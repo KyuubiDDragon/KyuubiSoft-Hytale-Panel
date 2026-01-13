@@ -1,0 +1,15 @@
+# Server files (too large for git)
+server/HytaleServer.jar
+server/Assets.zip
+server/HytaleServer.aot
+
+# Data directories
+data/
+backups/
+logs/
+
+# Backup of old server
+server_backup/
+
+# Docker
+.docker/
