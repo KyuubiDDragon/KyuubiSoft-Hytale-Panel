@@ -24,7 +24,9 @@ ENV JAVA_MIN_RAM="3G" \
     ASSETS_URL="" \
     # Option 2: Use official Hytale Downloader
     USE_HYTALE_DOWNLOADER="false" \
-    HYTALE_PATCHLINE="release"
+    HYTALE_PATCHLINE="release" \
+    # Auto-update on container restart
+    AUTO_UPDATE="false"
 
 # ============================================================
 # Install dependencies

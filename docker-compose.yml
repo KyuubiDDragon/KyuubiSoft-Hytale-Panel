@@ -46,6 +46,9 @@ services:
       # Hytale Downloader (Option 2)
       - USE_HYTALE_DOWNLOADER=${USE_HYTALE_DOWNLOADER:-false}
       - HYTALE_PATCHLINE=${HYTALE_PATCHLINE:-release}
+      
+      # Auto-update on restart
+      - AUTO_UPDATE=${AUTO_UPDATE:-false}
 
     # Ports - UDP!
     ports:

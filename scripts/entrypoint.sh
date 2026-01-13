@@ -53,29 +53,9 @@ ASSETS_FILE="/opt/hytale/server/Assets.zip"
 DOWNLOADER_DIR="/opt/hytale/downloader"
 CREDENTIALS_FILE="${DOWNLOADER_DIR}/.hytale-downloader-credentials.json"
 
-# If files exist, skip download
-if [ -f "$SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
-    echo "[INFO] Server files found!"
-    
-# Option 1: Download URLs provided
-elif [ -n "$SERVER_JAR_URL" ] && [ -n "$ASSETS_URL" ]; then
-    echo "[INFO] Downloading server files from URLs..."
-    
-    if [ ! -f "$SERVER_JAR" ]; then
-        echo "[INFO] Downloading HytaleServer.jar..."
-        gosu hytale wget -q --show-progress -O "$SERVER_JAR" "$SERVER_JAR_URL"
-    fi
-    
-    if [ ! -f "$ASSETS_FILE" ]; then
-        echo "[INFO] Downloading Assets.zip (~3GB)..."
-        gosu hytale wget -q --show-progress -O "$ASSETS_FILE" "$ASSETS_URL"
-    fi
-    
-    echo "[INFO] Download complete!"
-
-# Option 2: Use official Hytale Downloader
-elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
-    echo "[INFO] Using official Hytale Downloader..."
+# Function to run Hytale Downloader
+run_downloader() {
+    local UPDATE_MODE="$1"
     
     mkdir -p "$DOWNLOADER_DIR"
     chown hytale:hytale "$DOWNLOADER_DIR"
@@ -95,6 +75,11 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
     cd "$DOWNLOADER_DIR"
     PATCHLINE="${HYTALE_PATCHLINE:-release}"
     DOWNLOAD_PATH="/opt/hytale/server/game.zip"
+    
+    # For updates, remove old zip to force re-download
+    if [ "$UPDATE_MODE" = "update" ]; then
+        rm -f "$DOWNLOAD_PATH"
+    fi
     
     # Loop until download succeeds
     MAX_ATTEMPTS=60
@@ -117,7 +102,11 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
             echo ""
         fi
         
-        echo "[INFO] Attempting download (attempt ${ATTEMPT})..."
+        if [ "$UPDATE_MODE" = "update" ]; then
+            echo "[INFO] Checking for updates (attempt ${ATTEMPT})..."
+        else
+            echo "[INFO] Attempting download (attempt ${ATTEMPT})..."
+        fi
         
         # Run downloader directly - output goes straight to console
         gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -download-path "$DOWNLOAD_PATH" -skip-update-check
@@ -127,6 +116,12 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
             echo "[INFO] Download successful!"
             break
         else
+            # Exit code 3 = already up to date (no download needed)
+            if [ $RESULT -eq 3 ]; then
+                echo "[INFO] Server is already up to date!"
+                return 0
+            fi
+            
             echo "[WARN] Download failed (exit code: $RESULT)"
             
             # If no credentials file exists after failure, it was an auth problem
@@ -137,7 +132,15 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
             fi
             
             if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
-                echo "[ERROR] Max attempts reached. Please check:"
+                echo "[ERROR] Max attempts reached."
+                
+                # For updates, just continue with existing files
+                if [ "$UPDATE_MODE" = "update" ]; then
+                    echo "[WARN] Update check failed, continuing with existing files..."
+                    return 1
+                fi
+                
+                echo "[ERROR] Please check:"
                 echo "  - Is your Hytale account valid?"
                 echo "  - Do you own the game?"
                 echo "  - Are Hytale servers online?"
@@ -152,7 +155,7 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
                 while true; do
                     if [ -f "$SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
                         echo "[INFO] Files detected! Continuing..."
-                        break 2
+                        return 0
                     fi
                     sleep 10
                 done
@@ -167,6 +170,12 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
     if [ -f "$DOWNLOAD_PATH" ]; then
         echo "[INFO] Extracting game files..."
         cd /opt/hytale/server
+        
+        # Backup current JAR version info (if updating)
+        if [ "$UPDATE_MODE" = "update" ] && [ -f "$SERVER_JAR" ]; then
+            echo "[INFO] Updating server files..."
+        fi
+        
         gosu hytale unzip -o game.zip
         
         # Move files to correct locations
@@ -178,6 +187,40 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
         rm -f game.zip
         echo "[INFO] Extraction complete!"
     fi
+    
+    return 0
+}
+
+# Check if files exist
+if [ -f "$SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
+    echo "[INFO] Server files found!"
+    
+    # Auto-update check
+    if [ "$AUTO_UPDATE" = "true" ] && [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
+        echo "[INFO] AUTO_UPDATE enabled - checking for updates..."
+        run_downloader "update"
+    fi
+    
+# Option 1: Download URLs provided
+elif [ -n "$SERVER_JAR_URL" ] && [ -n "$ASSETS_URL" ]; then
+    echo "[INFO] Downloading server files from URLs..."
+    
+    if [ ! -f "$SERVER_JAR" ]; then
+        echo "[INFO] Downloading HytaleServer.jar..."
+        gosu hytale wget -q --show-progress -O "$SERVER_JAR" "$SERVER_JAR_URL"
+    fi
+    
+    if [ ! -f "$ASSETS_FILE" ]; then
+        echo "[INFO] Downloading Assets.zip (~3GB)..."
+        gosu hytale wget -q --show-progress -O "$ASSETS_FILE" "$ASSETS_URL"
+    fi
+    
+    echo "[INFO] Download complete!"
+
+# Option 2: Use official Hytale Downloader
+elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
+    echo "[INFO] Using official Hytale Downloader..."
+    run_downloader "fresh"
 
 # No method configured - wait for manual copy
 else
