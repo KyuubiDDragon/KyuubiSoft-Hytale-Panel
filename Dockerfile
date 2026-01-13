@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     gosu \
     ca-certificates \
+    dbus \
     && rm -rf /var/lib/apt/lists/* \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone
@@ -54,6 +55,7 @@ RUN groupadd -g 9999 hytale \
                 /opt/hytale/mods \
                 /opt/hytale/logs \
                 /opt/hytale/downloader \
+                /opt/hytale/auth \
     && chown -R hytale:hytale /opt/hytale
 
 WORKDIR /opt/hytale
@@ -68,7 +70,7 @@ COPY --chmod=755 scripts/backup.sh /opt/hytale/backup.sh
 # ============================================================
 # Volumes for persistent data
 # ============================================================
-VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server", "/opt/hytale/downloader"]
+VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server", "/opt/hytale/downloader", "/opt/hytale/auth"]
 
 # ============================================================
 # Expose UDP port (QUIC protocol)

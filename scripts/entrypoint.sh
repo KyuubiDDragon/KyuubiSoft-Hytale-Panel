@@ -21,6 +21,29 @@ echo "[INFO] Setting up directories..."
 chown -R hytale:hytale /opt/hytale
 
 # ============================================================
+# Setup persistent machine-id for encrypted auth
+# ============================================================
+MACHINE_ID_FILE="/opt/hytale/data/.machine-id"
+
+if [ ! -f "$MACHINE_ID_FILE" ]; then
+    echo "[INFO] Generating persistent machine-id..."
+    # Generate a random UUID-style machine-id
+    cat /proc/sys/kernel/random/uuid | tr -d '-' > "$MACHINE_ID_FILE"
+    chown hytale:hytale "$MACHINE_ID_FILE"
+fi
+
+# Link to /etc/machine-id (used by Hytale for encryption key)
+if [ -f "$MACHINE_ID_FILE" ]; then
+    cp "$MACHINE_ID_FILE" /etc/machine-id
+    chmod 444 /etc/machine-id
+    # Also setup dbus machine-id
+    mkdir -p /var/lib/dbus
+    cp "$MACHINE_ID_FILE" /var/lib/dbus/machine-id
+    chmod 444 /var/lib/dbus/machine-id
+    echo "[INFO] Machine-ID configured for auth persistence"
+fi
+
+# ============================================================
 # Check/Download server files
 # ============================================================
 echo "[INFO] Checking server files..."
@@ -218,6 +241,13 @@ ln -sfn /opt/hytale/plugins /opt/hytale/server/plugins 2>/dev/null || true
 
 mkdir -p /opt/hytale/mods
 ln -sfn /opt/hytale/mods /opt/hytale/server/mods 2>/dev/null || true
+
+# Auth credentials - symlink to persistent volume
+mkdir -p /opt/hytale/auth
+if [ ! -L "/opt/hytale/server/.auth" ]; then
+    rm -rf /opt/hytale/server/.auth 2>/dev/null || true
+    ln -sfn /opt/hytale/auth /opt/hytale/server/.auth
+fi
 
 chown -R hytale:hytale /opt/hytale
 

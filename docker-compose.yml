@@ -59,6 +59,7 @@ services:
       - hytale-plugins:/opt/hytale/plugins
       - hytale-mods:/opt/hytale/mods
       - hytale-downloader:/opt/hytale/downloader
+      - hytale-auth:/opt/hytale/auth
 
     # Console
     stdin_open: true
@@ -84,3 +85,5 @@ volumes:
     name: hytale-mods
   hytale-downloader:
     name: hytale-downloader
+  hytale-auth:
+    name: hytale-auth
