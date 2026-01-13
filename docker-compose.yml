@@ -18,7 +18,6 @@
 services:
   hytale:
     build: .
-    image: hytale-server:latest
     container_name: hytale
     hostname: hytale
     restart: on-failure:3

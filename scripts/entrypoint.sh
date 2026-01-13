@@ -97,17 +97,24 @@ elif [ "$USE_HYTALE_DOWNLOADER" = "true" ]; then
         echo "[INFO] Attempting download (attempt ${ATTEMPT})..."
         
         # Run downloader - it will show auth prompt if needed
-        if gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -download-path "$DOWNLOAD_PATH" -skip-update-check 2>&1; then
+        OUTPUT=$(gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -download-path "$DOWNLOAD_PATH" -skip-update-check 2>&1)
+        RESULT=$?
+        echo "$OUTPUT"
+        
+        if [ $RESULT -eq 0 ] && [ -f "$DOWNLOAD_PATH" ]; then
             echo "[INFO] Download successful!"
             break
         else
-            RESULT=$?
             echo "[WARN] Download failed (exit code: $RESULT)"
             
-            # If 403 error, credentials might be invalid - delete them
-            if [ -f "$CREDENTIALS_FILE" ]; then
-                echo "[WARN] Deleting old credentials and retrying..."
+            # Only delete credentials on 401 Unauthorized (invalid credentials)
+            # Do NOT delete on 403 Forbidden (server overloaded or permission issue)
+            if echo "$OUTPUT" | grep -q "401 Unauthorized"; then
+                echo "[WARN] Authentication invalid - deleting credentials..."
                 rm -f "$CREDENTIALS_FILE"
+            elif echo "$OUTPUT" | grep -q "403 Forbidden"; then
+                echo "[WARN] 403 Forbidden - Hytale servers may be overloaded (release day!)"
+                echo "[WARN] Keeping credentials and retrying..."
             fi
             
             if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
