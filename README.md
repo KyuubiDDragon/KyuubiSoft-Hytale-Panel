@@ -9,52 +9,53 @@ Vollautomatisches Docker-Setup für Hytale Server. Einfach als Stack in Portaine
 - Name: `hytale`
 - Build method: **Repository**
 - Repository URL: `https://github.com/DEIN-USER/hytale-docker`
-- Compose path: `docker-compose.yml`
 
-### 2. Server-Dateien konfigurieren
+### 2. Server-Dateien - Wähle eine Option:
 
-Wähle **eine** der Optionen in den Environment Variables:
+#### Option A: Offizieller Hytale Downloader (empfohlen)
+Lädt automatisch vom offiziellen Server. Erfordert einmaligen OAuth-Login.
 
-#### Option A: Eigene URLs (empfohlen)
-Lade `HytaleServer.jar` und `Assets.zip` auf deinen NAS/Webserver und setze:
-```yaml
-SERVER_JAR_URL=https://dein-nas.local/hytale/HytaleServer.jar
-ASSETS_URL=https://dein-nas.local/hytale/Assets.zip
-```
+| Variable | Wert |
+|----------|------|
+| `USE_HYTALE_DOWNLOADER` | `true` |
 
-#### Option B: Offizieller Downloader
-```yaml
-USE_HYTALE_DOWNLOADER=true
-```
-⚠️ Erfordert einmalige OAuth2-Authentifizierung nach dem Start!
+Beim ersten Start erscheint ein Link + Code → Im Browser öffnen und einloggen.
+
+#### Option B: Eigene Download-URLs
+Lade die Dateien auf deinen NAS und gib die URLs an.
+
+| Variable | Wert |
+|----------|------|
+| `SERVER_JAR_URL` | `https://dein-nas/HytaleServer.jar` |
+| `ASSETS_URL` | `https://dein-nas/Assets.zip` |
+
+Dateien findest du in: `%appdata%\Hytale\install\release\package\game\latest\`
 
 #### Option C: Manuell kopieren
 Nach dem Deploy:
 ```bash
-docker cp HytaleServer.jar hytale:/opt/hytale/server/
+docker cp Server/HytaleServer.jar hytale:/opt/hytale/server/
 docker cp Assets.zip hytale:/opt/hytale/server/
 docker restart hytale
 ```
 
-### 3. Deploy & Authentifizieren
+### 3. Server authentifizieren
 
-Nach dem ersten Start **muss** der Server authentifiziert werden:
+Nach dem ersten Start muss der Hytale-Server selbst auch authentifiziert werden:
 
 ```bash
-# In Portainer: Container → hytale → Console → Connect
-
-# Oder via Terminal:
+# Console öffnen (Portainer oder Terminal)
 docker attach hytale
 
 # Im Server eingeben:
 /auth login device
 ```
 
-Dann den angezeigten Link im Browser öffnen und einloggen.
+Link im Browser öffnen, Code eingeben, fertig!
 
 ---
 
-## ⚙️ Konfiguration
+## ⚙️ Alle Umgebungsvariablen
 
 | Variable | Standard | Beschreibung |
 |----------|----------|--------------|
@@ -64,14 +65,10 @@ Dann den angezeigten Link im Browser öffnen und einloggen.
 | `ENABLE_BACKUP` | true | Auto-Backups |
 | `BACKUP_FREQUENCY` | 30 | Backup-Intervall (min) |
 | `AUTH_MODE` | - | `offline` für LAN-only |
-
-### RAM Empfehlungen
-
-| Spieler | RAM |
-|---------|-----|
-| 1-5 | 4G |
-| 5-10 | 6G |
-| 10-20 | 8G |
+| `USE_HYTALE_DOWNLOADER` | false | Offiziellen Downloader nutzen |
+| `HYTALE_PATCHLINE` | release | `release` oder `pre-release` |
+| `SERVER_JAR_URL` | - | URL zu HytaleServer.jar |
+| `ASSETS_URL` | - | URL zu Assets.zip |
 
 ---
 
@@ -94,32 +91,39 @@ Router Port-Forwarding:
 | `hytale-backups` | Automatische Backups |
 | `hytale-plugins` | Server Plugins |
 | `hytale-mods` | Server Mods |
+| `hytale-downloader` | Downloader + Credentials |
 
 ---
 
 ## 🔄 Updates
 
-1. Neue Server-Dateien besorgen (aus Hytale Launcher oder Downloader)
-2. In Portainer: Stack stoppen
-3. Dateien ins Volume kopieren oder URLs aktualisieren
-4. Stack neu starten
+Mit Hytale Downloader:
+```bash
+# Container stoppen
+docker stop hytale
+
+# Server-Volume leeren (oder nur alte JAR löschen)
+docker volume rm hytale-server
+
+# Neu starten - lädt automatisch neue Version
+docker start hytale
+```
 
 ---
 
 ## 🛠️ Befehle
 
 ```bash
-# Logs anschauen
+# Logs
 docker logs -f hytale
 
-# Console öffnen
+# Console (verlassen: Ctrl+P, Ctrl+Q)
 docker attach hytale
-# Verlassen: Ctrl+P, Ctrl+Q
 
 # Manuelles Backup
 docker exec hytale /opt/hytale/backup.sh
 
-# Server neustarten
+# Neustart
 docker restart hytale
 ```
 
@@ -128,4 +132,4 @@ docker restart hytale
 ## 📝 Links
 
 - [Hytale Server Manual](https://support.hytale.com/hc/en-us/articles/45326769420827-Hytale-Server-Manual)
-- [Server Auth Guide](https://support.hytale.com/hc/en-us/articles/45328341414043-Server-Provider-Authentication-Guide)
+- [Hytale Downloader](https://downloader.hytale.com/hytale-downloader.zip)

@@ -40,11 +40,11 @@ services:
       # Auth
       - AUTH_MODE=${AUTH_MODE:-}
       
-      # Download URLs (Option A)
+      # Download URLs (Option 1)
       - SERVER_JAR_URL=${SERVER_JAR_URL:-}
       - ASSETS_URL=${ASSETS_URL:-}
       
-      # Hytale Downloader (Option B)
+      # Hytale Downloader (Option 2)
       - USE_HYTALE_DOWNLOADER=${USE_HYTALE_DOWNLOADER:-false}
       - HYTALE_PATCHLINE=${HYTALE_PATCHLINE:-release}
 
@@ -59,6 +59,7 @@ services:
       - hytale-backups:/opt/hytale/backups
       - hytale-plugins:/opt/hytale/plugins
       - hytale-mods:/opt/hytale/mods
+      - hytale-downloader:/opt/hytale/downloader
 
     # Console
     stdin_open: true
@@ -82,3 +83,5 @@ volumes:
     name: hytale-plugins
   hytale-mods:
     name: hytale-mods
+  hytale-downloader:
+    name: hytale-downloader

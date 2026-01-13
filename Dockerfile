@@ -19,11 +19,10 @@ ENV JAVA_MIN_RAM="3G" \
     ENABLE_BACKUP="true" \
     BACKUP_FREQUENCY="30" \
     TZ="Europe/Berlin" \
-    # Download options (set one of these):
-    # Option 1: Direct URL to your hosted server files
+    # Option 1: Direct URLs to server files
     SERVER_JAR_URL="" \
     ASSETS_URL="" \
-    # Option 2: Use official Hytale downloader (requires auth)
+    # Option 2: Use official Hytale Downloader
     USE_HYTALE_DOWNLOADER="false" \
     HYTALE_PATCHLINE="release"
 
@@ -63,14 +62,13 @@ WORKDIR /opt/hytale
 # Copy scripts
 # ============================================================
 COPY --chmod=755 scripts/entrypoint.sh /opt/hytale/entrypoint.sh
-COPY --chmod=755 scripts/download.sh /opt/hytale/download.sh
 COPY --chmod=755 scripts/start-server.sh /opt/hytale/start-server.sh
 COPY --chmod=755 scripts/backup.sh /opt/hytale/backup.sh
 
 # ============================================================
 # Volumes for persistent data
 # ============================================================
-VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server"]
+VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server", "/opt/hytale/downloader"]
 
 # ============================================================
 # Expose UDP port (QUIC protocol)
