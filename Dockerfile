@@ -45,8 +45,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================================
 # Create user and directories
 # ============================================================
-RUN groupadd -g 1000 hytale \
-    && useradd -u 1000 -g hytale -m -s /bin/bash hytale \
+# Use UID 9999 to avoid conflicts with existing users
+RUN groupadd -g 9999 hytale \
+    && useradd -u 9999 -g hytale -m -s /bin/bash hytale \
     && mkdir -p /opt/hytale/server \
                 /opt/hytale/data \
                 /opt/hytale/backups \
