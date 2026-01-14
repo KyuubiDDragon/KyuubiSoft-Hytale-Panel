@@ -39,6 +39,7 @@
     "permissions": "Berechtigungen",
     "worlds": "Welten",
     "performance": "Performance",
+    "configuration": "Konfiguration",
     "server": "Server",
     "management": "Verwaltung",
     "data": "Daten"
@@ -163,6 +164,17 @@
     "infoTitle": "Welten Übersicht",
     "infoDescription": "Hier siehst du alle auf dem Server verfügbaren Welten. Welten werden automatisch erkannt.",
     "noWorlds": "Keine Welten gefunden"
+  },
+  "config": {
+    "title": "Konfiguration",
+    "subtitle": "Server-Konfigurationsdateien bearbeiten",
+    "files": "Konfigurationsdateien",
+    "noFiles": "Keine Konfigurationsdateien gefunden",
+    "formMode": "Formular",
+    "textEditor": "Text Editor",
+    "saved": "Konfiguration erfolgreich gespeichert",
+    "unsaved": "Ungespeicherte Änderungen",
+    "warning": "Achtung: Fehlerhafte Konfiguration kann den Server beschädigen. Nach dem Speichern ist ein Server-Neustart erforderlich."
   },
   "performance": {
     "title": "Performance Monitor",

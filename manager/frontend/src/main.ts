@@ -17,6 +17,7 @@ import Whitelist from './views/Whitelist.vue'
 import Permissions from './views/Permissions.vue'
 import Worlds from './views/Worlds.vue'
 import Performance from './views/Performance.vue'
+import Configuration from './views/Configuration.vue'
 
 // Import auth store
 import { useAuthStore } from './stores/auth'
@@ -77,6 +78,12 @@ const router = createRouter({
       path: '/worlds',
       name: 'worlds',
       component: Worlds,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/configuration',
+      name: 'configuration',
+      component: Configuration,
       meta: { requiresAuth: true },
     },
     {

@@ -39,6 +39,7 @@
     "permissions": "Permissions",
     "worlds": "Worlds",
     "performance": "Performance",
+    "configuration": "Configuration",
     "server": "Server",
     "management": "Management",
     "data": "Data"
@@ -163,6 +164,17 @@
     "infoTitle": "Worlds Overview",
     "infoDescription": "Here you can see all worlds available on the server. Worlds are automatically detected.",
     "noWorlds": "No worlds found"
+  },
+  "config": {
+    "title": "Configuration",
+    "subtitle": "Edit server configuration files",
+    "files": "Configuration Files",
+    "noFiles": "No configuration files found",
+    "formMode": "Form",
+    "textEditor": "Text Editor",
+    "saved": "Configuration saved successfully",
+    "unsaved": "Unsaved changes",
+    "warning": "Warning: Invalid configuration may break the server. A server restart is required after saving changes."
   },
   "performance": {
     "title": "Performance Monitor",

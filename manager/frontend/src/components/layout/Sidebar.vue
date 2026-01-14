@@ -23,6 +23,7 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'permissions', path: '/permissions', icon: 'permissions', label: t('nav.permissions'), group: 'management' },
   { name: 'worlds', path: '/worlds', icon: 'worlds', label: t('nav.worlds'), group: 'management' },
   { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data' },
+  { name: 'configuration', path: '/configuration', icon: 'configuration', label: t('nav.configuration'), group: 'data' },
   { name: 'settings', path: '/settings', icon: 'settings', label: t('nav.settings'), group: 'data' },
 ])
 
@@ -136,6 +137,11 @@ function isActive(path: string): boolean {
             <!-- Backup Icon -->
             <svg v-if="item.icon === 'backup'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+
+            <!-- Configuration Icon -->
+            <svg v-else-if="item.icon === 'configuration'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
 
             <!-- Settings Icon -->
