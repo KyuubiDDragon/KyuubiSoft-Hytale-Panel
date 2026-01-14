@@ -66,19 +66,21 @@ router.post('/logout', authMiddleware, (_req: Request, res: Response) => {
 
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const user = await getUser(req.user);
+  const username = req.user!;  // authMiddleware guarantees this is set
+  const user = await getUser(username);
   if (!user) {
-    res.json({ username: req.user, role: 'admin' });
+    res.json({ username, role: 'admin' });
     return;
   }
-  res.json({ username: req.user, role: user.role });
+  res.json({ username, role: user.role });
 });
 
 // ============== USER MANAGEMENT (Admin only) ==============
 
 // Middleware to check admin role
 async function adminOnly(req: AuthenticatedRequest, res: Response, next: () => void) {
-  const user = await getUser(req.user);
+  const username = req.user!;  // authMiddleware guarantees this is set
+  const user = await getUser(username);
   if (!user || user.role !== 'admin') {
     res.status(403).json({ error: 'Admin access required' });
     return;
