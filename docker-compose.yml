@@ -2,9 +2,12 @@
 # Hytale Dedicated Server - Docker Compose
 # ============================================================
 #
+# HOST PFADE: /opt/hytale/
+# CONTAINER PFADE: /opt/hytale/
+#
 # PORTAINER SETUP:
 # 1. Repository URL eingeben
-# 2. Environment Variables setzen (siehe .env.example)
+# 2. Environment Variables in Portainer setzen (NICHT als .env Datei!)
 # 3. Deploy
 # 4. Nach Start: /auth login device
 #
@@ -12,6 +15,10 @@
 # 1. cp .env.example .env
 # 2. .env anpassen
 # 3. docker-compose up -d
+#
+# WEB MANAGER:
+# Nach dem Start erreichbar unter http://localhost:18080
+# Login mit MANAGER_USERNAME/MANAGER_PASSWORD
 #
 # ============================================================
 
@@ -74,3 +81,77 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+
+    # Network for manager communication
+    networks:
+      - hytale-net
+
+  # ============================================================
+  # Hytale Server Manager - Web UI
+  # ============================================================
+  hytale-manager:
+    build: ./manager
+    container_name: hytale-manager
+    hostname: hytale-manager
+    restart: unless-stopped
+
+    environment:
+      # Authentication
+      - MANAGER_USERNAME=${MANAGER_USERNAME:-admin}
+      - MANAGER_PASSWORD=${MANAGER_PASSWORD:-changeme}
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-key}
+
+      # Target container
+      - GAME_CONTAINER_NAME=hytale
+
+      # Paths (inside container)
+      - SERVER_PATH=/opt/hytale/server
+      - BACKUPS_PATH=/opt/hytale/backups
+      - DATA_PATH=/opt/hytale/data
+
+      # Settings
+      - TZ=${TZ:-Europe/Berlin}
+
+    ports:
+      - "${MANAGER_PORT:-18080}:18080"
+
+    volumes:
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # Shared volumes with game server (host: /opt/hytale/, container: /opt/hytale/)
+      # Server configs need write access for the config editor
+      - /opt/hytale/server:/opt/hytale/server
+      - /opt/hytale/backups:/opt/hytale/backups
+      - /opt/hytale/data:/opt/hytale/data
+      - /opt/hytale/mods:/opt/hytale/mods
+      - /opt/hytale/plugins:/opt/hytale/plugins
+
+      # Manager persistent data
+      - manager-data:/app/data
+
+    networks:
+      - hytale-net
+
+    depends_on:
+      - hytale
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================
+# Networks
+# ============================================================
+networks:
+  hytale-net:
+    driver: bridge
+
+# ============================================================
+# Volumes
+# ============================================================
+volumes:
+  manager-data:

@@ -1,0 +1,180 @@
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import { config } from '../config.js';
+import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js';
+
+export function listBackups(): BackupInfo[] {
+  const backups: BackupInfo[] = [];
+
+  if (!fs.existsSync(config.backupsPath)) {
+    return backups;
+  }
+
+  const files = fs.readdirSync(config.backupsPath);
+
+  for (const file of files) {
+    const ext = path.extname(file).toLowerCase();
+    if (!['.gz', '.tar', '.zip'].includes(ext) && !file.endsWith('.tar.gz')) {
+      continue;
+    }
+
+    const filePath = path.join(config.backupsPath, file);
+    const stat = fs.statSync(filePath);
+
+    // Extract ID from filename
+    let id = file;
+    if (file.endsWith('.tar.gz')) {
+      id = file.replace('.tar.gz', '');
+    } else {
+      id = path.basename(file, ext);
+    }
+
+    backups.push({
+      id,
+      filename: file,
+      size_bytes: stat.size,
+      size_mb: Math.round(stat.size / (1024 * 1024) * 100) / 100,
+      created_at: stat.mtime.toISOString(),
+      type: file.includes('auto') ? 'auto' : 'manual',
+    });
+  }
+
+  // Sort by creation time (newest first)
+  backups.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return backups;
+}
+
+export function getBackup(backupId: string): BackupInfo | null {
+  const backups = listBackups();
+  return backups.find((b) => b.id === backupId) || null;
+}
+
+export function getBackupPath(backupId: string): string | null {
+  const extensions = ['.tar.gz', '.tar', '.zip'];
+
+  for (const ext of extensions) {
+    const filePath = path.join(config.backupsPath, `${backupId}${ext}`);
+    if (fs.existsSync(filePath)) {
+      return filePath;
+    }
+  }
+
+  return null;
+}
+
+export function createBackup(name?: string): ActionResponse & { backup?: BackupInfo } {
+  if (!fs.existsSync(config.dataPath)) {
+    return { success: false, error: 'Data directory not found' };
+  }
+
+  // Ensure backups directory exists
+  if (!fs.existsSync(config.backupsPath)) {
+    fs.mkdirSync(config.backupsPath, { recursive: true });
+  }
+
+  // Generate backup name
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
+  const backupName = name ? `manual_${name}_${timestamp}` : `manual_${timestamp}`;
+  const backupFile = path.join(config.backupsPath, `${backupName}.tar.gz`);
+
+  try {
+    // Create tarball using tar command
+    execSync(`tar -czf "${backupFile}" -C "${config.dataPath}" .`, {
+      timeout: 300000, // 5 minutes
+    });
+
+    const stat = fs.statSync(backupFile);
+
+    return {
+      success: true,
+      backup: {
+        id: backupName,
+        filename: `${backupName}.tar.gz`,
+        size_bytes: stat.size,
+        size_mb: Math.round(stat.size / (1024 * 1024) * 100) / 100,
+        created_at: new Date().toISOString(),
+        type: 'manual',
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Backup failed' };
+  }
+}
+
+export function deleteBackup(backupId: string): ActionResponse {
+  const filePath = getBackupPath(backupId);
+
+  if (!filePath) {
+    return { success: false, error: 'Backup not found' };
+  }
+
+  try {
+    fs.unlinkSync(filePath);
+    return { success: true, message: `Backup ${backupId} deleted` };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Delete failed' };
+  }
+}
+
+export function restoreBackup(backupId: string): ActionResponse {
+  const filePath = getBackupPath(backupId);
+
+  if (!filePath) {
+    return { success: false, error: 'Backup not found' };
+  }
+
+  try {
+    // Create a pre-restore backup
+    createBackup('pre_restore');
+
+    // Create temp directory
+    const tempDir = path.join(config.backupsPath, '_restore_temp');
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true });
+    }
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    // Extract backup
+    execSync(`tar -xzf "${filePath}" -C "${tempDir}"`, {
+      timeout: 300000,
+    });
+
+    // Clear current data and move restored data
+    if (fs.existsSync(config.dataPath)) {
+      fs.rmSync(config.dataPath, { recursive: true });
+    }
+    fs.renameSync(tempDir, config.dataPath);
+
+    return {
+      success: true,
+      message: `Restored from backup ${backupId}. Server restart required.`,
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Restore failed' };
+  }
+}
+
+export function getStorageInfo(): StorageInfo {
+  let totalSize = 0;
+  let count = 0;
+
+  if (fs.existsSync(config.backupsPath)) {
+    const files = fs.readdirSync(config.backupsPath);
+    for (const file of files) {
+      const filePath = path.join(config.backupsPath, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) {
+        totalSize += stat.size;
+        count++;
+      }
+    }
+  }
+
+  return {
+    total_size_bytes: totalSize,
+    total_size_mb: Math.round(totalSize / (1024 * 1024) * 100) / 100,
+    backup_count: count,
+  };
+}

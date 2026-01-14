@@ -1,27 +1,94 @@
-# 🎮 Hytale Dedicated Server - Docker
+<div align="center">
 
-Vollautomatisches Docker-Setup für Hytale Server. Einfach als Stack in Portainer deployen!
+# Hytale Dedicated Server - Docker
 
-## 🚀 Quick Start mit Portainer
+### Vollautomatisches Docker-Setup mit Web Admin Panel
 
-### 1. Stack hinzufügen
-- Portainer → Stacks → **Add Stack**
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Me-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/kyuubiddragon)
+[![Discord](https://img.shields.io/badge/Discord-KyuubiDDragon-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+
+<img src="https://img.shields.io/badge/Hytale-Server-orange?style=for-the-badge" alt="Hytale Server"/>
+<img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
+<img src="https://img.shields.io/badge/Node.js-Backend-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js"/>
+<img src="https://img.shields.io/badge/Vue.js-Frontend-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white" alt="Vue.js"/>
+
+---
+
+**[Deutsch](#deutsch)** | **[English](#english)** | **[Commands](docs/COMMANDS.md)**
+
+</div>
+
+---
+
+## Screenshots
+
+<div align="center">
+<table>
+<tr>
+<td align="center"><strong>Dashboard</strong></td>
+<td align="center"><strong>Console</strong></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/dashboard.png" width="400" alt="Dashboard"/></td>
+<td><img src="docs/screenshots/console.png" width="400" alt="Console"/></td>
+</tr>
+<tr>
+<td align="center"><strong>Player Management</strong></td>
+<td align="center"><strong>Performance</strong></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/players.png" width="400" alt="Players"/></td>
+<td><img src="docs/screenshots/performance.png" width="400" alt="Performance"/></td>
+</tr>
+</table>
+</div>
+
+---
+
+## Deutsch
+
+Vollautomatisches Docker-Setup für Hytale Server mit modernem Web-basiertem Admin Panel.
+
+### Features
+
+| Feature | Beschreibung |
+|---------|--------------|
+| **Auto-Download** | Automatischer Server-Download via offiziellem Hytale Downloader |
+| **Web Admin Panel** | Modernes UI mit Dark Theme und Echtzeit-Updates |
+| **Multi-User** | Mehrere Benutzer mit Rollen (Admin, Moderator, Viewer) |
+| **Live Console** | Echtzeit-Logs mit Filterung und Auto-Scroll |
+| **Performance Monitor** | CPU, RAM und Spieler-Statistiken mit Graphen |
+| **Spieler Verwaltung** | Kick, Ban, Teleport, Gamemode, Items geben, Heal und mehr |
+| **Mods & Plugins** | Upload, Aktivieren/Deaktivieren, Config Editor |
+| **Backups** | Automatische und manuelle Backups mit Restore |
+| **Whitelist & Bans** | Komplette Zugriffskontrolle |
+| **Permissions** | Benutzer und Gruppen mit Berechtigungen |
+| **Activity Log** | Alle Admin-Aktionen werden protokolliert |
+| **Mehrsprachig** | Deutsch und Englisch |
+
+### Quick Start mit Portainer
+
+#### 1. Stack hinzufügen
+- Portainer → Stacks → Add Stack
 - Name: `hytale`
-- Build method: **Repository**
-- Repository URL: `https://github.com/DEIN-USER/hytale-docker`
+- Build method: Repository
+- Repository URL: `https://github.com/KyuubiDDragon/Hytale-Server`
 
-### 2. Server-Dateien - Wähle eine Option:
+#### 2. Server-Dateien
 
-#### Option A: Offizieller Hytale Downloader (empfohlen)
+**Option A: Offizieller Hytale Downloader (empfohlen)**
+
 Lädt automatisch vom offiziellen Server. Erfordert einmaligen OAuth-Login.
 
 | Variable | Wert |
 |----------|------|
 | `USE_HYTALE_DOWNLOADER` | `true` |
 
-Beim ersten Start erscheint ein Link + Code → Im Browser öffnen und einloggen.
+Beim ersten Start erscheint ein Link + Code im Log. Im Browser öffnen und einloggen.
 
-#### Option B: Eigene Download-URLs
+**Option B: Eigene Download-URLs**
+
 Lade die Dateien auf deinen NAS und gib die URLs an.
 
 | Variable | Wert |
@@ -31,58 +98,76 @@ Lade die Dateien auf deinen NAS und gib die URLs an.
 
 Dateien findest du in: `%appdata%\Hytale\install\release\package\game\latest\`
 
-#### Option C: Manuell kopieren
-Nach dem Deploy:
+**Option C: Manuell kopieren**
+
 ```bash
 docker cp Server/HytaleServer.jar hytale:/opt/hytale/server/
 docker cp Assets.zip hytale:/opt/hytale/server/
 docker restart hytale
 ```
 
-### 3. Server authentifizieren
+#### 3. Server authentifizieren
 
-Nach dem ersten Start muss der Hytale-Server selbst auch authentifiziert werden:
+Nach dem ersten Start muss der Hytale-Server authentifiziert werden:
 
 ```bash
-# Console öffnen (Portainer oder Terminal)
 docker attach hytale
-
-# Im Server eingeben:
 /auth login device
 ```
 
-Link im Browser öffnen, Code eingeben, fertig!
+Link im Browser öffnen, Code eingeben, fertig.
 
----
+### Admin Panel
 
-## ⚙️ Alle Umgebungsvariablen
+Das Admin Panel ist unter `http://SERVER-IP:3000` erreichbar.
+
+**Standard-Login:**
+| Feld | Wert |
+|------|------|
+| User | `admin` |
+| Password | `admin` |
+
+> **Wichtig:** Bitte Passwort nach dem ersten Login ändern!
+
+**Panel Features:**
+- Dashboard mit Server-Status und Ressourcen
+- Live Console mit Log-Filterung und Command-Historie
+- Performance Monitoring mit Echtzeit-Graphen
+- Spieler Verwaltung mit erweiterten Aktionen
+- Whitelist & Ban System
+- Permissions Verwaltung (Benutzer & Gruppen)
+- Mods & Plugins mit Upload und Config Editor
+- Backup System mit Restore-Funktion
+- Server Config Editor
+- Activity Log für alle Aktionen
+- Multi-User mit Rollen-System
+
+### Umgebungsvariablen
 
 | Variable | Standard | Beschreibung |
 |----------|----------|--------------|
 | `JAVA_MIN_RAM` | 3G | Minimaler RAM |
 | `JAVA_MAX_RAM` | 4G | Maximaler RAM |
 | `SERVER_PORT` | 5520 | UDP Port |
-| `ENABLE_BACKUP` | true | Auto-Backups |
-| `BACKUP_FREQUENCY` | 30 | Backup-Intervall (min) |
+| `ENABLE_BACKUP` | true | Auto-Backups aktivieren |
+| `BACKUP_FREQUENCY` | 30 | Backup-Intervall in Minuten |
 | `AUTH_MODE` | - | `offline` für LAN-only |
 | `USE_HYTALE_DOWNLOADER` | false | Offiziellen Downloader nutzen |
 | `HYTALE_PATCHLINE` | release | `release` oder `pre-release` |
 | `SERVER_JAR_URL` | - | URL zu HytaleServer.jar |
 | `ASSETS_URL` | - | URL zu Assets.zip |
+| `MANAGER_USER` | admin | Admin Panel Benutzername |
+| `MANAGER_PASSWORD` | admin | Admin Panel Passwort |
 
----
+### Netzwerk
 
-## 🌐 Netzwerk
-
-**WICHTIG:** Hytale nutzt **UDP** Port 5520 (QUIC), nicht TCP!
+Hytale nutzt **UDP Port 5520** (QUIC), nicht TCP.
 
 Router Port-Forwarding:
 - Protokoll: **UDP**
-- Port: 5520
+- Port: **5520**
 
----
-
-## 📦 Volumes
+### Volumes
 
 | Volume | Inhalt |
 |--------|--------|
@@ -93,31 +178,13 @@ Router Port-Forwarding:
 | `hytale-mods` | Server Mods |
 | `hytale-downloader` | Downloader + Credentials |
 
----
-
-## 🔄 Updates
-
-Mit Hytale Downloader:
-```bash
-# Container stoppen
-docker stop hytale
-
-# Server-Volume leeren (oder nur alte JAR löschen)
-docker volume rm hytale-server
-
-# Neu starten - lädt automatisch neue Version
-docker start hytale
-```
-
----
-
-## 🛠️ Befehle
+### Befehle
 
 ```bash
-# Logs
+# Logs anzeigen
 docker logs -f hytale
 
-# Console (verlassen: Ctrl+P, Ctrl+Q)
+# Console öffnen (verlassen: Ctrl+P, Ctrl+Q)
 docker attach hytale
 
 # Manuelles Backup
@@ -127,9 +194,196 @@ docker exec hytale /opt/hytale/backup.sh
 docker restart hytale
 ```
 
+### Updates
+
+Mit Hytale Downloader:
+```bash
+docker stop hytale
+docker volume rm hytale-server
+docker start hytale
+```
+
 ---
 
-## 📝 Links
+## English
 
+Fully automated Docker setup for Hytale Server with modern web-based admin panel.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Auto-Download** | Automatic server download via official Hytale Downloader |
+| **Web Admin Panel** | Modern UI with dark theme and real-time updates |
+| **Multi-User** | Multiple users with roles (Admin, Moderator, Viewer) |
+| **Live Console** | Real-time logs with filtering and auto-scroll |
+| **Performance Monitor** | CPU, RAM and player statistics with graphs |
+| **Player Management** | Kick, ban, teleport, gamemode, give items, heal and more |
+| **Mods & Plugins** | Upload, enable/disable, config editor |
+| **Backups** | Automatic and manual backups with restore |
+| **Whitelist & Bans** | Complete access control |
+| **Permissions** | Users and groups with permissions |
+| **Activity Log** | All admin actions are logged |
+| **Multilingual** | German and English |
+
+### Quick Start with Portainer
+
+#### 1. Add Stack
+- Portainer → Stacks → Add Stack
+- Name: `hytale`
+- Build method: Repository
+- Repository URL: `https://github.com/KyuubiDDragon/Hytale-Server`
+
+#### 2. Server Files
+
+**Option A: Official Hytale Downloader (recommended)**
+
+Downloads automatically from official server. Requires one-time OAuth login.
+
+| Variable | Value |
+|----------|-------|
+| `USE_HYTALE_DOWNLOADER` | `true` |
+
+On first start, a link + code will appear in the log. Open in browser and login.
+
+**Option B: Custom Download URLs**
+
+Upload files to your NAS and provide the URLs.
+
+| Variable | Value |
+|----------|-------|
+| `SERVER_JAR_URL` | `https://your-nas/HytaleServer.jar` |
+| `ASSETS_URL` | `https://your-nas/Assets.zip` |
+
+Files can be found in: `%appdata%\Hytale\install\release\package\game\latest\`
+
+**Option C: Manual Copy**
+
+```bash
+docker cp Server/HytaleServer.jar hytale:/opt/hytale/server/
+docker cp Assets.zip hytale:/opt/hytale/server/
+docker restart hytale
+```
+
+#### 3. Server Authentication
+
+After first start, the Hytale server needs to be authenticated:
+
+```bash
+docker attach hytale
+/auth login device
+```
+
+Open link in browser, enter code, done.
+
+### Admin Panel
+
+The admin panel is available at `http://SERVER-IP:3000`.
+
+**Default login:**
+| Field | Value |
+|-------|-------|
+| User | `admin` |
+| Password | `admin` |
+
+> **Important:** Please change password after first login!
+
+**Panel Features:**
+- Dashboard with server status and resources
+- Live console with log filtering and command history
+- Performance monitoring with real-time graphs
+- Player management with extended actions
+- Whitelist & ban system
+- Permissions management (users & groups)
+- Mods & plugins with upload and config editor
+- Backup system with restore function
+- Server config editor
+- Activity log for all actions
+- Multi-user with role system
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JAVA_MIN_RAM` | 3G | Minimum RAM |
+| `JAVA_MAX_RAM` | 4G | Maximum RAM |
+| `SERVER_PORT` | 5520 | UDP Port |
+| `ENABLE_BACKUP` | true | Enable auto-backups |
+| `BACKUP_FREQUENCY` | 30 | Backup interval in minutes |
+| `AUTH_MODE` | - | `offline` for LAN-only |
+| `USE_HYTALE_DOWNLOADER` | false | Use official downloader |
+| `HYTALE_PATCHLINE` | release | `release` or `pre-release` |
+| `SERVER_JAR_URL` | - | URL to HytaleServer.jar |
+| `ASSETS_URL` | - | URL to Assets.zip |
+| `MANAGER_USER` | admin | Admin panel username |
+| `MANAGER_PASSWORD` | admin | Admin panel password |
+
+### Network
+
+Hytale uses **UDP port 5520** (QUIC), not TCP.
+
+Router port forwarding:
+- Protocol: **UDP**
+- Port: **5520**
+
+### Volumes
+
+| Volume | Content |
+|--------|---------|
+| `hytale-server` | Server JAR + Assets |
+| `hytale-data` | Worlds, Configs |
+| `hytale-backups` | Automatic backups |
+| `hytale-plugins` | Server plugins |
+| `hytale-mods` | Server mods |
+| `hytale-downloader` | Downloader + Credentials |
+
+### Commands
+
+```bash
+# View logs
+docker logs -f hytale
+
+# Open console (exit: Ctrl+P, Ctrl+Q)
+docker attach hytale
+
+# Manual backup
+docker exec hytale /opt/hytale/backup.sh
+
+# Restart
+docker restart hytale
+```
+
+### Updates
+
+With Hytale Downloader:
+```bash
+docker stop hytale
+docker volume rm hytale-server
+docker start hytale
+```
+
+---
+
+## Documentation
+
+- **[Server Commands](docs/COMMANDS.md)** - Complete list of all Hytale server commands
 - [Hytale Server Manual](https://support.hytale.com/hc/en-us/articles/45326769420827-Hytale-Server-Manual)
 - [Hytale Downloader](https://downloader.hytale.com/hytale-downloader.zip)
+
+---
+
+<div align="center">
+
+## Support
+
+If you find this project helpful, consider supporting me!
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/kyuubiddragon)
+
+**Discord:** KyuubiDDragon
+
+---
+
+Made with :heart: by [KyuubiDDragon](https://github.com/KyuubiDDragon)
+
+</div>

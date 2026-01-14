@@ -21,3 +21,9 @@ server/
 # OS
 .DS_Store
 Thumbs.db
+
+# Node.js / Manager
+node_modules/
+dist/
+package-lock.json
+manager/static/
