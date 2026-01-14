@@ -379,78 +379,72 @@ onUnmounted(() => {
       </div>
     </Card>
 
-    <!-- Server Memory Stats (JVM) -->
+    <!-- Server Memory Stats (JVM Heap) -->
     <Card v-if="memoryStats?.available">
-      <h3 class="font-semibold text-white mb-4">{{ t('performance.serverMemory') }}</h3>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- JVM Heap Memory -->
+      <h3 class="font-semibold text-white mb-4">{{ t('performance.serverMemory') }} (JVM Heap)</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- JVM Heap Memory Details -->
         <div class="space-y-3">
           <h4 class="text-sm font-medium text-gray-400">{{ t('performance.heapMemory') }}</h4>
           <div class="space-y-2">
             <div class="flex justify-between items-center">
               <span class="text-sm text-gray-500">{{ t('performance.used') }}</span>
-              <span class="text-green-400 font-mono">{{ memoryStats.heap?.used?.toFixed(1) || '-' }} GiB</span>
+              <span class="text-green-400 font-mono">{{ memoryStats.heap?.used?.toFixed(2) || '-' }} GiB</span>
             </div>
-            <div class="w-full h-2 bg-dark-100 rounded-full overflow-hidden">
+            <div class="w-full h-3 bg-dark-100 rounded-full overflow-hidden">
               <div
                 class="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-500"
                 :style="{ width: `${(memoryStats.heap?.used || 0) / (memoryStats.heap?.max || 1) * 100}%` }"
               ></div>
             </div>
             <div class="flex justify-between text-xs text-gray-500">
-              <span>{{ t('performance.init') }}: {{ memoryStats.heap?.init?.toFixed(1) || '-' }} GiB</span>
-              <span>{{ t('performance.max') }}: {{ memoryStats.heap?.max?.toFixed(1) || '-' }} GiB</span>
-            </div>
-            <div class="text-xs text-gray-500">
-              {{ t('performance.committed') }}: {{ memoryStats.heap?.committed?.toFixed(1) || '-' }} GiB
+              <span>{{ t('performance.committed') }}: {{ memoryStats.heap?.committed?.toFixed(2) || '-' }} GiB</span>
+              <span>{{ t('performance.max') }}: {{ memoryStats.heap?.max?.toFixed(2) || '-' }} GiB</span>
             </div>
           </div>
         </div>
 
-        <!-- Physical Memory -->
+        <!-- JVM Heap Percentage Circle -->
         <div class="space-y-3">
-          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.physicalMemory') }}</h4>
-          <div class="space-y-2">
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-gray-500">{{ t('performance.used') }}</span>
-              <span class="text-blue-400 font-mono">
-                {{ ((memoryStats.physical?.total || 0) - (memoryStats.physical?.free || 0)).toFixed(1) }} GiB
-              </span>
-            </div>
-            <div class="w-full h-2 bg-dark-100 rounded-full overflow-hidden">
-              <div
-                class="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
-                :style="{ width: `${((memoryStats.physical?.total || 0) - (memoryStats.physical?.free || 0)) / (memoryStats.physical?.total || 1) * 100}%` }"
-              ></div>
-            </div>
-            <div class="flex justify-between text-xs text-gray-500">
-              <span>{{ t('performance.free') }}: {{ memoryStats.physical?.free?.toFixed(1) || '-' }} GiB</span>
-              <span>{{ t('performance.total') }}: {{ memoryStats.physical?.total?.toFixed(1) || '-' }} GiB</span>
+          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.heapUsage') }}</h4>
+          <div class="flex items-center justify-center h-32">
+            <div class="relative">
+              <svg class="w-28 h-28" viewBox="0 0 100 100">
+                <!-- Background circle -->
+                <circle
+                  cx="50" cy="50" r="40"
+                  fill="none"
+                  stroke="#1f2937"
+                  stroke-width="10"
+                />
+                <!-- Progress circle -->
+                <circle
+                  cx="50" cy="50" r="40"
+                  fill="none"
+                  stroke="url(#heapGradient)"
+                  stroke-width="10"
+                  stroke-linecap="round"
+                  :stroke-dasharray="`${(memoryStats.heap?.used || 0) / (memoryStats.heap?.max || 1) * 251.2} 251.2`"
+                  transform="rotate(-90 50 50)"
+                  class="transition-all duration-500"
+                />
+                <defs>
+                  <linearGradient id="heapGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#22c55e" />
+                    <stop offset="100%" stop-color="#4ade80" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <span class="text-2xl font-bold text-white">
+                  {{ ((memoryStats.heap?.used || 0) / (memoryStats.heap?.max || 1) * 100).toFixed(0) }}%
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-
-        <!-- Swap Memory -->
-        <div class="space-y-3">
-          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.swapMemory') }}</h4>
-          <div class="space-y-2">
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-gray-500">{{ t('performance.used') }}</span>
-              <span class="text-purple-400 font-mono">
-                {{ ((memoryStats.swap?.total || 0) - (memoryStats.swap?.free || 0)).toFixed(1) }} GiB
-              </span>
-            </div>
-            <div class="w-full h-2 bg-dark-100 rounded-full overflow-hidden">
-              <div
-                class="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full transition-all duration-500"
-                :style="{ width: `${((memoryStats.swap?.total || 0) - (memoryStats.swap?.free || 0)) / (memoryStats.swap?.total || 1) * 100}%` }"
-              ></div>
-            </div>
-            <div class="flex justify-between text-xs text-gray-500">
-              <span>{{ t('performance.free') }}: {{ memoryStats.swap?.free?.toFixed(1) || '-' }} GiB</span>
-              <span>{{ t('performance.total') }}: {{ memoryStats.swap?.total?.toFixed(1) || '-' }} GiB</span>
-            </div>
-          </div>
+          <p class="text-center text-xs text-gray-500">
+            {{ memoryStats.heap?.used?.toFixed(2) || '-' }} / {{ memoryStats.heap?.max?.toFixed(2) || '-' }} GiB
+          </p>
         </div>
       </div>
     </Card>
