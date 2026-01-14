@@ -2,7 +2,7 @@ import api from './client'
 
 export interface User {
   username: string
-  role: 'admin' | 'moderator' | 'viewer'
+  role: 'admin' | 'moderator' | 'operator' | 'viewer'
   createdAt: string
   lastLogin?: string
 }

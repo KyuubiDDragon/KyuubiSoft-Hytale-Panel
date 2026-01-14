@@ -294,11 +294,13 @@
     "roles": {
       "admin": "Administrator",
       "moderator": "Moderator",
+      "operator": "Operator",
       "viewer": "Betrachter"
     },
     "rolesInfo": "Benutzerrollen",
     "adminDesc": "Vollzugriff auf alle Funktionen",
     "moderatorDesc": "Kann Server verwalten, aber keine Benutzer",
+    "operatorDesc": "Kann Dashboard, Konsole, Performance sehen und Server neustarten",
     "viewerDesc": "Nur Lesezugriff",
     "created": "Erstellt",
     "lastLogin": "Letzter Login",

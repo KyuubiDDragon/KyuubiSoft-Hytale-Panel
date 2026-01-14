@@ -108,6 +108,8 @@ function getRoleBadgeClass(role: User['role']): string {
       return 'bg-status-error/20 text-status-error'
     case 'moderator':
       return 'bg-hytale-orange/20 text-hytale-orange'
+    case 'operator':
+      return 'bg-blue-500/20 text-blue-400'
     default:
       return 'bg-gray-500/20 text-gray-400'
   }
@@ -164,6 +166,7 @@ onMounted(loadUsers)
           <div class="text-sm text-gray-400 mt-2 space-y-1">
             <p><span class="text-status-error font-medium">Admin:</span> {{ t('users.adminDesc') }}</p>
             <p><span class="text-hytale-orange font-medium">Moderator:</span> {{ t('users.moderatorDesc') }}</p>
+            <p><span class="text-blue-400 font-medium">Operator:</span> {{ t('users.operatorDesc') }}</p>
             <p><span class="text-gray-400 font-medium">Viewer:</span> {{ t('users.viewerDesc') }}</p>
           </div>
         </div>
@@ -275,6 +278,7 @@ onMounted(loadUsers)
               class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-hytale-orange"
             >
               <option value="viewer">{{ t('users.roles.viewer') }}</option>
+              <option value="operator">{{ t('users.roles.operator') }}</option>
               <option value="moderator">{{ t('users.roles.moderator') }}</option>
               <option value="admin">{{ t('users.roles.admin') }}</option>
             </select>
@@ -327,6 +331,7 @@ onMounted(loadUsers)
               class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-hytale-orange"
             >
               <option value="viewer">{{ t('users.roles.viewer') }}</option>
+              <option value="operator">{{ t('users.roles.operator') }}</option>
               <option value="moderator">{{ t('users.roles.moderator') }}</option>
               <option value="admin">{{ t('users.roles.admin') }}</option>
             </select>

@@ -294,11 +294,13 @@
     "roles": {
       "admin": "Administrator",
       "moderator": "Moderator",
+      "operator": "Operator",
       "viewer": "Viewer"
     },
     "rolesInfo": "User Roles",
     "adminDesc": "Full access to all features",
     "moderatorDesc": "Can manage server but not users",
+    "operatorDesc": "Can view dashboard, console, performance and restart server",
     "viewerDesc": "Read-only access",
     "created": "Created",
     "lastLogin": "Last Login",

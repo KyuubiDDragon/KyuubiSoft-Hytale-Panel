@@ -8,35 +8,51 @@ const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
 
+type Permission = 'all' | 'console' | 'performance' | 'managePlayers' | 'manageBackups' | 'manageConfig' | 'admin'
+
 interface NavItem {
   name: string
   path: string
   icon: string
   label: string
   group?: string
-  adminOnly?: boolean
+  permission?: Permission
+}
+
+// Check if user has permission for a nav item
+function hasPermission(permission?: Permission): boolean {
+  if (!permission || permission === 'all') return true
+  switch (permission) {
+    case 'console': return authStore.canViewConsole
+    case 'performance': return authStore.canViewPerformance
+    case 'managePlayers': return authStore.canManagePlayers
+    case 'manageBackups': return authStore.canManageBackups
+    case 'manageConfig': return authStore.canManageConfig
+    case 'admin': return authStore.isAdmin
+    default: return true
+  }
 }
 
 const navItems = computed<NavItem[]>(() => [
-  { name: 'dashboard', path: '/', icon: 'dashboard', label: t('nav.dashboard'), group: 'main' },
-  { name: 'console', path: '/console', icon: 'console', label: t('nav.console'), group: 'main' },
-  { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), group: 'main' },
-  { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management' },
-  { name: 'whitelist', path: '/whitelist', icon: 'whitelist', label: t('nav.whitelist'), group: 'management' },
-  { name: 'permissions', path: '/permissions', icon: 'permissions', label: t('nav.permissions'), group: 'management' },
-  { name: 'worlds', path: '/worlds', icon: 'worlds', label: t('nav.worlds'), group: 'management' },
-  { name: 'mods', path: '/mods', icon: 'mods', label: t('nav.mods'), group: 'management' },
-  { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data' },
-  { name: 'configuration', path: '/configuration', icon: 'configuration', label: t('nav.configuration'), group: 'data' },
-  { name: 'settings', path: '/settings', icon: 'settings', label: t('nav.settings'), group: 'data' },
-  { name: 'users', path: '/users', icon: 'users', label: t('nav.users'), group: 'admin', adminOnly: true },
-  { name: 'activity', path: '/activity', icon: 'activity', label: t('nav.activityLog'), group: 'admin', adminOnly: true },
+  { name: 'dashboard', path: '/', icon: 'dashboard', label: t('nav.dashboard'), group: 'main', permission: 'all' },
+  { name: 'console', path: '/console', icon: 'console', label: t('nav.console'), group: 'main', permission: 'console' },
+  { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), group: 'main', permission: 'performance' },
+  { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management', permission: 'managePlayers' },
+  { name: 'whitelist', path: '/whitelist', icon: 'whitelist', label: t('nav.whitelist'), group: 'management', permission: 'managePlayers' },
+  { name: 'permissions', path: '/permissions', icon: 'permissions', label: t('nav.permissions'), group: 'management', permission: 'managePlayers' },
+  { name: 'worlds', path: '/worlds', icon: 'worlds', label: t('nav.worlds'), group: 'management', permission: 'managePlayers' },
+  { name: 'mods', path: '/mods', icon: 'mods', label: t('nav.mods'), group: 'management', permission: 'managePlayers' },
+  { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data', permission: 'manageBackups' },
+  { name: 'configuration', path: '/configuration', icon: 'configuration', label: t('nav.configuration'), group: 'data', permission: 'manageConfig' },
+  { name: 'settings', path: '/settings', icon: 'settings', label: t('nav.settings'), group: 'data', permission: 'all' },
+  { name: 'users', path: '/users', icon: 'users', label: t('nav.users'), group: 'admin', permission: 'admin' },
+  { name: 'activity', path: '/activity', icon: 'activity', label: t('nav.activityLog'), group: 'admin', permission: 'admin' },
 ])
 
-const mainItems = computed(() => navItems.value.filter(i => i.group === 'main'))
-const managementItems = computed(() => navItems.value.filter(i => i.group === 'management'))
-const dataItems = computed(() => navItems.value.filter(i => i.group === 'data'))
-const adminItems = computed(() => navItems.value.filter(i => i.group === 'admin' && (!i.adminOnly || authStore.isAdmin)))
+const mainItems = computed(() => navItems.value.filter(i => i.group === 'main' && hasPermission(i.permission)))
+const managementItems = computed(() => navItems.value.filter(i => i.group === 'management' && hasPermission(i.permission)))
+const dataItems = computed(() => navItems.value.filter(i => i.group === 'data' && hasPermission(i.permission)))
+const adminItems = computed(() => navItems.value.filter(i => i.group === 'admin' && hasPermission(i.permission)))
 
 function isActive(path: string): boolean {
   return route.path === path

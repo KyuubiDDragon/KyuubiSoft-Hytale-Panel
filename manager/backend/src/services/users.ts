@@ -7,7 +7,7 @@ import { config } from '../config.js';
 export interface User {
   username: string;
   passwordHash: string;
-  role: 'admin' | 'moderator' | 'viewer';
+  role: 'admin' | 'moderator' | 'operator' | 'viewer';
   createdAt: string;
   lastLogin?: string;
 }
