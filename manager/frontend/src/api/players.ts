@@ -53,4 +53,19 @@ export const playersApi = {
     const response = await api.delete<ActionResponse>(`/players/${playerName}/whitelist`)
     return response.data
   },
+
+  async op(playerName: string): Promise<ActionResponse> {
+    const response = await api.post<ActionResponse>(`/players/${playerName}/op`)
+    return response.data
+  },
+
+  async deop(playerName: string): Promise<ActionResponse> {
+    const response = await api.delete<ActionResponse>(`/players/${playerName}/op`)
+    return response.data
+  },
+
+  async sendMessage(playerName: string, message: string): Promise<ActionResponse> {
+    const response = await api.post<ActionResponse>(`/players/${playerName}/message`, { message })
+    return response.data
+  },
 }

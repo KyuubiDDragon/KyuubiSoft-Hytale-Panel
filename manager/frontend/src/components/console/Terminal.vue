@@ -9,9 +9,98 @@ const consoleStore = useConsoleStore()
 const { sendCommand } = useWebSocket()
 
 const terminalRef = ref<HTMLDivElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
 const commandInput = ref('')
 const searchFilter = ref('')
 const levelFilter = ref<'all' | 'error' | 'warn' | 'info' | 'debug'>('all')
+
+// Command auto-complete
+const showSuggestions = ref(false)
+const selectedSuggestion = ref(0)
+
+const knownCommands = [
+  '/help',
+  '/auth login device',
+  '/auth logout',
+  '/auth status',
+  '/stop',
+  '/save',
+  '/save-all',
+  '/kick',
+  '/ban',
+  '/unban',
+  '/pardon',
+  '/whitelist add',
+  '/whitelist remove',
+  '/whitelist list',
+  '/whitelist on',
+  '/whitelist off',
+  '/op',
+  '/deop',
+  '/gamemode',
+  '/tp',
+  '/teleport',
+  '/give',
+  '/time set',
+  '/time query',
+  '/weather clear',
+  '/weather rain',
+  '/seed',
+  '/list',
+  '/say',
+  '/tell',
+  '/msg',
+  '/me',
+  '/spawn',
+  '/setspawn',
+  '/world',
+  '/worlds',
+  '/reload',
+  '/plugins',
+  '/version',
+]
+
+const filteredCommands = computed(() => {
+  if (!commandInput.value.startsWith('/')) return []
+  const input = commandInput.value.toLowerCase()
+  return knownCommands.filter(cmd => cmd.toLowerCase().startsWith(input)).slice(0, 8)
+})
+
+function selectSuggestion(cmd: string) {
+  commandInput.value = cmd
+  showSuggestions.value = false
+  inputRef.value?.focus()
+}
+
+function handleKeyDown(e: KeyboardEvent) {
+  if (!showSuggestions.value || filteredCommands.value.length === 0) return
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    selectedSuggestion.value = (selectedSuggestion.value + 1) % filteredCommands.value.length
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    selectedSuggestion.value = selectedSuggestion.value === 0
+      ? filteredCommands.value.length - 1
+      : selectedSuggestion.value - 1
+  } else if (e.key === 'Tab' || e.key === 'Enter') {
+    if (filteredCommands.value.length > 0 && showSuggestions.value) {
+      e.preventDefault()
+      selectSuggestion(filteredCommands.value[selectedSuggestion.value])
+    }
+  } else if (e.key === 'Escape') {
+    showSuggestions.value = false
+  }
+}
+
+watch(commandInput, (val) => {
+  if (val.startsWith('/') && val.length > 1) {
+    showSuggestions.value = filteredCommands.value.length > 0
+    selectedSuggestion.value = 0
+  } else {
+    showSuggestions.value = false
+  }
+})
 
 // Filtered logs based on search and level
 const filteredLogs = computed(() => {
@@ -50,7 +139,7 @@ const filteredLogs = computed(() => {
 
 function handleSubmit() {
   if (!commandInput.value.trim()) return
-
+  showSuggestions.value = false
   sendCommand(commandInput.value)
   commandInput.value = ''
 }
@@ -186,18 +275,46 @@ onMounted(() => {
 
     <!-- Command Input - Always visible at bottom -->
     <div class="mt-4 flex-shrink-0">
-      <form @submit.prevent="handleSubmit" class="flex gap-2">
-        <input
-          v-model="commandInput"
-          type="text"
-          :placeholder="t('console.commandPlaceholder')"
-          class="input flex-1 font-mono"
-        />
-        <button type="submit" class="btn btn-primary">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-          </svg>
-        </button>
+      <form @submit.prevent="handleSubmit" class="relative">
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <input
+              ref="inputRef"
+              v-model="commandInput"
+              @keydown="handleKeyDown"
+              @blur="setTimeout(() => showSuggestions = false, 150)"
+              type="text"
+              :placeholder="t('console.commandPlaceholder')"
+              class="input w-full font-mono"
+            />
+
+            <!-- Auto-complete dropdown -->
+            <div
+              v-if="showSuggestions && filteredCommands.length > 0"
+              class="absolute bottom-full left-0 right-0 mb-1 bg-dark-300 border border-dark-50 rounded-lg overflow-hidden shadow-lg z-10"
+            >
+              <button
+                v-for="(cmd, index) in filteredCommands"
+                :key="cmd"
+                type="button"
+                @click="selectSuggestion(cmd)"
+                :class="[
+                  'w-full px-4 py-2 text-left font-mono text-sm transition-colors',
+                  index === selectedSuggestion
+                    ? 'bg-hytale-orange/20 text-hytale-orange'
+                    : 'text-gray-300 hover:bg-dark-100'
+                ]"
+              >
+                {{ cmd }}
+              </button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
       </form>
 
       <!-- Controls -->

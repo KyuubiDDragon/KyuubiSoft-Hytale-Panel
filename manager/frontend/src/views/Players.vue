@@ -43,6 +43,30 @@ function handleBan(name: string) {
   showBanModal.value = true
 }
 
+async function handleWhitelist(name: string) {
+  try {
+    await playersApi.addToWhitelist(name)
+  } catch (err) {
+    error.value = t('errors.serverError')
+  }
+}
+
+async function handleOp(name: string) {
+  try {
+    await playersApi.op(name)
+  } catch (err) {
+    error.value = t('errors.serverError')
+  }
+}
+
+async function handleMessage(name: string, message: string) {
+  try {
+    await playersApi.sendMessage(name, message)
+  } catch (err) {
+    error.value = t('errors.serverError')
+  }
+}
+
 async function confirmKick() {
   if (!selectedPlayer.value) return
   actionLoading.value = true
@@ -113,6 +137,9 @@ onUnmounted(() => {
         :loading="loading"
         @kick="handleKick"
         @ban="handleBan"
+        @whitelist="handleWhitelist"
+        @op="handleOp"
+        @message="handleMessage"
       />
     </Card>
 

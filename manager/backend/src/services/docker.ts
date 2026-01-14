@@ -141,6 +141,55 @@ export async function getLogs(tail: number = 100): Promise<string> {
   }
 }
 
+// Store the stdin stream for the container
+let stdinStream: NodeJS.WritableStream | null = null;
+let stdinAttached = false;
+
+async function ensureStdinAttached(): Promise<boolean> {
+  if (stdinAttached && stdinStream) {
+    return true;
+  }
+
+  try {
+    const container = await getContainer();
+    if (!container) {
+      return false;
+    }
+
+    const info = await container.inspect();
+    if (!info.State.Running) {
+      return false;
+    }
+
+    // Attach to container stdin
+    const stream = await container.attach({
+      stream: true,
+      stdin: true,
+      stdout: false,
+      stderr: false,
+      hijack: true,
+    });
+
+    stdinStream = stream;
+    stdinAttached = true;
+
+    stream.on('error', () => {
+      stdinAttached = false;
+      stdinStream = null;
+    });
+
+    stream.on('close', () => {
+      stdinAttached = false;
+      stdinStream = null;
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Failed to attach stdin:', error);
+    return false;
+  }
+}
+
 export async function execCommand(command: string): Promise<ActionResponse> {
   try {
     const container = await getContainer();
@@ -153,10 +202,30 @@ export async function execCommand(command: string): Promise<ActionResponse> {
       return { success: false, error: 'Container not running' };
     }
 
-    // Escape single quotes in command and send to container's main process stdin
-    const escapedCommand = command.replace(/'/g, "'\\''");
+    // Try to use stdin stream first
+    const attached = await ensureStdinAttached();
+    if (attached && stdinStream) {
+      try {
+        stdinStream.write(command + '\n');
+        return { success: true, message: `Command executed: ${command}` };
+      } catch {
+        // Reset and try fallback
+        stdinAttached = false;
+        stdinStream = null;
+      }
+    }
+
+    // Fallback: Use screen or tmux if available, or direct write
     const exec = await container.exec({
-      Cmd: ['sh', '-c', `echo '${escapedCommand}' > /proc/1/fd/0`],
+      Cmd: ['sh', '-c', `
+        if command -v screen > /dev/null && screen -list | grep -q hytale; then
+          screen -S hytale -p 0 -X stuff "${command.replace(/"/g, '\\"')}\n"
+        elif [ -p /tmp/server_input ]; then
+          echo "${command.replace(/"/g, '\\"')}" > /tmp/server_input
+        else
+          echo "${command.replace(/"/g, '\\"')}" >> /proc/1/fd/0
+        fi
+      `],
       AttachStdout: true,
       AttachStderr: true,
     });
@@ -164,10 +233,6 @@ export async function execCommand(command: string): Promise<ActionResponse> {
     const stream = await exec.start({});
 
     return new Promise((resolve) => {
-      let output = '';
-      stream.on('data', (chunk: Buffer) => {
-        output += chunk.toString('utf-8');
-      });
       stream.on('end', () => {
         resolve({ success: true, message: `Command sent: ${command}` });
       });
@@ -175,10 +240,9 @@ export async function execCommand(command: string): Promise<ActionResponse> {
         resolve({ success: false, error: err.message });
       });
 
-      // Timeout after 2 seconds
       setTimeout(() => {
         resolve({ success: true, message: `Command sent: ${command}` });
-      }, 2000);
+      }, 1000);
     });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

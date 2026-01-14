@@ -116,7 +116,9 @@
     "confirmKick": "Really kick this player?",
     "confirmBan": "Really ban this player?",
     "noPlayers": "No players online",
-    "playerCount": "{count} players online"
+    "playerCount": "{count} players online",
+    "messagePlaceholder": "Send message...",
+    "op": "OP"
   },
   "whitelist": {
     "title": "Whitelist & Bans",

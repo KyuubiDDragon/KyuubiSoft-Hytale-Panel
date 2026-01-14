@@ -304,36 +304,46 @@ interface WorldInfo {
   lastModified: string;
 }
 
-async function getWorldsPath(): Promise<string> {
-  return path.join(config.serverPath, 'worlds');
+// Possible world paths to check
+function getWorldsPaths(): string[] {
+  return [
+    path.join(config.dataPath, 'worlds'),
+    path.join(config.serverPath, 'worlds'),
+    path.join(config.serverPath, 'data', 'worlds'),
+    path.join(config.dataPath),
+  ];
 }
 
-// GET /api/management/worlds
-router.get('/worlds', authMiddleware, async (_req: Request, res: Response) => {
+async function scanWorldsInPath(worldsPath: string): Promise<WorldInfo[]> {
+  const worlds: WorldInfo[] = [];
   try {
-    const worldsPath = await getWorldsPath();
-    let worlds: WorldInfo[] = [];
+    const entries = await readdir(worldsPath);
 
-    try {
-      const entries = await readdir(worldsPath);
-
-      for (const entry of entries) {
-        const entryPath = path.join(worldsPath, entry);
-        try {
-          const stats = await stat(entryPath);
-          if (stats.isDirectory()) {
-            // Calculate directory size (simplified - just count files)
-            let size = 0;
-            try {
-              const files = await readdir(entryPath);
-              for (const file of files) {
+    for (const entry of entries) {
+      const entryPath = path.join(worldsPath, entry);
+      try {
+        const stats = await stat(entryPath);
+        if (stats.isDirectory()) {
+          // Check if it looks like a world (has level.dat or world files)
+          let isWorld = false;
+          let size = 0;
+          try {
+            const files = await readdir(entryPath);
+            // A world directory typically has certain files
+            isWorld = files.length > 0;
+            for (const file of files) {
+              try {
                 const fileStat = await stat(path.join(entryPath, file));
                 size += fileStat.size;
+              } catch {
+                // Ignore
               }
-            } catch {
-              // Ignore
             }
+          } catch {
+            // Ignore
+          }
 
+          if (isWorld) {
             worlds.push({
               name: entry,
               path: entryPath,
@@ -341,15 +351,36 @@ router.get('/worlds', authMiddleware, async (_req: Request, res: Response) => {
               lastModified: stats.mtime.toISOString(),
             });
           }
-        } catch {
-          // Skip entries that can't be read
+        }
+      } catch {
+        // Skip entries that can't be read
+      }
+    }
+  } catch {
+    // Path doesn't exist or can't be read
+  }
+  return worlds;
+}
+
+// GET /api/management/worlds
+router.get('/worlds', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    let worlds: WorldInfo[] = [];
+    const checkedPaths: string[] = [];
+
+    // Check all possible world paths
+    for (const worldsPath of getWorldsPaths()) {
+      checkedPaths.push(worldsPath);
+      const found = await scanWorldsInPath(worldsPath);
+      // Avoid duplicates
+      for (const world of found) {
+        if (!worlds.some(w => w.path === world.path)) {
+          worlds.push(world);
         }
       }
-    } catch {
-      // worlds directory doesn't exist
     }
 
-    res.json({ worlds });
+    res.json({ worlds, checkedPaths });
   } catch (error) {
     res.status(500).json({ error: 'Failed to read worlds' });
   }

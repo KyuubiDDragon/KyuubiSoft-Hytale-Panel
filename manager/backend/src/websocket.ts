@@ -1,13 +1,35 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { verifyToken } from './services/auth.js';
-import { getDockerInstance, getContainerName, execCommand } from './services/docker.js';
+import { getDockerInstance, getContainerName, execCommand, getLogs } from './services/docker.js';
 import { parseLogLine } from './services/logs.js';
 import { processLogLine } from './services/players.js';
 import type { WsMessage } from './types/index.js';
 
 const clients = new Set<WebSocket>();
 let logStream: NodeJS.ReadableStream | null = null;
+
+async function sendExistingLogs(ws: WebSocket): Promise<void> {
+  try {
+    const logs = await getLogs(200);
+    const lines = logs.split('\n');
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const parsed = parseLogLine(trimmed);
+      if (parsed && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'log',
+          ...parsed,
+        }));
+      }
+    }
+  } catch (error) {
+    console.error('Failed to send existing logs:', error);
+  }
+}
 
 export function setupWebSocket(wss: WebSocketServer): void {
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
@@ -28,6 +50,9 @@ export function setupWebSocket(wss: WebSocketServer): void {
 
     console.log(`WebSocket client connected: ${username}`);
     clients.add(ws);
+
+    // Send existing logs to new client
+    sendExistingLogs(ws);
 
     // Start streaming if first client
     if (clients.size === 1) {

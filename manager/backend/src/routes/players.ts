@@ -119,4 +119,70 @@ router.delete('/:name/whitelist', authMiddleware, async (req: Request, res: Resp
   }
 });
 
+// POST /api/players/:name/op
+router.post('/:name/op', authMiddleware, async (req: Request, res: Response) => {
+  const playerName = req.params.name;
+
+  const result = await dockerService.execCommand(`/op ${playerName}`);
+
+  if (result.success) {
+    res.json({
+      success: true,
+      message: `Player ${playerName} is now an operator`,
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Failed to op player',
+    });
+  }
+});
+
+// DELETE /api/players/:name/op
+router.delete('/:name/op', authMiddleware, async (req: Request, res: Response) => {
+  const playerName = req.params.name;
+
+  const result = await dockerService.execCommand(`/deop ${playerName}`);
+
+  if (result.success) {
+    res.json({
+      success: true,
+      message: `Player ${playerName} is no longer an operator`,
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Failed to deop player',
+    });
+  }
+});
+
+// POST /api/players/:name/message
+router.post('/:name/message', authMiddleware, async (req: Request, res: Response) => {
+  const playerName = req.params.name;
+  const { message } = req.body;
+
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({
+      success: false,
+      error: 'Message is required',
+    });
+    return;
+  }
+
+  const result = await dockerService.execCommand(`/tell ${playerName} ${message}`);
+
+  if (result.success) {
+    res.json({
+      success: true,
+      message: `Message sent to ${playerName}`,
+    });
+  } else {
+    res.status(500).json({
+      success: false,
+      error: result.error || 'Failed to send message',
+    });
+  }
+});
+
 export default router;
