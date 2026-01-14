@@ -4,45 +4,42 @@ import type { PlayerInfo } from '../types/index.js';
 // Player tracking state
 const onlinePlayers: Map<string, Date> = new Map();
 
-// Patterns for player events - supports various game server log formats
-// Player names can contain letters, numbers, underscores (Minecraft/Hytale style)
+// Patterns for player events - Hytale Server specific patterns first
+// Player names can contain letters, numbers, underscores
 const JOIN_PATTERNS = [
-  // Hytale / Generic formats
+  // Hytale Server specific patterns (from actual logs)
+  /\[Universe\|P\]\s+Adding player '(\w+)/i,
+  /\[World\|.*?\]\s+Player '(\w+)' joined world/i,
+  /\[World\|.*?\]\s+Adding player '(\w+)' to world/i,
+  /Starting authenticated flow for (\w+)/i,
+  /Connection complete for (\w+)/i,
+  /Identity token validated for (\w+)/i,
+  // Generic fallback patterns
   /Player\s+(\w+)\s+joined/i,
   /Player\s+(\w+)\s+connected/i,
   /(\w+)\s+joined the game/i,
   /(\w+)\s+joined the server/i,
   /(\w+)\s+has joined/i,
-  /(\w+)\s+has connected/i,
   /(\w+)\s+connected/i,
   /(\w+)\s+logged in/i,
-  /(\w+)\s+entered the game/i,
-  // UUID-based formats (Minecraft-style)
-  /UUID of player (\w+) is/i,
-  /\[Server\].*?(\w+).*?joined/i,
-  /\[INFO\].*?(\w+).*?joined/i,
-  // Connection messages
-  /Connection from.*?name=(\w+)/i,
-  /Client (\w+) connected/i,
 ];
 
 const LEAVE_PATTERNS = [
-  // Hytale / Generic formats
+  // Hytale Server specific patterns (from actual logs)
+  /Disconnecting (\w+) at/i,
+  /\[Universe\|P\]\s+Removing player '(\w+)/i,
+  /\[PlayerSystems\]\s+Removing player '(\w+)/i,
+  // Generic fallback patterns
   /Player\s+(\w+)\s+left/i,
   /Player\s+(\w+)\s+disconnected/i,
   /(\w+)\s+left the game/i,
   /(\w+)\s+left the server/i,
   /(\w+)\s+has left/i,
-  /(\w+)\s+has disconnected/i,
   /(\w+)\s+disconnected/i,
   /(\w+)\s+logged out/i,
   /(\w+)\s+quit/i,
   /(\w+)\s+timed out/i,
   /(\w+)\s+lost connection/i,
-  // Server messages
-  /\[Server\].*?(\w+).*?left/i,
-  /\[INFO\].*?(\w+).*?left/i,
-  /Client (\w+) disconnected/i,
 ];
 
 function formatDuration(ms: number): string {

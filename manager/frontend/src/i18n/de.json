@@ -14,7 +14,10 @@
     "refresh": "Aktualisieren",
     "download": "Herunterladen",
     "yes": "Ja",
-    "no": "Nein"
+    "no": "Nein",
+    "add": "Hinzufügen",
+    "edit": "Bearbeiten",
+    "remove": "Entfernen"
   },
   "auth": {
     "login": "Anmelden",
@@ -31,7 +34,14 @@
     "console": "Konsole",
     "backups": "Backups",
     "players": "Spieler",
-    "settings": "Einstellungen"
+    "settings": "Einstellungen",
+    "whitelist": "Whitelist",
+    "permissions": "Berechtigungen",
+    "worlds": "Welten",
+    "performance": "Performance",
+    "server": "Server",
+    "management": "Verwaltung",
+    "data": "Daten"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -62,7 +72,13 @@
     "connected": "Verbunden",
     "disconnected": "Getrennt",
     "reconnecting": "Verbinde...",
-    "noLogs": "Keine Logs vorhanden"
+    "noLogs": "Keine Logs vorhanden",
+    "filter": "Filter",
+    "filterPlaceholder": "Logs filtern...",
+    "showAll": "Alle",
+    "showErrors": "Fehler",
+    "showWarnings": "Warnungen",
+    "showInfo": "Info"
   },
   "backups": {
     "title": "Backup Verwaltung",
@@ -101,6 +117,69 @@
     "confirmBan": "Spieler wirklich bannen?",
     "noPlayers": "Keine Spieler online",
     "playerCount": "{count} Spieler online"
+  },
+  "whitelist": {
+    "title": "Whitelist & Bans",
+    "whitelist": "Whitelist",
+    "bans": "Bans",
+    "enabled": "Whitelist aktiviert",
+    "enabledDescription": "Nur Spieler auf der Whitelist können beitreten",
+    "addPlayer": "Spieler hinzufügen",
+    "playerName": "Spielername",
+    "players": "Spieler",
+    "noPlayers": "Keine Spieler auf der Whitelist",
+    "banPlayer": "Spieler bannen",
+    "banReason": "Begründung (optional)",
+    "ban": "Bannen",
+    "unban": "Entbannen",
+    "bannedPlayers": "Gebannte Spieler",
+    "noBans": "Keine Spieler gebannt"
+  },
+  "permissions": {
+    "title": "Berechtigungen",
+    "users": "Benutzer",
+    "groups": "Gruppen",
+    "addUser": "Benutzer hinzufügen",
+    "editUser": "Benutzer bearbeiten",
+    "playerName": "Spielername",
+    "assignGroups": "Gruppen zuweisen",
+    "usersList": "Benutzer",
+    "noUsers": "Keine Benutzer konfiguriert",
+    "noGroupsAssigned": "Keine Gruppen zugewiesen",
+    "addGroup": "Gruppe hinzufügen",
+    "editGroup": "Gruppe bearbeiten",
+    "groupName": "Gruppenname",
+    "permissions": "Berechtigungen",
+    "permissionsPlaceholder": "Eine Berechtigung pro Zeile\nz.B. hytale.command.kick\nhytale.admin.*",
+    "inheritsFrom": "Erbt von",
+    "groupsList": "Gruppen",
+    "noGroups": "Keine Gruppen konfiguriert",
+    "more": "weitere"
+  },
+  "worlds": {
+    "title": "Welten",
+    "infoTitle": "Welten Übersicht",
+    "infoDescription": "Hier siehst du alle auf dem Server verfügbaren Welten. Welten werden automatisch erkannt.",
+    "noWorlds": "Keine Welten gefunden"
+  },
+  "performance": {
+    "title": "Performance Monitor",
+    "liveUpdates": "Live Updates",
+    "cpu": "CPU",
+    "memory": "Speicher",
+    "players": "Spieler",
+    "status": "Status",
+    "cpuUsage": "CPU Auslastung",
+    "memoryUsage": "Speicher Auslastung",
+    "playersHistory": "Spieler Verlauf",
+    "avg": "Durchschnitt",
+    "max": "Maximum",
+    "current": "Aktuell",
+    "summary": "Zusammenfassung",
+    "containerName": "Container Name",
+    "containerId": "Container ID",
+    "memoryLimit": "Speicher Limit",
+    "dataPoints": "Datenpunkte"
   },
   "settings": {
     "title": "Einstellungen",

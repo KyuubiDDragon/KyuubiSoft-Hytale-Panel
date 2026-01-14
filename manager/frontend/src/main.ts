@@ -13,6 +13,10 @@ import Console from './views/Console.vue'
 import Backups from './views/Backups.vue'
 import Players from './views/Players.vue'
 import Settings from './views/Settings.vue'
+import Whitelist from './views/Whitelist.vue'
+import Permissions from './views/Permissions.vue'
+import Worlds from './views/Worlds.vue'
+import Performance from './views/Performance.vue'
 
 // Import auth store
 import { useAuthStore } from './stores/auth'
@@ -40,6 +44,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/performance',
+      name: 'performance',
+      component: Performance,
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/backups',
       name: 'backups',
       component: Backups,
@@ -49,6 +59,24 @@ const router = createRouter({
       path: '/players',
       name: 'players',
       component: Players,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/whitelist',
+      name: 'whitelist',
+      component: Whitelist,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/permissions',
+      name: 'permissions',
+      component: Permissions,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/worlds',
+      name: 'worlds',
+      component: Worlds,
       meta: { requiresAuth: true },
     },
     {

@@ -3,10 +3,11 @@ import type { LogEntry } from '../types/index.js';
 type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'UNKNOWN';
 
 const LOG_PATTERNS: [RegExp, LogLevel][] = [
-  [/\[ERROR\]|\[SEVERE\]|ERROR:|SEVERE:/i, 'ERROR'],
-  [/\[WARN\]|\[WARNING\]|WARN:|WARNING:/i, 'WARN'],
-  [/\[DEBUG\]|DEBUG:/i, 'DEBUG'],
-  [/\[INFO\]|INFO:/i, 'INFO'],
+  // Hytale Server format: [2026/01/14 12:41:18   ERROR]
+  [/\s+ERROR\]|ERROR:|SEVERE:|SEVERE\]/i, 'ERROR'],
+  [/\s+WARN\]|WARN:|WARNING:|WARNING\]/i, 'WARN'],
+  [/\s+DEBUG\]|DEBUG:|FINE\]|FINEST\]/i, 'DEBUG'],
+  [/\s+INFO\]|INFO:/i, 'INFO'],
 ];
 
 export function detectLogLevel(line: string): LogLevel {
@@ -24,15 +25,23 @@ export function parseLogLine(line: string): LogEntry | null {
 
   const level = detectLogLevel(trimmed);
 
-  // Try to extract timestamp from Docker logs format
-  // Format: 2024-01-14T12:00:00.000000000Z message
   let timestamp: string | null = null;
   let message = trimmed;
 
-  const timestampMatch = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/.exec(trimmed);
-  if (timestampMatch) {
-    timestamp = timestampMatch[1];
-    message = trimmed.substring(timestampMatch[0].length).replace(/^[\.\d]*Z?\s*/, '').trim();
+  // Hytale Server format: [2026/01/14 12:41:18   INFO] message
+  const hytaleMatch = /^\[(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+\w+\]\s*(.*)$/.exec(trimmed);
+  if (hytaleMatch) {
+    // Convert 2026/01/14 12:41:18 to ISO format
+    const dateStr = hytaleMatch[1].replace(/\//g, '-').replace(' ', 'T');
+    timestamp = dateStr;
+    message = hytaleMatch[2].trim();
+  } else {
+    // Docker logs format: 2024-01-14T12:00:00.000000000Z message
+    const dockerMatch = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/.exec(trimmed);
+    if (dockerMatch) {
+      timestamp = dockerMatch[1];
+      message = trimmed.substring(dockerMatch[0].length).replace(/^[\.\d]*Z?\s*/, '').trim();
+    }
   }
 
   return {

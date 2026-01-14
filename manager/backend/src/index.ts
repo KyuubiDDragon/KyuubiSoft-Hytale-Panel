@@ -16,6 +16,7 @@ import serverRoutes from './routes/server.js';
 import consoleRoutes from './routes/console.js';
 import backupRoutes from './routes/backup.js';
 import playersRoutes from './routes/players.js';
+import managementRoutes from './routes/management.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,6 +45,7 @@ app.use('/api/server', serverRoutes);
 app.use('/api/console', consoleRoutes);
 app.use('/api/backups', backupRoutes);
 app.use('/api/players', playersRoutes);
+app.use('/api/management', managementRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

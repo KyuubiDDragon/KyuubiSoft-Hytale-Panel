@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConsoleStore } from '@/stores/console'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -10,6 +10,43 @@ const { sendCommand } = useWebSocket()
 
 const terminalRef = ref<HTMLDivElement | null>(null)
 const commandInput = ref('')
+const searchFilter = ref('')
+const levelFilter = ref<'all' | 'error' | 'warn' | 'info' | 'debug'>('all')
+
+// Filtered logs based on search and level
+const filteredLogs = computed(() => {
+  let logs = consoleStore.logs
+
+  // Filter by level
+  if (levelFilter.value !== 'all') {
+    logs = logs.filter(log => {
+      const level = (log.level || 'INFO').toUpperCase()
+      switch (levelFilter.value) {
+        case 'error':
+          return level === 'ERROR' || level === 'SEVERE'
+        case 'warn':
+          return level === 'WARN' || level === 'WARNING'
+        case 'info':
+          return level === 'INFO'
+        case 'debug':
+          return level === 'DEBUG'
+        default:
+          return true
+      }
+    })
+  }
+
+  // Filter by search text
+  if (searchFilter.value.trim()) {
+    const search = searchFilter.value.toLowerCase()
+    logs = logs.filter(log =>
+      log.message.toLowerCase().includes(search) ||
+      (log.level && log.level.toLowerCase().includes(search))
+    )
+  }
+
+  return logs
+})
 
 function handleSubmit() {
   if (!commandInput.value.trim()) return
@@ -58,17 +95,73 @@ onMounted(() => {
 
 <template>
   <div class="flex flex-col h-full">
+    <!-- Filter Bar -->
+    <div class="flex items-center gap-3 mb-3 flex-shrink-0">
+      <!-- Search Input -->
+      <div class="relative flex-1">
+        <input
+          v-model="searchFilter"
+          type="text"
+          :placeholder="t('console.filterPlaceholder')"
+          class="w-full pl-9 pr-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+        />
+        <svg class="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+
+      <!-- Level Filter Buttons -->
+      <div class="flex gap-1">
+        <button
+          @click="levelFilter = 'all'"
+          :class="[
+            'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+            levelFilter === 'all' ? 'bg-hytale-orange text-dark' : 'bg-dark-100 text-gray-400 hover:text-white'
+          ]"
+        >
+          {{ t('console.showAll') }}
+        </button>
+        <button
+          @click="levelFilter = 'error'"
+          :class="[
+            'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+            levelFilter === 'error' ? 'bg-status-error text-white' : 'bg-dark-100 text-gray-400 hover:text-status-error'
+          ]"
+        >
+          {{ t('console.showErrors') }}
+        </button>
+        <button
+          @click="levelFilter = 'warn'"
+          :class="[
+            'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+            levelFilter === 'warn' ? 'bg-status-warning text-dark' : 'bg-dark-100 text-gray-400 hover:text-status-warning'
+          ]"
+        >
+          {{ t('console.showWarnings') }}
+        </button>
+        <button
+          @click="levelFilter = 'info'"
+          :class="[
+            'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+            levelFilter === 'info' ? 'bg-blue-500 text-white' : 'bg-dark-100 text-gray-400 hover:text-blue-400'
+          ]"
+        >
+          {{ t('console.showInfo') }}
+        </button>
+      </div>
+    </div>
+
     <!-- Terminal Output -->
     <div
       ref="terminalRef"
       class="terminal flex-1 min-h-0 overflow-y-auto"
-      style="max-height: calc(100vh - 280px);"
+      style="max-height: calc(100vh - 340px);"
     >
-      <div v-if="consoleStore.logs.length === 0" class="text-gray-500 text-center py-8">
-        {{ t('console.noLogs') }}
+      <div v-if="filteredLogs.length === 0" class="text-gray-500 text-center py-8">
+        {{ searchFilter || levelFilter !== 'all' ? t('console.noLogs') + ' (filtered)' : t('console.noLogs') }}
       </div>
       <div
-        v-for="log in consoleStore.logs"
+        v-for="log in filteredLogs"
         :key="log.id"
         :class="getLogClass(log.level)"
       >
@@ -129,6 +222,11 @@ onMounted(() => {
             />
             {{ t('console.autoScroll') }}
           </label>
+
+          <!-- Log count -->
+          <span class="text-xs text-gray-500">
+            {{ filteredLogs.length }} / {{ consoleStore.logs.length }}
+          </span>
         </div>
 
         <div class="flex items-center gap-2">
