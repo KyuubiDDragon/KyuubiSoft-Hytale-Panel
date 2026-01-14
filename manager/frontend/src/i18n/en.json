@@ -242,7 +242,16 @@
     "containerName": "Container Name",
     "containerId": "Container ID",
     "memoryLimit": "Memory Limit",
-    "dataPoints": "Data Points"
+    "dataPoints": "Data Points",
+    "serverMemory": "Server Memory (JVM)",
+    "heapMemory": "JVM Heap Memory",
+    "physicalMemory": "Physical Memory",
+    "swapMemory": "Swap Memory",
+    "used": "Used",
+    "free": "Free",
+    "total": "Total",
+    "init": "Init",
+    "committed": "Committed"
   },
   "settings": {
     "title": "Settings",

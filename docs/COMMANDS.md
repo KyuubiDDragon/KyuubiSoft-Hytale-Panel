@@ -132,9 +132,12 @@ This document lists all available commands for the Hytale server. Commands can b
 
 | Command | Description | Usage |
 |---------|-------------|-------|
-| `/teleport playertoplayer` | Teleport player to player | `/teleport playertoplayer <source> <target>` |
-| `/teleport tocoordinates` | Teleport to coordinates | `/teleport tocoordinates <player> <x> <y> <z>` |
-| `/teleport toworld` | Teleport to world spawn | `/teleport toworld <player> <world>` |
+| `/tp` | Teleport player to player | `/tp <player> <target>` |
+| `/tp` | Teleport to coordinates | `/tp <player> <x> <y> <z>` |
+| `/tp` | Teleport self to player | `/tp <target>` |
+| `/tp` | Teleport self to coords | `/tp <x> <y> <z>` |
+| `/tp` | Teleport to world | `/tp <player> <x> <y> <z> --world <name>` |
+| `/top` | Teleport to top | `/top` |
 | `/spawn` | Teleport to spawn | `/spawn [player]` |
 | `/home` | Teleport to home | `/home [player]` |
 | `/sethome` | Set home location | `/sethome [player]` |
@@ -237,11 +240,13 @@ Example permissions:
 /kick <player>                    - Kick player
 /ban <player>                     - Ban player
 /op add <player>                  - Give OP
-/teleport playertoplayer <p1> <p2> - Teleport player to player
+/tp <player> <target>             - Teleport player to player
+/tp <player> <x> <y> <z>          - Teleport to coordinates
 /gamemode creative <player>       - Set creative mode
 /give <player> <item> <amount>    - Give items
 /time set day                     - Set daytime
 /weather clear                    - Clear weather
+/server stats memory              - Show memory stats
 /save                            - Save worlds
 /stop                            - Stop server
 ```

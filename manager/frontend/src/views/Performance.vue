@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { statsApi, type StatsEntry } from '@/api/management'
+import { serverApi, type ServerMemoryStats } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 
 const { t } = useI18n()
@@ -11,6 +12,9 @@ const { stats, status, playerCount, refresh } = useServerStats()
 // Historical data
 const history = ref<StatsEntry[]>([])
 const loading = ref(true)
+
+// Server memory stats (from /server stats memory command)
+const memoryStats = ref<ServerMemoryStats | null>(null)
 
 // Local history for current session (updated live)
 const localHistory = ref<{ timestamp: Date; cpu: number; memory: number; players: number }[]>([])
@@ -27,6 +31,14 @@ async function loadHistory() {
     // Ignore - use local history
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMemoryStats() {
+  try {
+    memoryStats.value = await serverApi.getMemoryStats()
+  } catch (e) {
+    memoryStats.value = null
   }
 }
 
@@ -92,11 +104,13 @@ function generateAreaPath(data: number[], maxValue: number, width: number, heigh
 onMounted(async () => {
   await loadHistory()
   await refresh()
+  await loadMemoryStats()
   addLocalEntry()
 
   // Update every 5 seconds
   refreshInterval = setInterval(async () => {
     await refresh()
+    await loadMemoryStats()
     addLocalEntry()
   }, 5000)
 })
@@ -361,6 +375,82 @@ onUnmounted(() => {
         <div class="p-4 bg-dark-100 rounded-lg">
           <p class="text-sm text-gray-400 mb-1">{{ t('performance.dataPoints') }}</p>
           <p class="text-white">{{ localHistory.length }} / {{ maxLocalHistory }}</p>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Server Memory Stats (JVM) -->
+    <Card v-if="memoryStats?.available">
+      <h3 class="font-semibold text-white mb-4">{{ t('performance.serverMemory') }}</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- JVM Heap Memory -->
+        <div class="space-y-3">
+          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.heapMemory') }}</h4>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-gray-500">{{ t('performance.used') }}</span>
+              <span class="text-green-400 font-mono">{{ memoryStats.heap?.used?.toFixed(1) || '-' }} GiB</span>
+            </div>
+            <div class="w-full h-2 bg-dark-100 rounded-full overflow-hidden">
+              <div
+                class="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-500"
+                :style="{ width: `${(memoryStats.heap?.used || 0) / (memoryStats.heap?.max || 1) * 100}%` }"
+              ></div>
+            </div>
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>{{ t('performance.init') }}: {{ memoryStats.heap?.init?.toFixed(1) || '-' }} GiB</span>
+              <span>{{ t('performance.max') }}: {{ memoryStats.heap?.max?.toFixed(1) || '-' }} GiB</span>
+            </div>
+            <div class="text-xs text-gray-500">
+              {{ t('performance.committed') }}: {{ memoryStats.heap?.committed?.toFixed(1) || '-' }} GiB
+            </div>
+          </div>
+        </div>
+
+        <!-- Physical Memory -->
+        <div class="space-y-3">
+          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.physicalMemory') }}</h4>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-gray-500">{{ t('performance.used') }}</span>
+              <span class="text-blue-400 font-mono">
+                {{ ((memoryStats.physical?.total || 0) - (memoryStats.physical?.free || 0)).toFixed(1) }} GiB
+              </span>
+            </div>
+            <div class="w-full h-2 bg-dark-100 rounded-full overflow-hidden">
+              <div
+                class="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
+                :style="{ width: `${((memoryStats.physical?.total || 0) - (memoryStats.physical?.free || 0)) / (memoryStats.physical?.total || 1) * 100}%` }"
+              ></div>
+            </div>
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>{{ t('performance.free') }}: {{ memoryStats.physical?.free?.toFixed(1) || '-' }} GiB</span>
+              <span>{{ t('performance.total') }}: {{ memoryStats.physical?.total?.toFixed(1) || '-' }} GiB</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Swap Memory -->
+        <div class="space-y-3">
+          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.swapMemory') }}</h4>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-gray-500">{{ t('performance.used') }}</span>
+              <span class="text-purple-400 font-mono">
+                {{ ((memoryStats.swap?.total || 0) - (memoryStats.swap?.free || 0)).toFixed(1) }} GiB
+              </span>
+            </div>
+            <div class="w-full h-2 bg-dark-100 rounded-full overflow-hidden">
+              <div
+                class="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full transition-all duration-500"
+                :style="{ width: `${((memoryStats.swap?.total || 0) - (memoryStats.swap?.free || 0)) / (memoryStats.swap?.total || 1) * 100}%` }"
+              ></div>
+            </div>
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>{{ t('performance.free') }}: {{ memoryStats.swap?.free?.toFixed(1) || '-' }} GiB</span>
+              <span>{{ t('performance.total') }}: {{ memoryStats.swap?.total?.toFixed(1) || '-' }} GiB</span>
+            </div>
+          </div>
         </div>
       </div>
     </Card>

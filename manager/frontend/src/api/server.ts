@@ -26,6 +26,26 @@ export interface ActionResponse {
   error?: string
 }
 
+export interface ServerMemoryStats {
+  available: boolean
+  physical?: {
+    total: number | null
+    free: number | null
+  }
+  swap?: {
+    total: number | null
+    free: number | null
+  }
+  heap?: {
+    init: number | null
+    used: number | null
+    committed: number | null
+    max: number | null
+  }
+  raw?: string
+  error?: string
+}
+
 export interface ConfigFile {
   name: string
   size: number
@@ -49,6 +69,11 @@ export const serverApi = {
 
   async getStats(): Promise<ServerStats> {
     const response = await api.get<ServerStats>('/server/stats')
+    return response.data
+  },
+
+  async getMemoryStats(): Promise<ServerMemoryStats> {
+    const response = await api.get<ServerMemoryStats>('/server/memory')
     return response.data
   },
 

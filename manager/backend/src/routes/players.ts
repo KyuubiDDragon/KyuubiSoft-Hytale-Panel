@@ -1,9 +1,55 @@
 import { Router, Request, Response } from 'express';
+import { readFile, writeFile } from 'fs/promises';
+import path from 'path';
 import { authMiddleware } from '../middleware/auth.js';
 import * as playersService from '../services/players.js';
 import * as dockerService from '../services/docker.js';
+import { config } from '../config.js';
+import { logActivity } from '../services/activityLog.js';
+import type { AuthenticatedRequest } from '../types/index.js';
 
 const router = Router();
+
+// ============== FILE PERSISTENCE HELPERS ==============
+
+interface WhitelistData {
+  enabled: boolean;
+  list: string[];
+}
+
+interface BanEntry {
+  player: string;
+  reason?: string;
+  bannedAt: string;
+  bannedBy?: string;
+}
+
+async function readWhitelist(): Promise<WhitelistData> {
+  try {
+    const content = await readFile(path.join(config.serverPath, 'whitelist.json'), 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return { enabled: false, list: [] };
+  }
+}
+
+async function writeWhitelist(data: WhitelistData): Promise<void> {
+  await writeFile(path.join(config.serverPath, 'whitelist.json'), JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function readBans(): Promise<BanEntry[]> {
+  try {
+    const content = await readFile(path.join(config.serverPath, 'bans.json'), 'utf-8');
+    const data = JSON.parse(content);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeBans(data: BanEntry[]): Promise<void> {
+  await writeFile(path.join(config.serverPath, 'bans.json'), JSON.stringify(data, null, 2), 'utf-8');
+}
 
 // GET /api/players
 router.get('/', authMiddleware, async (_req: Request, res: Response) => {
@@ -22,19 +68,28 @@ router.get('/count', authMiddleware, async (_req: Request, res: Response) => {
 });
 
 // POST /api/players/:name/kick
-router.post('/:name/kick', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/kick', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
+  const { reason } = req.body;
+  const username = req.user || 'system';
 
-  // Send kick command to server
-  const result = await dockerService.execCommand(`/kick ${playerName}`);
+  // Send kick command to server (with optional reason)
+  const command = reason ? `/kick ${playerName} ${reason}` : `/kick ${playerName}`;
+  const result = await dockerService.execCommand(command);
 
   if (result.success) {
     playersService.removePlayer(playerName);
+
+    // Log activity
+    await logActivity(username, 'kick', 'player', true, playerName, reason);
+
     res.json({
       success: true,
       message: `Player ${playerName} kicked`,
     });
   } else {
+    await logActivity(username, 'kick', 'player', false, playerName, result.error);
+
     res.status(500).json({
       success: false,
       error: result.error || 'Failed to kick player',
@@ -43,18 +98,54 @@ router.post('/:name/kick', authMiddleware, async (req: Request, res: Response) =
 });
 
 // POST /api/players/:name/ban
-router.post('/:name/ban', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/ban', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
+  const { reason } = req.body;
+  const username = req.user || 'system';
 
-  const result = await dockerService.execCommand(`/ban ${playerName}`);
+  // First kick the player if online
+  await dockerService.execCommand(`/kick ${playerName} ${reason || 'You have been banned'}`);
+
+  // Then execute ban command
+  const command = reason ? `/ban ${playerName} ${reason}` : `/ban ${playerName}`;
+  const result = await dockerService.execCommand(command);
 
   if (result.success) {
     playersService.removePlayer(playerName);
+
+    // Persist ban to bans.json
+    try {
+      const bans = await readBans();
+      if (!bans.find(b => b.player === playerName)) {
+        bans.push({
+          player: playerName,
+          reason: reason || undefined,
+          bannedAt: new Date().toISOString(),
+          bannedBy: username,
+        });
+        await writeBans(bans);
+      }
+
+      // Remove from whitelist if present
+      const whitelist = await readWhitelist();
+      if (whitelist.list.includes(playerName)) {
+        whitelist.list = whitelist.list.filter(p => p !== playerName);
+        await writeWhitelist(whitelist);
+      }
+    } catch (err) {
+      console.error('Failed to persist ban:', err);
+    }
+
+    // Log activity
+    await logActivity(username, 'ban', 'player', true, playerName, reason);
+
     res.json({
       success: true,
       message: `Player ${playerName} banned`,
     });
   } else {
+    await logActivity(username, 'ban', 'player', false, playerName, result.error);
+
     res.status(500).json({
       success: false,
       error: result.error || 'Failed to ban player',
@@ -63,17 +154,32 @@ router.post('/:name/ban', authMiddleware, async (req: Request, res: Response) =>
 });
 
 // DELETE /api/players/:name/ban
-router.delete('/:name/ban', authMiddleware, async (req: Request, res: Response) => {
+router.delete('/:name/ban', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
+  const username = req.user || 'system';
 
   const result = await dockerService.execCommand(`/unban ${playerName}`);
 
   if (result.success) {
+    // Remove from bans.json
+    try {
+      let bans = await readBans();
+      bans = bans.filter(b => b.player !== playerName);
+      await writeBans(bans);
+    } catch (err) {
+      console.error('Failed to remove ban from file:', err);
+    }
+
+    // Log activity
+    await logActivity(username, 'unban', 'player', true, playerName);
+
     res.json({
       success: true,
       message: `Player ${playerName} unbanned`,
     });
   } else {
+    await logActivity(username, 'unban', 'player', false, playerName, result.error);
+
     res.status(500).json({
       success: false,
       error: result.error || 'Failed to unban player',
@@ -82,17 +188,34 @@ router.delete('/:name/ban', authMiddleware, async (req: Request, res: Response) 
 });
 
 // POST /api/players/:name/whitelist
-router.post('/:name/whitelist', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/whitelist', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
+  const username = req.user || 'system';
 
   const result = await dockerService.execCommand(`/whitelist add ${playerName}`);
 
   if (result.success) {
+    // Persist to whitelist.json
+    try {
+      const whitelist = await readWhitelist();
+      if (!whitelist.list.includes(playerName)) {
+        whitelist.list.push(playerName);
+        await writeWhitelist(whitelist);
+      }
+    } catch (err) {
+      console.error('Failed to persist whitelist:', err);
+    }
+
+    // Log activity
+    await logActivity(username, 'whitelist_add', 'player', true, playerName);
+
     res.json({
       success: true,
       message: `Player ${playerName} added to whitelist`,
     });
   } else {
+    await logActivity(username, 'whitelist_add', 'player', false, playerName, result.error);
+
     res.status(500).json({
       success: false,
       error: result.error || 'Failed to add to whitelist',
@@ -101,17 +224,32 @@ router.post('/:name/whitelist', authMiddleware, async (req: Request, res: Respon
 });
 
 // DELETE /api/players/:name/whitelist
-router.delete('/:name/whitelist', authMiddleware, async (req: Request, res: Response) => {
+router.delete('/:name/whitelist', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
+  const username = req.user || 'system';
 
   const result = await dockerService.execCommand(`/whitelist remove ${playerName}`);
 
   if (result.success) {
+    // Remove from whitelist.json
+    try {
+      const whitelist = await readWhitelist();
+      whitelist.list = whitelist.list.filter(p => p !== playerName);
+      await writeWhitelist(whitelist);
+    } catch (err) {
+      console.error('Failed to persist whitelist removal:', err);
+    }
+
+    // Log activity
+    await logActivity(username, 'whitelist_remove', 'player', true, playerName);
+
     res.json({
       success: true,
       message: `Player ${playerName} removed from whitelist`,
     });
   } else {
+    await logActivity(username, 'whitelist_remove', 'player', false, playerName, result.error);
+
     res.status(500).json({
       success: false,
       error: result.error || 'Failed to remove from whitelist',
@@ -192,11 +330,11 @@ router.post('/:name/teleport', authMiddleware, async (req: Request, res: Respons
 
   let command: string;
   if (target) {
-    // Teleport to another player
-    command = `/teleport playertoplayer ${playerName} ${target}`;
+    // Teleport player to another player: /tp <source> <target>
+    command = `/tp ${playerName} ${target}`;
   } else if (x !== undefined && y !== undefined && z !== undefined) {
-    // Teleport to coordinates
-    command = `/teleport tocoordinates ${playerName} ${x} ${y} ${z}`;
+    // Teleport to coordinates: /tp <player> <x> <y> <z>
+    command = `/tp ${playerName} ${x} ${y} ${z}`;
   } else {
     res.status(400).json({
       success: false,
