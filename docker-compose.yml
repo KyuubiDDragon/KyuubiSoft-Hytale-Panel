@@ -23,10 +23,10 @@
 # ============================================================
 
 services:
-  hytale:
+  hytale-beta:
     build: .
-    container_name: hytale
-    hostname: hytale
+    container_name: hytale-beta
+    hostname: hytale-beta
     restart: on-failure:3
     
     environment:
@@ -84,15 +84,15 @@ services:
 
     # Network for manager communication
     networks:
-      - hytale-net
+      - hytale-beta-net
 
   # ============================================================
   # Hytale Server Manager - Web UI
   # ============================================================
-  hytale-manager:
+  hytale-beta-manager:
     build: ./manager
-    container_name: hytale-manager
-    hostname: hytale-manager
+    container_name: hytale-beta-manager
+    hostname: hytale-beta-manager
     restart: unless-stopped
 
     environment:
@@ -102,7 +102,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-key}
 
       # Target container
-      - GAME_CONTAINER_NAME=hytale
+      - GAME_CONTAINER_NAME=hytale-beta
 
       # Paths (inside container)
       - SERVER_PATH=/opt/hytale/server
@@ -128,10 +128,10 @@ services:
       - manager-data:/app/data
 
     networks:
-      - hytale-net
+      - hytale-beta-net
 
     depends_on:
-      - hytale
+      - hytale-beta
 
     # Logging
     logging:
@@ -144,7 +144,7 @@ services:
 # Networks
 # ============================================================
 networks:
-  hytale-net:
+  hytale-beta-net:
     driver: bridge
 
 # ============================================================
