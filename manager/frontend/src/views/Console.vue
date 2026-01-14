@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
 import Terminal from '@/components/console/Terminal.vue'
+import CommandsPanel from '@/components/console/CommandsPanel.vue'
 
 const { t } = useI18n()
 </script>
@@ -19,5 +20,8 @@ const { t } = useI18n()
         <Terminal />
       </div>
     </Card>
+
+    <!-- Commands Reference Panel -->
+    <CommandsPanel />
   </div>
 </template>

@@ -1,12 +1,36 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
+import { serverApi, type ServerMemoryStats } from '@/api/server'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 
 const { t } = useI18n()
 const { status, stats, playerCount, loading, error, refresh } = useServerStats()
+
+// Server JVM memory stats
+const serverMemory = ref<ServerMemoryStats | null>(null)
+let memoryInterval: ReturnType<typeof setInterval> | null = null
+
+async function fetchServerMemory() {
+  try {
+    serverMemory.value = await serverApi.getMemoryStats()
+  } catch {
+    // Silently fail - server might not be running
+  }
+}
+
+onMounted(() => {
+  fetchServerMemory()
+  memoryInterval = setInterval(fetchServerMemory, 10000) // Every 10 seconds
+})
+
+onUnmounted(() => {
+  if (memoryInterval) {
+    clearInterval(memoryInterval)
+  }
+})
 
 const serverStatusText = computed(() => {
   if (!status.value) return t('common.loading')
@@ -23,9 +47,31 @@ const cpuValue = computed(() => {
   return `${stats.value.cpu_percent.toFixed(1)}%`
 })
 
+// Show JVM heap memory if available, otherwise fall back to Docker memory
 const memoryValue = computed(() => {
+  // Prefer JVM heap memory from server stats
+  if (serverMemory.value?.available && serverMemory.value.heap?.used !== null) {
+    const used = serverMemory.value.heap.used
+    const max = serverMemory.value.heap.max
+    if (used !== null && max !== null) {
+      return `${used.toFixed(1)} / ${max.toFixed(1)} GiB`
+    }
+  }
+  // Fall back to Docker container memory
   if (!stats.value?.memory_mb) return '0 MB'
   return `${stats.value.memory_mb.toFixed(0)} / ${stats.value.memory_limit_mb?.toFixed(0) || '?'} MB`
+})
+
+// Memory percent for status color (based on JVM heap or Docker)
+const memoryPercent = computed(() => {
+  if (serverMemory.value?.available && serverMemory.value.heap?.used !== null && serverMemory.value.heap?.max !== null) {
+    const used = serverMemory.value.heap.used
+    const max = serverMemory.value.heap.max
+    if (used !== null && max !== null && max > 0) {
+      return (used / max) * 100
+    }
+  }
+  return stats.value?.memory_percent || 0
 })
 
 const uptimeValue = computed(() => {
@@ -47,8 +93,16 @@ const uptimeValue = computed(() => {
 function handleAction(type: string, success: boolean) {
   if (success) {
     // Refresh stats after action
-    setTimeout(refresh, 2000)
+    setTimeout(() => {
+      refresh()
+      fetchServerMemory()
+    }, 2000)
   }
+}
+
+function refreshAll() {
+  refresh()
+  fetchServerMemory()
 }
 </script>
 
@@ -58,7 +112,7 @@ function handleAction(type: string, success: boolean) {
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold text-white">{{ t('dashboard.title') }}</h1>
       <button
-        @click="refresh"
+        @click="refreshAll"
         class="text-gray-400 hover:text-white transition-colors"
         :class="{ 'animate-spin': loading }"
       >
@@ -92,7 +146,7 @@ function handleAction(type: string, success: boolean) {
       <StatusCard
         :title="t('dashboard.memory')"
         :value="memoryValue"
-        :status="(stats?.memory_percent || 0) > 80 ? 'warning' : 'info'"
+        :status="memoryPercent > 80 ? 'warning' : 'info'"
         icon="memory"
       />
 
