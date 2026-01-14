@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { config } from '../config.js';
 import type { JwtPayload } from '../types/index.js';
@@ -21,7 +21,7 @@ export function createAccessToken(subject: string): string {
   return jwt.sign(
     { sub: subject, type: 'access' },
     config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn }
+    { expiresIn: config.jwtExpiresIn } as SignOptions
   );
 }
 
@@ -29,7 +29,7 @@ export function createRefreshToken(subject: string): string {
   return jwt.sign(
     { sub: subject, type: 'refresh' },
     config.jwtSecret,
-    { expiresIn: config.refreshExpiresIn }
+    { expiresIn: config.refreshExpiresIn } as SignOptions
   );
 }
 
