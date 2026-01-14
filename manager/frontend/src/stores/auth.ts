@@ -22,7 +22,7 @@ const removeStorageItem = (key: string): void => {
   }
 }
 
-export type UserRole = 'admin' | 'moderator' | 'viewer'
+export type UserRole = 'admin' | 'moderator' | 'operator' | 'viewer'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -35,6 +35,16 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!accessToken.value)
   const isAdmin = computed(() => role.value === 'admin')
   const canManageServer = computed(() => role.value === 'admin' || role.value === 'moderator')
+
+  // Operator permissions: can view dashboard, console, performance + restart server
+  const canRestartServer = computed(() => ['admin', 'moderator', 'operator'].includes(role.value || ''))
+  const canViewConsole = computed(() => ['admin', 'moderator', 'operator'].includes(role.value || ''))
+  const canViewPerformance = computed(() => ['admin', 'moderator', 'operator'].includes(role.value || ''))
+
+  // Only admin/moderator can manage players, backups, mods, etc.
+  const canManagePlayers = computed(() => ['admin', 'moderator'].includes(role.value || ''))
+  const canManageBackups = computed(() => ['admin', 'moderator'].includes(role.value || ''))
+  const canManageConfig = computed(() => ['admin', 'moderator'].includes(role.value || ''))
 
   // Actions
   function setTokens(access: string, refresh: string) {
@@ -90,6 +100,12 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isAdmin,
     canManageServer,
+    canRestartServer,
+    canViewConsole,
+    canViewPerformance,
+    canManagePlayers,
+    canManageBackups,
+    canManageConfig,
     // Actions
     setTokens,
     setUser,
