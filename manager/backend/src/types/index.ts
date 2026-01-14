@@ -48,6 +48,7 @@ export interface ActionResponse {
   success: boolean;
   message?: string;
   error?: string;
+  output?: string;
 }
 
 // Console Types
