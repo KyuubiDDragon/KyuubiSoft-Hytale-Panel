@@ -293,6 +293,7 @@ onMounted(loadData)
               </div>
               <div>
                 <p class="text-white font-medium">{{ user.name }}</p>
+                <p v-if="user.uuid" class="text-xs text-gray-500 font-mono">{{ user.uuid }}</p>
                 <div class="flex flex-wrap gap-1 mt-1">
                   <span
                     v-for="group in user.groups"

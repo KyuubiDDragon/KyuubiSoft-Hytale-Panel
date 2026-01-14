@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { playersApi, type PlayerInfo } from '@/api/players'
+import { playersApi, type PlayerInfo, type PlayerHistoryEntry } from '@/api/players'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
 
 const { t } = useI18n()
 
+// Tab state
+const activeTab = ref<'online' | 'offline'>('online')
+
 const players = ref<PlayerInfo[]>([])
+const offlinePlayers = ref<PlayerHistoryEntry[]>([])
 const loading = ref(true)
+const offlineLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
 
 // Selected player for actions
 const selectedPlayer = ref<string | null>(null)
+const selectedPlayerUuid = ref<string | null>(null)
 const actionLoading = ref(false)
+
+// Ban reason
+const banReason = ref('')
 
 // Modals
 const showKickModal = ref(false)
@@ -54,6 +63,32 @@ async function fetchPlayers() {
   }
 }
 
+async function fetchOfflinePlayers() {
+  offlineLoading.value = true
+  try {
+    const response = await playersApi.getOffline()
+    offlinePlayers.value = response.players
+    error.value = ''
+  } catch (err) {
+    error.value = t('errors.connectionFailed')
+  } finally {
+    offlineLoading.value = false
+  }
+}
+
+function formatPlayTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+  return `${minutes}m`
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString()
+}
+
 function showSuccess(msg: string) {
   successMessage.value = msg
   setTimeout(() => { successMessage.value = '' }, 3000)
@@ -74,8 +109,10 @@ function openKickModal(name: string) {
   closeDropdown()
 }
 
-function openBanModal(name: string) {
+function openBanModal(name: string, uuid?: string) {
   selectedPlayer.value = name
+  selectedPlayerUuid.value = uuid || null
+  banReason.value = ''
   showBanModal.value = true
   closeDropdown()
 }
@@ -197,10 +234,15 @@ async function confirmBan() {
   if (!selectedPlayer.value) return
   actionLoading.value = true
   try {
-    await playersApi.ban(selectedPlayer.value)
+    await playersApi.ban(selectedPlayer.value, banReason.value || undefined)
     showBanModal.value = false
     showSuccess(t('players.ban') + ': ' + selectedPlayer.value)
+    banReason.value = ''
     await fetchPlayers()
+    // Also refresh offline players if that tab is active
+    if (activeTab.value === 'offline') {
+      await fetchOfflinePlayers()
+    }
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -284,6 +326,7 @@ async function confirmGive() {
 
 onMounted(() => {
   fetchPlayers()
+  fetchOfflinePlayers()
   pollInterval = setInterval(fetchPlayers, 10000)
 })
 
@@ -321,8 +364,34 @@ onUnmounted(() => {
       <p class="text-status-error">{{ error }}</p>
     </div>
 
+    <!-- Tabs -->
+    <div class="flex gap-2">
+      <button
+        @click="activeTab = 'online'"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors',
+          activeTab === 'online'
+            ? 'bg-hytale-orange text-dark'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        {{ t('players.online') }} ({{ players.length }})
+      </button>
+      <button
+        @click="activeTab = 'offline'; fetchOfflinePlayers()"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors',
+          activeTab === 'offline'
+            ? 'bg-hytale-orange text-dark'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        {{ t('players.offline') }} ({{ offlinePlayers.length }})
+      </button>
+    </div>
+
     <!-- Online Players -->
-    <Card :title="t('players.online')" :padding="false">
+    <Card v-if="activeTab === 'online'" :padding="false">
       <div v-if="loading" class="text-center text-gray-500 p-8">
         {{ t('common.loading') }}
       </div>
@@ -482,6 +551,69 @@ onUnmounted(() => {
       </div>
     </Card>
 
+    <!-- Offline Players -->
+    <Card v-if="activeTab === 'offline'" :padding="false">
+      <div v-if="offlineLoading" class="text-center text-gray-500 p-8">
+        {{ t('common.loading') }}
+      </div>
+
+      <div v-else-if="offlinePlayers.length === 0" class="text-center text-gray-500 p-8">
+        <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+        {{ t('players.noOfflinePlayers') }}
+      </div>
+
+      <div v-else class="divide-y divide-dark-50/30">
+        <div
+          v-for="player in offlinePlayers"
+          :key="player.name"
+          class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
+        >
+          <!-- Player Info -->
+          <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center">
+              <span class="text-gray-400 font-bold">{{ player.name[0].toUpperCase() }}</span>
+            </div>
+            <div>
+              <p class="font-medium text-white">{{ player.name }}</p>
+              <p v-if="player.uuid" class="text-xs text-gray-500 font-mono">{{ player.uuid }}</p>
+              <div class="flex gap-4 text-sm text-gray-500 mt-1">
+                <span>{{ t('players.lastSeen') }}: {{ formatDate(player.lastSeen) }}</span>
+                <span>{{ t('players.totalPlayTime') }}: {{ formatPlayTime(player.playTime) }}</span>
+                <span>{{ t('players.sessions') }}: {{ player.sessionCount }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-2">
+            <!-- Whitelist -->
+            <button
+              @click.stop="handleWhitelist(player.name)"
+              class="p-2 text-gray-400 hover:text-green-400 transition-colors"
+              :title="t('players.addToWhitelist')"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+
+            <!-- Ban -->
+            <button
+              @click.stop="openBanModal(player.name, player.uuid)"
+              class="p-2 text-gray-400 hover:text-red-400 transition-colors"
+              :title="t('players.ban')"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Card>
+
     <!-- Kick Modal -->
     <Modal :open="showKickModal" :title="t('players.kick')" @close="showKickModal = false">
       <p class="text-gray-300">
@@ -496,10 +628,24 @@ onUnmounted(() => {
 
     <!-- Ban Modal -->
     <Modal :open="showBanModal" :title="t('players.ban')" @close="showBanModal = false">
-      <p class="text-gray-300">
-        {{ t('players.confirmBan') }}
-        <span class="font-semibold text-white">{{ selectedPlayer }}</span>
-      </p>
+      <div class="space-y-4">
+        <p class="text-gray-300">
+          {{ t('players.confirmBan') }}
+          <span class="font-semibold text-white">{{ selectedPlayer }}</span>
+        </p>
+        <p v-if="selectedPlayerUuid" class="text-xs text-gray-500 font-mono">
+          UUID: {{ selectedPlayerUuid }}
+        </p>
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">{{ t('players.banReason') }}</label>
+          <input
+            v-model="banReason"
+            type="text"
+            placeholder="No reason"
+            class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+          />
+        </div>
+      </div>
       <template #footer>
         <Button variant="secondary" @click="showBanModal = false">{{ t('common.cancel') }}</Button>
         <Button variant="danger" :loading="actionLoading" @click="confirmBan">{{ t('players.ban') }}</Button>

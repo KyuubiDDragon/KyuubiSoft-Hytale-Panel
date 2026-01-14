@@ -291,60 +291,99 @@ router.delete('/bans/:player', authMiddleware, async (req: AuthenticatedRequest,
     // Import docker service to check status and execute commands
     const { execCommand, getStatus } = await import('../services/docker.js');
 
+    // First, find the player's UUID from our mapping
+    const mapping = await readBansMapping();
+    let playerUuid: string | undefined;
+    let playerName = player;
+
+    // Check if the input is already a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(player)) {
+      playerUuid = player;
+      playerName = mapping[player] || player;
+    } else {
+      // It's a name, find the UUID
+      const uuidEntry = Object.entries(mapping).find(([, name]) => name === player);
+      if (uuidEntry) {
+        playerUuid = uuidEntry[0];
+      }
+    }
+
     // Check if server is running
     const status = await getStatus();
     const serverRunning = status.running;
 
+    let commandSent = false;
     if (serverRunning) {
-      // Server is online - use command
-      const result = await execCommand(`/unban ${player}`);
+      // Server is online - try unban command with both name and UUID
+      // Try with player name first
+      let result = await execCommand(`/unban ${playerName}`);
+      if (result.success) {
+        commandSent = true;
+        console.log(`Unban command sent for player name: ${playerName}`);
+      }
 
-      if (!result.success) {
-        // Command failed, try direct file manipulation as fallback
-        console.log('Unban command failed, trying direct file manipulation');
-      } else {
-        // Log activity
-        await logActivity(req.user || 'Admin', 'unban', 'player', true, player);
+      // Also try with UUID if we have it
+      if (playerUuid && playerUuid !== playerName) {
+        result = await execCommand(`/unban ${playerUuid}`);
+        if (result.success) {
+          commandSent = true;
+          console.log(`Unban command sent for UUID: ${playerUuid}`);
+        }
+      }
 
-        // Wait a moment for server to update bans.json
+      // Wait a moment for server to process
+      if (commandSent) {
         await new Promise(resolve => setTimeout(resolve, 500));
-        const bans = await readBans();
-        res.json({ success: true, bans });
-        return;
       }
     }
 
-    // Server is offline or command failed - directly modify bans.json
+    // ALWAYS directly modify bans.json as well (server might not update the file)
     const bansPath = await getBansPath();
-    const content = await readFile(bansPath, 'utf-8');
-    const bansData = JSON.parse(content);
+    let fileModified = false;
 
-    if (Array.isArray(bansData)) {
-      // Find the player's UUID from our mapping
-      const mapping = await readBansMapping();
-      let targetIdentifier = player;
+    try {
+      const content = await readFile(bansPath, 'utf-8');
+      const bansData = JSON.parse(content);
 
-      // Check if this is a name, find the UUID
-      const uuidEntry = Object.entries(mapping).find(([, name]) => name === player);
-      if (uuidEntry) {
-        targetIdentifier = uuidEntry[0];
+      if (Array.isArray(bansData)) {
+        const originalLength = bansData.length;
+
+        // Filter out the ban (check both target UUID and name mapping)
+        const filteredBans = bansData.filter((ban: HytaleBanEntry) => {
+          const banName = mapping[ban.target];
+          // Remove if target matches UUID or name matches player
+          if (playerUuid && ban.target === playerUuid) return false;
+          if (banName === playerName) return false;
+          if (ban.target === player) return false; // Direct match
+          return true;
+        });
+
+        if (filteredBans.length < originalLength) {
+          // Write back the filtered bans
+          await writeFile(bansPath, JSON.stringify(filteredBans, null, 2), 'utf-8');
+          fileModified = true;
+          console.log(`Removed ${originalLength - filteredBans.length} ban(s) from bans.json`);
+
+          // Also update our name mapping (remove the unbanned player)
+          if (playerUuid) {
+            delete mapping[playerUuid];
+            await writeBansMapping(mapping);
+          }
+        }
       }
-
-      // Filter out the ban (check both target UUID and name mapping)
-      const filteredBans = bansData.filter((ban: HytaleBanEntry) => {
-        const banName = mapping[ban.target];
-        return ban.target !== targetIdentifier && banName !== player;
-      });
-
-      // Write back the filtered bans
-      await writeFile(bansPath, JSON.stringify(filteredBans, null, 2), 'utf-8');
+    } catch (fileError) {
+      console.error('Error modifying bans.json:', fileError);
     }
 
     // Log activity
-    await logActivity(req.user || 'Admin', 'unban', 'player', true, player, 'Direct file modification');
+    const details = serverRunning
+      ? (commandSent ? 'Command sent + file modified' : 'File modified only')
+      : 'Direct file modification (server offline)';
+    await logActivity(req.user || 'Admin', 'unban', 'player', true, playerName, details);
 
     const bans = await readBans();
-    res.json({ success: true, bans });
+    res.json({ success: true, bans, fileModified, commandSent });
   } catch (error) {
     console.error('Unban error:', error);
     res.status(500).json({ error: 'Failed to remove ban' });
