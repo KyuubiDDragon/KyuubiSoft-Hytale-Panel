@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { setLocale, getLocale } from '@/i18n'
+import { modStoreApi } from '@/api/management'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -11,6 +12,7 @@ const authStore = useAuthStore()
 
 const showUserMenu = ref(false)
 const currentLocale = ref(getLocale())
+const webMapInstalled = ref(false)
 
 function toggleLocale() {
   const newLocale = currentLocale.value === 'de' ? 'en' : 'de'
@@ -22,6 +24,27 @@ function logout() {
   authStore.logout()
   router.push('/login')
 }
+
+function openWebMap() {
+  // Navigate to the embedded web map page
+  router.push('/webmap')
+}
+
+async function checkWebMapStatus() {
+  try {
+    const result = await modStoreApi.getAvailable()
+    const webMap = result.mods.find(m => m.id === 'easywebmap')
+    if (webMap && webMap.installed) {
+      webMapInstalled.value = true
+    }
+  } catch (e) {
+    // Silently fail - just don't show the button
+  }
+}
+
+onMounted(() => {
+  checkWebMapStatus()
+})
 </script>
 
 <template>
@@ -33,6 +56,18 @@ function logout() {
 
     <!-- Right: Actions -->
     <div class="flex items-center gap-4">
+      <!-- Web Map Button (only when EasyWebMap is installed) -->
+      <button
+        v-if="webMapInstalled"
+        @click="openWebMap"
+        class="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-hytale-orange transition-colors rounded-lg hover:bg-dark-50"
+        :title="t('header.openMap')"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        </svg>
+      </button>
+
       <!-- Language Toggle -->
       <button
         @click="toggleLocale"

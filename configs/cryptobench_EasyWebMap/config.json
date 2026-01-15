@@ -1,0 +1,12 @@
+{
+  "httpPort": 18081,
+  "wsPort": 18082,
+  "maxZoom": 5,
+  "minZoom": 0,
+  "tileSize": 256,
+  "updateInterval": 1000,
+  "enableWebSocket": true,
+  "enablePlayerTracking": true,
+  "enableChunkRendering": true,
+  "bindAddress": "0.0.0.0"
+}

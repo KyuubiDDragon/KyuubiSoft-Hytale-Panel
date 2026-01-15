@@ -231,8 +231,10 @@
     "subtitle": "Manage server mods and plugins",
     "mods": "Mods",
     "plugins": "Plugins",
+    "store": "Mod Store",
     "noMods": "No mods found",
     "noPlugins": "No plugins found",
+    "noStoreMods": "No mods available in the store",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "active": "active",
@@ -240,11 +242,26 @@
     "restartNote": "Server restart required after enabling/disabling mods or plugins.",
     "upload": "Upload",
     "confirmDelete": "Really delete \"{name}\"?",
+    "confirmUninstall": "Really uninstall \"{name}\"?",
     "configEditor": "Config Editor",
     "configFiles": "Config Files",
     "noConfigs": "No config files found",
     "selectConfig": "Select a config file to edit",
-    "editConfig": "Edit Config"
+    "editConfig": "Edit Config",
+    "storeTitle": "Mod Store",
+    "storeDescription": "Install popular mods with one click. Mods are downloaded from GitHub releases.",
+    "availableMods": "Available Mods",
+    "installed": "Installed",
+    "install": "Install",
+    "installing": "Installing...",
+    "installSuccess": "Installed!",
+    "uninstall": "Uninstall",
+    "update": "Update",
+    "updating": "Updating...",
+    "updateAvailable": "Update available",
+    "updateSuccess": "Updated!",
+    "by": "by",
+    "ports": "Ports"
   },
   "performance": {
     "title": "Performance Monitor",
@@ -454,5 +471,16 @@
     "unauthorized": "Unauthorized",
     "notFound": "Not found",
     "unknown": "Unknown error"
+  },
+  "header": {
+    "openMap": "Open Web Map"
+  },
+  "webmap": {
+    "title": "Web Map",
+    "subtitle": "Live server map with real-time player tracking",
+    "openNewTab": "Open in New Tab",
+    "notInstalled": "EasyWebMap Not Installed",
+    "notInstalledDesc": "The EasyWebMap mod is not installed. Install it from the Mod Store to enable the live web map feature.",
+    "goToModStore": "Go to Mod Store"
   }
 }

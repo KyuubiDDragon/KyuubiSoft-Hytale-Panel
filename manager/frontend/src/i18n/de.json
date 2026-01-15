@@ -231,8 +231,10 @@
     "subtitle": "Server-Mods und Plugins verwalten",
     "mods": "Mods",
     "plugins": "Plugins",
+    "store": "Mod Store",
     "noMods": "Keine Mods gefunden",
     "noPlugins": "Keine Plugins gefunden",
+    "noStoreMods": "Keine Mods im Store verfügbar",
     "enabled": "Aktiviert",
     "disabled": "Deaktiviert",
     "active": "aktiv",
@@ -240,11 +242,26 @@
     "restartNote": "Server-Neustart erforderlich nach Aktivieren/Deaktivieren von Mods oder Plugins.",
     "upload": "Hochladen",
     "confirmDelete": "\"{name}\" wirklich löschen?",
+    "confirmUninstall": "\"{name}\" wirklich deinstallieren?",
     "configEditor": "Konfig-Editor",
     "configFiles": "Konfigurationsdateien",
     "noConfigs": "Keine Konfigurationsdateien gefunden",
     "selectConfig": "Konfigurationsdatei zum Bearbeiten auswählen",
-    "editConfig": "Konfig bearbeiten"
+    "editConfig": "Konfig bearbeiten",
+    "storeTitle": "Mod Store",
+    "storeDescription": "Beliebte Mods mit einem Klick installieren. Mods werden von GitHub Releases heruntergeladen.",
+    "availableMods": "Verfügbare Mods",
+    "installed": "Installiert",
+    "install": "Installieren",
+    "installing": "Installiere...",
+    "installSuccess": "Installiert!",
+    "uninstall": "Deinstallieren",
+    "update": "Aktualisieren",
+    "updating": "Aktualisiere...",
+    "updateAvailable": "Update verfügbar",
+    "updateSuccess": "Aktualisiert!",
+    "by": "von",
+    "ports": "Ports"
   },
   "performance": {
     "title": "Performance Monitor",
@@ -454,5 +471,16 @@
     "unauthorized": "Nicht autorisiert",
     "notFound": "Nicht gefunden",
     "unknown": "Unbekannter Fehler"
+  },
+  "header": {
+    "openMap": "Web Map öffnen"
+  },
+  "webmap": {
+    "title": "Web Map",
+    "subtitle": "Live Server-Karte mit Echtzeit-Spielerverfolgung",
+    "openNewTab": "In neuem Tab öffnen",
+    "notInstalled": "EasyWebMap nicht installiert",
+    "notInstalledDesc": "Das EasyWebMap-Mod ist nicht installiert. Installiere es über den Mod Store, um die Live-Webkarte zu aktivieren.",
+    "goToModStore": "Zum Mod Store"
   }
 }

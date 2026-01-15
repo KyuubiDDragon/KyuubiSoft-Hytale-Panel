@@ -264,6 +264,57 @@ export async function execCommand(command: string): Promise<ActionResponse> {
   }
 }
 
+// Execute a shell command inside the container and capture output
+export async function execInContainer(command: string): Promise<ActionResponse & { output?: string }> {
+  try {
+    const container = await getContainer();
+    if (!container) {
+      return { success: false, error: 'Container not found' };
+    }
+
+    const info = await container.inspect();
+    if (!info.State.Running) {
+      return { success: false, error: 'Container not running' };
+    }
+
+    const exec = await container.exec({
+      Cmd: ['sh', '-c', command],
+      AttachStdout: true,
+      AttachStderr: true,
+    });
+
+    const stream = await exec.start({});
+
+    return new Promise((resolve) => {
+      let output = '';
+
+      stream.on('data', (chunk: Buffer) => {
+        // Docker stream multiplexing: first 8 bytes are header
+        // Skip header bytes and extract actual output
+        const data = chunk.toString('utf8');
+        output += data;
+      });
+
+      stream.on('end', () => {
+        // Clean up docker stream headers (binary characters)
+        const cleanOutput = output.replace(/[\x00-\x08]/g, '').trim();
+        resolve({ success: true, output: cleanOutput });
+      });
+
+      stream.on('error', (err: Error) => {
+        resolve({ success: false, error: err.message });
+      });
+
+      setTimeout(() => {
+        const cleanOutput = output.replace(/[\x00-\x08]/g, '').trim();
+        resolve({ success: true, output: cleanOutput });
+      }, 5000);
+    });
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 export function getDockerInstance(): Docker {
   return docker;
 }

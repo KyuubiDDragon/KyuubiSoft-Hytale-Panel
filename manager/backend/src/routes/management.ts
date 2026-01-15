@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { logActivity, getActivityLog, clearActivityLog, type ActivityLogEntry } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { getRealPathIfSafe, isPathSafe, sanitizeFileName } from '../utils/pathSecurity.js';
+import { getAvailableMods, installMod, uninstallMod, updateMod, getLatestRelease, refreshRegistry, getRegistryInfo } from '../services/modStore.js';
 
 // Configure multer for file uploads
 const modsStorage = multer.diskStorage({
@@ -935,32 +936,106 @@ router.delete('/plugins/:filename', authMiddleware, async (req: AuthenticatedReq
 
 // ============== MOD/PLUGIN CONFIG FILES ==============
 
+// Helper: Extract base mod name without version (e.g., "EasyWebMap-v1.0.9" -> "EasyWebMap")
+function extractBaseModName(filename: string): string {
+  // Remove extension first
+  let name = filename.replace(/\.(jar|zip|disabled)$/i, '');
+  // Remove version patterns like -v1.0.0, -1.0.0, _v1.0.0
+  name = name.replace(/[-_]v?\d+(\.\d+)*$/i, '');
+  return name;
+}
+
+// Helper: Find config directories matching mod name (fuzzy search)
+async function findConfigDirs(baseDir: string, modName: string): Promise<string[]> {
+  const result: string[] = [];
+  const modNameLower = modName.toLowerCase();
+
+  try {
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const entryLower = entry.name.toLowerCase();
+        const entryNormalized = entryLower.replace(/[_-]/g, '');
+        const modNameNormalized = modNameLower.replace(/[_-]/g, '');
+
+        // Match patterns:
+        // 1. Folder contains mod name: "cryptobench_EasyWebMap" contains "easywebmap"
+        // 2. Mod name contains folder name
+        // 3. Pattern: author_modname (e.g., cryptobench_EasyWebMap)
+        // 4. Normalized comparison (ignoring _ and -)
+        if (
+          entryLower.includes(modNameLower) ||
+          modNameLower.includes(entryLower) ||
+          entryNormalized.includes(modNameNormalized) ||
+          modNameNormalized.includes(entryNormalized) ||
+          entryLower.endsWith('_' + modNameLower) ||
+          entryLower.startsWith(modNameLower + '_')
+        ) {
+          result.push(path.join(baseDir, entry.name));
+        }
+      }
+    }
+  } catch (e) {
+    // Directory doesn't exist or can't be read
+    console.log(`findConfigDirs: Could not read ${baseDir}:`, e);
+  }
+
+  return result;
+}
+
 // GET /api/management/mods/:filename/configs
 router.get('/mods/:filename/configs', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { filename } = req.params;
     const modName = filename.replace(/\.(jar|zip|disabled)$/i, '');
+    const baseModName = extractBaseModName(filename);
 
-    // Check common config locations
-    const configPaths = [
+    console.log(`Looking for configs for mod: ${filename}, baseName: ${baseModName}`);
+
+    // Priority search locations (mods directory first!)
+    const configPaths: string[] = [];
+
+    // 1. First search in mods directory (highest priority)
+    const modsMatches = await findConfigDirs(config.modsPath, baseModName);
+    configPaths.push(...modsMatches);
+    console.log(`Found in modsPath (${config.modsPath}):`, modsMatches);
+
+    // 2. Exact matches in common locations
+    configPaths.push(
       path.join(config.modsPath, modName),
+      path.join(config.modsPath, baseModName),
       path.join(config.modsPath, 'config', modName),
+      path.join(config.modsPath, 'config', baseModName),
       path.join(config.serverPath, 'config', modName),
+      path.join(config.serverPath, 'config', baseModName),
       path.join(config.dataPath, 'config', modName),
-    ];
+      path.join(config.dataPath, 'config', baseModName),
+    );
+
+    // 3. Also search in server/config and data/config for fuzzy matches
+    const serverConfigMatches = await findConfigDirs(path.join(config.serverPath, 'config'), baseModName);
+    const dataConfigMatches = await findConfigDirs(path.join(config.dataPath, 'config'), baseModName);
+    configPaths.push(...serverConfigMatches, ...dataConfigMatches);
+
+    // Deduplicate paths
+    const uniquePaths = [...new Set(configPaths)];
 
     const configs: { name: string; path: string }[] = [];
 
-    for (const configPath of configPaths) {
+    for (const configPath of uniquePaths) {
       try {
         const entries = await readdir(configPath);
         for (const entry of entries) {
           const ext = path.extname(entry).toLowerCase();
           if (['.json', '.yml', '.yaml', '.toml', '.cfg', '.conf', '.properties'].includes(ext)) {
-            configs.push({
-              name: entry,
-              path: path.join(configPath, entry),
-            });
+            const fullPath = path.join(configPath, entry);
+            // Avoid duplicates
+            if (!configs.some(c => c.path === fullPath)) {
+              configs.push({
+                name: entry,
+                path: fullPath,
+              });
+            }
           }
         }
       } catch {
@@ -968,8 +1043,10 @@ router.get('/mods/:filename/configs', authMiddleware, async (req: Request, res: 
       }
     }
 
+    console.log(`Found ${configs.length} config files for ${filename}:`, configs.map(c => c.path));
     res.json({ configs });
   } catch (error) {
+    console.error('Failed to get mod configs:', error);
     res.status(500).json({ error: 'Failed to get mod configs' });
   }
 });
@@ -979,27 +1056,53 @@ router.get('/plugins/:filename/configs', authMiddleware, async (req: Request, re
   try {
     const { filename } = req.params;
     const pluginName = filename.replace(/\.(jar|zip|disabled)$/i, '');
+    const basePluginName = extractBaseModName(filename);
 
-    // Check common config locations
-    const configPaths = [
+    console.log(`Looking for configs for plugin: ${filename}, baseName: ${basePluginName}`);
+
+    // Priority search locations (plugins directory first!)
+    const configPaths: string[] = [];
+
+    // 1. First search in plugins directory (highest priority)
+    const pluginsMatches = await findConfigDirs(config.pluginsPath, basePluginName);
+    configPaths.push(...pluginsMatches);
+
+    // 2. Exact matches in common locations
+    configPaths.push(
       path.join(config.pluginsPath, pluginName),
+      path.join(config.pluginsPath, basePluginName),
       path.join(config.pluginsPath, 'config', pluginName),
+      path.join(config.pluginsPath, 'config', basePluginName),
       path.join(config.serverPath, 'plugins', pluginName),
+      path.join(config.serverPath, 'plugins', basePluginName),
       path.join(config.dataPath, 'plugins', pluginName),
-    ];
+      path.join(config.dataPath, 'plugins', basePluginName),
+    );
+
+    // 3. Also search in server/plugins and data/plugins for fuzzy matches
+    const serverPluginsMatches = await findConfigDirs(path.join(config.serverPath, 'plugins'), basePluginName);
+    const dataPluginsMatches = await findConfigDirs(path.join(config.dataPath, 'plugins'), basePluginName);
+    configPaths.push(...serverPluginsMatches, ...dataPluginsMatches);
+
+    // Deduplicate paths
+    const uniquePaths = [...new Set(configPaths)];
 
     const configs: { name: string; path: string }[] = [];
 
-    for (const configPath of configPaths) {
+    for (const configPath of uniquePaths) {
       try {
         const entries = await readdir(configPath);
         for (const entry of entries) {
           const ext = path.extname(entry).toLowerCase();
           if (['.json', '.yml', '.yaml', '.toml', '.cfg', '.conf', '.properties'].includes(ext)) {
-            configs.push({
-              name: entry,
-              path: path.join(configPath, entry),
-            });
+            const fullPath = path.join(configPath, entry);
+            // Avoid duplicates
+            if (!configs.some(c => c.path === fullPath)) {
+              configs.push({
+                name: entry,
+                path: fullPath,
+              });
+            }
           }
         }
       } catch {
@@ -1007,8 +1110,10 @@ router.get('/plugins/:filename/configs', authMiddleware, async (req: Request, re
       }
     }
 
+    console.log(`Found ${configs.length} config files for plugin ${filename}:`, configs.map(c => c.path));
     res.json({ configs });
   } catch (error) {
+    console.error('Failed to get plugin configs:', error);
     res.status(500).json({ error: 'Failed to get plugin configs' });
   }
 });
@@ -1109,6 +1214,387 @@ router.delete('/activity', authMiddleware, async (req: AuthenticatedRequest, res
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to clear activity log' });
+  }
+});
+
+// ============== MOD STORE ==============
+
+// GET /api/management/modstore
+router.get('/modstore', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const mods = await getAvailableMods();
+    res.json({ mods });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get mod store' });
+  }
+});
+
+// GET /api/management/modstore/:modId/release
+router.get('/modstore/:modId/release', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const mods = await getAvailableMods();
+    const mod = mods.find((m) => m.id === modId);
+
+    if (!mod) {
+      res.status(404).json({ error: 'Mod not found' });
+      return;
+    }
+
+    // Check if mod has GitHub source
+    if (!mod.github) {
+      // For direct download mods, return version from registry
+      res.json({
+        version: mod.version || 'unknown',
+        name: mod.name,
+        publishedAt: null,
+        assets: [],
+        source: 'direct',
+      });
+      return;
+    }
+
+    const release = await getLatestRelease(mod.github);
+    if (!release) {
+      res.status(500).json({ error: 'Failed to fetch release info' });
+      return;
+    }
+
+    res.json({
+      version: release.tag_name,
+      name: release.name,
+      publishedAt: release.published_at,
+      assets: release.assets.map((a) => ({
+        name: a.name,
+        size: a.size,
+      })),
+      source: 'github',
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get release info' });
+  }
+});
+
+// POST /api/management/modstore/:modId/install
+router.post('/modstore/:modId/install', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const result = await installMod(modId);
+
+    if (result.success) {
+      await logActivity(
+        req.user || 'unknown',
+        'install_mod',
+        'mod',
+        true,
+        result.filename,
+        `Installed ${modId} v${result.version} from Mod Store`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to install mod' });
+  }
+});
+
+// DELETE /api/management/modstore/:modId/uninstall
+router.delete('/modstore/:modId/uninstall', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const result = await uninstallMod(modId);
+
+    if (result.success) {
+      await logActivity(
+        req.user || 'unknown',
+        'uninstall_mod',
+        'mod',
+        true,
+        modId,
+        `Uninstalled ${modId} from Mod Store`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
+  }
+});
+
+// POST /api/management/modstore/:modId/update
+router.post('/modstore/:modId/update', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const result = await updateMod(modId);
+
+    if (result.success) {
+      await logActivity(
+        req.user || 'unknown',
+        'update_mod',
+        'mod',
+        true,
+        result.filename,
+        `Updated ${modId} to ${result.version} from Mod Store`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to update mod' });
+  }
+});
+
+// POST /api/management/modstore/refresh - Refresh the external mod registry
+router.post('/modstore/refresh', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    refreshRegistry();
+    const mods = await getAvailableMods();
+    res.json({ success: true, modCount: mods.length, registry: getRegistryInfo() });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to refresh registry' });
+  }
+});
+
+// GET /api/management/modstore/info - Get registry info
+router.get('/modstore/info', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    res.json(getRegistryInfo());
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get registry info' });
+  }
+});
+
+// ==================== WORLD CONFIG ====================
+
+// Interface for world config
+interface WorldConfig {
+  name: string;
+  displayName?: string;
+  seed?: number;
+  isTicking?: boolean;
+  isBlockTicking?: boolean;
+  isPvpEnabled?: boolean;
+  isFallDamageEnabled?: boolean;
+  isGameTimePaused?: boolean;
+  gameTime?: string;
+  isSpawningNPC?: boolean;
+  isAllNPCFrozen?: boolean;
+  isSpawnMarkersEnabled?: boolean;
+  isObjectiveMarkersEnabled?: boolean;
+  isSavingPlayers?: boolean;
+  isSavingChunks?: boolean;
+  saveNewChunks?: boolean;
+  isUnloadingChunks?: boolean;
+  daytimeDurationSecondsOverride?: number;
+  nighttimeDurationSecondsOverride?: number;
+  clientEffects?: {
+    sunHeightPercent?: number;
+    sunAngleDegrees?: number;
+    bloomIntensity?: number;
+    bloomPower?: number;
+    sunIntensity?: number;
+    sunshaftIntensity?: number;
+    sunshaftScaleFactor?: number;
+  };
+}
+
+// GET /api/management/worlds - List all worlds
+router.get('/worlds', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const worldsPath = path.join(config.serverPath, 'worlds');
+
+    // Check if worlds directory exists
+    try {
+      await stat(worldsPath);
+    } catch {
+      res.json({ worlds: [] });
+      return;
+    }
+
+    const entries = await readdir(worldsPath, { withFileTypes: true });
+    const worlds: { name: string; hasConfig: boolean }[] = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const configPath = path.join(worldsPath, entry.name, 'config.json');
+        let hasConfig = false;
+        try {
+          await stat(configPath);
+          hasConfig = true;
+        } catch {
+          // No config file
+        }
+        worlds.push({ name: entry.name, hasConfig });
+      }
+    }
+
+    res.json({ worlds });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list worlds' });
+  }
+});
+
+// GET /api/management/worlds/:worldName/config - Get world config
+router.get('/worlds/:worldName/config', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { worldName } = req.params;
+
+    // Security: validate world name
+    if (!worldName || worldName.includes('..') || worldName.includes('/') || worldName.includes('\\')) {
+      res.status(400).json({ error: 'Invalid world name' });
+      return;
+    }
+
+    const configPath = path.join(config.serverPath, 'worlds', worldName, 'config.json');
+
+    // Check path is safe
+    const realPath = getRealPathIfSafe(configPath, [path.join(config.serverPath, 'worlds')]);
+    if (!realPath) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const content = await readFile(configPath, 'utf-8');
+    const worldConfig = JSON.parse(content);
+
+    // Return normalized config
+    res.json({
+      name: worldName,
+      raw: worldConfig,
+      // Normalized fields for easy editing
+      displayName: worldConfig.DisplayName || worldName,
+      seed: worldConfig.Seed,
+      isTicking: worldConfig.IsTicking ?? true,
+      isBlockTicking: worldConfig.IsBlockTicking ?? true,
+      isPvpEnabled: worldConfig.IsPvpEnabled ?? false,
+      isFallDamageEnabled: worldConfig.IsFallDamageEnabled ?? true,
+      isGameTimePaused: worldConfig.IsGameTimePaused ?? false,
+      gameTime: worldConfig.GameTime,
+      isSpawningNPC: worldConfig.IsSpawningNPC ?? true,
+      isAllNPCFrozen: worldConfig.IsAllNPCFrozen ?? false,
+      isSpawnMarkersEnabled: worldConfig.IsSpawnMarkersEnabled ?? true,
+      isObjectiveMarkersEnabled: worldConfig.IsObjectiveMarkersEnabled ?? true,
+      isSavingPlayers: worldConfig.IsSavingPlayers ?? true,
+      isSavingChunks: worldConfig.IsSavingChunks ?? true,
+      saveNewChunks: worldConfig.SaveNewChunks ?? true,
+      isUnloadingChunks: worldConfig.IsUnloadingChunks ?? true,
+      daytimeDurationSecondsOverride: worldConfig.DaytimeDurationSecondsOverride,
+      nighttimeDurationSecondsOverride: worldConfig.NighttimeDurationSecondsOverride,
+      clientEffects: worldConfig.ClientEffects ? {
+        sunHeightPercent: worldConfig.ClientEffects.SunHeightPercent,
+        sunAngleDegrees: worldConfig.ClientEffects.SunAngleDegrees,
+        bloomIntensity: worldConfig.ClientEffects.BloomIntensity,
+        bloomPower: worldConfig.ClientEffects.BloomPower,
+        sunIntensity: worldConfig.ClientEffects.SunIntensity,
+        sunshaftIntensity: worldConfig.ClientEffects.SunshaftIntensity,
+        sunshaftScaleFactor: worldConfig.ClientEffects.SunshaftScaleFactor,
+      } : undefined,
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      res.status(404).json({ error: 'World config not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to read world config' });
+    }
+  }
+});
+
+// PUT /api/management/worlds/:worldName/config - Update world config
+router.put('/worlds/:worldName/config', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { worldName } = req.params;
+    const updates = req.body;
+
+    // Security: validate world name
+    if (!worldName || worldName.includes('..') || worldName.includes('/') || worldName.includes('\\')) {
+      res.status(400).json({ error: 'Invalid world name' });
+      return;
+    }
+
+    const configPath = path.join(config.serverPath, 'worlds', worldName, 'config.json');
+
+    // Check path is safe
+    const realPath = getRealPathIfSafe(configPath, [path.join(config.serverPath, 'worlds')]);
+    if (!realPath) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    // Read existing config
+    const content = await readFile(configPath, 'utf-8');
+    const worldConfig = JSON.parse(content);
+
+    // Apply updates (map camelCase to PascalCase)
+    if (updates.displayName !== undefined) worldConfig.DisplayName = updates.displayName;
+    if (updates.isTicking !== undefined) worldConfig.IsTicking = updates.isTicking;
+    if (updates.isBlockTicking !== undefined) worldConfig.IsBlockTicking = updates.isBlockTicking;
+    if (updates.isPvpEnabled !== undefined) worldConfig.IsPvpEnabled = updates.isPvpEnabled;
+    if (updates.isFallDamageEnabled !== undefined) worldConfig.IsFallDamageEnabled = updates.isFallDamageEnabled;
+    if (updates.isGameTimePaused !== undefined) worldConfig.IsGameTimePaused = updates.isGameTimePaused;
+    if (updates.isSpawningNPC !== undefined) worldConfig.IsSpawningNPC = updates.isSpawningNPC;
+    if (updates.isAllNPCFrozen !== undefined) worldConfig.IsAllNPCFrozen = updates.isAllNPCFrozen;
+    if (updates.isSpawnMarkersEnabled !== undefined) worldConfig.IsSpawnMarkersEnabled = updates.isSpawnMarkersEnabled;
+    if (updates.isObjectiveMarkersEnabled !== undefined) worldConfig.IsObjectiveMarkersEnabled = updates.isObjectiveMarkersEnabled;
+    if (updates.isSavingPlayers !== undefined) worldConfig.IsSavingPlayers = updates.isSavingPlayers;
+    if (updates.isSavingChunks !== undefined) worldConfig.IsSavingChunks = updates.isSavingChunks;
+    if (updates.saveNewChunks !== undefined) worldConfig.SaveNewChunks = updates.saveNewChunks;
+    if (updates.isUnloadingChunks !== undefined) worldConfig.IsUnloadingChunks = updates.isUnloadingChunks;
+
+    // Day/Night duration overrides
+    if (updates.daytimeDurationSecondsOverride !== undefined) {
+      if (updates.daytimeDurationSecondsOverride === null || updates.daytimeDurationSecondsOverride === '') {
+        delete worldConfig.DaytimeDurationSecondsOverride;
+      } else {
+        worldConfig.DaytimeDurationSecondsOverride = Number(updates.daytimeDurationSecondsOverride);
+      }
+    }
+    if (updates.nighttimeDurationSecondsOverride !== undefined) {
+      if (updates.nighttimeDurationSecondsOverride === null || updates.nighttimeDurationSecondsOverride === '') {
+        delete worldConfig.NighttimeDurationSecondsOverride;
+      } else {
+        worldConfig.NighttimeDurationSecondsOverride = Number(updates.nighttimeDurationSecondsOverride);
+      }
+    }
+
+    // Client effects
+    if (updates.clientEffects) {
+      if (!worldConfig.ClientEffects) worldConfig.ClientEffects = {};
+      if (updates.clientEffects.sunHeightPercent !== undefined)
+        worldConfig.ClientEffects.SunHeightPercent = Number(updates.clientEffects.sunHeightPercent);
+      if (updates.clientEffects.sunAngleDegrees !== undefined)
+        worldConfig.ClientEffects.SunAngleDegrees = Number(updates.clientEffects.sunAngleDegrees);
+      if (updates.clientEffects.bloomIntensity !== undefined)
+        worldConfig.ClientEffects.BloomIntensity = Number(updates.clientEffects.bloomIntensity);
+      if (updates.clientEffects.bloomPower !== undefined)
+        worldConfig.ClientEffects.BloomPower = Number(updates.clientEffects.bloomPower);
+      if (updates.clientEffects.sunIntensity !== undefined)
+        worldConfig.ClientEffects.SunIntensity = Number(updates.clientEffects.sunIntensity);
+      if (updates.clientEffects.sunshaftIntensity !== undefined)
+        worldConfig.ClientEffects.SunshaftIntensity = Number(updates.clientEffects.sunshaftIntensity);
+      if (updates.clientEffects.sunshaftScaleFactor !== undefined)
+        worldConfig.ClientEffects.SunshaftScaleFactor = Number(updates.clientEffects.sunshaftScaleFactor);
+    }
+
+    // Write updated config
+    await writeFile(configPath, JSON.stringify(worldConfig, null, 2), 'utf-8');
+
+    // Log activity
+    await logActivity(
+      (req.user as { username?: string })?.username || 'unknown',
+      'update_world_config',
+      'config',
+      true,
+      worldName,
+      `Updated world config for ${worldName}`
+    );
+
+    res.json({ success: true, message: 'World config updated' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      res.status(404).json({ error: 'World config not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to update world config' });
+    }
   }
 });
 

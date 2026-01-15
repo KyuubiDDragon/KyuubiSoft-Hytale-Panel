@@ -179,6 +179,51 @@ router.post('/restart', authMiddleware, async (_req: Request, res: Response) => 
   res.json(result);
 });
 
+// GET /api/server/check-update - Check if a Hytale server update is available
+router.get('/check-update', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    // Read installed version from file
+    const versionFilePath = path.join(config.serverPath, '.hytale-version');
+    let installedVersion = 'unknown';
+    try {
+      installedVersion = (await readFile(versionFilePath, 'utf-8')).trim();
+    } catch {
+      // Version file doesn't exist yet
+    }
+
+    // Get latest version by running the downloader with -print-version inside container
+    // We need to exec into the container to run this
+    const checkResult = await dockerService.execInContainer(
+      'cd /opt/hytale/downloader && ./hytale-downloader-linux-amd64 -patchline release -print-version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1'
+    );
+
+    let latestVersion = 'unknown';
+    if (checkResult.success && checkResult.output) {
+      latestVersion = checkResult.output.trim();
+    }
+
+    const updateAvailable = installedVersion !== 'unknown' &&
+                           latestVersion !== 'unknown' &&
+                           installedVersion !== latestVersion;
+
+    res.json({
+      installedVersion,
+      latestVersion,
+      updateAvailable,
+      message: updateAvailable
+        ? `Update available: ${installedVersion} → ${latestVersion}`
+        : installedVersion === latestVersion
+          ? 'Server is up to date'
+          : 'Could not determine update status'
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to check for updates',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // GET /api/server/config/files - List config files
 router.get('/config/files', authMiddleware, async (_req: Request, res: Response) => {
   try {

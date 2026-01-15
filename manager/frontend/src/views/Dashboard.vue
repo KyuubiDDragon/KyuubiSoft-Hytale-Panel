@@ -2,7 +2,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
-import { serverApi, type ServerMemoryStats } from '@/api/server'
+import { serverApi, type ServerMemoryStats, type UpdateCheckResponse } from '@/api/server'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 
@@ -13,11 +13,28 @@ const { status, stats, playerCount, loading, error, refresh } = useServerStats()
 const serverMemory = ref<ServerMemoryStats | null>(null)
 let memoryInterval: ReturnType<typeof setInterval> | null = null
 
+// Update check state
+const updateInfo = ref<UpdateCheckResponse | null>(null)
+const checkingUpdate = ref(false)
+const updateCheckError = ref<string | null>(null)
+
 async function fetchServerMemory() {
   try {
     serverMemory.value = await serverApi.getMemoryStats()
   } catch {
     // Silently fail - server might not be running
+  }
+}
+
+async function checkForUpdates() {
+  checkingUpdate.value = true
+  updateCheckError.value = null
+  try {
+    updateInfo.value = await serverApi.checkForUpdates()
+  } catch (err) {
+    updateCheckError.value = err instanceof Error ? err.message : 'Failed to check for updates'
+  } finally {
+    checkingUpdate.value = false
   }
 }
 
@@ -206,6 +223,71 @@ function refreshAll() {
                 {{ status?.status || '-' }}
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Update Check Card -->
+    <div class="card">
+      <div class="card-header flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-white">Hytale Updates</h3>
+        <button
+          @click="checkForUpdates"
+          :disabled="checkingUpdate"
+          class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+        >
+          <svg
+            class="w-4 h-4"
+            :class="{ 'animate-spin': checkingUpdate }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {{ checkingUpdate ? 'Checking...' : 'Check for Updates' }}
+        </button>
+      </div>
+      <div class="card-body">
+        <!-- Error -->
+        <div v-if="updateCheckError" class="p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+          <p class="text-status-error text-sm">{{ updateCheckError }}</p>
+        </div>
+
+        <!-- No check yet -->
+        <div v-else-if="!updateInfo" class="text-gray-400 text-sm">
+          Click "Check for Updates" to see if a new version is available.
+        </div>
+
+        <!-- Update info -->
+        <div v-else class="space-y-3">
+          <div class="flex justify-between items-center">
+            <span class="text-gray-400">Installed Version</span>
+            <span class="text-white font-mono">{{ updateInfo.installedVersion }}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-400">Latest Version</span>
+            <span class="text-white font-mono">{{ updateInfo.latestVersion }}</span>
+          </div>
+          <div
+            class="p-3 rounded-lg text-sm font-medium"
+            :class="updateInfo.updateAvailable
+              ? 'bg-hytale-orange/20 text-hytale-orange border border-hytale-orange/30'
+              : 'bg-status-success/20 text-status-success border border-status-success/30'"
+          >
+            <div class="flex items-center gap-2">
+              <svg v-if="updateInfo.updateAvailable" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              {{ updateInfo.message }}
+            </div>
+            <p v-if="updateInfo.updateAvailable" class="mt-2 text-xs opacity-80">
+              Restart the server with AUTO_UPDATE=true to apply the update.
+            </p>
           </div>
         </div>
       </div>

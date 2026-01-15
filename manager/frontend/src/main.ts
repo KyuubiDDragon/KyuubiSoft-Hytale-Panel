@@ -23,6 +23,7 @@ import Users from './views/Users.vue'
 import ActivityLog from './views/ActivityLog.vue'
 import Scheduler from './views/Scheduler.vue'
 import Statistics from './views/Statistics.vue'
+import WebMap from './views/WebMap.vue'
 
 // Import auth store
 import { useAuthStore } from './stores/auth'
@@ -125,6 +126,12 @@ const router = createRouter({
       path: '/statistics',
       name: 'statistics',
       component: Statistics,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/webmap',
+      name: 'webmap',
+      component: WebMap,
       meta: { requiresAuth: true },
     },
     {

@@ -107,14 +107,56 @@ export const permissionsApi = {
 
 export interface WorldInfo {
   name: string
-  path: string
-  size: number
-  lastModified: string
+  hasConfig: boolean
+}
+
+export interface WorldClientEffects {
+  sunHeightPercent?: number
+  sunAngleDegrees?: number
+  bloomIntensity?: number
+  bloomPower?: number
+  sunIntensity?: number
+  sunshaftIntensity?: number
+  sunshaftScaleFactor?: number
+}
+
+export interface WorldConfig {
+  name: string
+  displayName?: string
+  seed?: number
+  isTicking: boolean
+  isBlockTicking: boolean
+  isPvpEnabled: boolean
+  isFallDamageEnabled: boolean
+  isGameTimePaused: boolean
+  gameTime?: string
+  isSpawningNPC: boolean
+  isAllNPCFrozen: boolean
+  isSpawnMarkersEnabled: boolean
+  isObjectiveMarkersEnabled: boolean
+  isSavingPlayers: boolean
+  isSavingChunks: boolean
+  saveNewChunks: boolean
+  isUnloadingChunks: boolean
+  daytimeDurationSecondsOverride?: number | null
+  nighttimeDurationSecondsOverride?: number | null
+  clientEffects?: WorldClientEffects
+  raw?: Record<string, unknown>
 }
 
 export const worldsApi = {
   async get(): Promise<{ worlds: WorldInfo[] }> {
     const response = await api.get<{ worlds: WorldInfo[] }>('/management/worlds')
+    return response.data
+  },
+
+  async getConfig(worldName: string): Promise<WorldConfig> {
+    const response = await api.get<WorldConfig>(`/management/worlds/${encodeURIComponent(worldName)}/config`)
+    return response.data
+  },
+
+  async updateConfig(worldName: string, updates: Partial<WorldConfig>): Promise<{ success: boolean; message?: string }> {
+    const response = await api.put<{ success: boolean; message?: string }>(`/management/worlds/${encodeURIComponent(worldName)}/config`, updates)
     return response.data
   },
 }
@@ -245,6 +287,66 @@ export const activityApi = {
 
   async clear(): Promise<{ success: boolean }> {
     const response = await api.delete<{ success: boolean }>('/management/activity')
+    return response.data
+  },
+}
+
+// ============== MOD STORE ==============
+
+export interface ModStoreEntry {
+  id: string
+  name: string
+  description: string
+  author: string
+  github: string
+  category: 'map' | 'utility' | 'gameplay' | 'admin' | 'other'
+  installed: boolean
+  installedFilename?: string
+  installedVersion?: string
+  latestVersion?: string
+  hasUpdate?: boolean
+  configPath?: string
+  ports?: { name: string; default: number; env: string }[]
+}
+
+export interface ModReleaseInfo {
+  version: string
+  name: string
+  publishedAt: string
+  assets: { name: string; size: number }[]
+}
+
+export interface InstallResult {
+  success: boolean
+  error?: string
+  filename?: string
+  version?: string
+  configCreated?: boolean
+}
+
+export const modStoreApi = {
+  async getAvailable(): Promise<{ mods: ModStoreEntry[] }> {
+    const response = await api.get<{ mods: ModStoreEntry[] }>('/management/modstore')
+    return response.data
+  },
+
+  async getRelease(modId: string): Promise<ModReleaseInfo> {
+    const response = await api.get<ModReleaseInfo>(`/management/modstore/${modId}/release`)
+    return response.data
+  },
+
+  async install(modId: string): Promise<InstallResult> {
+    const response = await api.post<InstallResult>(`/management/modstore/${modId}/install`)
+    return response.data
+  },
+
+  async uninstall(modId: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.delete<{ success: boolean; error?: string }>(`/management/modstore/${modId}/uninstall`)
+    return response.data
+  },
+
+  async update(modId: string): Promise<InstallResult> {
+    const response = await api.post<InstallResult>(`/management/modstore/${modId}/update`)
     return response.data
   },
 }

@@ -70,6 +70,13 @@ export interface QuickSettings {
   defaultGameMode: string
 }
 
+export interface UpdateCheckResponse {
+  installedVersion: string
+  latestVersion: string
+  updateAvailable: boolean
+  message: string
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -123,6 +130,11 @@ export const serverApi = {
 
   async saveQuickSettings(settings: Partial<QuickSettings>): Promise<ActionResponse> {
     const response = await api.put<ActionResponse>('/server/quick-settings', settings)
+    return response.data
+  },
+
+  async checkForUpdates(): Promise<UpdateCheckResponse> {
+    const response = await api.get<UpdateCheckResponse>('/server/check-update')
     return response.data
   },
 }
