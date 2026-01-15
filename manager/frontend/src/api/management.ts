@@ -248,3 +248,55 @@ export const activityApi = {
     return response.data
   },
 }
+
+// ============== MOD STORE ==============
+
+export interface ModStoreEntry {
+  id: string
+  name: string
+  description: string
+  author: string
+  github: string
+  category: 'map' | 'utility' | 'gameplay' | 'admin' | 'other'
+  installed: boolean
+  installedFilename?: string
+  configPath?: string
+  ports?: { name: string; default: number; env: string }[]
+}
+
+export interface ModReleaseInfo {
+  version: string
+  name: string
+  publishedAt: string
+  assets: { name: string; size: number }[]
+}
+
+export interface InstallResult {
+  success: boolean
+  error?: string
+  filename?: string
+  version?: string
+  configCreated?: boolean
+}
+
+export const modStoreApi = {
+  async getAvailable(): Promise<{ mods: ModStoreEntry[] }> {
+    const response = await api.get<{ mods: ModStoreEntry[] }>('/management/modstore')
+    return response.data
+  },
+
+  async getRelease(modId: string): Promise<ModReleaseInfo> {
+    const response = await api.get<ModReleaseInfo>(`/management/modstore/${modId}/release`)
+    return response.data
+  },
+
+  async install(modId: string): Promise<InstallResult> {
+    const response = await api.post<InstallResult>(`/management/modstore/${modId}/install`)
+    return response.data
+  },
+
+  async uninstall(modId: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.delete<{ success: boolean; error?: string }>(`/management/modstore/${modId}/uninstall`)
+    return response.data
+  },
+}

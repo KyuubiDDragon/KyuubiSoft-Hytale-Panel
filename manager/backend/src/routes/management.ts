@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { logActivity, getActivityLog, clearActivityLog, type ActivityLogEntry } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { getRealPathIfSafe, isPathSafe, sanitizeFileName } from '../utils/pathSecurity.js';
+import { getAvailableMods, installMod, uninstallMod, getLatestRelease } from '../services/modStore.js';
 
 // Configure multer for file uploads
 const modsStorage = multer.diskStorage({
@@ -1109,6 +1110,96 @@ router.delete('/activity', authMiddleware, async (req: AuthenticatedRequest, res
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to clear activity log' });
+  }
+});
+
+// ============== MOD STORE ==============
+
+// GET /api/management/modstore
+router.get('/modstore', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const mods = await getAvailableMods();
+    res.json({ mods });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get mod store' });
+  }
+});
+
+// GET /api/management/modstore/:modId/release
+router.get('/modstore/:modId/release', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const mods = await getAvailableMods();
+    const mod = mods.find((m) => m.id === modId);
+
+    if (!mod) {
+      res.status(404).json({ error: 'Mod not found' });
+      return;
+    }
+
+    const release = await getLatestRelease(mod.github);
+    if (!release) {
+      res.status(500).json({ error: 'Failed to fetch release info' });
+      return;
+    }
+
+    res.json({
+      version: release.tag_name,
+      name: release.name,
+      publishedAt: release.published_at,
+      assets: release.assets.map((a) => ({
+        name: a.name,
+        size: a.size,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get release info' });
+  }
+});
+
+// POST /api/management/modstore/:modId/install
+router.post('/modstore/:modId/install', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const result = await installMod(modId);
+
+    if (result.success) {
+      await logActivity(
+        req.user || 'unknown',
+        'install_mod',
+        'mod',
+        true,
+        result.filename,
+        `Installed ${modId} v${result.version} from Mod Store`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to install mod' });
+  }
+});
+
+// DELETE /api/management/modstore/:modId/uninstall
+router.delete('/modstore/:modId/uninstall', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const result = await uninstallMod(modId);
+
+    if (result.success) {
+      await logActivity(
+        req.user || 'unknown',
+        'uninstall_mod',
+        'mod',
+        true,
+        modId,
+        `Uninstalled ${modId} from Mod Store`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
   }
 });
 
