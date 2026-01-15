@@ -56,13 +56,13 @@ CREDENTIALS_FILE="${DOWNLOADER_DIR}/.hytale-downloader-credentials.json"
 # Function to run Hytale Downloader
 run_downloader() {
     local UPDATE_MODE="$1"
-    
+
     mkdir -p "$DOWNLOADER_DIR"
     chown hytale:hytale "$DOWNLOADER_DIR"
-    
+
     # Download the downloader tool
     DOWNLOADER_BIN="${DOWNLOADER_DIR}/hytale-downloader-linux-amd64"
-    
+
     if [ ! -f "$DOWNLOADER_BIN" ]; then
         echo "[INFO] Downloading Hytale Downloader from official source..."
         cd "$DOWNLOADER_DIR"
@@ -71,13 +71,41 @@ run_downloader() {
         chmod +x hytale-downloader-linux-amd64 2>/dev/null || true
         rm -f hytale-downloader.zip
     fi
-    
+
     cd "$DOWNLOADER_DIR"
     PATCHLINE="${HYTALE_PATCHLINE:-release}"
     DOWNLOAD_PATH="/opt/hytale/server/game.zip"
-    
-    # For updates, remove old zip to force re-download
+    VERSION_FILE="/opt/hytale/server/.hytale-version"
+
+    # For update mode: Check version FIRST before downloading
     if [ "$UPDATE_MODE" = "update" ]; then
+        echo "[INFO] Checking for updates..."
+
+        # Get latest version from downloader
+        LATEST_VERSION=$(gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+        if [ -z "$LATEST_VERSION" ]; then
+            echo "[WARN] Could not determine latest version, skipping update check"
+            return 0
+        fi
+
+        # Get installed version
+        INSTALLED_VERSION=""
+        if [ -f "$VERSION_FILE" ]; then
+            INSTALLED_VERSION=$(cat "$VERSION_FILE")
+        fi
+
+        echo "[INFO] Installed version: ${INSTALLED_VERSION:-unknown}"
+        echo "[INFO] Latest version: $LATEST_VERSION"
+
+        # Compare versions
+        if [ "$INSTALLED_VERSION" = "$LATEST_VERSION" ]; then
+            echo "[INFO] Server is already up to date! (v$INSTALLED_VERSION)"
+            return 0
+        fi
+
+        echo "[INFO] Update available: $INSTALLED_VERSION -> $LATEST_VERSION"
+        # Remove old zip to force download of new version
         rm -f "$DOWNLOAD_PATH"
     fi
     
@@ -186,8 +214,24 @@ run_downloader() {
         
         rm -f game.zip
         echo "[INFO] Extraction complete!"
+
+        # Save installed version to file for future update checks
+        if [ -n "$LATEST_VERSION" ]; then
+            echo "$LATEST_VERSION" > "$VERSION_FILE"
+            chown hytale:hytale "$VERSION_FILE"
+            echo "[INFO] Saved version $LATEST_VERSION to $VERSION_FILE"
+        else
+            # For fresh installs, get and save the version
+            cd "$DOWNLOADER_DIR"
+            INSTALLED_VER=$(./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            if [ -n "$INSTALLED_VER" ]; then
+                echo "$INSTALLED_VER" > "$VERSION_FILE"
+                chown hytale:hytale "$VERSION_FILE"
+                echo "[INFO] Saved version $INSTALLED_VER to $VERSION_FILE"
+            fi
+        fi
     fi
-    
+
     return 0
 }
 
