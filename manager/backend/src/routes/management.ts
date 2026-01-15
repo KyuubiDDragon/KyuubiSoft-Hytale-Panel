@@ -1241,6 +1241,19 @@ router.get('/modstore/:modId/release', authMiddleware, async (req: Request, res:
       return;
     }
 
+    // Check if mod has GitHub source
+    if (!mod.github) {
+      // For direct download mods, return version from registry
+      res.json({
+        version: mod.version || 'unknown',
+        name: mod.name,
+        publishedAt: null,
+        assets: [],
+        source: 'direct',
+      });
+      return;
+    }
+
     const release = await getLatestRelease(mod.github);
     if (!release) {
       res.status(500).json({ error: 'Failed to fetch release info' });
@@ -1255,6 +1268,7 @@ router.get('/modstore/:modId/release', authMiddleware, async (req: Request, res:
         name: a.name,
         size: a.size,
       })),
+      source: 'github',
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get release info' });
