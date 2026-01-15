@@ -57,9 +57,15 @@ services:
       # Auto-update on restart
       - AUTO_UPDATE=${AUTO_UPDATE:-false}
 
-    # Ports - UDP!
+      # EasyWebMap (optional)
+      - WEBMAP_PORT=${WEBMAP_PORT:-18081}
+      - WEBMAP_WS_PORT=${WEBMAP_WS_PORT:-18082}
+
+    # Ports - UDP for game, TCP for webmap
     ports:
       - "${SERVER_PORT:-5520}:${SERVER_PORT:-5520}/udp"
+      - "${WEBMAP_PORT:-18081}:${WEBMAP_PORT:-18081}/tcp"
+      - "${WEBMAP_WS_PORT:-18082}:${WEBMAP_WS_PORT:-18082}/tcp"
     
     # Volumes - Bind Mounts zu /opt/hytale/
     volumes:
