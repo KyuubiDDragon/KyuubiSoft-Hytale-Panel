@@ -87,14 +87,15 @@ services:
       - hytale-net
 
     # SECURITY: Resource limits to prevent resource exhaustion
+    # Note: DOCKER_MEMORY_LIMIT should be >= JAVA_MAX_RAM + 1G for overhead
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '${DOCKER_CPU_LIMIT:-4}'
+          memory: ${DOCKER_MEMORY_LIMIT:-8G}
         reservations:
           cpus: '1'
-          memory: 2G
+          memory: ${JAVA_MAX_RAM:-4G}
 
   # ============================================================
   # Hytale Server Manager - Web UI
