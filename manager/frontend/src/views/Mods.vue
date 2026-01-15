@@ -629,9 +629,9 @@ onMounted(loadData)
 
     <!-- Config Editor Modal -->
     <div v-if="showConfigModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-dark-200 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div class="bg-dark-200 rounded-xl w-full max-w-7xl h-[85vh] flex flex-col">
         <!-- Modal Header -->
-        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
           <h2 class="text-xl font-bold text-white">{{ t('mods.configEditor') }}: {{ editingItem?.name }}</h2>
           <button @click="showConfigModal = false" class="text-gray-400 hover:text-white">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -641,9 +641,9 @@ onMounted(loadData)
         </div>
 
         <!-- Modal Content -->
-        <div class="flex-1 flex overflow-hidden">
+        <div class="flex-1 flex overflow-hidden min-h-0">
           <!-- Config Files List -->
-          <div class="w-64 border-r border-dark-50/50 overflow-y-auto p-4">
+          <div class="w-80 border-r border-dark-50/50 overflow-y-auto p-4 shrink-0">
             <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">{{ t('mods.configFiles') }}</h3>
             <div v-if="configLoading && !selectedConfig" class="text-gray-500 text-sm">
               {{ t('common.loading') }}
@@ -663,23 +663,24 @@ onMounted(loadData)
                     : 'text-gray-300 hover:bg-dark-100'
                 ]"
               >
-                {{ config.name }}
+                <div class="font-medium">{{ config.name }}</div>
+                <div class="text-xs text-gray-500 truncate mt-0.5">{{ config.path }}</div>
               </button>
             </div>
           </div>
 
           <!-- Config Editor -->
-          <div class="flex-1 flex flex-col p-4">
+          <div class="flex-1 flex flex-col p-4 min-w-0">
             <div v-if="!selectedConfig" class="flex-1 flex items-center justify-center text-gray-500">
               {{ t('mods.selectConfig') }}
             </div>
             <template v-else>
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-sm text-gray-400">{{ selectedConfig.path }}</span>
+              <div class="flex items-center justify-between mb-3 shrink-0">
+                <span class="text-sm text-gray-400 truncate mr-4">{{ selectedConfig.path }}</span>
                 <button
                   @click="saveConfigFile"
                   :disabled="configSaving"
-                  class="px-4 py-1.5 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors text-sm disabled:opacity-50"
+                  class="px-4 py-1.5 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors text-sm disabled:opacity-50 shrink-0"
                 >
                   {{ configSaving ? t('common.saving') : t('common.save') }}
                 </button>
@@ -690,7 +691,7 @@ onMounted(loadData)
               <textarea
                 v-else
                 v-model="configContent"
-                class="flex-1 w-full p-4 bg-dark-300 border border-dark-50 rounded-lg text-white font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange"
+                class="flex-1 w-full p-4 bg-dark-300 border border-dark-50 rounded-lg text-white font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange min-h-[400px]"
                 spellcheck="false"
               />
             </template>
