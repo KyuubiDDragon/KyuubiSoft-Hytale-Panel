@@ -10,6 +10,16 @@ const router = Router();
 // Allowed config file extensions
 const CONFIG_EXTENSIONS = ['.json', '.properties', '.yml', '.yaml', '.toml', '.cfg', '.conf', '.ini'];
 
+// Quick settings interface
+interface QuickSettings {
+  serverName: string;
+  motd: string;
+  password: string;
+  maxPlayers: number;
+  maxViewRadius: number;
+  defaultGameMode: string;
+}
+
 // GET /api/server/status
 router.get('/status', authMiddleware, async (_req: Request, res: Response) => {
   const status = await dockerService.getStatus();
@@ -80,6 +90,61 @@ router.get('/memory', authMiddleware, async (_req: Request, res: Response) => {
     res.status(500).json({
       available: false,
       error: error instanceof Error ? error.message : 'Failed to get memory stats',
+    });
+  }
+});
+
+// GET /api/server/quick-settings - Get quick settings from config.json
+router.get('/quick-settings', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const configPath = path.join(config.serverPath, 'config.json');
+    const content = await readFile(configPath, 'utf-8');
+    const configData = JSON.parse(content);
+
+    const quickSettings: QuickSettings = {
+      serverName: configData.ServerName || 'Hytale Server',
+      motd: configData.MOTD || '',
+      password: configData.Password || '',
+      maxPlayers: configData.MaxPlayers || 100,
+      maxViewRadius: configData.MaxViewRadius || 32,
+      defaultGameMode: configData.Defaults?.GameMode || 'Adventure',
+    };
+
+    res.json(quickSettings);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to load quick settings',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// PUT /api/server/quick-settings - Save quick settings to config.json
+router.put('/quick-settings', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { serverName, motd, password, maxPlayers, maxViewRadius, defaultGameMode } = req.body;
+
+    const configPath = path.join(config.serverPath, 'config.json');
+    const content = await readFile(configPath, 'utf-8');
+    const configData = JSON.parse(content);
+
+    // Update only the quick settings fields
+    if (serverName !== undefined) configData.ServerName = serverName;
+    if (motd !== undefined) configData.MOTD = motd;
+    if (password !== undefined) configData.Password = password;
+    if (maxPlayers !== undefined) configData.MaxPlayers = Number(maxPlayers);
+    if (maxViewRadius !== undefined) configData.MaxViewRadius = Number(maxViewRadius);
+    if (defaultGameMode !== undefined) {
+      if (!configData.Defaults) configData.Defaults = {};
+      configData.Defaults.GameMode = defaultGameMode;
+    }
+
+    await writeFile(configPath, JSON.stringify(configData, null, 2), 'utf-8');
+    res.json({ success: true, message: 'Quick settings saved' });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to save quick settings',
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

@@ -211,7 +211,18 @@
     "textEditor": "Text Editor",
     "saved": "Configuration saved successfully",
     "unsaved": "Unsaved changes",
-    "warning": "Warning: Invalid configuration may break the server. A server restart is required after saving changes."
+    "warning": "Warning: Invalid configuration may break the server. A server restart is required after saving changes.",
+    "quickSettings": "Quick Settings",
+    "serverName": "Server Name",
+    "serverNamePlaceholder": "Enter server name...",
+    "motd": "Message of the Day (MOTD)",
+    "motdPlaceholder": "Welcome to our server!",
+    "password": "Server Password",
+    "passwordPlaceholder": "Leave empty for no password",
+    "passwordHint": "Leave empty to allow anyone to join",
+    "maxPlayers": "Max Players",
+    "maxViewRadius": "View Radius",
+    "defaultGameMode": "Default Gamemode"
   },
   "mods": {
     "title": "Mods & Plugins",

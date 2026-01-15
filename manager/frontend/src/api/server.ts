@@ -61,6 +61,15 @@ export interface ConfigContentResponse {
   content: string
 }
 
+export interface QuickSettings {
+  serverName: string
+  motd: string
+  password: string
+  maxPlayers: number
+  maxViewRadius: number
+  defaultGameMode: string
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -104,6 +113,16 @@ export const serverApi = {
 
   async saveConfigContent(filename: string, content: string): Promise<ActionResponse> {
     const response = await api.put<ActionResponse>(`/server/config/${encodeURIComponent(filename)}`, { content })
+    return response.data
+  },
+
+  async getQuickSettings(): Promise<QuickSettings> {
+    const response = await api.get<QuickSettings>('/server/quick-settings')
+    return response.data
+  },
+
+  async saveQuickSettings(settings: Partial<QuickSettings>): Promise<ActionResponse> {
+    const response = await api.put<ActionResponse>('/server/quick-settings', settings)
     return response.data
   },
 }

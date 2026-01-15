@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
 import ConfigFormEditor from '@/components/config/ConfigFormEditor.vue'
-import { serverApi, type ConfigFile } from '@/api/server'
+import { serverApi, type ConfigFile, type QuickSettings } from '@/api/server'
 
 const { t } = useI18n()
 
@@ -18,6 +18,61 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
+
+// Quick Settings
+const quickSettings = reactive<QuickSettings>({
+  serverName: '',
+  motd: '',
+  password: '',
+  maxPlayers: 100,
+  maxViewRadius: 32,
+  defaultGameMode: 'Adventure'
+})
+const originalQuickSettings = ref<QuickSettings | null>(null)
+const quickSettingsLoading = ref(false)
+const quickSettingsSaving = ref(false)
+
+const gameModes = ['Adventure', 'Survival', 'Creative', 'Spectator']
+
+async function loadQuickSettings() {
+  try {
+    quickSettingsLoading.value = true
+    const settings = await serverApi.getQuickSettings()
+    Object.assign(quickSettings, settings)
+    originalQuickSettings.value = { ...settings }
+  } catch (e) {
+    console.error('Failed to load quick settings:', e)
+  } finally {
+    quickSettingsLoading.value = false
+  }
+}
+
+async function saveQuickSettings() {
+  try {
+    quickSettingsSaving.value = true
+    error.value = null
+    await serverApi.saveQuickSettings(quickSettings)
+    originalQuickSettings.value = { ...quickSettings }
+    successMessage.value = t('config.saved')
+    setTimeout(() => { successMessage.value = null }, 3000)
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    quickSettingsSaving.value = false
+  }
+}
+
+const quickSettingsChanged = computed(() => {
+  if (!originalQuickSettings.value) return false
+  return (
+    quickSettings.serverName !== originalQuickSettings.value.serverName ||
+    quickSettings.motd !== originalQuickSettings.value.motd ||
+    quickSettings.password !== originalQuickSettings.value.password ||
+    quickSettings.maxPlayers !== originalQuickSettings.value.maxPlayers ||
+    quickSettings.maxViewRadius !== originalQuickSettings.value.maxViewRadius ||
+    quickSettings.defaultGameMode !== originalQuickSettings.value.defaultGameMode
+  )
+})
 
 async function loadConfigFiles() {
   try {
@@ -89,6 +144,7 @@ const fileExtension = computed(() => {
 
 onMounted(() => {
   loadConfigFiles()
+  loadQuickSettings()
 })
 </script>
 
@@ -119,6 +175,113 @@ onMounted(() => {
     <div v-if="successMessage" class="p-4 bg-status-success/10 border border-status-success/20 rounded-lg">
       <p class="text-status-success">{{ successMessage }}</p>
     </div>
+
+    <!-- Quick Settings -->
+    <Card v-if="!selectedFile" :title="t('config.quickSettings')">
+      <div v-if="quickSettingsLoading" class="text-center py-8 text-gray-400">
+        {{ t('common.loading') }}
+      </div>
+      <div v-else class="space-y-4">
+        <!-- Server Name -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.serverName') }}</label>
+          <input
+            v-model="quickSettings.serverName"
+            type="text"
+            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            :placeholder="t('config.serverNamePlaceholder')"
+          />
+        </div>
+
+        <!-- MOTD -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.motd') }}</label>
+          <input
+            v-model="quickSettings.motd"
+            type="text"
+            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            :placeholder="t('config.motdPlaceholder')"
+          />
+        </div>
+
+        <!-- Password -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.password') }}</label>
+          <input
+            v-model="quickSettings.password"
+            type="password"
+            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            :placeholder="t('config.passwordPlaceholder')"
+          />
+          <p class="text-xs text-gray-500 mt-1">{{ t('config.passwordHint') }}</p>
+        </div>
+
+        <!-- Grid for numeric settings -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Max Players -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.maxPlayers') }}</label>
+            <input
+              v-model.number="quickSettings.maxPlayers"
+              type="number"
+              min="1"
+              max="1000"
+              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            />
+          </div>
+
+          <!-- Max View Radius -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.maxViewRadius') }}</label>
+            <input
+              v-model.number="quickSettings.maxViewRadius"
+              type="number"
+              min="1"
+              max="64"
+              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            />
+          </div>
+
+          <!-- Default GameMode -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.defaultGameMode') }}</label>
+            <select
+              v-model="quickSettings.defaultGameMode"
+              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            >
+              <option v-for="mode in gameModes" :key="mode" :value="mode">
+                {{ t(`players.gamemodes.${mode.toLowerCase()}`) }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Save Button -->
+        <div class="flex items-center justify-between pt-4 border-t border-dark-50">
+          <span v-if="quickSettingsChanged" class="text-xs text-status-warning">{{ t('config.unsaved') }}</span>
+          <span v-else></span>
+          <button
+            @click="saveQuickSettings"
+            :disabled="quickSettingsSaving || !quickSettingsChanged"
+            :class="[
+              'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all',
+              quickSettingsChanged
+                ? 'bg-hytale-orange text-dark hover:bg-hytale-yellow'
+                : 'bg-dark-50 text-gray-500 cursor-not-allowed'
+            ]"
+          >
+            <svg v-if="quickSettingsSaving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            {{ t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </Card>
 
     <!-- File List -->
     <Card v-if="!selectedFile" :title="t('config.files')">

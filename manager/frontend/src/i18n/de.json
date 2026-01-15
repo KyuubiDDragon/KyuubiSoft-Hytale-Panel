@@ -211,7 +211,18 @@
     "textEditor": "Text Editor",
     "saved": "Konfiguration erfolgreich gespeichert",
     "unsaved": "Ungespeicherte Änderungen",
-    "warning": "Achtung: Fehlerhafte Konfiguration kann den Server beschädigen. Nach dem Speichern ist ein Server-Neustart erforderlich."
+    "warning": "Achtung: Fehlerhafte Konfiguration kann den Server beschädigen. Nach dem Speichern ist ein Server-Neustart erforderlich.",
+    "quickSettings": "Schnelleinstellungen",
+    "serverName": "Server Name",
+    "serverNamePlaceholder": "Server Namen eingeben...",
+    "motd": "Nachricht des Tages (MOTD)",
+    "motdPlaceholder": "Willkommen auf unserem Server!",
+    "password": "Server Passwort",
+    "passwordPlaceholder": "Leer lassen für kein Passwort",
+    "passwordHint": "Leer lassen um jedem das Beitreten zu erlauben",
+    "maxPlayers": "Max. Spieler",
+    "maxViewRadius": "Sichtweite",
+    "defaultGameMode": "Standard Spielmodus"
   },
   "mods": {
     "title": "Mods & Plugins",
