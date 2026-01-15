@@ -43,7 +43,7 @@ export const MOD_REGISTRY: ModStoreEntry[] = [
       enableChunkRendering: true,
       bindAddress: '0.0.0.0',
     },
-    configPath: 'config/EasyWebMap/config.json',
+    configPath: 'config/cryptobench_EasyWebMap/config.json',
     ports: [
       { name: 'HTTP', default: 18081, env: 'WEBMAP_PORT' },
       { name: 'WebSocket', default: 18082, env: 'WEBMAP_WS_PORT' },

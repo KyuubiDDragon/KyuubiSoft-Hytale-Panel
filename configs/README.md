@@ -12,8 +12,8 @@ EasyWebMap is a live web map mod for Hytale servers.
 2. Place the JAR file in `/opt/hytale/mods/`
 3. Copy the config:
    ```bash
-   mkdir -p /opt/hytale/server/config/EasyWebMap
-   cp configs/EasyWebMap/config.json /opt/hytale/server/config/EasyWebMap/
+   mkdir -p /opt/hytale/server/config/cryptobench_EasyWebMap
+   cp configs/cryptobench_EasyWebMap/config.json /opt/hytale/server/config/cryptobench_EasyWebMap/
    ```
 4. Restart the server
 
