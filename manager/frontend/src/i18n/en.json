@@ -474,5 +474,13 @@
   },
   "header": {
     "openMap": "Open Web Map"
+  },
+  "webmap": {
+    "title": "Web Map",
+    "subtitle": "Live server map with real-time player tracking",
+    "openNewTab": "Open in New Tab",
+    "notInstalled": "EasyWebMap Not Installed",
+    "notInstalledDesc": "The EasyWebMap mod is not installed. Install it from the Mod Store to enable the live web map feature.",
+    "goToModStore": "Go to Mod Store"
   }
 }

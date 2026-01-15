@@ -26,6 +26,7 @@ const selectedConfig = ref<ConfigFile | null>(null)
 const configContent = ref('')
 const configLoading = ref(false)
 const configSaving = ref(false)
+const configSaveSuccess = ref(false)
 
 // Mod Store state
 const storeMods = ref<ModStoreEntry[]>([])
@@ -249,8 +250,14 @@ async function saveConfigFile() {
   if (!selectedConfig.value) return
 
   configSaving.value = true
+  configSaveSuccess.value = false
   try {
     await configApi.write(selectedConfig.value.path, configContent.value)
+    configSaveSuccess.value = true
+    // Hide success message after 3 seconds
+    setTimeout(() => {
+      configSaveSuccess.value = false
+    }, 3000)
   } catch (e) {
     error.value = t('errors.serverError')
   } finally {
@@ -677,13 +684,25 @@ onMounted(loadData)
             <template v-else>
               <div class="flex items-center justify-between mb-3 shrink-0">
                 <span class="text-sm text-gray-400 truncate mr-4">{{ selectedConfig.path }}</span>
-                <button
-                  @click="saveConfigFile"
-                  :disabled="configSaving"
-                  class="px-4 py-1.5 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors text-sm disabled:opacity-50 shrink-0"
-                >
-                  {{ configSaving ? t('common.saving') : t('common.save') }}
-                </button>
+                <div class="flex items-center gap-3 shrink-0">
+                  <!-- Success indicator -->
+                  <span
+                    v-if="configSaveSuccess"
+                    class="flex items-center gap-1.5 text-green-400 text-sm animate-fade-in"
+                  >
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    {{ t('config.saved') }}
+                  </span>
+                  <button
+                    @click="saveConfigFile"
+                    :disabled="configSaving"
+                    class="px-4 py-1.5 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors text-sm disabled:opacity-50"
+                  >
+                    {{ configSaving ? t('common.saving') : t('common.save') }}
+                  </button>
+                </div>
               </div>
               <div v-if="configLoading" class="flex-1 flex items-center justify-center text-gray-500">
                 {{ t('common.loading') }}

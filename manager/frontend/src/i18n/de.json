@@ -474,5 +474,13 @@
   },
   "header": {
     "openMap": "Web Map öffnen"
+  },
+  "webmap": {
+    "title": "Web Map",
+    "subtitle": "Live Server-Karte mit Echtzeit-Spielerverfolgung",
+    "openNewTab": "In neuem Tab öffnen",
+    "notInstalled": "EasyWebMap nicht installiert",
+    "notInstalledDesc": "Das EasyWebMap-Mod ist nicht installiert. Installiere es über den Mod Store, um die Live-Webkarte zu aktivieren.",
+    "goToModStore": "Zum Mod Store"
   }
 }

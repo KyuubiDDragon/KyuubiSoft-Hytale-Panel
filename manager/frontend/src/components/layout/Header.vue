@@ -13,7 +13,6 @@ const authStore = useAuthStore()
 const showUserMenu = ref(false)
 const currentLocale = ref(getLocale())
 const webMapInstalled = ref(false)
-const webMapPort = ref(18081)
 
 function toggleLocale() {
   const newLocale = currentLocale.value === 'de' ? 'en' : 'de'
@@ -27,9 +26,8 @@ function logout() {
 }
 
 function openWebMap() {
-  // Open the web map in a new tab
-  const host = window.location.hostname
-  window.open(`http://${host}:${webMapPort.value}`, '_blank')
+  // Navigate to the embedded web map page
+  router.push('/webmap')
 }
 
 async function checkWebMapStatus() {
@@ -38,10 +36,6 @@ async function checkWebMapStatus() {
     const webMap = result.mods.find(m => m.id === 'easywebmap')
     if (webMap && webMap.installed) {
       webMapInstalled.value = true
-      // Get port from config if available
-      if (webMap.ports && webMap.ports.length > 0) {
-        webMapPort.value = webMap.ports[0].default
-      }
     }
   } catch (e) {
     // Silently fail - just don't show the button
