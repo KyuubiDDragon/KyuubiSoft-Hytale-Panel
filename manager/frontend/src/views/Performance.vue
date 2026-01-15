@@ -3,7 +3,6 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { statsApi, type StatsEntry } from '@/api/management'
-import { serverApi, type ServerMemoryStats } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 
 const { t } = useI18n()
@@ -12,9 +11,6 @@ const { stats, status, playerCount, refresh } = useServerStats()
 // Historical data
 const history = ref<StatsEntry[]>([])
 const loading = ref(true)
-
-// Server memory stats (from /server stats memory command)
-const memoryStats = ref<ServerMemoryStats | null>(null)
 
 // Local history for current session (updated live)
 const localHistory = ref<{ timestamp: Date; cpu: number; memory: number; players: number }[]>([])
@@ -31,14 +27,6 @@ async function loadHistory() {
     // Ignore - use local history
   } finally {
     loading.value = false
-  }
-}
-
-async function loadMemoryStats() {
-  try {
-    memoryStats.value = await serverApi.getMemoryStats()
-  } catch (e) {
-    memoryStats.value = null
   }
 }
 
@@ -104,13 +92,11 @@ function generateAreaPath(data: number[], maxValue: number, width: number, heigh
 onMounted(async () => {
   await loadHistory()
   await refresh()
-  await loadMemoryStats()
   addLocalEntry()
 
   // Update every 5 seconds
   refreshInterval = setInterval(async () => {
     await refresh()
-    await loadMemoryStats()
     addLocalEntry()
   }, 5000)
 })
@@ -375,76 +361,6 @@ onUnmounted(() => {
         <div class="p-4 bg-dark-100 rounded-lg">
           <p class="text-sm text-gray-400 mb-1">{{ t('performance.dataPoints') }}</p>
           <p class="text-white">{{ localHistory.length }} / {{ maxLocalHistory }}</p>
-        </div>
-      </div>
-    </Card>
-
-    <!-- Server Memory Stats (JVM Heap) -->
-    <Card v-if="memoryStats?.available">
-      <h3 class="font-semibold text-white mb-4">{{ t('performance.serverMemory') }} (JVM Heap)</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- JVM Heap Memory Details -->
-        <div class="space-y-3">
-          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.heapMemory') }}</h4>
-          <div class="space-y-2">
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-gray-500">{{ t('performance.used') }}</span>
-              <span class="text-green-400 font-mono">{{ memoryStats.heap?.used?.toFixed(2) || '-' }} GiB</span>
-            </div>
-            <div class="w-full h-3 bg-dark-100 rounded-full overflow-hidden">
-              <div
-                class="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-500"
-                :style="{ width: `${(memoryStats.heap?.used || 0) / (memoryStats.heap?.max || 1) * 100}%` }"
-              ></div>
-            </div>
-            <div class="flex justify-between text-xs text-gray-500">
-              <span>{{ t('performance.committed') }}: {{ memoryStats.heap?.committed?.toFixed(2) || '-' }} GiB</span>
-              <span>{{ t('performance.max') }}: {{ memoryStats.heap?.max?.toFixed(2) || '-' }} GiB</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- JVM Heap Percentage Circle -->
-        <div class="space-y-3">
-          <h4 class="text-sm font-medium text-gray-400">{{ t('performance.heapUsage') }}</h4>
-          <div class="flex items-center justify-center h-32">
-            <div class="relative">
-              <svg class="w-28 h-28" viewBox="0 0 100 100">
-                <!-- Background circle -->
-                <circle
-                  cx="50" cy="50" r="40"
-                  fill="none"
-                  stroke="#1f2937"
-                  stroke-width="10"
-                />
-                <!-- Progress circle -->
-                <circle
-                  cx="50" cy="50" r="40"
-                  fill="none"
-                  stroke="url(#heapGradient)"
-                  stroke-width="10"
-                  stroke-linecap="round"
-                  :stroke-dasharray="`${(memoryStats.heap?.used || 0) / (memoryStats.heap?.max || 1) * 251.2} 251.2`"
-                  transform="rotate(-90 50 50)"
-                  class="transition-all duration-500"
-                />
-                <defs>
-                  <linearGradient id="heapGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="#22c55e" />
-                    <stop offset="100%" stop-color="#4ade80" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div class="absolute inset-0 flex items-center justify-center">
-                <span class="text-2xl font-bold text-white">
-                  {{ ((memoryStats.heap?.used || 0) / (memoryStats.heap?.max || 1) * 100).toFixed(0) }}%
-                </span>
-              </div>
-            </div>
-          </div>
-          <p class="text-center text-xs text-gray-500">
-            {{ memoryStats.heap?.used?.toFixed(2) || '-' }} / {{ memoryStats.heap?.max?.toFixed(2) || '-' }} GiB
-          </p>
         </div>
       </div>
     </Card>
