@@ -1,6 +1,7 @@
 import Docker from 'dockerode';
 import { config } from '../config.js';
 import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.js';
+import { isCommandSafe, escapeShellArg } from '../utils/sanitize.js';
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
@@ -192,6 +193,17 @@ async function ensureStdinAttached(): Promise<boolean> {
 
 export async function execCommand(command: string): Promise<ActionResponse> {
   try {
+    // SECURITY: Validate command before execution
+    if (!command || typeof command !== 'string') {
+      return { success: false, error: 'Invalid command' };
+    }
+
+    // Check for command injection attempts
+    if (!isCommandSafe(command)) {
+      console.warn(`[SECURITY] Blocked potentially dangerous command: ${command.substring(0, 50)}...`);
+      return { success: false, error: 'Command contains invalid characters' };
+    }
+
     const container = await getContainer();
     if (!container) {
       return { success: false, error: 'Container not found' };
@@ -202,7 +214,7 @@ export async function execCommand(command: string): Promise<ActionResponse> {
       return { success: false, error: 'Container not running' };
     }
 
-    // Try to use stdin stream first
+    // Try to use stdin stream first (safest method - no shell interpolation)
     const attached = await ensureStdinAttached();
     if (attached && stdinStream) {
       try {
@@ -215,15 +227,18 @@ export async function execCommand(command: string): Promise<ActionResponse> {
       }
     }
 
+    // SECURITY: Use proper shell escaping for fallback method
+    const escapedCommand = escapeShellArg(command);
+
     // Fallback: Use screen or tmux if available, or direct write
     const exec = await container.exec({
       Cmd: ['sh', '-c', `
         if command -v screen > /dev/null && screen -list | grep -q hytale; then
-          screen -S hytale -p 0 -X stuff "${command.replace(/"/g, '\\"')}\n"
+          screen -S hytale -p 0 -X stuff ${escapedCommand}$'\n'
         elif [ -p /tmp/server_input ]; then
-          echo "${command.replace(/"/g, '\\"')}" > /tmp/server_input
+          echo ${escapedCommand} > /tmp/server_input
         else
-          echo "${command.replace(/"/g, '\\"')}" >> /proc/1/fd/0
+          echo ${escapedCommand} >> /proc/1/fd/0
         fi
       `],
       AttachStdout: true,

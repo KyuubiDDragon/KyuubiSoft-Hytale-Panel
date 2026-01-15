@@ -7,7 +7,7 @@ import { WebSocketServer } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { config } from './config.js';
+import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
 
 // Routes
@@ -90,6 +90,9 @@ server.listen(config.port, '0.0.0.0', () => {
 ║  Target container: ${config.gameContainerName.padEnd(28)}║
 ╚═══════════════════════════════════════════════════╝
   `);
+
+  // SECURITY: Check for insecure default credentials
+  checkSecurityConfig();
 
   // Start schedulers
   startSchedulers();

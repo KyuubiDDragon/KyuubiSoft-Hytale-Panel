@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getAllUsers, createUser, updateUser, deleteUser, getUser } from '../services/users.js';
@@ -6,8 +7,26 @@ import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 
 const router = Router();
 
+// SECURITY: Rate limiting for authentication endpoints
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per window
+  message: { detail: 'Too many login attempts, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Only count failed attempts
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 refreshes per minute
+  message: { detail: 'Too many refresh requests, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // POST /api/auth/login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   const { username, password } = req.body as LoginRequest;
 
   if (!username || !password) {
@@ -34,7 +53,7 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/refresh
-router.post('/refresh', (req: Request, res: Response) => {
+router.post('/refresh', refreshLimiter, (req: Request, res: Response) => {
   const { refresh_token } = req.body;
 
   if (!refresh_token) {

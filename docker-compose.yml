@@ -86,6 +86,16 @@ services:
     networks:
       - hytale-net
 
+    # SECURITY: Resource limits to prevent resource exhaustion
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
   # ============================================================
   # Hytale Server Manager - Web UI
   # ============================================================
@@ -142,6 +152,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+    # SECURITY: Resource limits for manager
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
 # ============================================================
 # Networks

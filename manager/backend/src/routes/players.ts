@@ -7,8 +7,29 @@ import * as dockerService from '../services/docker.js';
 import { config } from '../config.js';
 import { logActivity } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import {
+  isValidPlayerName,
+  isValidGamemode,
+  isValidItemId,
+  isValidNumber,
+  isValidCoordinate,
+  isValidEffectName,
+  sanitizeMessage,
+} from '../utils/sanitize.js';
 
 const router = Router();
+
+// SECURITY: Validate player name from URL params
+function validatePlayerName(res: Response, name: string): boolean {
+  if (!isValidPlayerName(name)) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid player name. Only alphanumeric characters, underscores and hyphens allowed.',
+    });
+    return false;
+  }
+  return true;
+}
 
 // ============== FILE PERSISTENCE HELPERS ==============
 
@@ -82,8 +103,14 @@ router.post('/:name/kick', authMiddleware, async (req: AuthenticatedRequest, res
   const { reason } = req.body;
   const username = req.user || 'system';
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
+  // SECURITY: Sanitize reason if provided
+  const safeReason = reason ? sanitizeMessage(reason, 100) : '';
+
   // Send kick command to server (with optional reason)
-  const command = reason ? `/kick ${playerName} ${reason}` : `/kick ${playerName}`;
+  const command = safeReason ? `/kick ${playerName} ${safeReason}` : `/kick ${playerName}`;
   const result = await dockerService.execCommand(command);
 
   if (result.success) {
@@ -112,11 +139,17 @@ router.post('/:name/ban', authMiddleware, async (req: AuthenticatedRequest, res:
   const { reason } = req.body;
   const username = req.user || 'system';
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
+  // SECURITY: Sanitize reason if provided
+  const safeReason = reason ? sanitizeMessage(reason, 100) : 'You have been banned';
+
   // First kick the player if online
-  await dockerService.execCommand(`/kick ${playerName} ${reason || 'You have been banned'}`);
+  await dockerService.execCommand(`/kick ${playerName} ${safeReason}`);
 
   // Then execute ban command - server will update bans.json with UUID
-  const command = reason ? `/ban ${playerName} ${reason}` : `/ban ${playerName}`;
+  const command = `/ban ${playerName} ${safeReason}`;
   const result = await dockerService.execCommand(command);
 
   if (result.success) {
@@ -163,6 +196,9 @@ router.delete('/:name/ban', authMiddleware, async (req: AuthenticatedRequest, re
   const playerName = req.params.name;
   const username = req.user || 'system';
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   // Execute unban command - server will update bans.json
   const result = await dockerService.execCommand(`/unban ${playerName}`);
 
@@ -188,6 +224,9 @@ router.delete('/:name/ban', authMiddleware, async (req: AuthenticatedRequest, re
 router.post('/:name/whitelist', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
   const username = req.user || 'system';
+
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
 
   const result = await dockerService.execCommand(`/whitelist add ${playerName}`);
 
@@ -225,6 +264,9 @@ router.delete('/:name/whitelist', authMiddleware, async (req: AuthenticatedReque
   const playerName = req.params.name;
   const username = req.user || 'system';
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   const result = await dockerService.execCommand(`/whitelist remove ${playerName}`);
 
   if (result.success) {
@@ -258,6 +300,9 @@ router.delete('/:name/whitelist', authMiddleware, async (req: AuthenticatedReque
 router.post('/:name/op', authMiddleware, async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   const result = await dockerService.execCommand(`/op add ${playerName}`);
 
   if (result.success) {
@@ -276,6 +321,9 @@ router.post('/:name/op', authMiddleware, async (req: Request, res: Response) => 
 // DELETE /api/players/:name/op
 router.delete('/:name/op', authMiddleware, async (req: Request, res: Response) => {
   const playerName = req.params.name;
+
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
 
   const result = await dockerService.execCommand(`/op remove ${playerName}`);
 
@@ -297,6 +345,9 @@ router.post('/:name/message', authMiddleware, async (req: Request, res: Response
   const playerName = req.params.name;
   const { message } = req.body;
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   if (!message || typeof message !== 'string') {
     res.status(400).json({
       success: false,
@@ -305,7 +356,10 @@ router.post('/:name/message', authMiddleware, async (req: Request, res: Response
     return;
   }
 
-  const result = await dockerService.execCommand(`/msg ${playerName} ${message}`);
+  // SECURITY: Sanitize message
+  const safeMessage = sanitizeMessage(message, 256);
+
+  const result = await dockerService.execCommand(`/msg ${playerName} ${safeMessage}`);
 
   if (result.success) {
     res.json({
@@ -325,11 +379,24 @@ router.post('/:name/teleport', authMiddleware, async (req: Request, res: Respons
   const playerName = req.params.name;
   const { target, x, y, z } = req.body;
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   let command: string;
   if (target) {
+    // SECURITY: Validate target player name
+    if (!isValidPlayerName(target)) {
+      res.status(400).json({ success: false, error: 'Invalid target player name' });
+      return;
+    }
     // Teleport player to another player: /tp <source> <target>
     command = `/tp ${playerName} ${target}`;
   } else if (x !== undefined && y !== undefined && z !== undefined) {
+    // SECURITY: Validate coordinates
+    if (!isValidCoordinate(x) || !isValidCoordinate(y) || !isValidCoordinate(z)) {
+      res.status(400).json({ success: false, error: 'Invalid coordinates' });
+      return;
+    }
     // Teleport to coordinates: /tp <player> <x> <y> <z>
     command = `/tp ${playerName} ${x} ${y} ${z}`;
   } else {
@@ -359,6 +426,9 @@ router.post('/:name/teleport', authMiddleware, async (req: Request, res: Respons
 router.post('/:name/kill', authMiddleware, async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   const result = await dockerService.execCommand(`/kill ${playerName}`);
 
   if (result.success) {
@@ -377,6 +447,9 @@ router.post('/:name/kill', authMiddleware, async (req: Request, res: Response) =
 // POST /api/players/:name/respawn
 router.post('/:name/respawn', authMiddleware, async (req: Request, res: Response) => {
   const playerName = req.params.name;
+
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
 
   const result = await dockerService.execCommand(`/player respawn ${playerName}`);
 
@@ -398,10 +471,22 @@ router.post('/:name/gamemode', authMiddleware, async (req: Request, res: Respons
   const playerName = req.params.name;
   const { gamemode } = req.body;
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   if (!gamemode) {
     res.status(400).json({
       success: false,
       error: 'Gamemode is required',
+    });
+    return;
+  }
+
+  // SECURITY: Validate gamemode
+  if (!isValidGamemode(gamemode)) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid gamemode. Use: survival, creative, adventure, spectator',
     });
     return;
   }
@@ -426,10 +511,31 @@ router.post('/:name/give', authMiddleware, async (req: Request, res: Response) =
   const playerName = req.params.name;
   const { item, amount } = req.body;
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   if (!item) {
     res.status(400).json({
       success: false,
       error: 'Item is required',
+    });
+    return;
+  }
+
+  // SECURITY: Validate item ID format
+  if (!isValidItemId(String(item).toLowerCase())) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid item ID format. Use: namespace:item_name',
+    });
+    return;
+  }
+
+  // SECURITY: Validate amount if provided
+  if (amount !== undefined && !isValidNumber(amount)) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid amount. Must be a number.',
     });
     return;
   }
@@ -454,6 +560,9 @@ router.post('/:name/give', authMiddleware, async (req: Request, res: Response) =
 router.post('/:name/heal', authMiddleware, async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
   const result = await dockerService.execCommand(`/player stats settomax ${playerName} health`);
 
   if (result.success) {
@@ -474,10 +583,22 @@ router.post('/:name/effect', authMiddleware, async (req: Request, res: Response)
   const playerName = req.params.name;
   const { effect, action } = req.body;
 
-  if (!effect) {
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
+  if (!effect && action !== 'clear') {
     res.status(400).json({
       success: false,
       error: 'Effect is required',
+    });
+    return;
+  }
+
+  // SECURITY: Validate effect name if provided
+  if (effect && !isValidEffectName(effect)) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid effect name',
     });
     return;
   }

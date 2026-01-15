@@ -6,6 +6,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { logActivity, getActivityLog, clearActivityLog, type ActivityLogEntry } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import { getRealPathIfSafe, isPathSafe, sanitizeFileName } from '../utils/pathSecurity.js';
 
 // Configure multer for file uploads
 const modsStorage = multer.diskStorage({
@@ -1021,18 +1022,18 @@ router.get('/config/read', authMiddleware, async (req: Request, res: Response) =
       return;
     }
 
-    // Security: ensure path is within allowed directories
-    const normalizedPath = path.normalize(configPath);
-    const allowedPrefixes = [config.modsPath, config.pluginsPath, config.serverPath, config.dataPath];
-    const isAllowed = allowedPrefixes.some(prefix => normalizedPath.startsWith(prefix));
+    // SECURITY: Use proper path validation to prevent traversal attacks
+    const allowedDirectories = [config.modsPath, config.pluginsPath, config.serverPath, config.dataPath];
+    const safePath = getRealPathIfSafe(configPath, allowedDirectories);
 
-    if (!isAllowed) {
-      res.status(403).json({ error: 'Access denied' });
+    if (!safePath) {
+      console.warn(`[SECURITY] Blocked path traversal attempt: ${configPath}`);
+      res.status(403).json({ error: 'Access denied - invalid path' });
       return;
     }
 
-    const content = await readFile(configPath, 'utf-8');
-    res.json({ content, path: configPath });
+    const content = await readFile(safePath, 'utf-8');
+    res.json({ content, path: safePath });
   } catch (error) {
     res.status(500).json({ error: 'Failed to read config' });
   }
@@ -1047,25 +1048,25 @@ router.put('/config/write', authMiddleware, async (req: AuthenticatedRequest, re
       return;
     }
 
-    // Security: ensure path is within allowed directories
-    const normalizedPath = path.normalize(configPath);
-    const allowedPrefixes = [config.modsPath, config.pluginsPath, config.serverPath, config.dataPath];
-    const isAllowed = allowedPrefixes.some(prefix => normalizedPath.startsWith(prefix));
+    // SECURITY: Use proper path validation to prevent traversal attacks
+    const allowedDirectories = [config.modsPath, config.pluginsPath, config.serverPath, config.dataPath];
+    const safePath = getRealPathIfSafe(configPath, allowedDirectories);
 
-    if (!isAllowed) {
-      res.status(403).json({ error: 'Access denied' });
+    if (!safePath) {
+      console.warn(`[SECURITY] Blocked path traversal attempt (write): ${configPath}`);
+      res.status(403).json({ error: 'Access denied - invalid path' });
       return;
     }
 
-    await writeFile(configPath, content, 'utf-8');
+    await writeFile(safePath, content, 'utf-8');
 
     await logActivity(
       req.user || 'unknown',
       'edit_config',
       'config',
       true,
-      path.basename(configPath),
-      `Edited config: ${configPath}`
+      path.basename(safePath),
+      `Edited config: ${safePath}`
     );
 
     res.json({ success: true });
