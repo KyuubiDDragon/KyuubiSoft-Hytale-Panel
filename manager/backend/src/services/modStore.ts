@@ -1,6 +1,7 @@
 /**
  * Mod Store Service
  * Downloads and installs mods from GitHub releases
+ * Supports external mod registry from kyuubisoft.com
  */
 
 import { writeFile, mkdir, access } from 'fs/promises';
@@ -9,21 +10,28 @@ import https from 'https';
 import http from 'http';
 import { config } from '../config.js';
 
+// External registry URL
+const EXTERNAL_REGISTRY_URL = 'https://kyuubisoft.com/hytale-mods.json';
+const REGISTRY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+
 // Registry of available mods
 export interface ModStoreEntry {
   id: string;
   name: string;
   description: string;
   author: string;
-  github: string; // owner/repo format
+  github?: string; // owner/repo format (for GitHub releases)
+  downloadUrl?: string; // Direct download URL (alternative to github)
   category: 'map' | 'utility' | 'gameplay' | 'admin' | 'other';
   configTemplate?: Record<string, unknown>;
   configPath?: string; // Relative path for config file
   ports?: { name: string; default: number; env: string }[];
+  website?: string;
+  version?: string; // For direct downloads
 }
 
-// Available mods registry
-export const MOD_REGISTRY: ModStoreEntry[] = [
+// Built-in fallback registry (used if external registry fails)
+const BUILTIN_REGISTRY: ModStoreEntry[] = [
   {
     id: 'easywebmap',
     name: 'EasyWebMap',
@@ -50,6 +58,108 @@ export const MOD_REGISTRY: ModStoreEntry[] = [
     ],
   },
 ];
+
+// Cache for external registry
+let registryCache: { data: ModStoreEntry[]; timestamp: number } | null = null;
+
+/**
+ * Fetch JSON from URL
+ */
+async function fetchJson<T>(url: string): Promise<T | null> {
+  return new Promise((resolve) => {
+    const protocol = url.startsWith('https') ? https : http;
+
+    protocol.get(url, { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } }, (res) => {
+      // Handle redirects
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        const redirectUrl = res.headers.location;
+        if (redirectUrl) {
+          fetchJson<T>(redirectUrl).then(resolve);
+          return;
+        }
+      }
+
+      if (res.statusCode !== 200) {
+        console.error(`Fetch failed: ${url} - Status: ${res.statusCode}`);
+        resolve(null);
+        return;
+      }
+
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          console.error('Failed to parse JSON:', e);
+          resolve(null);
+        }
+      });
+      res.on('error', () => resolve(null));
+    }).on('error', (e) => {
+      console.error('Request error:', e);
+      resolve(null);
+    });
+  });
+}
+
+/**
+ * Fetch mod registry from external URL with caching
+ */
+async function fetchExternalRegistry(): Promise<ModStoreEntry[]> {
+  // Check cache
+  if (registryCache && Date.now() - registryCache.timestamp < REGISTRY_CACHE_TTL) {
+    return registryCache.data;
+  }
+
+  console.log('Fetching external mod registry from:', EXTERNAL_REGISTRY_URL);
+
+  try {
+    const response = await fetchJson<{ mods: ModStoreEntry[] } | ModStoreEntry[]>(EXTERNAL_REGISTRY_URL);
+
+    if (response) {
+      // Support both { mods: [...] } and [...] formats
+      const mods = Array.isArray(response) ? response : response.mods;
+
+      if (Array.isArray(mods) && mods.length > 0) {
+        console.log(`Loaded ${mods.length} mods from external registry`);
+        registryCache = { data: mods, timestamp: Date.now() };
+        return mods;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch external registry:', e);
+  }
+
+  // Fallback to built-in registry
+  console.log('Using built-in mod registry as fallback');
+  return BUILTIN_REGISTRY;
+}
+
+/**
+ * Get the combined mod registry (external + built-in)
+ */
+export async function getModRegistry(): Promise<ModStoreEntry[]> {
+  const externalMods = await fetchExternalRegistry();
+
+  // Merge with built-in, external takes priority for same IDs
+  const modMap = new Map<string, ModStoreEntry>();
+
+  // Add built-in first
+  for (const mod of BUILTIN_REGISTRY) {
+    modMap.set(mod.id, mod);
+  }
+
+  // Override/add from external
+  for (const mod of externalMods) {
+    modMap.set(mod.id, mod);
+  }
+
+  return Array.from(modMap.values());
+}
+
+// Legacy export for compatibility
+export const MOD_REGISTRY = BUILTIN_REGISTRY;
 
 export interface GitHubRelease {
   tag_name: string;
@@ -221,8 +331,9 @@ function compareVersions(v1: string, v2: string): number {
 /**
  * Check if a mod is installed
  */
-export async function isModInstalled(modId: string): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
-  const mod = MOD_REGISTRY.find((m) => m.id === modId);
+export async function isModInstalled(modId: string, registry?: ModStoreEntry[]): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
+  const mods = registry || await getModRegistry();
+  const mod = mods.find((m) => m.id === modId);
   if (!mod) {
     return { installed: false };
   }
@@ -253,27 +364,48 @@ export async function isModInstalled(modId: string): Promise<{ installed: boolea
  * Install a mod from the registry
  */
 export async function installMod(modId: string): Promise<InstallResult> {
-  const mod = MOD_REGISTRY.find((m) => m.id === modId);
+  const registry = await getModRegistry();
+  const mod = registry.find((m) => m.id === modId);
   if (!mod) {
     return { success: false, error: 'Mod not found in registry' };
   }
 
   // Check if already installed
-  const installed = await isModInstalled(modId);
+  const installed = await isModInstalled(modId, registry);
   if (installed.installed) {
     return { success: false, error: `Mod already installed: ${installed.filename}` };
   }
 
-  // Get latest release
-  const release = await getLatestRelease(mod.github);
-  if (!release) {
-    return { success: false, error: 'Failed to fetch release from GitHub' };
-  }
+  let downloadUrl: string;
+  let filename: string;
+  let version: string;
 
-  // Find JAR asset
-  const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
-  if (!jarAsset) {
-    return { success: false, error: 'No JAR file found in release' };
+  // Determine download source (GitHub or direct URL)
+  if (mod.github) {
+    // Get latest release from GitHub
+    const release = await getLatestRelease(mod.github);
+    if (!release) {
+      return { success: false, error: 'Failed to fetch release from GitHub' };
+    }
+
+    // Find JAR asset
+    const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
+    if (!jarAsset) {
+      return { success: false, error: 'No JAR file found in release' };
+    }
+
+    downloadUrl = jarAsset.browser_download_url;
+    filename = jarAsset.name;
+    version = release.tag_name;
+  } else if (mod.downloadUrl) {
+    // Direct download URL
+    downloadUrl = mod.downloadUrl;
+    // Extract filename from URL or use mod name
+    const urlParts = mod.downloadUrl.split('/');
+    filename = urlParts[urlParts.length - 1] || `${mod.name}.jar`;
+    version = mod.version || 'unknown';
+  } else {
+    return { success: false, error: 'No download source available' };
   }
 
   // Ensure mods directory exists
@@ -284,8 +416,8 @@ export async function installMod(modId: string): Promise<InstallResult> {
   }
 
   // Download the JAR
-  const destPath = path.join(config.modsPath, jarAsset.name);
-  const downloaded = await downloadFile(jarAsset.browser_download_url, destPath);
+  const destPath = path.join(config.modsPath, filename);
+  const downloaded = await downloadFile(downloadUrl, destPath);
 
   if (!downloaded) {
     return { success: false, error: 'Failed to download mod file' };
@@ -309,8 +441,8 @@ export async function installMod(modId: string): Promise<InstallResult> {
 
   return {
     success: true,
-    filename: jarAsset.name,
-    version: release.tag_name,
+    filename,
+    version,
     configCreated,
   };
 }
@@ -343,22 +475,31 @@ export async function checkModUpdate(modId: string): Promise<{
   latestVersion?: string;
   error?: string;
 }> {
-  const mod = MOD_REGISTRY.find((m) => m.id === modId);
+  const registry = await getModRegistry();
+  const mod = registry.find((m) => m.id === modId);
   if (!mod) {
     return { hasUpdate: false, error: 'Mod not found' };
   }
 
-  const installed = await isModInstalled(modId);
+  const installed = await isModInstalled(modId, registry);
   if (!installed.installed || !installed.installedVersion) {
     return { hasUpdate: false, error: 'Mod not installed or version unknown' };
   }
 
-  const release = await getLatestRelease(mod.github);
-  if (!release) {
-    return { hasUpdate: false, installedVersion: installed.installedVersion, error: 'Failed to fetch latest release' };
+  let latestVersion: string | undefined;
+
+  if (mod.github) {
+    const release = await getLatestRelease(mod.github);
+    if (!release) {
+      return { hasUpdate: false, installedVersion: installed.installedVersion, error: 'Failed to fetch latest release' };
+    }
+    latestVersion = release.tag_name;
+  } else if (mod.version) {
+    latestVersion = mod.version;
+  } else {
+    return { hasUpdate: false, installedVersion: installed.installedVersion, error: 'No version info available' };
   }
 
-  const latestVersion = release.tag_name;
   const hasUpdate = compareVersions(installed.installedVersion, latestVersion) < 0;
 
   return {
@@ -372,32 +513,50 @@ export async function checkModUpdate(modId: string): Promise<{
  * Update a mod to the latest version
  */
 export async function updateMod(modId: string): Promise<InstallResult> {
-  const mod = MOD_REGISTRY.find((m) => m.id === modId);
+  const registry = await getModRegistry();
+  const mod = registry.find((m) => m.id === modId);
   if (!mod) {
     return { success: false, error: 'Mod not found in registry' };
   }
 
   // Check if installed
-  const installed = await isModInstalled(modId);
+  const installed = await isModInstalled(modId, registry);
   if (!installed.installed || !installed.filename) {
     return { success: false, error: 'Mod not installed' };
   }
 
-  // Get latest release
-  const release = await getLatestRelease(mod.github);
-  if (!release) {
-    return { success: false, error: 'Failed to fetch release from GitHub' };
-  }
+  let downloadUrl: string;
+  let filename: string;
+  let latestVersion: string;
 
-  // Find JAR asset
-  const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
-  if (!jarAsset) {
-    return { success: false, error: 'No JAR file found in release' };
+  if (mod.github) {
+    // Get latest release from GitHub
+    const release = await getLatestRelease(mod.github);
+    if (!release) {
+      return { success: false, error: 'Failed to fetch release from GitHub' };
+    }
+
+    // Find JAR asset
+    const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
+    if (!jarAsset) {
+      return { success: false, error: 'No JAR file found in release' };
+    }
+
+    downloadUrl = jarAsset.browser_download_url;
+    filename = jarAsset.name;
+    latestVersion = release.tag_name;
+  } else if (mod.downloadUrl) {
+    downloadUrl = mod.downloadUrl;
+    const urlParts = mod.downloadUrl.split('/');
+    filename = urlParts[urlParts.length - 1] || `${mod.name}.jar`;
+    latestVersion = mod.version || 'unknown';
+  } else {
+    return { success: false, error: 'No download source available' };
   }
 
   // Check if already latest
   if (installed.installedVersion) {
-    const comparison = compareVersions(installed.installedVersion, release.tag_name);
+    const comparison = compareVersions(installed.installedVersion, latestVersion);
     if (comparison >= 0) {
       return { success: false, error: 'Already on latest version', version: installed.installedVersion };
     }
@@ -414,8 +573,8 @@ export async function updateMod(modId: string): Promise<InstallResult> {
   }
 
   // Download new version
-  const destPath = path.join(config.modsPath, jarAsset.name);
-  const downloaded = await downloadFile(jarAsset.browser_download_url, destPath);
+  const destPath = path.join(config.modsPath, filename);
+  const downloaded = await downloadFile(downloadUrl, destPath);
 
   if (!downloaded) {
     return { success: false, error: 'Failed to download new version' };
@@ -423,8 +582,8 @@ export async function updateMod(modId: string): Promise<InstallResult> {
 
   return {
     success: true,
-    filename: jarAsset.name,
-    version: release.tag_name,
+    filename,
+    version: latestVersion,
   };
 }
 
@@ -438,19 +597,26 @@ export async function getAvailableMods(): Promise<(ModStoreEntry & {
   latestVersion?: string;
   hasUpdate?: boolean;
 })[]> {
+  const registry = await getModRegistry();
   const result = [];
 
-  for (const mod of MOD_REGISTRY) {
-    const status = await isModInstalled(mod.id);
+  for (const mod of registry) {
+    const status = await isModInstalled(mod.id, registry);
 
     let latestVersion: string | undefined;
     let hasUpdate = false;
 
-    // Only check for updates if mod is installed
-    if (status.installed && status.installedVersion) {
+    // Only check for updates if mod is installed and has GitHub source
+    if (status.installed && status.installedVersion && mod.github) {
       const release = await getLatestRelease(mod.github);
       if (release) {
         latestVersion = release.tag_name;
+        hasUpdate = compareVersions(status.installedVersion, latestVersion) < 0;
+      }
+    } else if (mod.version) {
+      // For direct download mods, use the version from registry
+      latestVersion = mod.version;
+      if (status.installed && status.installedVersion) {
         hasUpdate = compareVersions(status.installedVersion, latestVersion) < 0;
       }
     }
@@ -468,8 +634,28 @@ export async function getAvailableMods(): Promise<(ModStoreEntry & {
   return result;
 }
 
+/**
+ * Force refresh the external registry cache
+ */
+export function refreshRegistry(): void {
+  registryCache = null;
+  console.log('Mod registry cache cleared');
+}
+
+/**
+ * Get registry info (for debugging)
+ */
+export function getRegistryInfo(): { url: string; cached: boolean; cacheAge?: number } {
+  return {
+    url: EXTERNAL_REGISTRY_URL,
+    cached: registryCache !== null,
+    cacheAge: registryCache ? Date.now() - registryCache.timestamp : undefined,
+  };
+}
+
 export default {
   MOD_REGISTRY,
+  getModRegistry,
   getLatestRelease,
   isModInstalled,
   installMod,
@@ -477,4 +663,6 @@ export default {
   updateMod,
   checkModUpdate,
   getAvailableMods,
+  refreshRegistry,
+  getRegistryInfo,
 };

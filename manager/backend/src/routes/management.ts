@@ -7,7 +7,7 @@ import { config } from '../config.js';
 import { logActivity, getActivityLog, clearActivityLog, type ActivityLogEntry } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { getRealPathIfSafe, isPathSafe, sanitizeFileName } from '../utils/pathSecurity.js';
-import { getAvailableMods, installMod, uninstallMod, updateMod, getLatestRelease } from '../services/modStore.js';
+import { getAvailableMods, installMod, uninstallMod, updateMod, getLatestRelease, refreshRegistry, getRegistryInfo } from '../services/modStore.js';
 
 // Configure multer for file uploads
 const modsStorage = multer.diskStorage({
@@ -1327,6 +1327,26 @@ router.post('/modstore/:modId/update', authMiddleware, async (req: Authenticated
     res.json(result);
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to update mod' });
+  }
+});
+
+// POST /api/management/modstore/refresh - Refresh the external mod registry
+router.post('/modstore/refresh', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    refreshRegistry();
+    const mods = await getAvailableMods();
+    res.json({ success: true, modCount: mods.length, registry: getRegistryInfo() });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to refresh registry' });
+  }
+});
+
+// GET /api/management/modstore/info - Get registry info
+router.get('/modstore/info', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    res.json(getRegistryInfo());
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get registry info' });
   }
 });
 
