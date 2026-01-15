@@ -21,6 +21,8 @@ import Configuration from './views/Configuration.vue'
 import Mods from './views/Mods.vue'
 import Users from './views/Users.vue'
 import ActivityLog from './views/ActivityLog.vue'
+import Scheduler from './views/Scheduler.vue'
+import Statistics from './views/Statistics.vue'
 
 // Import auth store
 import { useAuthStore } from './stores/auth'
@@ -112,6 +114,18 @@ const router = createRouter({
       name: 'activity',
       component: ActivityLog,
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/scheduler',
+      name: 'scheduler',
+      component: Scheduler,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/statistics',
+      name: 'statistics',
+      component: Statistics,
+      meta: { requiresAuth: true },
     },
     {
       path: '/:pathMatch(.*)*',

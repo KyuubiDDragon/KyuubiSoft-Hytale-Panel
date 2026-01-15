@@ -235,3 +235,108 @@ export function processLogLine(line: string): { event: 'join' | 'leave'; player:
 
   return null;
 }
+
+// Player statistics
+export interface PlayerStatistics {
+  totalPlayers: number;
+  totalPlaytime: number; // in seconds
+  averagePlaytime: number;
+  averageSessionsPerPlayer: number;
+  topPlayers: { name: string; playTime: number; sessions: number }[];
+  newPlayersLast7Days: number;
+  activePlayersLast7Days: number;
+  peakOnlineToday: number;
+}
+
+// Track peak players
+let peakOnlineToday = 0;
+let peakResetDate = new Date().toDateString();
+
+function updatePeakOnline(): void {
+  const today = new Date().toDateString();
+  if (today !== peakResetDate) {
+    peakOnlineToday = 0;
+    peakResetDate = today;
+  }
+  if (onlinePlayers.size > peakOnlineToday) {
+    peakOnlineToday = onlinePlayers.size;
+  }
+}
+
+export async function getPlayerStatistics(): Promise<PlayerStatistics> {
+  await loadPlayerHistory();
+  updatePeakOnline();
+
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const players = Array.from(playerHistory.values());
+  const totalPlayers = players.length;
+  const totalPlaytime = players.reduce((sum, p) => sum + p.playTime, 0);
+  const totalSessions = players.reduce((sum, p) => sum + p.sessionCount, 0);
+
+  // Top 10 players by playtime
+  const topPlayers = players
+    .sort((a, b) => b.playTime - a.playTime)
+    .slice(0, 10)
+    .map(p => ({
+      name: p.name,
+      playTime: p.playTime,
+      sessions: p.sessionCount,
+    }));
+
+  // New players in last 7 days
+  const newPlayersLast7Days = players.filter(
+    p => new Date(p.firstSeen) >= sevenDaysAgo
+  ).length;
+
+  // Active players in last 7 days
+  const activePlayersLast7Days = players.filter(
+    p => new Date(p.lastSeen) >= sevenDaysAgo
+  ).length;
+
+  return {
+    totalPlayers,
+    totalPlaytime,
+    averagePlaytime: totalPlayers > 0 ? Math.round(totalPlaytime / totalPlayers) : 0,
+    averageSessionsPerPlayer: totalPlayers > 0 ? Math.round((totalSessions / totalPlayers) * 10) / 10 : 0,
+    topPlayers,
+    newPlayersLast7Days,
+    activePlayersLast7Days,
+    peakOnlineToday,
+  };
+}
+
+// Daily activity for charts (last 7 days)
+export interface DailyActivity {
+  date: string;
+  uniquePlayers: number;
+  totalSessions: number;
+}
+
+export async function getDailyActivity(days: number = 7): Promise<DailyActivity[]> {
+  await loadPlayerHistory();
+
+  const result: DailyActivity[] = [];
+  const now = new Date();
+
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+
+    // Count players active on this day
+    const playersOnDay = Array.from(playerHistory.values()).filter(p => {
+      const lastSeen = new Date(p.lastSeen);
+      return lastSeen.toISOString().split('T')[0] === dateStr;
+    });
+
+    result.push({
+      date: dateStr,
+      uniquePlayers: playersOnDay.length,
+      totalSessions: playersOnDay.reduce((sum, p) => sum + 1, 0), // Simplified: 1 session per active day
+    });
+  }
+
+  return result;
+}

@@ -37,12 +37,14 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'dashboard', path: '/', icon: 'dashboard', label: t('nav.dashboard'), group: 'main', permission: 'all' },
   { name: 'console', path: '/console', icon: 'console', label: t('nav.console'), group: 'main', permission: 'console' },
   { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), group: 'main', permission: 'performance' },
+  { name: 'statistics', path: '/statistics', icon: 'statistics', label: t('nav.statistics'), group: 'main', permission: 'all' },
   { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management', permission: 'managePlayers' },
   { name: 'whitelist', path: '/whitelist', icon: 'whitelist', label: t('nav.whitelist'), group: 'management', permission: 'managePlayers' },
   { name: 'permissions', path: '/permissions', icon: 'permissions', label: t('nav.permissions'), group: 'management', permission: 'managePlayers' },
   { name: 'worlds', path: '/worlds', icon: 'worlds', label: t('nav.worlds'), group: 'management', permission: 'managePlayers' },
   { name: 'mods', path: '/mods', icon: 'mods', label: t('nav.mods'), group: 'management', permission: 'managePlayers' },
   { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data', permission: 'manageBackups' },
+  { name: 'scheduler', path: '/scheduler', icon: 'scheduler', label: t('nav.scheduler'), group: 'data', permission: 'manageBackups' },
   { name: 'configuration', path: '/configuration', icon: 'configuration', label: t('nav.configuration'), group: 'data', permission: 'manageConfig' },
   { name: 'settings', path: '/settings', icon: 'settings', label: t('nav.settings'), group: 'data', permission: 'all' },
   { name: 'users', path: '/users', icon: 'users', label: t('nav.users'), group: 'admin', permission: 'admin' },
@@ -99,6 +101,11 @@ function isActive(path: string): boolean {
             <!-- Performance Icon -->
             <svg v-else-if="item.icon === 'performance'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+
+            <!-- Statistics Icon -->
+            <svg v-else-if="item.icon === 'statistics'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
 
             <span>{{ item.label }}</span>
@@ -165,6 +172,11 @@ function isActive(path: string): boolean {
             <!-- Backup Icon -->
             <svg v-if="item.icon === 'backup'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+
+            <!-- Scheduler Icon -->
+            <svg v-else-if="item.icon === 'scheduler'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
 
             <!-- Configuration Icon -->

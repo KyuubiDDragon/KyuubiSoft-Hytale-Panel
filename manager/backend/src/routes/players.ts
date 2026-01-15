@@ -519,4 +519,17 @@ router.post('/:name/inventory/clear', authMiddleware, async (req: Request, res: 
   }
 });
 
+// GET /api/players/statistics - Get player statistics
+router.get('/statistics', authMiddleware, async (_req: Request, res: Response) => {
+  const stats = await playersService.getPlayerStatistics();
+  res.json(stats);
+});
+
+// GET /api/players/activity - Get daily activity for charts
+router.get('/activity', authMiddleware, async (req: Request, res: Response) => {
+  const days = parseInt(req.query.days as string) || 7;
+  const activity = await playersService.getDailyActivity(days);
+  res.json(activity);
+});
+
 export default router;
