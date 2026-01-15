@@ -170,9 +170,58 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
 }
 
 /**
+ * Extract version from filename (e.g., "EasyWebMap-v1.0.9.jar" -> "v1.0.9")
+ */
+function extractVersionFromFilename(filename: string): string | null {
+  // Common patterns: Name-v1.0.0.jar, Name-1.0.0.jar, Name_v1.0.0.jar
+  const patterns = [
+    /[-_]v?(\d+\.\d+\.\d+)/i,  // v1.0.0 or 1.0.0
+    /[-_]v?(\d+\.\d+)/i,       // v1.0 or 1.0
+  ];
+
+  for (const pattern of patterns) {
+    const match = filename.match(pattern);
+    if (match) {
+      return match[1].startsWith('v') ? match[1] : `v${match[1]}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Normalize version string for comparison (remove 'v' prefix)
+ */
+function normalizeVersion(version: string): string {
+  return version.replace(/^v/i, '').trim();
+}
+
+/**
+ * Compare two version strings. Returns:
+ * -1 if v1 < v2
+ *  0 if v1 == v2
+ *  1 if v1 > v2
+ */
+function compareVersions(v1: string, v2: string): number {
+  const parts1 = normalizeVersion(v1).split('.').map(Number);
+  const parts2 = normalizeVersion(v2).split('.').map(Number);
+
+  const maxLen = Math.max(parts1.length, parts2.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const p1 = parts1[i] || 0;
+    const p2 = parts2[i] || 0;
+
+    if (p1 < p2) return -1;
+    if (p1 > p2) return 1;
+  }
+
+  return 0;
+}
+
+/**
  * Check if a mod is installed
  */
-export async function isModInstalled(modId: string): Promise<{ installed: boolean; filename?: string }> {
+export async function isModInstalled(modId: string): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
   const mod = MOD_REGISTRY.find((m) => m.id === modId);
   if (!mod) {
     return { installed: false };
@@ -188,7 +237,8 @@ export async function isModInstalled(modId: string): Promise<{ installed: boolea
       const lowerFile = file.toLowerCase();
       if (lowerFile.includes(modId) || lowerFile.includes(mod.name.toLowerCase())) {
         if (file.endsWith('.jar') || file.endsWith('.jar.disabled')) {
-          return { installed: true, filename: file };
+          const version = extractVersionFromFilename(file);
+          return { installed: true, filename: file, installedVersion: version || undefined };
         }
       }
     }
@@ -285,17 +335,133 @@ export async function uninstallMod(modId: string): Promise<{ success: boolean; e
 }
 
 /**
- * Get all available mods with installation status
+ * Check if an update is available for a mod
  */
-export async function getAvailableMods(): Promise<(ModStoreEntry & { installed: boolean; installedFilename?: string })[]> {
+export async function checkModUpdate(modId: string): Promise<{
+  hasUpdate: boolean;
+  installedVersion?: string;
+  latestVersion?: string;
+  error?: string;
+}> {
+  const mod = MOD_REGISTRY.find((m) => m.id === modId);
+  if (!mod) {
+    return { hasUpdate: false, error: 'Mod not found' };
+  }
+
+  const installed = await isModInstalled(modId);
+  if (!installed.installed || !installed.installedVersion) {
+    return { hasUpdate: false, error: 'Mod not installed or version unknown' };
+  }
+
+  const release = await getLatestRelease(mod.github);
+  if (!release) {
+    return { hasUpdate: false, installedVersion: installed.installedVersion, error: 'Failed to fetch latest release' };
+  }
+
+  const latestVersion = release.tag_name;
+  const hasUpdate = compareVersions(installed.installedVersion, latestVersion) < 0;
+
+  return {
+    hasUpdate,
+    installedVersion: installed.installedVersion,
+    latestVersion,
+  };
+}
+
+/**
+ * Update a mod to the latest version
+ */
+export async function updateMod(modId: string): Promise<InstallResult> {
+  const mod = MOD_REGISTRY.find((m) => m.id === modId);
+  if (!mod) {
+    return { success: false, error: 'Mod not found in registry' };
+  }
+
+  // Check if installed
+  const installed = await isModInstalled(modId);
+  if (!installed.installed || !installed.filename) {
+    return { success: false, error: 'Mod not installed' };
+  }
+
+  // Get latest release
+  const release = await getLatestRelease(mod.github);
+  if (!release) {
+    return { success: false, error: 'Failed to fetch release from GitHub' };
+  }
+
+  // Find JAR asset
+  const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
+  if (!jarAsset) {
+    return { success: false, error: 'No JAR file found in release' };
+  }
+
+  // Check if already latest
+  if (installed.installedVersion) {
+    const comparison = compareVersions(installed.installedVersion, release.tag_name);
+    if (comparison >= 0) {
+      return { success: false, error: 'Already on latest version', version: installed.installedVersion };
+    }
+  }
+
+  const { unlink } = await import('fs/promises');
+
+  // Delete old version
+  try {
+    await unlink(path.join(config.modsPath, installed.filename));
+  } catch (e) {
+    console.error('Failed to delete old mod file:', e);
+    // Continue anyway - download new version
+  }
+
+  // Download new version
+  const destPath = path.join(config.modsPath, jarAsset.name);
+  const downloaded = await downloadFile(jarAsset.browser_download_url, destPath);
+
+  if (!downloaded) {
+    return { success: false, error: 'Failed to download new version' };
+  }
+
+  return {
+    success: true,
+    filename: jarAsset.name,
+    version: release.tag_name,
+  };
+}
+
+/**
+ * Get all available mods with installation status and update info
+ */
+export async function getAvailableMods(): Promise<(ModStoreEntry & {
+  installed: boolean;
+  installedFilename?: string;
+  installedVersion?: string;
+  latestVersion?: string;
+  hasUpdate?: boolean;
+})[]> {
   const result = [];
 
   for (const mod of MOD_REGISTRY) {
     const status = await isModInstalled(mod.id);
+
+    let latestVersion: string | undefined;
+    let hasUpdate = false;
+
+    // Only check for updates if mod is installed
+    if (status.installed && status.installedVersion) {
+      const release = await getLatestRelease(mod.github);
+      if (release) {
+        latestVersion = release.tag_name;
+        hasUpdate = compareVersions(status.installedVersion, latestVersion) < 0;
+      }
+    }
+
     result.push({
       ...mod,
       installed: status.installed,
       installedFilename: status.filename,
+      installedVersion: status.installedVersion,
+      latestVersion,
+      hasUpdate,
     });
   }
 
@@ -308,5 +474,7 @@ export default {
   isModInstalled,
   installMod,
   uninstallMod,
+  updateMod,
+  checkModUpdate,
   getAvailableMods,
 };

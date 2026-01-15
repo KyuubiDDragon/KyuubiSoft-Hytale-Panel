@@ -260,6 +260,9 @@ export interface ModStoreEntry {
   category: 'map' | 'utility' | 'gameplay' | 'admin' | 'other'
   installed: boolean
   installedFilename?: string
+  installedVersion?: string
+  latestVersion?: string
+  hasUpdate?: boolean
   configPath?: string
   ports?: { name: string; default: number; env: string }[]
 }
@@ -297,6 +300,11 @@ export const modStoreApi = {
 
   async uninstall(modId: string): Promise<{ success: boolean; error?: string }> {
     const response = await api.delete<{ success: boolean; error?: string }>(`/management/modstore/${modId}/uninstall`)
+    return response.data
+  },
+
+  async update(modId: string): Promise<InstallResult> {
+    const response = await api.post<InstallResult>(`/management/modstore/${modId}/update`)
     return response.data
   },
 }

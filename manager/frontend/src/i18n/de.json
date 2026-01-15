@@ -256,6 +256,10 @@
     "installing": "Installiere...",
     "installSuccess": "Installiert!",
     "uninstall": "Deinstallieren",
+    "update": "Aktualisieren",
+    "updating": "Aktualisiere...",
+    "updateAvailable": "Update verfügbar",
+    "updateSuccess": "Aktualisiert!",
     "by": "von",
     "ports": "Ports"
   },

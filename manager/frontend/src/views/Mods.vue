@@ -106,6 +106,30 @@ async function uninstallStoreMod(modId: string) {
   }
 }
 
+const updatingMod = ref<string | null>(null)
+const updateSuccess = ref<string | null>(null)
+
+async function updateStoreMod(modId: string) {
+  updatingMod.value = modId
+  updateSuccess.value = null
+  error.value = ''
+  try {
+    const result = await modStoreApi.update(modId)
+    if (result.success) {
+      updateSuccess.value = modId
+      await loadStoreData()
+      await loadData()
+      setTimeout(() => { updateSuccess.value = null }, 3000)
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    updatingMod.value = null
+  }
+}
+
 function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
     map: 'bg-blue-500/20 text-blue-400',
@@ -517,16 +541,22 @@ onMounted(loadData)
 
             <!-- Info -->
             <div class="flex-1">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
                 <p class="font-medium text-white">{{ mod.name }}</p>
                 <span :class="['px-2 py-0.5 rounded text-xs', getCategoryColor(mod.category)]">
                   {{ mod.category }}
                 </span>
                 <span v-if="mod.installed" class="px-2 py-0.5 rounded text-xs bg-status-success/20 text-status-success">
-                  {{ t('mods.installed') }}
+                  {{ t('mods.installed') }} {{ mod.installedVersion }}
+                </span>
+                <span v-if="mod.hasUpdate" class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse">
+                  {{ t('mods.updateAvailable') }}: {{ mod.latestVersion }}
                 </span>
                 <span v-if="installSuccess === mod.id" class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 animate-pulse">
                   {{ t('mods.installSuccess') }}
+                </span>
+                <span v-if="updateSuccess === mod.id" class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse">
+                  {{ t('mods.updateSuccess') }}
                 </span>
               </div>
               <p class="text-sm text-gray-400 mt-1">{{ mod.description }}</p>
@@ -546,7 +576,23 @@ onMounted(loadData)
           </div>
 
           <!-- Actions -->
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <!-- Update Button (only if installed and has update) -->
+            <button
+              v-if="mod.installed && mod.hasUpdate"
+              @click="updateStoreMod(mod.id)"
+              :disabled="updatingMod === mod.id"
+              class="px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <svg v-if="updatingMod === mod.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ updatingMod === mod.id ? t('mods.updating') : t('mods.update') }}
+            </button>
+            <!-- Install Button -->
             <button
               v-if="!mod.installed"
               @click="installStoreMod(mod.id)"
@@ -561,10 +607,11 @@ onMounted(loadData)
               </svg>
               {{ installingMod === mod.id ? t('mods.installing') : t('mods.install') }}
             </button>
+            <!-- Uninstall Button -->
             <button
-              v-else
+              v-if="mod.installed"
               @click="uninstallStoreMod(mod.id)"
-              :disabled="installingMod === mod.id"
+              :disabled="installingMod === mod.id || updatingMod === mod.id"
               class="px-4 py-2 bg-status-error/20 text-status-error font-medium rounded-lg hover:bg-status-error/30 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <svg v-if="installingMod === mod.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">

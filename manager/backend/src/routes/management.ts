@@ -7,7 +7,7 @@ import { config } from '../config.js';
 import { logActivity, getActivityLog, clearActivityLog, type ActivityLogEntry } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { getRealPathIfSafe, isPathSafe, sanitizeFileName } from '../utils/pathSecurity.js';
-import { getAvailableMods, installMod, uninstallMod, getLatestRelease } from '../services/modStore.js';
+import { getAvailableMods, installMod, uninstallMod, updateMod, getLatestRelease } from '../services/modStore.js';
 
 // Configure multer for file uploads
 const modsStorage = multer.diskStorage({
@@ -1200,6 +1200,29 @@ router.delete('/modstore/:modId/uninstall', authMiddleware, async (req: Authenti
     res.json(result);
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
+  }
+});
+
+// POST /api/management/modstore/:modId/update
+router.post('/modstore/:modId/update', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { modId } = req.params;
+    const result = await updateMod(modId);
+
+    if (result.success) {
+      await logActivity(
+        req.user || 'unknown',
+        'update_mod',
+        'mod',
+        true,
+        result.filename,
+        `Updated ${modId} to ${result.version} from Mod Store`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to update mod' });
   }
 });
 
