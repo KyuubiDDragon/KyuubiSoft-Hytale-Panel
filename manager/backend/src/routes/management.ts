@@ -955,14 +955,29 @@ async function findConfigDirs(baseDir: string, modName: string): Promise<string[
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const entryLower = entry.name.toLowerCase();
-        // Match if folder contains mod name or mod name contains folder
-        if (entryLower.includes(modNameLower) || modNameLower.includes(entryLower.replace(/[_-]/g, ''))) {
+        const entryNormalized = entryLower.replace(/[_-]/g, '');
+        const modNameNormalized = modNameLower.replace(/[_-]/g, '');
+
+        // Match patterns:
+        // 1. Folder contains mod name: "cryptobench_EasyWebMap" contains "easywebmap"
+        // 2. Mod name contains folder name
+        // 3. Pattern: author_modname (e.g., cryptobench_EasyWebMap)
+        // 4. Normalized comparison (ignoring _ and -)
+        if (
+          entryLower.includes(modNameLower) ||
+          modNameLower.includes(entryLower) ||
+          entryNormalized.includes(modNameNormalized) ||
+          modNameNormalized.includes(entryNormalized) ||
+          entryLower.endsWith('_' + modNameLower) ||
+          entryLower.startsWith(modNameLower + '_')
+        ) {
           result.push(path.join(baseDir, entry.name));
         }
       }
     }
-  } catch {
-    // Directory doesn't exist
+  } catch (e) {
+    // Directory doesn't exist or can't be read
+    console.log(`findConfigDirs: Could not read ${baseDir}:`, e);
   }
 
   return result;
@@ -975,25 +990,32 @@ router.get('/mods/:filename/configs', authMiddleware, async (req: Request, res: 
     const modName = filename.replace(/\.(jar|zip|disabled)$/i, '');
     const baseModName = extractBaseModName(filename);
 
-    // Check common config locations (exact match)
-    const configPaths = [
+    console.log(`Looking for configs for mod: ${filename}, baseName: ${baseModName}`);
+
+    // Priority search locations (mods directory first!)
+    const configPaths: string[] = [];
+
+    // 1. First search in mods directory (highest priority)
+    const modsMatches = await findConfigDirs(config.modsPath, baseModName);
+    configPaths.push(...modsMatches);
+    console.log(`Found in modsPath (${config.modsPath}):`, modsMatches);
+
+    // 2. Exact matches in common locations
+    configPaths.push(
       path.join(config.modsPath, modName),
+      path.join(config.modsPath, baseModName),
       path.join(config.modsPath, 'config', modName),
+      path.join(config.modsPath, 'config', baseModName),
       path.join(config.serverPath, 'config', modName),
+      path.join(config.serverPath, 'config', baseModName),
       path.join(config.dataPath, 'config', modName),
-    ];
+      path.join(config.dataPath, 'config', baseModName),
+    );
 
-    // Also search for fuzzy matches in config directories
-    const configDirs = [
-      path.join(config.modsPath),
-      path.join(config.serverPath, 'config'),
-      path.join(config.dataPath, 'config'),
-    ];
-
-    for (const dir of configDirs) {
-      const matchingDirs = await findConfigDirs(dir, baseModName);
-      configPaths.push(...matchingDirs);
-    }
+    // 3. Also search in server/config and data/config for fuzzy matches
+    const serverConfigMatches = await findConfigDirs(path.join(config.serverPath, 'config'), baseModName);
+    const dataConfigMatches = await findConfigDirs(path.join(config.dataPath, 'config'), baseModName);
+    configPaths.push(...serverConfigMatches, ...dataConfigMatches);
 
     // Deduplicate paths
     const uniquePaths = [...new Set(configPaths)];
@@ -1021,8 +1043,10 @@ router.get('/mods/:filename/configs', authMiddleware, async (req: Request, res: 
       }
     }
 
+    console.log(`Found ${configs.length} config files for ${filename}:`, configs.map(c => c.path));
     res.json({ configs });
   } catch (error) {
+    console.error('Failed to get mod configs:', error);
     res.status(500).json({ error: 'Failed to get mod configs' });
   }
 });
@@ -1034,25 +1058,31 @@ router.get('/plugins/:filename/configs', authMiddleware, async (req: Request, re
     const pluginName = filename.replace(/\.(jar|zip|disabled)$/i, '');
     const basePluginName = extractBaseModName(filename);
 
-    // Check common config locations (exact match)
-    const configPaths = [
+    console.log(`Looking for configs for plugin: ${filename}, baseName: ${basePluginName}`);
+
+    // Priority search locations (plugins directory first!)
+    const configPaths: string[] = [];
+
+    // 1. First search in plugins directory (highest priority)
+    const pluginsMatches = await findConfigDirs(config.pluginsPath, basePluginName);
+    configPaths.push(...pluginsMatches);
+
+    // 2. Exact matches in common locations
+    configPaths.push(
       path.join(config.pluginsPath, pluginName),
+      path.join(config.pluginsPath, basePluginName),
       path.join(config.pluginsPath, 'config', pluginName),
+      path.join(config.pluginsPath, 'config', basePluginName),
       path.join(config.serverPath, 'plugins', pluginName),
+      path.join(config.serverPath, 'plugins', basePluginName),
       path.join(config.dataPath, 'plugins', pluginName),
-    ];
+      path.join(config.dataPath, 'plugins', basePluginName),
+    );
 
-    // Also search for fuzzy matches in config directories
-    const configDirs = [
-      path.join(config.pluginsPath),
-      path.join(config.serverPath, 'plugins'),
-      path.join(config.dataPath, 'plugins'),
-    ];
-
-    for (const dir of configDirs) {
-      const matchingDirs = await findConfigDirs(dir, basePluginName);
-      configPaths.push(...matchingDirs);
-    }
+    // 3. Also search in server/plugins and data/plugins for fuzzy matches
+    const serverPluginsMatches = await findConfigDirs(path.join(config.serverPath, 'plugins'), basePluginName);
+    const dataPluginsMatches = await findConfigDirs(path.join(config.dataPath, 'plugins'), basePluginName);
+    configPaths.push(...serverPluginsMatches, ...dataPluginsMatches);
 
     // Deduplicate paths
     const uniquePaths = [...new Set(configPaths)];
@@ -1080,8 +1110,10 @@ router.get('/plugins/:filename/configs', authMiddleware, async (req: Request, re
       }
     }
 
+    console.log(`Found ${configs.length} config files for plugin ${filename}:`, configs.map(c => c.path));
     res.json({ configs });
   } catch (error) {
+    console.error('Failed to get plugin configs:', error);
     res.status(500).json({ error: 'Failed to get plugin configs' });
   }
 });
