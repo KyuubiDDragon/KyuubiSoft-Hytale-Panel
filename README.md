@@ -1,6 +1,6 @@
 <div align="center">
 
-# KyuubiPanel - Hytale Server Management
+# KyuubiSoft Panel - Hytale Server Management
 
 ### Vollautomatisches Docker-Setup mit Web Admin Panel by KyuubiSoft
 
@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/badge/Discord-KyuubiDDragon-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-<img src="https://img.shields.io/badge/KyuubiPanel-orange?style=for-the-badge" alt="KyuubiPanel"/>
+<img src="https://img.shields.io/badge/KyuubiSoft_Panel-orange?style=for-the-badge" alt="KyuubiSoft Panel"/>
 <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
 <img src="https://img.shields.io/badge/Node.js-Backend-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js"/>
 <img src="https://img.shields.io/badge/Vue.js-Frontend-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white" alt="Vue.js"/>
@@ -48,7 +48,7 @@
 
 ## Deutsch
 
-KyuubiPanel - Vollautomatisches Docker-Setup für Hytale Server mit modernem Web-basiertem Admin Panel by KyuubiSoft.
+KyuubiSoft Panel - Vollautomatisches Docker-Setup für Hytale Server mit modernem Web-basiertem Admin Panel.
 
 ### Features
 
@@ -122,7 +122,7 @@ docker attach hytale
 
 Link im Browser öffnen, Code eingeben, fertig.
 
-### KyuubiPanel
+### KyuubiSoft Panel
 
 Das Admin Panel ist unter `http://SERVER-IP:18080` erreichbar.
 
@@ -226,7 +226,7 @@ docker start hytale
 
 ## English
 
-KyuubiPanel - Fully automated Docker setup for Hytale Server with modern web-based admin panel by KyuubiSoft.
+KyuubiSoft Panel - Fully automated Docker setup for Hytale Server with modern web-based admin panel.
 
 ### Features
 
@@ -300,7 +300,7 @@ docker attach hytale
 
 Open link in browser, enter code, done.
 
-### KyuubiPanel
+### KyuubiSoft Panel
 
 The admin panel is available at `http://SERVER-IP:18080`.
 
@@ -422,6 +422,6 @@ If you find this project helpful, consider supporting me!
 
 ---
 
-KyuubiPanel - Made with :heart: by [KyuubiSoft](https://github.com/KyuubiDDragon)
+KyuubiSoft Panel - Made with :heart: by [KyuubiSoft](https://github.com/KyuubiDDragon)
 
 </div>

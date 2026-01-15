@@ -56,11 +56,10 @@ async function handleLogin() {
         <!-- Logo -->
         <div class="text-center mb-8">
           <div class="inline-flex items-center justify-center w-24 h-24 bg-dark-200 rounded-2xl mb-4 overflow-hidden border border-dark-50/50 shadow-lg">
-            <img src="/logo.png" alt="KyuubiPanel" class="w-full h-full object-cover" />
+            <img src="/logo.png" alt="KyuubiSoft Panel" class="w-full h-full object-cover" />
           </div>
-          <h1 class="text-2xl font-bold text-white">KyuubiPanel</h1>
+          <h1 class="text-2xl font-bold text-white">KyuubiSoft Panel</h1>
           <p class="text-gray-400 mt-1 text-sm">Hytale Server Management</p>
-          <p class="text-hytale-orange mt-3 text-xs font-medium">by KyuubiSoft</p>
         </div>
 
         <!-- Error Message -->

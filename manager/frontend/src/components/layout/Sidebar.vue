@@ -67,10 +67,10 @@ function isActive(path: string): boolean {
     <div class="h-16 flex items-center px-6 border-b border-dark-50/50">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-lg overflow-hidden bg-dark-100 flex items-center justify-center shadow-md">
-          <img src="/logo.png" alt="KyuubiPanel" class="w-full h-full object-cover" />
+          <img src="/logo.png" alt="KyuubiSoft Panel" class="w-full h-full object-cover" />
         </div>
         <div class="flex flex-col">
-          <span class="text-lg font-bold text-white leading-tight">KyuubiPanel</span>
+          <span class="text-lg font-bold text-white leading-tight">KyuubiSoft Panel</span>
           <span class="text-[10px] text-gray-500 leading-tight">Hytale Server Management</span>
         </div>
       </div>
