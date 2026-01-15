@@ -471,5 +471,8 @@
     "unauthorized": "Unauthorized",
     "notFound": "Not found",
     "unknown": "Unknown error"
+  },
+  "header": {
+    "openMap": "Open Web Map"
   }
 }
