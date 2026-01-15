@@ -1364,6 +1364,240 @@ router.get('/modstore/info', authMiddleware, async (_req: Request, res: Response
   }
 });
 
+// ==================== WORLD CONFIG ====================
+
+// Interface for world config
+interface WorldConfig {
+  name: string;
+  displayName?: string;
+  seed?: number;
+  isTicking?: boolean;
+  isBlockTicking?: boolean;
+  isPvpEnabled?: boolean;
+  isFallDamageEnabled?: boolean;
+  isGameTimePaused?: boolean;
+  gameTime?: string;
+  isSpawningNPC?: boolean;
+  isAllNPCFrozen?: boolean;
+  isSpawnMarkersEnabled?: boolean;
+  isObjectiveMarkersEnabled?: boolean;
+  isSavingPlayers?: boolean;
+  isSavingChunks?: boolean;
+  saveNewChunks?: boolean;
+  isUnloadingChunks?: boolean;
+  daytimeDurationSecondsOverride?: number;
+  nighttimeDurationSecondsOverride?: number;
+  clientEffects?: {
+    sunHeightPercent?: number;
+    sunAngleDegrees?: number;
+    bloomIntensity?: number;
+    bloomPower?: number;
+    sunIntensity?: number;
+    sunshaftIntensity?: number;
+    sunshaftScaleFactor?: number;
+  };
+}
+
+// GET /api/management/worlds - List all worlds
+router.get('/worlds', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const worldsPath = path.join(config.serverPath, 'worlds');
+
+    // Check if worlds directory exists
+    try {
+      await stat(worldsPath);
+    } catch {
+      res.json({ worlds: [] });
+      return;
+    }
+
+    const entries = await readdir(worldsPath, { withFileTypes: true });
+    const worlds: { name: string; hasConfig: boolean }[] = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const configPath = path.join(worldsPath, entry.name, 'config.json');
+        let hasConfig = false;
+        try {
+          await stat(configPath);
+          hasConfig = true;
+        } catch {
+          // No config file
+        }
+        worlds.push({ name: entry.name, hasConfig });
+      }
+    }
+
+    res.json({ worlds });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list worlds' });
+  }
+});
+
+// GET /api/management/worlds/:worldName/config - Get world config
+router.get('/worlds/:worldName/config', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { worldName } = req.params;
+
+    // Security: validate world name
+    if (!worldName || worldName.includes('..') || worldName.includes('/') || worldName.includes('\\')) {
+      res.status(400).json({ error: 'Invalid world name' });
+      return;
+    }
+
+    const configPath = path.join(config.serverPath, 'worlds', worldName, 'config.json');
+
+    // Check path is safe
+    const realPath = getRealPathIfSafe(configPath, [path.join(config.serverPath, 'worlds')]);
+    if (!realPath) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const content = await readFile(configPath, 'utf-8');
+    const worldConfig = JSON.parse(content);
+
+    // Return normalized config
+    res.json({
+      name: worldName,
+      raw: worldConfig,
+      // Normalized fields for easy editing
+      displayName: worldConfig.DisplayName || worldName,
+      seed: worldConfig.Seed,
+      isTicking: worldConfig.IsTicking ?? true,
+      isBlockTicking: worldConfig.IsBlockTicking ?? true,
+      isPvpEnabled: worldConfig.IsPvpEnabled ?? false,
+      isFallDamageEnabled: worldConfig.IsFallDamageEnabled ?? true,
+      isGameTimePaused: worldConfig.IsGameTimePaused ?? false,
+      gameTime: worldConfig.GameTime,
+      isSpawningNPC: worldConfig.IsSpawningNPC ?? true,
+      isAllNPCFrozen: worldConfig.IsAllNPCFrozen ?? false,
+      isSpawnMarkersEnabled: worldConfig.IsSpawnMarkersEnabled ?? true,
+      isObjectiveMarkersEnabled: worldConfig.IsObjectiveMarkersEnabled ?? true,
+      isSavingPlayers: worldConfig.IsSavingPlayers ?? true,
+      isSavingChunks: worldConfig.IsSavingChunks ?? true,
+      saveNewChunks: worldConfig.SaveNewChunks ?? true,
+      isUnloadingChunks: worldConfig.IsUnloadingChunks ?? true,
+      daytimeDurationSecondsOverride: worldConfig.DaytimeDurationSecondsOverride,
+      nighttimeDurationSecondsOverride: worldConfig.NighttimeDurationSecondsOverride,
+      clientEffects: worldConfig.ClientEffects ? {
+        sunHeightPercent: worldConfig.ClientEffects.SunHeightPercent,
+        sunAngleDegrees: worldConfig.ClientEffects.SunAngleDegrees,
+        bloomIntensity: worldConfig.ClientEffects.BloomIntensity,
+        bloomPower: worldConfig.ClientEffects.BloomPower,
+        sunIntensity: worldConfig.ClientEffects.SunIntensity,
+        sunshaftIntensity: worldConfig.ClientEffects.SunshaftIntensity,
+        sunshaftScaleFactor: worldConfig.ClientEffects.SunshaftScaleFactor,
+      } : undefined,
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      res.status(404).json({ error: 'World config not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to read world config' });
+    }
+  }
+});
+
+// PUT /api/management/worlds/:worldName/config - Update world config
+router.put('/worlds/:worldName/config', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { worldName } = req.params;
+    const updates = req.body;
+
+    // Security: validate world name
+    if (!worldName || worldName.includes('..') || worldName.includes('/') || worldName.includes('\\')) {
+      res.status(400).json({ error: 'Invalid world name' });
+      return;
+    }
+
+    const configPath = path.join(config.serverPath, 'worlds', worldName, 'config.json');
+
+    // Check path is safe
+    const realPath = getRealPathIfSafe(configPath, [path.join(config.serverPath, 'worlds')]);
+    if (!realPath) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    // Read existing config
+    const content = await readFile(configPath, 'utf-8');
+    const worldConfig = JSON.parse(content);
+
+    // Apply updates (map camelCase to PascalCase)
+    if (updates.displayName !== undefined) worldConfig.DisplayName = updates.displayName;
+    if (updates.isTicking !== undefined) worldConfig.IsTicking = updates.isTicking;
+    if (updates.isBlockTicking !== undefined) worldConfig.IsBlockTicking = updates.isBlockTicking;
+    if (updates.isPvpEnabled !== undefined) worldConfig.IsPvpEnabled = updates.isPvpEnabled;
+    if (updates.isFallDamageEnabled !== undefined) worldConfig.IsFallDamageEnabled = updates.isFallDamageEnabled;
+    if (updates.isGameTimePaused !== undefined) worldConfig.IsGameTimePaused = updates.isGameTimePaused;
+    if (updates.isSpawningNPC !== undefined) worldConfig.IsSpawningNPC = updates.isSpawningNPC;
+    if (updates.isAllNPCFrozen !== undefined) worldConfig.IsAllNPCFrozen = updates.isAllNPCFrozen;
+    if (updates.isSpawnMarkersEnabled !== undefined) worldConfig.IsSpawnMarkersEnabled = updates.isSpawnMarkersEnabled;
+    if (updates.isObjectiveMarkersEnabled !== undefined) worldConfig.IsObjectiveMarkersEnabled = updates.isObjectiveMarkersEnabled;
+    if (updates.isSavingPlayers !== undefined) worldConfig.IsSavingPlayers = updates.isSavingPlayers;
+    if (updates.isSavingChunks !== undefined) worldConfig.IsSavingChunks = updates.isSavingChunks;
+    if (updates.saveNewChunks !== undefined) worldConfig.SaveNewChunks = updates.saveNewChunks;
+    if (updates.isUnloadingChunks !== undefined) worldConfig.IsUnloadingChunks = updates.isUnloadingChunks;
+
+    // Day/Night duration overrides
+    if (updates.daytimeDurationSecondsOverride !== undefined) {
+      if (updates.daytimeDurationSecondsOverride === null || updates.daytimeDurationSecondsOverride === '') {
+        delete worldConfig.DaytimeDurationSecondsOverride;
+      } else {
+        worldConfig.DaytimeDurationSecondsOverride = Number(updates.daytimeDurationSecondsOverride);
+      }
+    }
+    if (updates.nighttimeDurationSecondsOverride !== undefined) {
+      if (updates.nighttimeDurationSecondsOverride === null || updates.nighttimeDurationSecondsOverride === '') {
+        delete worldConfig.NighttimeDurationSecondsOverride;
+      } else {
+        worldConfig.NighttimeDurationSecondsOverride = Number(updates.nighttimeDurationSecondsOverride);
+      }
+    }
+
+    // Client effects
+    if (updates.clientEffects) {
+      if (!worldConfig.ClientEffects) worldConfig.ClientEffects = {};
+      if (updates.clientEffects.sunHeightPercent !== undefined)
+        worldConfig.ClientEffects.SunHeightPercent = Number(updates.clientEffects.sunHeightPercent);
+      if (updates.clientEffects.sunAngleDegrees !== undefined)
+        worldConfig.ClientEffects.SunAngleDegrees = Number(updates.clientEffects.sunAngleDegrees);
+      if (updates.clientEffects.bloomIntensity !== undefined)
+        worldConfig.ClientEffects.BloomIntensity = Number(updates.clientEffects.bloomIntensity);
+      if (updates.clientEffects.bloomPower !== undefined)
+        worldConfig.ClientEffects.BloomPower = Number(updates.clientEffects.bloomPower);
+      if (updates.clientEffects.sunIntensity !== undefined)
+        worldConfig.ClientEffects.SunIntensity = Number(updates.clientEffects.sunIntensity);
+      if (updates.clientEffects.sunshaftIntensity !== undefined)
+        worldConfig.ClientEffects.SunshaftIntensity = Number(updates.clientEffects.sunshaftIntensity);
+      if (updates.clientEffects.sunshaftScaleFactor !== undefined)
+        worldConfig.ClientEffects.SunshaftScaleFactor = Number(updates.clientEffects.sunshaftScaleFactor);
+    }
+
+    // Write updated config
+    await writeFile(configPath, JSON.stringify(worldConfig, null, 2), 'utf-8');
+
+    // Log activity
+    await logActivity(
+      (req.user as { username?: string })?.username || 'unknown',
+      'update_world_config',
+      'config',
+      true,
+      worldName,
+      `Updated world config for ${worldName}`
+    );
+
+    res.json({ success: true, message: 'World config updated' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      res.status(404).json({ error: 'World config not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to update world config' });
+    }
+  }
+});
+
 // Helper function to log activity from other routes
 export { logActivity };
 

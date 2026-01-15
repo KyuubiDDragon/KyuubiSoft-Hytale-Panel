@@ -107,14 +107,56 @@ export const permissionsApi = {
 
 export interface WorldInfo {
   name: string
-  path: string
-  size: number
-  lastModified: string
+  hasConfig: boolean
+}
+
+export interface WorldClientEffects {
+  sunHeightPercent?: number
+  sunAngleDegrees?: number
+  bloomIntensity?: number
+  bloomPower?: number
+  sunIntensity?: number
+  sunshaftIntensity?: number
+  sunshaftScaleFactor?: number
+}
+
+export interface WorldConfig {
+  name: string
+  displayName?: string
+  seed?: number
+  isTicking: boolean
+  isBlockTicking: boolean
+  isPvpEnabled: boolean
+  isFallDamageEnabled: boolean
+  isGameTimePaused: boolean
+  gameTime?: string
+  isSpawningNPC: boolean
+  isAllNPCFrozen: boolean
+  isSpawnMarkersEnabled: boolean
+  isObjectiveMarkersEnabled: boolean
+  isSavingPlayers: boolean
+  isSavingChunks: boolean
+  saveNewChunks: boolean
+  isUnloadingChunks: boolean
+  daytimeDurationSecondsOverride?: number | null
+  nighttimeDurationSecondsOverride?: number | null
+  clientEffects?: WorldClientEffects
+  raw?: Record<string, unknown>
 }
 
 export const worldsApi = {
   async get(): Promise<{ worlds: WorldInfo[] }> {
     const response = await api.get<{ worlds: WorldInfo[] }>('/management/worlds')
+    return response.data
+  },
+
+  async getConfig(worldName: string): Promise<WorldConfig> {
+    const response = await api.get<WorldConfig>(`/management/worlds/${encodeURIComponent(worldName)}/config`)
+    return response.data
+  },
+
+  async updateConfig(worldName: string, updates: Partial<WorldConfig>): Promise<{ success: boolean; message?: string }> {
+    const response = await api.put<{ success: boolean; message?: string }>(`/management/worlds/${encodeURIComponent(worldName)}/config`, updates)
     return response.data
   },
 }
