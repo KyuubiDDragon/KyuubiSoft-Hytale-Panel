@@ -93,6 +93,8 @@ export async function getPlayerHistory(): Promise<PlayerHistoryEntry[]> {
 
 export async function getOfflinePlayers(): Promise<PlayerHistoryEntry[]> {
   await loadPlayerHistory();
+  // Scan logs to ensure onlinePlayers map is up-to-date before filtering
+  await scanLogs();
   const onlineNames = new Set(onlinePlayers.keys());
   return Array.from(playerHistory.values())
     .filter(p => !onlineNames.has(p.name))
