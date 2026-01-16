@@ -163,8 +163,16 @@ function sanitizeForFilename(input: string): string | null {
  * Get the Modtale API key from config/environment
  */
 function getApiKey(): string | undefined {
-  return process.env.MODTALE_API_KEY || config.modtaleApiKey;
+  const key = process.env.MODTALE_API_KEY || config.modtaleApiKey;
+  // Only log on first call
+  if (key && !apiKeyLogged) {
+    console.log(`[Modtale] API key configured (${key.substring(0, 6)}...)`);
+    apiKeyLogged = true;
+  }
+  return key || undefined;
 }
+
+let apiKeyLogged = false;
 
 /**
  * Make a request to the Modtale API
@@ -585,13 +593,14 @@ export async function checkModtaleStatus(): Promise<{
   const apiKey = getApiKey();
   const hasApiKey = !!apiKey;
 
-  // Try a simple request to check if API is available
-  const result = await modtaleRequest<string[]>('/api/v1/meta/classifications');
+  // Try a simple search request to check if API is available
+  // This is more reliable than meta endpoints which may not exist
+  const result = await modtaleRequest<ModtaleSearchResult>('/api/v1/projects?size=1');
 
   return {
     configured: true,
     hasApiKey,
-    apiAvailable: result !== null,
+    apiAvailable: result !== null && Array.isArray(result.content),
     rateLimit: hasApiKey
       ? { tier: 'Standard', limit: 300 }
       : { tier: 'No Auth', limit: 10 },
