@@ -71,6 +71,17 @@ async function writeBansMapping(mapping: BanNameMapping): Promise<void> {
 
 // GET /api/players
 router.get('/', authMiddleware, async (_req: Request, res: Response) => {
+  // Check if server is running - if not, clear stale players and return empty list
+  const status = await dockerService.getStatus();
+  if (!status.running) {
+    playersService.clearOnlinePlayers();
+    res.json({
+      players: [],
+      count: 0,
+    });
+    return;
+  }
+
   const players = await playersService.getOnlinePlayers();
 
   res.json({
@@ -81,6 +92,13 @@ router.get('/', authMiddleware, async (_req: Request, res: Response) => {
 
 // GET /api/players/count
 router.get('/count', authMiddleware, async (_req: Request, res: Response) => {
+  // Check if server is running - if not, return 0
+  const status = await dockerService.getStatus();
+  if (!status.running) {
+    playersService.clearOnlinePlayers();
+    res.json({ count: 0 });
+    return;
+  }
   const count = await playersService.getPlayerCount();
   res.json({ count });
 });
