@@ -92,6 +92,10 @@ const hasChanges = () => fileContent.value !== originalContent.value
 // Hytale Auth Functions
 async function loadHytaleAuthStatus() {
   try {
+    // First verify auth status with the backend (this updates the stored status)
+    await authApi.checkHytaleAuthCompletion()
+
+    // Then get the updated status
     const status = await authApi.getHytaleAuthStatus()
     hytaleAuthStatus.value = status
   } catch (e) {

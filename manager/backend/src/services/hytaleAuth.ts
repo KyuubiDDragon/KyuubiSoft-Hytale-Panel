@@ -363,12 +363,11 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
     ];
 
     // Look for auth required messages (server asking for authentication)
+    // Note: Only match patterns that indicate the server is currently asking for auth,
+    // NOT patterns that indicate the user initiated auth (like "/auth login")
     const authRequiredPatterns = [
       /authentication\s+required/i,
       /please\s+authenticate/i,
-      /visit.*to\s+authenticate/i,
-      /\/auth\s+login/i,
-      /not\s+authenticated/i,
       /missing\s+authentication/i,
     ];
 
@@ -392,8 +391,9 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
 
     // Priority 1: Token file exists = authenticated (most reliable)
     if (tokenFileExists) {
-      // But check if logs show it expired or failed
-      if (hasAuthFailure || hasAuthRequired) {
+      // Only consider auth failed if there are RECENT failure messages
+      // hasAuthFailure indicates token expired/invalid in the recent logs
+      if (hasAuthFailure) {
         await saveAuthStatus({
           authenticated: false,
           lastChecked: Date.now(),
@@ -405,6 +405,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
       }
 
       // Token exists and no failures = authenticated
+      // hasAuthRequired alone is not enough to invalidate a valid token
       await saveAuthStatus({
         authenticated: true,
         lastChecked: Date.now(),

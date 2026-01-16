@@ -49,33 +49,33 @@ async function checkForUpdates() {
 
 async function checkHytaleAuth() {
   try {
-    const authStatus = await authApi.getHytaleAuthStatus()
-    hytaleAuthStatus.value = authStatus
-
     // Check if server is running
     if (status.value?.running) {
-      // Show banner if not authenticated
+      // First verify auth status with the backend
+      const checkResult = await authApi.checkHytaleAuthCompletion()
+
+      // Then get the updated status (which may have been modified by checkHytaleAuthCompletion)
+      const authStatus = await authApi.getHytaleAuthStatus()
+      hytaleAuthStatus.value = authStatus
+
+      // Show banner only if not authenticated
       if (!authStatus.authenticated) {
         showAuthBanner.value = true
         showMemoryOnlyWarning.value = false
       } else {
-        // Check if auth expired
-        const checkResult = await authApi.checkHytaleAuthCompletion()
-        if (!checkResult.success) {
-          showAuthBanner.value = true
-          showMemoryOnlyWarning.value = false
-        } else {
-          showAuthBanner.value = false
+        showAuthBanner.value = false
 
-          // Show memory-only warning if authenticated but not persistent
-          if (authStatus.persistenceType === 'memory' || (!authStatus.persistent && authStatus.authenticated)) {
-            showMemoryOnlyWarning.value = true
-          } else {
-            showMemoryOnlyWarning.value = false
-          }
+        // Show memory-only warning if authenticated but not persistent
+        if (authStatus.persistenceType === 'memory' || (!authStatus.persistent && authStatus.authenticated)) {
+          showMemoryOnlyWarning.value = true
+        } else {
+          showMemoryOnlyWarning.value = false
         }
       }
     } else {
+      // Server not running - just get the status without checking
+      const authStatus = await authApi.getHytaleAuthStatus()
+      hytaleAuthStatus.value = authStatus
       showAuthBanner.value = false
       showMemoryOnlyWarning.value = false
     }
