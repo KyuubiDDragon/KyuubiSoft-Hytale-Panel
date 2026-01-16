@@ -499,3 +499,149 @@ export const modtaleApi = {
     return response.data
   },
 }
+
+// ============== STACKMART API ==============
+
+export interface StackMartResource {
+  id: string
+  name: string
+  slug: string
+  tagline: string
+  category: string
+  subcategory?: string
+  version: string
+  downloads: number
+  rating: number
+  author: string
+  source: string
+  sourceUrl: string
+  downloadUrl: string
+  iconUrl?: string
+  bannerUrl?: string
+}
+
+export interface StackMartResourceDetails extends StackMartResource {
+  description: string
+  features: string[]
+  screenshots: string[]
+  tags?: string[]
+  requirements?: string
+  changelog?: string
+  supportUrl?: string
+  documentationUrl?: string
+  fileUrl?: string
+  fileName?: string
+  fileSize?: number
+  views?: number
+  reviewsCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface StackMartSearchResult {
+  resources: StackMartResource[]
+  total: number
+  page: number
+  totalPages: number
+  source: string
+  apiVersion: string
+}
+
+export interface StackMartStatus {
+  configured: boolean
+  hasApiKey: boolean
+  apiAvailable: boolean
+  rateLimit: {
+    limit: number
+  }
+}
+
+export interface StackMartInstallResult {
+  success: boolean
+  error?: string
+  filename?: string
+  version?: string
+  resourceId?: string
+  resourceName?: string
+}
+
+export interface StackMartInstalledInfo {
+  resourceId: string
+  resourceName: string
+  version: string
+  filename: string
+  category: string
+  installedAt: string
+}
+
+export type StackMartSortOption = 'popular' | 'recent' | 'rated'
+export type StackMartCategory = 'plugins' | 'mods' | 'scripts' | 'tools'
+
+export const stackmartApi = {
+  async getStatus(): Promise<StackMartStatus> {
+    const response = await api.get<StackMartStatus>('/management/stackmart/status')
+    return response.data
+  },
+
+  async search(options?: {
+    search?: string
+    page?: number
+    limit?: number
+    sort?: StackMartSortOption
+    category?: StackMartCategory
+    subcategory?: string
+  }): Promise<StackMartSearchResult> {
+    const params = new URLSearchParams()
+    if (options?.search) params.append('search', options.search)
+    if (options?.page !== undefined) params.append('page', options.page.toString())
+    if (options?.limit) params.append('limit', options.limit.toString())
+    if (options?.sort) params.append('sort', options.sort)
+    if (options?.category) params.append('category', options.category)
+    if (options?.subcategory) params.append('subcategory', options.subcategory)
+
+    const response = await api.get<StackMartSearchResult>(`/management/stackmart/search?${params.toString()}`)
+    return response.data
+  },
+
+  async getResource(resourceId: string): Promise<{ resource: StackMartResourceDetails }> {
+    const response = await api.get<{ resource: StackMartResourceDetails }>(`/management/stackmart/resources/${resourceId}`)
+    return response.data
+  },
+
+  async install(resourceId: string): Promise<StackMartInstallResult> {
+    const response = await api.post<StackMartInstallResult>('/management/stackmart/install', { resourceId })
+    return response.data
+  },
+
+  async getPopular(limit?: number): Promise<{ resources: StackMartResource[] }> {
+    const params = limit ? `?limit=${limit}` : ''
+    const response = await api.get<{ resources: StackMartResource[] }>(`/management/stackmart/popular${params}`)
+    return response.data
+  },
+
+  async getRecent(limit?: number): Promise<{ resources: StackMartResource[] }> {
+    const params = limit ? `?limit=${limit}` : ''
+    const response = await api.get<{ resources: StackMartResource[] }>(`/management/stackmart/recent${params}`)
+    return response.data
+  },
+
+  async getCategories(): Promise<{ categories: string[] }> {
+    const response = await api.get<{ categories: string[] }>('/management/stackmart/categories')
+    return response.data
+  },
+
+  async refresh(): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/management/stackmart/refresh')
+    return response.data
+  },
+
+  async getInstalled(): Promise<{ installed: Record<string, StackMartInstalledInfo> }> {
+    const response = await api.get<{ installed: Record<string, StackMartInstalledInfo> }>('/management/stackmart/installed')
+    return response.data
+  },
+
+  async uninstall(resourceId: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.delete<{ success: boolean; error?: string }>(`/management/stackmart/uninstall/${resourceId}`)
+    return response.data
+  },
+}

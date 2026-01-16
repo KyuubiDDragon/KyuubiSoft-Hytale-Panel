@@ -8,6 +8,7 @@ import {
   configApi,
   modStoreApi,
   modtaleApi,
+  stackmartApi,
   type ModInfo,
   type ConfigFile,
   type ModStoreEntry,
@@ -17,11 +18,17 @@ import {
   type ModtaleSortOption,
   type ModtaleClassification,
   type ModtaleInstalledInfo,
+  type StackMartResource,
+  type StackMartResourceDetails,
+  type StackMartStatus,
+  type StackMartSortOption,
+  type StackMartCategory,
+  type StackMartInstalledInfo,
 } from '@/api/management'
 
 const { t } = useI18n()
 
-type TabType = 'mods' | 'plugins' | 'store' | 'modtale'
+type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart'
 
 const activeTab = ref<TabType>('mods')
 const mods = ref<ModInfo[]>([])
@@ -69,6 +76,26 @@ const showModtaleDetail = ref(false)
 const modtaleDetailProject = ref<ModtaleProjectDetails | null>(null)
 const modtaleDetailLoading = ref(false)
 const modtaleInstalled = ref<Record<string, ModtaleInstalledInfo>>({})
+
+// StackMart state
+const stackmartStatus = ref<StackMartStatus | null>(null)
+const stackmartResources = ref<StackMartResource[]>([])
+const stackmartLoading = ref(false)
+const stackmartSearch = ref('')
+const stackmartSort = ref<StackMartSortOption>('popular')
+const stackmartCategory = ref<StackMartCategory | ''>('')
+const stackmartCategories = ref<string[]>([])
+const stackmartPage = ref(1)
+const stackmartTotalPages = ref(0)
+const stackmartTotal = ref(0)
+const stackmartInstallingId = ref<string | null>(null)
+const stackmartInstallSuccess = ref<string | null>(null)
+const stackmartUninstallingId = ref<string | null>(null)
+const showStackMartSettings = ref(false)
+const showStackMartDetail = ref(false)
+const stackmartDetailResource = ref<StackMartResourceDetails | null>(null)
+const stackmartDetailLoading = ref(false)
+const stackmartInstalled = ref<Record<string, StackMartInstalledInfo>>({})
 
 async function loadData() {
   loading.value = true
@@ -478,6 +505,153 @@ watch(modtalePage, () => {
   searchModtale()
 })
 
+// StackMart functions
+async function loadStackMartStatus() {
+  try {
+    stackmartStatus.value = await stackmartApi.getStatus()
+  } catch (e) {
+    console.error('Failed to load StackMart status:', e)
+  }
+}
+
+async function loadStackMartInstalled() {
+  try {
+    const result = await stackmartApi.getInstalled()
+    stackmartInstalled.value = result.installed
+  } catch (e) {
+    console.error('Failed to load installed StackMart resources:', e)
+  }
+}
+
+async function loadStackMartCategories() {
+  try {
+    const result = await stackmartApi.getCategories()
+    stackmartCategories.value = result.categories
+  } catch (e) {
+    console.error('Failed to load StackMart categories:', e)
+  }
+}
+
+async function searchStackMart() {
+  stackmartLoading.value = true
+  error.value = ''
+  try {
+    const result = await stackmartApi.search({
+      search: stackmartSearch.value || undefined,
+      page: stackmartPage.value,
+      limit: 20,
+      sort: stackmartSort.value,
+      category: stackmartCategory.value || undefined,
+    })
+    stackmartResources.value = result.resources
+    stackmartTotalPages.value = result.totalPages
+    stackmartTotal.value = result.total
+  } catch (e: any) {
+    if (e.response?.status === 503) {
+      error.value = t('mods.stackmartUnavailable')
+    } else {
+      error.value = e.response?.data?.error || t('errors.serverError')
+    }
+  } finally {
+    stackmartLoading.value = false
+  }
+}
+
+async function switchToStackMart() {
+  activeTab.value = 'stackmart'
+  if (!stackmartStatus.value) {
+    await loadStackMartStatus()
+  }
+  loadStackMartInstalled()
+  if (stackmartCategories.value.length === 0) {
+    loadStackMartCategories()
+  }
+  if (stackmartResources.value.length === 0) {
+    searchStackMart()
+  }
+}
+
+async function installFromStackMart(resource: StackMartResource) {
+  stackmartInstallingId.value = resource.id
+  stackmartInstallSuccess.value = null
+  error.value = ''
+  try {
+    const result = await stackmartApi.install(resource.id)
+    if (result.success) {
+      stackmartInstallSuccess.value = resource.id
+      await Promise.all([loadData(), loadStackMartInstalled()])
+      setTimeout(() => { stackmartInstallSuccess.value = null }, 3000)
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    stackmartInstallingId.value = null
+  }
+}
+
+async function uninstallFromStackMart(resource: StackMartResource) {
+  if (!confirm(t('mods.confirmUninstall', { name: resource.name }))) return
+
+  stackmartUninstallingId.value = resource.id
+  error.value = ''
+  try {
+    const result = await stackmartApi.uninstall(resource.id)
+    if (result.success) {
+      await Promise.all([loadData(), loadStackMartInstalled()])
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    stackmartUninstallingId.value = null
+  }
+}
+
+function isStackMartInstalled(resourceId: string): boolean {
+  return !!stackmartInstalled.value[resourceId]
+}
+
+function getStackMartInstalledVersion(resourceId: string): string | null {
+  return stackmartInstalled.value[resourceId]?.version || null
+}
+
+async function openStackMartDetail(resource: StackMartResource) {
+  showStackMartDetail.value = true
+  stackmartDetailLoading.value = true
+  stackmartDetailResource.value = null
+  try {
+    const result = await stackmartApi.getResource(resource.id)
+    stackmartDetailResource.value = result.resource
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    stackmartDetailLoading.value = false
+  }
+}
+
+function getStackMartCategoryColor(category: string): string {
+  const colors: Record<string, string> = {
+    plugins: 'bg-purple-500/20 text-purple-400',
+    mods: 'bg-blue-500/20 text-blue-400',
+    scripts: 'bg-green-500/20 text-green-400',
+    tools: 'bg-orange-500/20 text-orange-400',
+  }
+  return colors[category?.toLowerCase()] || 'bg-gray-500/20 text-gray-400'
+}
+
+// Watch for StackMart search/filter changes
+watch([stackmartSearch, stackmartSort, stackmartCategory], () => {
+  stackmartPage.value = 1
+  searchStackMart()
+})
+
+watch(stackmartPage, () => {
+  searchStackMart()
+})
+
 onMounted(loadData)
 </script>
 
@@ -587,10 +761,24 @@ onMounted(loadData)
         </svg>
         Modtale
       </button>
+      <button
+        @click="switchToStackMart"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          activeTab === 'stackmart'
+            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+        </svg>
+        StackMart
+      </button>
     </div>
 
     <!-- Info Card (Mods/Plugins tabs) -->
-    <Card v-if="activeTab !== 'store'">
+    <Card v-if="activeTab === 'mods' || activeTab === 'plugins'">
       <div class="flex items-start gap-4">
         <div class="p-3 bg-hytale-orange/20 rounded-lg">
           <svg class="w-6 h-6 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -622,7 +810,7 @@ onMounted(loadData)
     </Card>
 
     <!-- Items List (Mods/Plugins) -->
-    <Card v-if="activeTab !== 'store'" :title="activeTab === 'mods' ? t('mods.mods') : t('mods.plugins')" :padding="false">
+    <Card v-if="activeTab === 'mods' || activeTab === 'plugins'" :title="activeTab === 'mods' ? t('mods.mods') : t('mods.plugins')" :padding="false">
       <div v-if="loading" class="text-center text-gray-500 p-8">
         {{ t('common.loading') }}
       </div>
@@ -852,7 +1040,20 @@ onMounted(loadData)
           </div>
           <div class="flex-1">
             <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-white">Modtale</h3>
+              <div class="flex items-center gap-3">
+                <h3 class="font-semibold text-white">Modtale</h3>
+                <a
+                  href="https://modtale.net"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1 text-sm"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  modtale.net
+                </a>
+              </div>
               <button
                 @click="showModtaleSettings = true"
                 class="px-3 py-1.5 bg-dark-100 text-gray-300 rounded-lg hover:bg-dark-50 transition-colors flex items-center gap-2 text-sm"
@@ -1246,6 +1447,418 @@ onMounted(loadData)
             <div v-if="modtaleDetailProject.about" class="prose prose-invert max-w-none">
               <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
               <div class="text-gray-400 whitespace-pre-wrap">{{ modtaleDetailProject.about }}</div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- StackMart Section -->
+    <template v-if="activeTab === 'stackmart'">
+      <!-- StackMart Info Card with Settings Button -->
+      <Card>
+        <div class="flex items-start gap-4">
+          <div class="p-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-lg">
+            <svg class="w-6 h-6 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <h3 class="font-semibold text-white">StackMart</h3>
+                <a
+                  href="https://stackmart.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1 text-sm"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  stackmart.org
+                </a>
+              </div>
+              <button
+                @click="showStackMartSettings = true"
+                class="px-3 py-1.5 bg-dark-100 text-gray-300 rounded-lg hover:bg-dark-50 transition-colors flex items-center gap-2 text-sm"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                API Key
+              </button>
+            </div>
+            <p class="text-sm text-gray-400 mt-1">{{ t('mods.stackmartDescription') }}</p>
+            <div class="flex items-center gap-4 mt-2 text-sm">
+              <span v-if="stackmartStatus?.apiAvailable" class="flex items-center gap-1 text-green-400">
+                <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                {{ t('mods.apiOnline') }}
+              </span>
+              <span v-else class="flex items-center gap-1 text-red-400">
+                <span class="w-2 h-2 bg-red-400 rounded-full"></span>
+                {{ t('mods.apiOffline') }}
+              </span>
+              <span class="text-gray-500">
+                {{ stackmartStatus?.rateLimit?.limit || 100 }} req/min
+              </span>
+              <span class="text-gray-500">
+                {{ stackmartTotal }} {{ t('mods.resourcesFound') }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <!-- StackMart Search & Filter -->
+      <Card>
+        <div class="flex flex-wrap gap-4">
+          <!-- Search Input -->
+          <div class="flex-1 min-w-[200px]">
+            <div class="relative">
+              <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                v-model="stackmartSearch"
+                type="text"
+                :placeholder="t('mods.searchStackMart')"
+                class="w-full pl-10 pr-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <!-- Sort -->
+          <select
+            v-model="stackmartSort"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-amber-500"
+          >
+            <option value="popular">{{ t('mods.sortPopular') }}</option>
+            <option value="recent">{{ t('mods.sortRecent') }}</option>
+            <option value="rated">{{ t('mods.sortRating') }}</option>
+          </select>
+
+          <!-- Category Filter -->
+          <select
+            v-model="stackmartCategory"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-amber-500"
+          >
+            <option value="">{{ t('mods.allCategories') }}</option>
+            <option value="plugins">Plugins</option>
+            <option value="mods">Mods</option>
+            <option value="scripts">Scripts</option>
+            <option value="tools">Tools</option>
+          </select>
+        </div>
+      </Card>
+
+      <!-- StackMart Results -->
+      <Card :title="t('mods.stackmartResults')" :padding="false">
+        <div v-if="stackmartLoading" class="text-center text-gray-500 p-8">
+          <svg class="w-8 h-8 mx-auto animate-spin text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <p class="mt-2">{{ t('common.loading') }}</p>
+        </div>
+
+        <div v-else-if="stackmartResources.length === 0" class="text-center text-gray-500 p-8">
+          <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {{ t('mods.noStackMartResults') }}
+        </div>
+
+        <div v-else class="divide-y divide-dark-50/30">
+          <div
+            v-for="resource in stackmartResources"
+            :key="resource.id"
+            class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors cursor-pointer"
+            @click="openStackMartDetail(resource)"
+          >
+            <div class="flex items-center gap-4 flex-1 min-w-0">
+              <!-- Image/Icon -->
+              <div class="w-16 h-16 rounded-lg overflow-hidden bg-dark-100 shrink-0">
+                <img
+                  v-if="resource.iconUrl"
+                  :src="resource.iconUrl.startsWith('http') ? resource.iconUrl : `https://stackmart.org${resource.iconUrl}`"
+                  :alt="resource.name"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center">
+                  <svg class="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="font-medium text-white truncate">{{ resource.name }}</p>
+                  <span :class="['px-2 py-0.5 rounded text-xs', getStackMartCategoryColor(resource.category)]">
+                    {{ resource.category }}
+                  </span>
+                  <span v-if="isStackMartInstalled(resource.id)" class="px-2 py-0.5 rounded text-xs bg-status-success/20 text-status-success">
+                    {{ t('mods.installed') }} {{ getStackMartInstalledVersion(resource.id) }}
+                  </span>
+                  <span v-if="stackmartInstallSuccess === resource.id" class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 animate-pulse">
+                    {{ t('mods.installSuccess') }}
+                  </span>
+                </div>
+                <p class="text-sm text-gray-400 mt-1 line-clamp-1">{{ resource.tagline }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                  <span>{{ resource.author }}</span>
+                  <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ formatDownloads(resource.downloads) }}
+                  </span>
+                  <span v-if="resource.rating != null && resource.rating > 0" class="flex items-center gap-1">
+                    <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ resource.rating?.toFixed(1) || '0.0' }}
+                  </span>
+                  <span class="text-xs text-gray-600">v{{ resource.version }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2 shrink-0 ml-4">
+              <!-- Uninstall Button (if installed) -->
+              <button
+                v-if="isStackMartInstalled(resource.id)"
+                @click.stop="uninstallFromStackMart(resource)"
+                :disabled="stackmartUninstallingId === resource.id"
+                class="px-4 py-2 bg-status-error/20 text-status-error font-medium rounded-lg hover:bg-status-error/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg v-if="stackmartUninstallingId === resource.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                {{ t('mods.uninstall') }}
+              </button>
+              <!-- Reinstall Button (if installed) -->
+              <button
+                v-if="isStackMartInstalled(resource.id)"
+                @click.stop="installFromStackMart(resource)"
+                :disabled="stackmartInstallingId === resource.id"
+                class="px-4 py-2 bg-amber-500/20 text-amber-400 font-medium rounded-lg hover:bg-amber-500/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg v-if="stackmartInstallingId === resource.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {{ t('mods.update') }}
+              </button>
+              <!-- Install Button (if not installed) -->
+              <button
+                v-if="!isStackMartInstalled(resource.id)"
+                @click.stop="installFromStackMart(resource)"
+                :disabled="stackmartInstallingId === resource.id"
+                class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium rounded-lg hover:from-amber-400 hover:to-orange-400 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg v-if="stackmartInstallingId === resource.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {{ stackmartInstallingId === resource.id ? t('mods.installing') : t('mods.install') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="stackmartTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-dark-50/30">
+          <button
+            @click="stackmartPage = Math.max(1, stackmartPage - 1)"
+            :disabled="stackmartPage === 1"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &larr;
+          </button>
+          <span class="text-gray-400">
+            {{ stackmartPage }} / {{ stackmartTotalPages }}
+          </span>
+          <button
+            @click="stackmartPage = Math.min(stackmartTotalPages, stackmartPage + 1)"
+            :disabled="stackmartPage >= stackmartTotalPages"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &rarr;
+          </button>
+        </div>
+      </Card>
+    </template>
+
+    <!-- StackMart Settings Modal -->
+    <div v-if="showStackMartSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-dark-200 rounded-xl w-full max-w-md">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">StackMart API Settings</h2>
+          <button @click="showStackMartSettings = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('mods.statusLabel') }}:</span>
+                <span :class="stackmartStatus?.apiAvailable ? 'text-green-400' : 'text-red-400'">
+                  {{ stackmartStatus?.apiAvailable ? t('mods.online') : t('mods.offline') }}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('mods.apiKeyLabel') }}:</span>
+                <span :class="stackmartStatus?.hasApiKey ? 'text-green-400' : 'text-yellow-400'">
+                  {{ stackmartStatus?.hasApiKey ? t('mods.configured') : t('mods.notConfigured') }}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('mods.rateLimitLabel') }}:</span>
+                <span class="text-amber-400">
+                  {{ stackmartStatus?.rateLimit?.limit || 100 }} req/min
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <h3 class="font-medium text-amber-400 mb-2 flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {{ t('mods.setupApiKey') }}
+            </h3>
+            <p class="text-sm text-gray-400 mb-3">
+              {{ t('mods.stackmartApiKeyInstructions') }}
+            </p>
+            <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
+              <li>{{ t('mods.stackmartApiKeyStep1') }} <a href="https://stackmart.org" target="_blank" class="text-amber-400 hover:underline">stackmart.org</a></li>
+              <li>{{ t('mods.stackmartApiKeyStep2') }}</li>
+              <li>{{ t('mods.stackmartApiKeyStep3') }}</li>
+            </ol>
+            <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
+              STACKMART_API_KEY=sm_pub_your_key_here
+            </code>
+          </div>
+
+          <button
+            @click="showStackMartSettings = false"
+            class="w-full px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium rounded-lg hover:from-amber-400 hover:to-orange-400 transition-colors"
+          >
+            {{ t('mods.close') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- StackMart Detail Modal -->
+    <div v-if="showStackMartDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-dark-200 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
+          <h2 class="text-xl font-bold text-white">{{ stackmartDetailResource?.name || t('common.loading') }}</h2>
+          <button @click="showStackMartDetail = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6">
+          <div v-if="stackmartDetailLoading" class="text-center text-gray-500 py-8">
+            <svg class="w-8 h-8 mx-auto animate-spin text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+
+          <template v-else-if="stackmartDetailResource">
+            <div class="flex gap-6 mb-6">
+              <!-- Image -->
+              <div v-if="stackmartDetailResource.iconUrl" class="w-32 h-32 rounded-lg overflow-hidden shrink-0">
+                <img
+                  :src="stackmartDetailResource.iconUrl.startsWith('http') ? stackmartDetailResource.iconUrl : `https://stackmart.org${stackmartDetailResource.iconUrl}`"
+                  :alt="stackmartDetailResource.name"
+                  class="w-full h-full object-cover"
+                />
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1">
+                <div class="flex items-center gap-2 flex-wrap mb-2">
+                  <span :class="['px-2 py-0.5 rounded text-xs', getStackMartCategoryColor(stackmartDetailResource.category)]">
+                    {{ stackmartDetailResource.category }}
+                  </span>
+                  <span v-for="tag in (stackmartDetailResource.tags || [])" :key="tag" class="px-2 py-0.5 rounded text-xs bg-dark-100 text-gray-400">
+                    {{ tag }}
+                  </span>
+                </div>
+                <p class="text-gray-400 mb-2">{{ stackmartDetailResource.tagline }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500">
+                  <span>{{ stackmartDetailResource.author }}</span>
+                  <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ formatDownloads(stackmartDetailResource.downloads) }} Downloads
+                  </span>
+                  <span v-if="stackmartDetailResource.rating != null && stackmartDetailResource.rating > 0" class="flex items-center gap-1">
+                    <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ stackmartDetailResource.rating?.toFixed(1) || '0.0' }}
+                  </span>
+                  <span class="text-xs">v{{ stackmartDetailResource.version }}</span>
+                </div>
+                <div class="flex gap-3 mt-3">
+                  <a v-if="stackmartDetailResource.supportUrl" :href="stackmartDetailResource.supportUrl" target="_blank" class="text-amber-400 hover:underline text-sm">
+                    Support
+                  </a>
+                  <a v-if="stackmartDetailResource.documentationUrl" :href="stackmartDetailResource.documentationUrl" target="_blank" class="text-amber-400 hover:underline text-sm">
+                    Documentation
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Features -->
+            <div v-if="stackmartDetailResource.features?.length" class="mb-6">
+              <h3 class="font-semibold text-white mb-3">Features</h3>
+              <ul class="list-disc list-inside text-gray-400 space-y-1">
+                <li v-for="feature in stackmartDetailResource.features" :key="feature">{{ feature }}</li>
+              </ul>
+            </div>
+
+            <!-- Description -->
+            <div v-if="stackmartDetailResource.description" class="mb-6">
+              <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
+              <div class="text-gray-400 whitespace-pre-wrap">{{ stackmartDetailResource.description }}</div>
+            </div>
+
+            <!-- Install Button -->
+            <div class="flex justify-end">
+              <button
+                @click="installFromStackMart(stackmartDetailResource); showStackMartDetail = false;"
+                class="px-6 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium rounded-lg hover:from-amber-400 hover:to-orange-400 transition-colors flex items-center gap-2"
+              >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {{ t('mods.install') }} v{{ stackmartDetailResource.version }}
+              </button>
             </div>
           </template>
         </div>

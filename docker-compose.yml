@@ -132,6 +132,9 @@ services:
       # Modtale API (optional)
       - MODTALE_API_KEY=${MODTALE_API_KEY:-}
 
+      # StackMart API (optional)
+      - STACKMART_API_KEY=${STACKMART_API_KEY:-}
+
     ports:
       - "${MANAGER_PORT:-18080}:18080"
 
