@@ -249,11 +249,19 @@ const filteredLogs = computed(() => {
   return logs
 })
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!commandInput.value.trim()) return
   showSuggestions.value = false
   sendCommand(commandInput.value)
   commandInput.value = ''
+
+  // Auto-scroll to bottom after command is sent
+  await nextTick()
+  setTimeout(() => {
+    if (terminalRef.value) {
+      terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+    }
+  }, 100)
 }
 
 function clearLogs() {

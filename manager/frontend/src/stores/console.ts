@@ -8,6 +8,18 @@ export interface LogEntry {
   message: string
 }
 
+/**
+ * Removes ANSI escape codes from text
+ */
+function stripAnsiCodes(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
+    .replace(/\[0;31m/g, '')
+    .replace(/\[33m/g, '')
+    .replace(/\[m/g, '')
+    .replace(/\[0m/g, '')
+}
+
 export const useConsoleStore = defineStore('console', () => {
   // State
   const logs = ref<LogEntry[]>([])
@@ -21,7 +33,11 @@ export const useConsoleStore = defineStore('console', () => {
   // Actions
   function addLog(entry: Omit<LogEntry, 'id'>) {
     const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    logs.value.push({ ...entry, id })
+
+    // Strip ANSI codes from message
+    const cleanMessage = stripAnsiCodes(entry.message)
+
+    logs.value.push({ ...entry, message: cleanMessage, id })
 
     // Limit log size
     if (logs.value.length > maxLogs) {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, getLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import { serverApi, type ConfigFile } from '@/api/server'
+import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -19,7 +20,15 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 
-function changeLocale(locale: 'de' | 'en') {
+// Hytale Auth
+const hytaleAuthStatus = ref<HytaleAuthStatus>({ authenticated: false })
+const hytaleAuthLoading = ref(false)
+const hytaleAuthError = ref<string | null>(null)
+const hytaleAuthSuccess = ref<string | null>(null)
+const deviceCodeData = ref<HytaleDeviceCodeResponse | null>(null)
+const checkingInterval = ref<number | null>(null)
+
+function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
   currentLocale.value = locale
 }
@@ -80,11 +89,134 @@ function closeEditor() {
 
 const hasChanges = () => fileContent.value !== originalContent.value
 
+// Hytale Auth Functions
+async function loadHytaleAuthStatus() {
+  try {
+    const status = await authApi.getHytaleAuthStatus()
+    hytaleAuthStatus.value = status
+  } catch (e) {
+    console.error('Failed to load Hytale auth status:', e)
+  }
+}
+
+async function initiateHytaleAuth() {
+  try {
+    hytaleAuthLoading.value = true
+    hytaleAuthError.value = null
+    hytaleAuthSuccess.value = null
+
+    const result = await authApi.initiateHytaleLogin()
+
+    if (!result.success) {
+      hytaleAuthError.value = result.error || 'Failed to initiate authentication'
+      return
+    }
+
+    deviceCodeData.value = result
+
+    // Start polling for completion
+    startAuthPolling()
+  } catch (e) {
+    hytaleAuthError.value = 'An error occurred while initiating authentication'
+  } finally {
+    hytaleAuthLoading.value = false
+  }
+}
+
+function startAuthPolling() {
+  // Poll every 5 seconds
+  checkingInterval.value = window.setInterval(async () => {
+    try {
+      const result = await authApi.checkHytaleAuthCompletion()
+
+      if (result.success) {
+        // Authentication completed!
+        stopAuthPolling()
+        hytaleAuthSuccess.value = result.message || t('settings.authSuccess')
+        deviceCodeData.value = null
+        await loadHytaleAuthStatus()
+
+        // Clear success message after 5 seconds
+        setTimeout(() => {
+          hytaleAuthSuccess.value = null
+        }, 5000)
+      }
+    } catch (e) {
+      console.error('Error checking auth completion:', e)
+    }
+  }, 5000)
+}
+
+function stopAuthPolling() {
+  if (checkingInterval.value) {
+    window.clearInterval(checkingInterval.value)
+    checkingInterval.value = null
+  }
+}
+
+async function verifyAuth() {
+  try {
+    hytaleAuthLoading.value = true
+    hytaleAuthError.value = null
+
+    const result = await authApi.checkHytaleAuthCompletion()
+
+    if (result.success) {
+      hytaleAuthSuccess.value = result.message || t('settings.authSuccess')
+      deviceCodeData.value = null
+      stopAuthPolling()
+      await loadHytaleAuthStatus()
+    } else {
+      hytaleAuthError.value = result.error || t('settings.authPending')
+    }
+  } catch (e) {
+    hytaleAuthError.value = 'Failed to verify authentication'
+  } finally {
+    hytaleAuthLoading.value = false
+  }
+}
+
+async function resetHytaleAuth() {
+  try {
+    hytaleAuthLoading.value = true
+    hytaleAuthError.value = null
+    hytaleAuthSuccess.value = null
+
+    await authApi.resetHytaleAuth()
+    deviceCodeData.value = null
+    stopAuthPolling()
+    await loadHytaleAuthStatus()
+  } catch (e) {
+    hytaleAuthError.value = 'Failed to reset authentication'
+  } finally {
+    hytaleAuthLoading.value = false
+  }
+}
+
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text)
+}
+
+function openAuthUrl() {
+  if (deviceCodeData.value?.verificationUrl) {
+    window.open(deviceCodeData.value.verificationUrl, '_blank')
+  }
+}
+
 onMounted(() => {
   // Only load config files if user has permission
   if (authStore.canManageConfig) {
     loadConfigFiles()
   }
+
+  // Load Hytale auth status if user can manage server
+  if (authStore.canManageServer) {
+    loadHytaleAuthStatus()
+  }
+})
+
+onUnmounted(() => {
+  stopAuthPolling()
 })
 </script>
 
@@ -145,6 +277,162 @@ onMounted(() => {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>
         </button>
+
+        <button
+          @click="changeLocale('pt_br')"
+          :class="[
+            'flex items-center gap-3 px-4 py-3 rounded-lg border-2 transition-all',
+            currentLocale === 'pt_br'
+              ? 'border-hytale-orange bg-hytale-orange/10'
+              : 'border-dark-50 hover:border-gray-600'
+          ]"
+        >
+          <span class="text-2xl">🇧🇷</span>
+          <div class="text-left">
+            <p class="font-medium text-white">Português (Brasil)</p>
+            <p class="text-sm text-gray-400">Portuguese (Brazil)</p>
+          </div>
+          <svg
+            v-if="currentLocale === 'pt_br'"
+            class="w-5 h-5 text-hytale-orange ml-auto"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+      </div>
+    </Card>
+
+    <!-- Hytale Server Authentication (admins and moderators only) -->
+    <Card v-if="authStore.canManageServer" :title="t('settings.hytaleAuth')">
+      <p class="text-gray-400 text-sm mb-4">{{ t('settings.hytaleAuthDesc') }}</p>
+
+      <!-- Error/Success Messages -->
+      <div v-if="hytaleAuthError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
+        {{ hytaleAuthError }}
+      </div>
+      <div v-if="hytaleAuthSuccess" class="mb-4 p-3 bg-status-success/20 border border-status-success/30 rounded-lg text-status-success text-sm">
+        {{ hytaleAuthSuccess }}
+      </div>
+
+      <div class="space-y-4">
+        <!-- Current Status -->
+        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+          <div>
+            <p class="text-sm text-gray-400">{{ t('settings.authStatus') }}</p>
+            <p class="text-white font-medium mt-1">
+              <span v-if="hytaleAuthStatus.authenticated" class="flex items-center gap-2">
+                <svg class="w-5 h-5 text-status-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {{ t('settings.authenticated') }}
+              </span>
+              <span v-else class="flex items-center gap-2">
+                <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {{ t('settings.notAuthenticated') }}
+              </span>
+            </p>
+            <!-- Persistence Type Warning -->
+            <p v-if="hytaleAuthStatus.authenticated && hytaleAuthStatus.persistenceType === 'memory'" class="text-xs text-status-warning mt-1 flex items-center gap-1">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              {{ t('dashboard.authMemoryOnlyShort') }}
+            </p>
+          </div>
+
+          <div class="flex gap-2">
+            <button
+              v-if="!hytaleAuthStatus.authenticated && !deviceCodeData"
+              @click="initiateHytaleAuth"
+              :disabled="hytaleAuthLoading"
+              class="btn btn-primary"
+            >
+              <svg v-if="hytaleAuthLoading" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ t('settings.initiateAuth') }}
+            </button>
+
+            <button
+              v-if="hytaleAuthStatus.authenticated"
+              @click="resetHytaleAuth"
+              :disabled="hytaleAuthLoading"
+              class="btn btn-secondary"
+            >
+              {{ t('settings.resetAuth') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Authentication in Progress -->
+        <div v-if="deviceCodeData" class="p-4 bg-dark-300 rounded-lg border-2 border-hytale-orange">
+          <div class="flex items-start gap-3">
+            <svg class="w-6 h-6 text-hytale-orange mt-1 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <div class="flex-1">
+              <h3 class="text-white font-medium mb-2">{{ t('settings.authInProgress') }}</h3>
+              <p class="text-gray-400 text-sm mb-4">{{ t('settings.completeAuth') }}</p>
+
+              <!-- Auth Code Display -->
+              <div class="bg-dark-400 p-4 rounded-lg mb-4">
+                <p class="text-xs text-gray-500 uppercase mb-2">{{ t('settings.authCode') }}</p>
+                <div class="flex items-center justify-between">
+                  <p class="text-2xl font-mono text-hytale-orange font-bold">{{ deviceCodeData.userCode }}</p>
+                  <button
+                    @click="copyToClipboard(deviceCodeData.userCode || '')"
+                    class="btn btn-sm btn-secondary"
+                  >
+                    <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    {{ t('settings.copyCode') }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex gap-2">
+                <button
+                  @click="openAuthUrl"
+                  class="btn btn-primary flex-1"
+                >
+                  <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  {{ t('settings.openAuthUrl') }}
+                </button>
+
+                <button
+                  @click="verifyAuth"
+                  :disabled="hytaleAuthLoading"
+                  class="btn btn-secondary"
+                >
+                  <svg v-if="hytaleAuthLoading" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  {{ t('settings.verifyAuth') }}
+                </button>
+
+                <button
+                  @click="resetHytaleAuth"
+                  class="btn btn-secondary"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </Card>
 

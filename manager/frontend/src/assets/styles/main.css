@@ -139,11 +139,15 @@
 
   /* Console Terminal */
   .terminal {
-    @apply bg-dark-400 font-mono text-sm p-4 rounded-lg overflow-auto;
+    @apply bg-dark-400 font-mono text-xs p-4 rounded-lg overflow-auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    line-height: 1.5;
   }
 
   .terminal-line {
     @apply py-0.5;
+    word-wrap: break-word;
+    white-space: pre-wrap;
   }
 
   .terminal-line.info {

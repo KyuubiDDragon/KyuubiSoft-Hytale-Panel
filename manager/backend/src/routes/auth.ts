@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getAllUsers, createUser, updateUser, deleteUser, getUser } from '../services/users.js';
+import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 
 const router = Router();
@@ -176,6 +177,129 @@ router.delete('/users/:username', authMiddleware, async (req: AuthenticatedReque
       res.status(400).json({ error: (error as Error).message });
     }
   });
+});
+
+// ============== HYTALE SERVER AUTHENTICATION ==============
+
+// GET /api/auth/hytale/status - Get Hytale authentication status
+router.get('/hytale/status', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const status = await getAuthStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get auth status' });
+  }
+});
+
+// POST /api/auth/hytale/initiate - Initiate Hytale device login
+router.post('/hytale/initiate', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Only admins and moderators can initiate Hytale auth
+    const username = req.user!;
+    const user = await getUser(username);
+    if (!user || !['admin', 'moderator'].includes(user.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+
+    const result = await initiateDeviceLogin();
+
+    if (!result.success) {
+      res.status(400).json(result);
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to initiate login'
+    });
+  }
+});
+
+// POST /api/auth/hytale/check - Check if authentication is complete
+router.post('/hytale/check', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await checkAuthCompletion();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to check auth status'
+    });
+  }
+});
+
+// POST /api/auth/hytale/reset - Reset Hytale authentication
+router.post('/hytale/reset', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Only admins and moderators can reset Hytale auth
+    const username = req.user!;
+    const user = await getUser(username);
+    if (!user || !['admin', 'moderator'].includes(user.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+
+    const result = await resetAuth();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to reset auth'
+    });
+  }
+});
+
+// POST /api/auth/hytale/persistence - Set authentication persistence type
+router.post('/hytale/persistence', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Only admins and moderators can change persistence settings
+    const username = req.user!;
+    const user = await getUser(username);
+    if (!user || !['admin', 'moderator'].includes(user.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+
+    const { type } = req.body;
+    if (!type || !['Memory', 'Encrypted'].includes(type)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid persistence type. Must be "Memory" or "Encrypted"'
+      });
+      return;
+    }
+
+    const result = await setPersistence(type);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to set persistence'
+    });
+  }
+});
+
+// GET /api/auth/hytale/files - List files in auth directory (debug)
+router.get('/hytale/files', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const files = await listAuthFiles();
+    res.json({ files });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list auth files' });
+  }
+});
+
+// GET /api/auth/hytale/inspect-credentials - Inspect downloader credentials structure (debug)
+router.get('/hytale/inspect-credentials', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await inspectDownloaderCredentials();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to inspect credentials' });
+  }
 });
 
 export default router;

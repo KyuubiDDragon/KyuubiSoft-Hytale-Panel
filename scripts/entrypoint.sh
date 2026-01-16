@@ -336,6 +336,26 @@ if [ ! -L "/opt/hytale/server/.auth" ]; then
     ln -sfn /opt/hytale/auth /opt/hytale/server/.auth
 fi
 
+# ============================================================
+# Copy downloader credentials to server auth directory
+# ============================================================
+DOWNLOADER_CREDS="/opt/hytale/downloader/.hytale-downloader-credentials.json"
+SERVER_AUTH_DIR="/opt/hytale/auth"
+
+if [ -f "$DOWNLOADER_CREDS" ]; then
+    echo "[INFO] Found downloader credentials, copying to server auth directory..."
+
+    # Copy with different possible names the server might look for
+    cp "$DOWNLOADER_CREDS" "$SERVER_AUTH_DIR/.hytale-downloader-credentials.json" 2>/dev/null || true
+    cp "$DOWNLOADER_CREDS" "$SERVER_AUTH_DIR/credentials.json" 2>/dev/null || true
+    cp "$DOWNLOADER_CREDS" "$SERVER_AUTH_DIR/.credentials" 2>/dev/null || true
+    cp "$DOWNLOADER_CREDS" "$SERVER_AUTH_DIR/oauth_credentials.json" 2>/dev/null || true
+
+    echo "[INFO] Credentials copied to server auth directory"
+else
+    echo "[WARN] No downloader credentials found at $DOWNLOADER_CREDS"
+fi
+
 chown -R hytale:hytale /opt/hytale
 
 # ============================================================

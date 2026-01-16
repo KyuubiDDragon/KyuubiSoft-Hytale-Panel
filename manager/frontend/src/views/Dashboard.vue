@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { serverApi, type ServerMemoryStats, type UpdateCheckResponse } from '@/api/server'
+import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 const { status, stats, playerCount, loading, error, refresh } = useServerStats()
 
 // Server JVM memory stats
@@ -17,6 +20,12 @@ let memoryInterval: ReturnType<typeof setInterval> | null = null
 const updateInfo = ref<UpdateCheckResponse | null>(null)
 const checkingUpdate = ref(false)
 const updateCheckError = ref<string | null>(null)
+
+// Hytale Auth status
+const hytaleAuthStatus = ref<HytaleAuthStatus>({ authenticated: false })
+const showAuthBanner = ref(false)
+const showMemoryOnlyWarning = ref(false)
+const enablingPersistence = ref(false)
 
 async function fetchServerMemory() {
   try {
@@ -38,9 +47,69 @@ async function checkForUpdates() {
   }
 }
 
+async function checkHytaleAuth() {
+  try {
+    const authStatus = await authApi.getHytaleAuthStatus()
+    hytaleAuthStatus.value = authStatus
+
+    // Check if server is running
+    if (status.value?.running) {
+      // Show banner if not authenticated
+      if (!authStatus.authenticated) {
+        showAuthBanner.value = true
+        showMemoryOnlyWarning.value = false
+      } else {
+        // Check if auth expired
+        const checkResult = await authApi.checkHytaleAuthCompletion()
+        if (!checkResult.success) {
+          showAuthBanner.value = true
+          showMemoryOnlyWarning.value = false
+        } else {
+          showAuthBanner.value = false
+
+          // Show memory-only warning if authenticated but not persistent
+          if (authStatus.persistenceType === 'memory' || (!authStatus.persistent && authStatus.authenticated)) {
+            showMemoryOnlyWarning.value = true
+          } else {
+            showMemoryOnlyWarning.value = false
+          }
+        }
+      }
+    } else {
+      showAuthBanner.value = false
+      showMemoryOnlyWarning.value = false
+    }
+  } catch (err) {
+    console.error('Failed to check Hytale auth:', err)
+  }
+}
+
+function goToSettings() {
+  router.push('/settings')
+}
+
+async function enablePersistence() {
+  enablingPersistence.value = true
+  try {
+    const result = await authApi.setHytalePersistence('Encrypted')
+    if (result.success) {
+      // Refresh auth status to update the UI
+      await checkHytaleAuth()
+    }
+  } catch (err) {
+    console.error('Failed to enable persistence:', err)
+  } finally {
+    enablingPersistence.value = false
+  }
+}
+
 onMounted(() => {
   fetchServerMemory()
-  memoryInterval = setInterval(fetchServerMemory, 10000) // Every 10 seconds
+  checkHytaleAuth()
+  memoryInterval = setInterval(() => {
+    fetchServerMemory()
+    checkHytaleAuth()
+  }, 10000) // Every 10 seconds
 })
 
 onUnmounted(() => {
@@ -125,6 +194,85 @@ function refreshAll() {
 
 <template>
   <div class="space-y-6">
+    <!-- Authentication Banner -->
+    <div
+      v-if="showAuthBanner && status?.running"
+      class="bg-gradient-to-r from-status-warning/20 to-hytale-orange/20 border-2 border-status-warning rounded-lg p-4"
+    >
+      <div class="flex items-start gap-4">
+        <div class="flex-shrink-0">
+          <svg class="w-8 h-8 text-status-warning animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-white mb-1">
+            {{ hytaleAuthStatus.authenticated ? t('dashboard.authExpired') : t('dashboard.authRequired') }}
+          </h3>
+          <p class="text-gray-300 text-sm mb-3">
+            {{ hytaleAuthStatus.authenticated ? t('dashboard.authExpiredDesc') : t('dashboard.authRequiredDesc') }}
+          </p>
+          <button
+            @click="goToSettings"
+            class="btn btn-primary inline-flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            {{ t('dashboard.authenticateNow') }}
+          </button>
+        </div>
+        <button
+          @click="showAuthBanner = false"
+          class="flex-shrink-0 text-gray-400 hover:text-white"
+        >
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Memory-Only Auth Warning Banner -->
+    <div
+      v-if="showMemoryOnlyWarning && status?.running"
+      class="bg-gradient-to-r from-hytale-orange/20 to-status-warning/20 border-2 border-hytale-orange rounded-lg p-4"
+    >
+      <div class="flex items-start gap-4">
+        <div class="flex-shrink-0">
+          <svg class="w-8 h-8 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-white mb-1">
+            {{ t('dashboard.authMemoryOnly') }}
+          </h3>
+          <p class="text-gray-300 text-sm mb-3">
+            {{ t('dashboard.authMemoryOnlyDesc') }}
+          </p>
+          <button
+            @click="enablePersistence"
+            :disabled="enablingPersistence"
+            class="btn btn-primary inline-flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            {{ enablingPersistence ? t('dashboard.enablingPersistence') : t('dashboard.enablePersistence') }}
+          </button>
+        </div>
+        <button
+          @click="showMemoryOnlyWarning = false"
+          class="flex-shrink-0 text-gray-400 hover:text-white"
+        >
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <!-- Page Title -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold text-white">{{ t('dashboard.title') }}</h1>
@@ -145,7 +293,7 @@ function refreshAll() {
     </div>
 
     <!-- Status Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
       <StatusCard
         :title="t('dashboard.serverStatus')"
         :value="serverStatusText"
@@ -173,6 +321,40 @@ function refreshAll() {
         status="info"
         icon="players"
       />
+
+      <!-- Auth Status Card -->
+      <div class="card" :class="hytaleAuthStatus.authenticated ? 'border-status-success' : 'border-status-warning'">
+        <div class="card-body p-4">
+          <div class="flex items-center gap-3">
+            <div class="flex-shrink-0">
+              <svg
+                v-if="hytaleAuthStatus.authenticated"
+                class="w-6 h-6 text-status-success"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <svg
+                v-else
+                class="w-6 h-6 text-status-warning animate-pulse"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs text-gray-400 mb-1">{{ t('settings.authStatus') }}</p>
+              <p class="text-sm font-semibold truncate" :class="hytaleAuthStatus.authenticated ? 'text-status-success' : 'text-status-warning'">
+                {{ hytaleAuthStatus.authenticated ? t('settings.authenticated') : t('settings.notAuthenticated') }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Quick Actions -->
