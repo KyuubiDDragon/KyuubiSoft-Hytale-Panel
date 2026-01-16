@@ -1,5 +1,8 @@
 import api from './client'
 
+// Extended timeout for long-running backup operations (30 minutes)
+const BACKUP_TIMEOUT = 30 * 60 * 1000
+
 export interface BackupInfo {
   id: string
   filename: string
@@ -39,7 +42,10 @@ export const backupApi = {
   },
 
   async create(name?: string): Promise<ActionResponse> {
-    const response = await api.post<ActionResponse>('/backups', { name })
+    // Use extended timeout for backup creation (can take 30+ minutes for large servers)
+    const response = await api.post<ActionResponse>('/backups', { name }, {
+      timeout: BACKUP_TIMEOUT,
+    })
     return response.data
   },
 
@@ -49,7 +55,10 @@ export const backupApi = {
   },
 
   async restore(backupId: string): Promise<ActionResponse> {
-    const response = await api.post<ActionResponse>(`/backups/${backupId}/restore`)
+    // Use extended timeout for backup restoration (can take 30+ minutes for large backups)
+    const response = await api.post<ActionResponse>(`/backups/${backupId}/restore`, {}, {
+      timeout: BACKUP_TIMEOUT,
+    })
     return response.data
   },
 
