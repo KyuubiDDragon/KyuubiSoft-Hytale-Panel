@@ -32,6 +32,9 @@ export const config = {
 
   // Timezone
   tz: process.env.TZ || 'Europe/Berlin',
+
+  // Modtale Integration
+  modtaleApiKey: process.env.MODTALE_API_KEY || '',
 };
 
 // SECURITY: Check for insecure default credentials on startup

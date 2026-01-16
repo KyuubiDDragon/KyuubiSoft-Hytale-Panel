@@ -350,3 +350,133 @@ export const modStoreApi = {
     return response.data
   },
 }
+
+// ============== MODTALE API ==============
+
+export interface ModtaleProject {
+  id: string
+  title: string
+  author: string
+  classification: 'PLUGIN' | 'DATA' | 'ART' | 'SAVE' | 'MODPACK'
+  description: string
+  imageUrl?: string
+  downloads: number
+  rating: number
+  updatedAt: string
+  tags: string[]
+}
+
+export interface ModtaleVersion {
+  id: string
+  versionNumber: string
+  fileUrl: string
+  downloadCount: number
+  gameVersions?: string[]
+  changelog?: string
+  channel?: 'RELEASE' | 'BETA' | 'ALPHA'
+}
+
+export interface ModtaleProjectDetails extends ModtaleProject {
+  about?: string
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | 'UNLISTED'
+  versions: ModtaleVersion[]
+  galleryImages: string[]
+  license?: string
+  repositoryUrl?: string
+}
+
+export interface ModtaleSearchResult {
+  content: ModtaleProject[]
+  totalPages: number
+  totalElements: number
+}
+
+export interface ModtaleStatus {
+  configured: boolean
+  hasApiKey: boolean
+  apiAvailable: boolean
+  rateLimit?: {
+    tier: string
+    limit: number
+  }
+}
+
+export interface ModtaleInstallResult {
+  success: boolean
+  error?: string
+  filename?: string
+  version?: string
+  projectId?: string
+  projectTitle?: string
+}
+
+export type ModtaleSortOption = 'relevance' | 'downloads' | 'updated' | 'newest' | 'rating' | 'favorites'
+export type ModtaleClassification = 'PLUGIN' | 'DATA' | 'ART' | 'SAVE' | 'MODPACK'
+
+export const modtaleApi = {
+  async getStatus(): Promise<ModtaleStatus> {
+    const response = await api.get<ModtaleStatus>('/management/modtale/status')
+    return response.data
+  },
+
+  async search(options?: {
+    search?: string
+    page?: number
+    size?: number
+    sort?: ModtaleSortOption
+    classification?: ModtaleClassification
+    tags?: string[]
+    gameVersion?: string
+    author?: string
+  }): Promise<ModtaleSearchResult> {
+    const params = new URLSearchParams()
+    if (options?.search) params.append('search', options.search)
+    if (options?.page !== undefined) params.append('page', options.page.toString())
+    if (options?.size) params.append('size', options.size.toString())
+    if (options?.sort) params.append('sort', options.sort)
+    if (options?.classification) params.append('classification', options.classification)
+    if (options?.tags?.length) params.append('tags', options.tags.join(','))
+    if (options?.gameVersion) params.append('gameVersion', options.gameVersion)
+    if (options?.author) params.append('author', options.author)
+
+    const response = await api.get<ModtaleSearchResult>(`/management/modtale/search?${params.toString()}`)
+    return response.data
+  },
+
+  async getProject(projectId: string): Promise<ModtaleProjectDetails> {
+    const response = await api.get<ModtaleProjectDetails>(`/management/modtale/projects/${projectId}`)
+    return response.data
+  },
+
+  async install(projectId: string, versionId?: string): Promise<ModtaleInstallResult> {
+    const response = await api.post<ModtaleInstallResult>('/management/modtale/install', { projectId, versionId })
+    return response.data
+  },
+
+  async getFeatured(limit?: number): Promise<{ mods: ModtaleProject[] }> {
+    const params = limit ? `?limit=${limit}` : ''
+    const response = await api.get<{ mods: ModtaleProject[] }>(`/management/modtale/featured${params}`)
+    return response.data
+  },
+
+  async getRecent(limit?: number): Promise<{ mods: ModtaleProject[] }> {
+    const params = limit ? `?limit=${limit}` : ''
+    const response = await api.get<{ mods: ModtaleProject[] }>(`/management/modtale/recent${params}`)
+    return response.data
+  },
+
+  async getTags(): Promise<{ tags: string[] }> {
+    const response = await api.get<{ tags: string[] }>('/management/modtale/tags')
+    return response.data
+  },
+
+  async getClassifications(): Promise<{ classifications: string[] }> {
+    const response = await api.get<{ classifications: string[] }>('/management/modtale/classifications')
+    return response.data
+  },
+
+  async refresh(): Promise<{ success: boolean; message: string }> {
+    const response = await api.post<{ success: boolean; message: string }>('/management/modtale/refresh')
+    return response.data
+  },
+}

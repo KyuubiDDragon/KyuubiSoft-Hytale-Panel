@@ -1,12 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
-import { modsApi, pluginsApi, configApi, modStoreApi, type ModInfo, type ConfigFile, type ModStoreEntry } from '@/api/management'
+import {
+  modsApi,
+  pluginsApi,
+  configApi,
+  modStoreApi,
+  modtaleApi,
+  type ModInfo,
+  type ConfigFile,
+  type ModStoreEntry,
+  type ModtaleProject,
+  type ModtaleProjectDetails,
+  type ModtaleStatus,
+  type ModtaleSortOption,
+  type ModtaleClassification,
+} from '@/api/management'
 
 const { t } = useI18n()
 
-type TabType = 'mods' | 'plugins' | 'store'
+type TabType = 'mods' | 'plugins' | 'store' | 'modtale'
 
 const activeTab = ref<TabType>('mods')
 const mods = ref<ModInfo[]>([])
@@ -33,6 +47,25 @@ const storeMods = ref<ModStoreEntry[]>([])
 const storeLoading = ref(false)
 const installingMod = ref<string | null>(null)
 const installSuccess = ref<string | null>(null)
+
+// Modtale state
+const modtaleStatus = ref<ModtaleStatus | null>(null)
+const modtaleMods = ref<ModtaleProject[]>([])
+const modtaleLoading = ref(false)
+const modtaleSearch = ref('')
+const modtaleSort = ref<ModtaleSortOption>('downloads')
+const modtaleClassification = ref<ModtaleClassification | ''>('')
+const modtaleTags = ref<string[]>([])
+const modtaleAvailableTags = ref<string[]>([])
+const modtalePage = ref(0)
+const modtaleTotalPages = ref(0)
+const modtaleTotalElements = ref(0)
+const modtaleInstallingId = ref<string | null>(null)
+const modtaleInstallSuccess = ref<string | null>(null)
+const showModtaleSettings = ref(false)
+const showModtaleDetail = ref(false)
+const modtaleDetailProject = ref<ModtaleProjectDetails | null>(null)
+const modtaleDetailLoading = ref(false)
 
 async function loadData() {
   loading.value = true
@@ -286,6 +319,123 @@ function switchToStore() {
   }
 }
 
+// Modtale functions
+async function loadModtaleStatus() {
+  try {
+    modtaleStatus.value = await modtaleApi.getStatus()
+  } catch (e) {
+    console.error('Failed to load Modtale status:', e)
+  }
+}
+
+async function loadModtaleTags() {
+  try {
+    const result = await modtaleApi.getTags()
+    modtaleAvailableTags.value = result.tags
+  } catch (e) {
+    console.error('Failed to load Modtale tags:', e)
+  }
+}
+
+async function searchModtale() {
+  modtaleLoading.value = true
+  error.value = ''
+  try {
+    const result = await modtaleApi.search({
+      search: modtaleSearch.value || undefined,
+      page: modtalePage.value,
+      size: 20,
+      sort: modtaleSort.value,
+      classification: modtaleClassification.value || undefined,
+      tags: modtaleTags.value.length > 0 ? modtaleTags.value : undefined,
+    })
+    modtaleMods.value = result.content
+    modtaleTotalPages.value = result.totalPages
+    modtaleTotalElements.value = result.totalElements
+  } catch (e: any) {
+    if (e.response?.status === 503) {
+      error.value = t('mods.modtaleUnavailable')
+    } else {
+      error.value = e.response?.data?.error || t('errors.serverError')
+    }
+  } finally {
+    modtaleLoading.value = false
+  }
+}
+
+async function switchToModtale() {
+  activeTab.value = 'modtale'
+  if (!modtaleStatus.value) {
+    await loadModtaleStatus()
+  }
+  if (modtaleAvailableTags.value.length === 0) {
+    loadModtaleTags()
+  }
+  if (modtaleMods.value.length === 0) {
+    searchModtale()
+  }
+}
+
+async function installFromModtale(project: ModtaleProject) {
+  modtaleInstallingId.value = project.id
+  modtaleInstallSuccess.value = null
+  error.value = ''
+  try {
+    const result = await modtaleApi.install(project.id)
+    if (result.success) {
+      modtaleInstallSuccess.value = project.id
+      await loadData()
+      setTimeout(() => { modtaleInstallSuccess.value = null }, 3000)
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    modtaleInstallingId.value = null
+  }
+}
+
+async function openModtaleDetail(project: ModtaleProject) {
+  showModtaleDetail.value = true
+  modtaleDetailLoading.value = true
+  modtaleDetailProject.value = null
+  try {
+    modtaleDetailProject.value = await modtaleApi.getProject(project.id)
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    modtaleDetailLoading.value = false
+  }
+}
+
+function getClassificationColor(classification: string): string {
+  const colors: Record<string, string> = {
+    PLUGIN: 'bg-purple-500/20 text-purple-400',
+    DATA: 'bg-blue-500/20 text-blue-400',
+    ART: 'bg-pink-500/20 text-pink-400',
+    SAVE: 'bg-green-500/20 text-green-400',
+    MODPACK: 'bg-orange-500/20 text-orange-400',
+  }
+  return colors[classification] || 'bg-gray-500/20 text-gray-400'
+}
+
+function formatDownloads(num: number): string {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  return num.toString()
+}
+
+// Watch for search/filter changes
+watch([modtaleSearch, modtaleSort, modtaleClassification, modtaleTags], () => {
+  modtalePage.value = 0
+  searchModtale()
+}, { deep: true })
+
+watch(modtalePage, () => {
+  searchModtale()
+})
+
 onMounted(loadData)
 </script>
 
@@ -380,6 +530,20 @@ onMounted(loadData)
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
         {{ t('mods.store') }}
+      </button>
+      <button
+        @click="switchToModtale"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          activeTab === 'modtale'
+            ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+        </svg>
+        Modtale
       </button>
     </div>
 
@@ -633,6 +797,383 @@ onMounted(loadData)
         </div>
       </div>
     </Card>
+
+    <!-- Modtale Section -->
+    <template v-if="activeTab === 'modtale'">
+      <!-- Modtale Info Card with Settings Button -->
+      <Card>
+        <div class="flex items-start gap-4">
+          <div class="p-3 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-lg">
+            <svg class="w-6 h-6 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-white">Modtale</h3>
+              <button
+                @click="showModtaleSettings = true"
+                class="px-3 py-1.5 bg-dark-100 text-gray-300 rounded-lg hover:bg-dark-50 transition-colors flex items-center gap-2 text-sm"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                API Key
+              </button>
+            </div>
+            <p class="text-sm text-gray-400 mt-1">{{ t('mods.modtaleDescription') }}</p>
+            <div class="flex items-center gap-4 mt-2 text-sm">
+              <span v-if="modtaleStatus?.apiAvailable" class="flex items-center gap-1 text-green-400">
+                <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                API Online
+              </span>
+              <span v-else class="flex items-center gap-1 text-red-400">
+                <span class="w-2 h-2 bg-red-400 rounded-full"></span>
+                API Offline
+              </span>
+              <span v-if="modtaleStatus?.hasApiKey" class="text-cyan-400">
+                {{ modtaleStatus.rateLimit?.limit }} req/min
+              </span>
+              <span v-else class="text-gray-500">
+                10 req/min (No API Key)
+              </span>
+              <span class="text-gray-500">
+                {{ modtaleTotalElements }} Mods gefunden
+              </span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <!-- Search & Filter -->
+      <Card>
+        <div class="flex flex-wrap gap-4">
+          <!-- Search Input -->
+          <div class="flex-1 min-w-[200px]">
+            <div class="relative">
+              <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                v-model="modtaleSearch"
+                type="text"
+                :placeholder="t('mods.searchModtale')"
+                class="w-full pl-10 pr-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+          </div>
+
+          <!-- Sort -->
+          <select
+            v-model="modtaleSort"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+          >
+            <option value="downloads">{{ t('mods.sortDownloads') }}</option>
+            <option value="updated">{{ t('mods.sortUpdated') }}</option>
+            <option value="newest">{{ t('mods.sortNewest') }}</option>
+            <option value="rating">{{ t('mods.sortRating') }}</option>
+            <option value="relevance">{{ t('mods.sortRelevance') }}</option>
+          </select>
+
+          <!-- Classification Filter -->
+          <select
+            v-model="modtaleClassification"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+          >
+            <option value="">{{ t('mods.allTypes') }}</option>
+            <option value="PLUGIN">Plugins</option>
+            <option value="DATA">Data Packs</option>
+            <option value="ART">Art/Resources</option>
+            <option value="SAVE">Saves</option>
+            <option value="MODPACK">Modpacks</option>
+          </select>
+        </div>
+      </Card>
+
+      <!-- Modtale Results -->
+      <Card :title="t('mods.modtaleResults')" :padding="false">
+        <div v-if="modtaleLoading" class="text-center text-gray-500 p-8">
+          <svg class="w-8 h-8 mx-auto animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <p class="mt-2">{{ t('common.loading') }}</p>
+        </div>
+
+        <div v-else-if="modtaleMods.length === 0" class="text-center text-gray-500 p-8">
+          <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {{ t('mods.noModtaleResults') }}
+        </div>
+
+        <div v-else class="divide-y divide-dark-50/30">
+          <div
+            v-for="mod in modtaleMods"
+            :key="mod.id"
+            class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors cursor-pointer"
+            @click="openModtaleDetail(mod)"
+          >
+            <div class="flex items-center gap-4 flex-1 min-w-0">
+              <!-- Image/Icon -->
+              <div class="w-16 h-16 rounded-lg overflow-hidden bg-dark-100 shrink-0">
+                <img
+                  v-if="mod.imageUrl"
+                  :src="mod.imageUrl"
+                  :alt="mod.title"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center">
+                  <svg class="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="font-medium text-white truncate">{{ mod.title }}</p>
+                  <span :class="['px-2 py-0.5 rounded text-xs', getClassificationColor(mod.classification)]">
+                    {{ mod.classification }}
+                  </span>
+                  <span v-if="modtaleInstallSuccess === mod.id" class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 animate-pulse">
+                    Installiert!
+                  </span>
+                </div>
+                <p class="text-sm text-gray-400 mt-1 line-clamp-1">{{ mod.description }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                  <span>{{ mod.author }}</span>
+                  <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ formatDownloads(mod.downloads) }}
+                  </span>
+                  <span v-if="mod.rating > 0" class="flex items-center gap-1">
+                    <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ mod.rating.toFixed(1) }}
+                  </span>
+                  <div class="flex gap-1 flex-wrap">
+                    <span v-for="tag in mod.tags.slice(0, 3)" :key="tag" class="px-1.5 py-0.5 rounded text-xs bg-dark-100 text-gray-400">
+                      {{ tag }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2 shrink-0 ml-4">
+              <button
+                @click.stop="installFromModtale(mod)"
+                :disabled="modtaleInstallingId === mod.id"
+                class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-lg hover:from-cyan-400 hover:to-blue-400 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg v-if="modtaleInstallingId === mod.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {{ modtaleInstallingId === mod.id ? t('mods.installing') : t('mods.install') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="modtaleTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-dark-50/30">
+          <button
+            @click="modtalePage = Math.max(0, modtalePage - 1)"
+            :disabled="modtalePage === 0"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &larr;
+          </button>
+          <span class="text-gray-400">
+            {{ modtalePage + 1 }} / {{ modtaleTotalPages }}
+          </span>
+          <button
+            @click="modtalePage = Math.min(modtaleTotalPages - 1, modtalePage + 1)"
+            :disabled="modtalePage >= modtaleTotalPages - 1"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &rarr;
+          </button>
+        </div>
+      </Card>
+    </template>
+
+    <!-- Modtale Settings Modal -->
+    <div v-if="showModtaleSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-dark-200 rounded-xl w-full max-w-md">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">Modtale API Settings</h2>
+          <button @click="showModtaleSettings = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <h3 class="font-medium text-white mb-2">API Status</h3>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-400">Status:</span>
+                <span :class="modtaleStatus?.apiAvailable ? 'text-green-400' : 'text-red-400'">
+                  {{ modtaleStatus?.apiAvailable ? 'Online' : 'Offline' }}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">API Key:</span>
+                <span :class="modtaleStatus?.hasApiKey ? 'text-green-400' : 'text-yellow-400'">
+                  {{ modtaleStatus?.hasApiKey ? 'Konfiguriert' : 'Nicht konfiguriert' }}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Rate Limit:</span>
+                <span class="text-cyan-400">
+                  {{ modtaleStatus?.rateLimit?.limit || 10 }} req/min
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <h3 class="font-medium text-blue-400 mb-2 flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              API Key einrichten
+            </h3>
+            <p class="text-sm text-gray-400 mb-3">
+              Um mehr Anfragen pro Minute zu erhalten (300 statt 10), erstelle einen kostenlosen API Key auf modtale.net:
+            </p>
+            <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
+              <li>Gehe zu <a href="https://modtale.net" target="_blank" class="text-cyan-400 hover:underline">modtale.net</a></li>
+              <li>Erstelle ein Konto / Logge dich ein</li>
+              <li>Gehe zu Developer Settings</li>
+              <li>Generiere einen API Key</li>
+            </ol>
+            <p class="text-sm text-gray-400">
+              Trage den Key in deine <code class="bg-dark-300 px-1.5 py-0.5 rounded text-cyan-400">.env</code> Datei ein:
+            </p>
+            <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
+              MODTALE_API_KEY=md_dein_api_key_hier
+            </code>
+          </div>
+
+          <button
+            @click="showModtaleSettings = false"
+            class="w-full px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-lg hover:from-cyan-400 hover:to-blue-400 transition-colors"
+          >
+            Schliessen
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modtale Detail Modal -->
+    <div v-if="showModtaleDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-dark-200 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
+          <h2 class="text-xl font-bold text-white">{{ modtaleDetailProject?.title || 'Loading...' }}</h2>
+          <button @click="showModtaleDetail = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6">
+          <div v-if="modtaleDetailLoading" class="text-center text-gray-500 py-8">
+            <svg class="w-8 h-8 mx-auto animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+
+          <template v-else-if="modtaleDetailProject">
+            <div class="flex gap-6 mb-6">
+              <!-- Image -->
+              <div v-if="modtaleDetailProject.imageUrl" class="w-32 h-32 rounded-lg overflow-hidden shrink-0">
+                <img :src="modtaleDetailProject.imageUrl" :alt="modtaleDetailProject.title" class="w-full h-full object-cover" />
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1">
+                <div class="flex items-center gap-2 flex-wrap mb-2">
+                  <span :class="['px-2 py-0.5 rounded text-xs', getClassificationColor(modtaleDetailProject.classification)]">
+                    {{ modtaleDetailProject.classification }}
+                  </span>
+                  <span v-for="tag in modtaleDetailProject.tags" :key="tag" class="px-2 py-0.5 rounded text-xs bg-dark-100 text-gray-400">
+                    {{ tag }}
+                  </span>
+                </div>
+                <p class="text-gray-400 mb-2">{{ modtaleDetailProject.description }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500">
+                  <span>{{ modtaleDetailProject.author }}</span>
+                  <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ formatDownloads(modtaleDetailProject.downloads) }} Downloads
+                  </span>
+                  <span v-if="modtaleDetailProject.rating > 0" class="flex items-center gap-1">
+                    <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    {{ modtaleDetailProject.rating.toFixed(1) }}
+                  </span>
+                </div>
+                <div v-if="modtaleDetailProject.repositoryUrl" class="mt-2">
+                  <a :href="modtaleDetailProject.repositoryUrl" target="_blank" class="text-cyan-400 hover:underline text-sm">
+                    Repository
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Versions -->
+            <div v-if="modtaleDetailProject.versions?.length" class="mb-6">
+              <h3 class="font-semibold text-white mb-3">Versionen</h3>
+              <div class="space-y-2">
+                <div
+                  v-for="version in modtaleDetailProject.versions.slice(0, 5)"
+                  :key="version.id"
+                  class="flex items-center justify-between p-3 bg-dark-100 rounded-lg"
+                >
+                  <div>
+                    <span class="text-white font-medium">{{ version.versionNumber }}</span>
+                    <span v-if="version.channel && version.channel !== 'RELEASE'" class="ml-2 px-2 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400">
+                      {{ version.channel }}
+                    </span>
+                    <span v-if="version.gameVersions?.length" class="ml-2 text-sm text-gray-500">
+                      ({{ version.gameVersions.join(', ') }})
+                    </span>
+                  </div>
+                  <button
+                    @click="modtaleApi.install(modtaleDetailProject!.id, version.versionNumber).then(() => { loadData(); showModtaleDetail = false; })"
+                    class="px-3 py-1 bg-cyan-500 text-white rounded hover:bg-cyan-400 transition-colors text-sm"
+                  >
+                    Installieren
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div v-if="modtaleDetailProject.about" class="prose prose-invert max-w-none">
+              <h3 class="font-semibold text-white mb-3">Beschreibung</h3>
+              <div class="text-gray-400 whitespace-pre-wrap">{{ modtaleDetailProject.about }}</div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
 
     <!-- Config Editor Modal -->
     <div v-if="showConfigModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

@@ -295,7 +295,18 @@
     "updateAvailable": "Update verfügbar",
     "updateSuccess": "Aktualisiert!",
     "by": "von",
-    "ports": "Ports"
+    "ports": "Ports",
+    "modtaleDescription": "Durchsuche und installiere Mods direkt von modtale.net - der offiziellen Hytale Mod-Plattform.",
+    "modtaleUnavailable": "Modtale API nicht erreichbar. Bitte versuche es später erneut.",
+    "searchModtale": "Mods auf Modtale suchen...",
+    "sortDownloads": "Downloads",
+    "sortUpdated": "Aktualisiert",
+    "sortNewest": "Neueste",
+    "sortRating": "Bewertung",
+    "sortRelevance": "Relevanz",
+    "allTypes": "Alle Typen",
+    "modtaleResults": "Modtale Ergebnisse",
+    "noModtaleResults": "Keine Mods gefunden"
   },
   "performance": {
     "title": "Performance Monitor",
