@@ -298,6 +298,7 @@ async function checkTokenFileExists(): Promise<boolean> {
 
     // Try common token file locations
     const possiblePaths = [
+      path.join(config.serverPath, 'auth.enc'),
       path.join(config.serverPath, '.hytale_token'),
       path.join(config.serverPath, 'auth_token'),
       path.join(config.serverPath, 'oauth_token.json'),
@@ -307,6 +308,7 @@ async function checkTokenFileExists(): Promise<boolean> {
       path.join(config.serverPath, '.auth', 'credentials.enc'),
       path.join(config.serverPath, '.auth', 'token'),
       path.join(config.serverPath, '.auth', 'oauth_token'),
+      path.join(config.serverPath, '.auth', 'auth.enc'),
     ];
 
     for (const tokenPath of possiblePaths) {
