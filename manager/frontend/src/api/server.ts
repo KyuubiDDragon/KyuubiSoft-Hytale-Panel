@@ -77,6 +77,70 @@ export interface UpdateCheckResponse {
   message: string
 }
 
+// KyuubiSoft API Plugin interfaces
+export interface PluginStatus {
+  installed: boolean
+  running: boolean
+  version: string | null
+  port: number
+  error?: string
+}
+
+export interface PluginUpdateCheck {
+  available: boolean
+  currentVersion: string | null
+  latestVersion: string
+}
+
+export interface PluginInstallResponse {
+  success: boolean
+  message?: string
+  version?: string
+  error?: string
+}
+
+// Plugin API data interfaces
+export interface PluginServerInfo {
+  version: string
+  patchline: string
+  onlinePlayers: number
+  maxPlayers: number
+  worldCount: number
+  uptimeSeconds: number
+  startedAt: string
+  tps: number
+  mspt: number
+}
+
+export interface PluginPlayer {
+  uuid: string
+  name: string
+  position?: { x: number; y: number; z: number }
+  world?: string
+  health?: number
+  gameMode?: string
+  ping?: number
+  joinedAt?: string
+}
+
+export interface PluginPlayersResponse {
+  players: PluginPlayer[]
+  count: number
+}
+
+export interface PluginMemoryInfo {
+  heapUsed: number
+  heapMax: number
+  heapFree: number
+  heapUsagePercent: number
+}
+
+export interface PluginApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -135,6 +199,43 @@ export const serverApi = {
 
   async checkForUpdates(): Promise<UpdateCheckResponse> {
     const response = await api.get<UpdateCheckResponse>('/server/check-update')
+    return response.data
+  },
+
+  // KyuubiSoft API Plugin methods
+  async getPluginStatus(): Promise<PluginStatus> {
+    const response = await api.get<PluginStatus>('/server/plugin/status')
+    return response.data
+  },
+
+  async checkPluginUpdate(): Promise<PluginUpdateCheck> {
+    const response = await api.get<PluginUpdateCheck>('/server/plugin/update-check')
+    return response.data
+  },
+
+  async installPlugin(): Promise<PluginInstallResponse> {
+    const response = await api.post<PluginInstallResponse>('/server/plugin/install')
+    return response.data
+  },
+
+  async uninstallPlugin(): Promise<PluginInstallResponse> {
+    const response = await api.delete<PluginInstallResponse>('/server/plugin/uninstall')
+    return response.data
+  },
+
+  // Plugin API data methods
+  async getPluginServerInfo(): Promise<PluginApiResponse<PluginServerInfo>> {
+    const response = await api.get<PluginApiResponse<PluginServerInfo>>('/server/plugin/info')
+    return response.data
+  },
+
+  async getPluginPlayers(): Promise<PluginApiResponse<PluginPlayersResponse>> {
+    const response = await api.get<PluginApiResponse<PluginPlayersResponse>>('/server/plugin/players')
+    return response.data
+  },
+
+  async getPluginMemory(): Promise<PluginApiResponse<PluginMemoryInfo>> {
+    const response = await api.get<PluginApiResponse<PluginMemoryInfo>>('/server/plugin/memory')
     return response.data
   },
 }

@@ -79,7 +79,24 @@
     "authMemoryOnlyDesc": "Dein Server ist authentifiziert, aber das Token wird nur im Speicher gespeichert. Du musst dich nach jedem Server-Neustart erneut authentifizieren.",
     "authMemoryOnlyShort": "Nur Speicher (Nicht persistent)",
     "enablePersistence": "Persistenz aktivieren",
-    "enablingPersistence": "Aktiviere..."
+    "enablingPersistence": "Aktiviere...",
+    "plugin": {
+      "notInstalled": "KyuubiSoft API Plugin nicht installiert",
+      "notRunning": "KyuubiSoft API Plugin nicht aktiv",
+      "installHint": "Installiere das Plugin für genauere Spielerdaten, Server-Statistiken und Echtzeit-Events.",
+      "restartHint": "Starte den Server neu, um das Plugin zu aktivieren.",
+      "install": "Plugin installieren",
+      "installing": "Installiere...",
+      "installSuccess": "Plugin erfolgreich installiert. Starte den Server neu, um es zu aktivieren.",
+      "installFailed": "Installation fehlgeschlagen",
+      "version": "Version",
+      "updateAvailable": "Plugin-Update verfügbar",
+      "updateHint": "Version {current} → {latest}. Aktualisiere das Plugin für die neuesten Features.",
+      "update": "Plugin aktualisieren",
+      "updating": "Aktualisiere...",
+      "updateSuccess": "Plugin erfolgreich aktualisiert. Starte den Server neu, um es zu aktivieren.",
+      "updateFailed": "Aktualisierung fehlgeschlagen"
+    }
   },
   "console": {
     "title": "Server Konsole",

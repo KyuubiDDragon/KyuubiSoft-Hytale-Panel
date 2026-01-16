@@ -2,6 +2,7 @@ import Docker from 'dockerode';
 import { config } from '../config.js';
 import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.js';
 import { isCommandSafe, escapeShellArg } from '../utils/sanitize.js';
+import { clearOnlinePlayers } from './players.js';
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
@@ -102,6 +103,8 @@ export async function stopContainer(): Promise<ActionResponse> {
     }
 
     await container.stop({ t: 30 });
+    // Clear online players when server stops - they can't be online if server is down
+    clearOnlinePlayers();
     return { success: true, message: 'Container stopped' };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -116,6 +119,8 @@ export async function restartContainer(): Promise<ActionResponse> {
     }
 
     await container.restart({ t: 30 });
+    // Clear online players on restart - they need to rejoin after restart
+    clearOnlinePlayers();
     return { success: true, message: 'Container restarted' };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

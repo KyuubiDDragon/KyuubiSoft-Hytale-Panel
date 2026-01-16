@@ -7,10 +7,11 @@ import { serverApi, type ServerMemoryStats, type UpdateCheckResponse } from '@/a
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
+import PluginBanner from '@/components/dashboard/PluginBanner.vue'
 
 const { t } = useI18n()
 const router = useRouter()
-const { status, stats, playerCount, loading, error, refresh } = useServerStats()
+const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, mspt, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
 
 // Server JVM memory stats
 const serverMemory = ref<ServerMemoryStats | null>(null)
@@ -161,6 +162,20 @@ const memoryPercent = computed(() => {
 })
 
 const uptimeValue = computed(() => {
+  // Prefer plugin uptime (more accurate - actual JVM uptime)
+  if (pluginAvailable.value && uptimeSeconds.value !== null) {
+    const totalSeconds = uptimeSeconds.value
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+
+    if (hours > 24) {
+      const days = Math.floor(hours / 24)
+      return `${days}d ${hours % 24}h`
+    }
+    return `${hours}h ${minutes}m`
+  }
+
+  // Fall back to Docker container uptime
   if (!status.value?.started_at) return '-'
   const started = new Date(status.value.started_at)
   const now = new Date()
@@ -174,6 +189,28 @@ const uptimeValue = computed(() => {
     return `${days}d ${hours % 24}h`
   }
   return `${hours}h ${minutes}m`
+})
+
+// TPS value from plugin
+const tpsValue = computed(() => {
+  if (!pluginAvailable.value || tps.value === null) return null
+  return tps.value.toFixed(1)
+})
+
+// TPS status color
+const tpsStatus = computed((): 'success' | 'warning' | 'error' => {
+  if (!tps.value) return 'info' as 'success'
+  if (tps.value >= 19) return 'success'
+  if (tps.value >= 15) return 'warning'
+  return 'error'
+})
+
+// Player count with max players
+const playerCountDisplay = computed(() => {
+  if (maxPlayers.value) {
+    return `${playerCount.value} / ${maxPlayers.value}`
+  }
+  return playerCount.value.toString()
 })
 
 function handleAction(type: string, success: boolean) {
@@ -292,6 +329,9 @@ function refreshAll() {
       <p class="text-status-error">{{ error }}</p>
     </div>
 
+    <!-- Plugin Status Banner -->
+    <PluginBanner />
+
     <!-- Status Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
       <StatusCard
@@ -317,9 +357,18 @@ function refreshAll() {
 
       <StatusCard
         :title="t('dashboard.players')"
-        :value="playerCount.toString()"
+        :value="playerCountDisplay"
         status="info"
         icon="players"
+      />
+
+      <!-- TPS Card (only when plugin is available) -->
+      <StatusCard
+        v-if="pluginAvailable && tpsValue"
+        title="TPS"
+        :value="tpsValue"
+        :status="tpsStatus"
+        icon="cpu"
       />
 
       <!-- Auth Status Card -->
@@ -386,18 +435,40 @@ function refreshAll() {
 
       <!-- Server Info Card -->
       <div class="card">
-        <div class="card-header">
+        <div class="card-header flex items-center justify-between">
           <h3 class="text-lg font-semibold text-white">Server Info</h3>
+          <span
+            v-if="pluginAvailable"
+            class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30"
+          >
+            Plugin API
+          </span>
         </div>
         <div class="card-body">
           <div class="space-y-3">
+            <!-- Plugin data (when available) -->
+            <template v-if="pluginAvailable">
+              <div class="flex justify-between">
+                <span class="text-gray-400">Version</span>
+                <span class="text-white font-mono">{{ serverVersion || '-' }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Patchline</span>
+                <span class="text-white font-mono">{{ patchline || '-' }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Worlds</span>
+                <span class="text-white">{{ worldCount ?? '-' }}</span>
+              </div>
+            </template>
+            <!-- Container info -->
             <div class="flex justify-between">
               <span class="text-gray-400">Container</span>
               <span class="text-white font-mono">{{ status?.name || '-' }}</span>
             </div>
-            <div class="flex justify-between">
+            <div v-if="!pluginAvailable" class="flex justify-between">
               <span class="text-gray-400">Container ID</span>
-              <span class="text-white font-mono">{{ status?.id || '-' }}</span>
+              <span class="text-white font-mono text-xs">{{ status?.id || '-' }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-gray-400">Status</span>

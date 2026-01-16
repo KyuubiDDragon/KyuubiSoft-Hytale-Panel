@@ -1,0 +1,31 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.kyuubisoft'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+// No external repositories needed - all dependencies are in HytaleServer.jar
+
+dependencies {
+    // Hytale Server API (includes Netty, Gson, etc.)
+    compileOnly files('../lib/HytaleServer.jar')
+}
+
+jar {
+    archiveBaseName.set('KyuubiSoftAPI')
+    archiveVersion.set(version)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes(
+            'Implementation-Title': 'KyuubiSoft API',
+            'Implementation-Version': version
+        )
+    }
+}

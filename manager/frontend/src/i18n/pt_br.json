@@ -79,7 +79,24 @@
     "authMemoryOnlyDesc": "Seu servidor está autenticado mas o token está armazenado apenas na memória. Você precisará autenticar novamente após cada reinicialização do servidor.",
     "authMemoryOnlyShort": "Apenas Memória (Não Persistente)",
     "enablePersistence": "Habilitar Persistência",
-    "enablingPersistence": "Habilitando..."
+    "enablingPersistence": "Habilitando...",
+    "plugin": {
+      "notInstalled": "Plugin KyuubiSoft API não instalado",
+      "notRunning": "Plugin KyuubiSoft API não ativo",
+      "installHint": "Instale o plugin para dados precisos de jogadores, estatísticas do servidor e eventos em tempo real.",
+      "restartHint": "Reinicie o servidor para ativar o plugin.",
+      "install": "Instalar Plugin",
+      "installing": "Instalando...",
+      "installSuccess": "Plugin instalado com sucesso. Reinicie o servidor para ativar.",
+      "installFailed": "Falha na instalação",
+      "version": "Versão",
+      "updateAvailable": "Atualização de plugin disponível",
+      "updateHint": "Versão {current} → {latest}. Atualize o plugin para os recursos mais recentes.",
+      "update": "Atualizar Plugin",
+      "updating": "Atualizando...",
+      "updateSuccess": "Plugin atualizado com sucesso. Reinicie o servidor para ativar.",
+      "updateFailed": "Falha na atualização"
+    }
   },
   "console": {
     "title": "Console do Servidor",
