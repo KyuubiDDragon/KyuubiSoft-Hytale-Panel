@@ -207,6 +207,19 @@ export function removePlayer(name: string): void {
   onlinePlayers.delete(name);
 }
 
+/**
+ * Clear all online players - called when server stops or restarts
+ * This ensures no stale players remain in the online list after server restart
+ */
+export function clearOnlinePlayers(): void {
+  // Record leave for all online players before clearing
+  for (const [name] of onlinePlayers) {
+    recordPlayerLeave(name);
+  }
+  onlinePlayers.clear();
+  console.log('[Players] Cleared online players list (server stop/restart)');
+}
+
 export function processLogLine(line: string): { event: 'join' | 'leave'; player: string } | null {
   // Initialize history loading
   loadPlayerHistory().catch(() => {});
