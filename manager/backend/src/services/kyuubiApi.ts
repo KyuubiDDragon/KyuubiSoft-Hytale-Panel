@@ -8,6 +8,11 @@
 import { config } from '../config.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get directory of this file for resolving relative paths
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version)
 export const PLUGIN_VERSION = '1.0.0';
@@ -185,7 +190,10 @@ export function isUpdateAvailable(): { available: boolean; currentVersion: strin
  */
 export function getBundledPluginPath(): string {
   // The JAR is stored in the manager's assets folder
-  return path.join(process.cwd(), 'assets', 'plugins', PLUGIN_JAR_NAME);
+  // When running from dist/services, go up 2 levels to /manager/backend
+  const assetsPath = path.join(__dirname, '..', '..', 'assets', 'plugins', PLUGIN_JAR_NAME);
+  console.log(`[KyuubiAPI] Looking for plugin JAR at: ${assetsPath}`);
+  return assetsPath;
 }
 
 /**
