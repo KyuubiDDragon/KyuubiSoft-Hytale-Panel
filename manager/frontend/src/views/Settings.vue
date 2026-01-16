@@ -19,7 +19,7 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const successMessage = ref<string | null>(null)
 
-function changeLocale(locale: 'de' | 'en') {
+function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
   currentLocale.value = locale
 }
@@ -137,6 +137,31 @@ onMounted(() => {
           </div>
           <svg
             v-if="currentLocale === 'en'"
+            class="w-5 h-5 text-hytale-orange ml-auto"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+
+        <button
+          @click="changeLocale('pt_br')"
+          :class="[
+            'flex items-center gap-3 px-4 py-3 rounded-lg border-2 transition-all',
+            currentLocale === 'pt_br'
+              ? 'border-hytale-orange bg-hytale-orange/10'
+              : 'border-dark-50 hover:border-gray-600'
+          ]"
+        >
+          <span class="text-2xl">🇧🇷</span>
+          <div class="text-left">
+            <p class="font-medium text-white">Português (Brasil)</p>
+            <p class="text-sm text-gray-400">Portuguese (Brazil)</p>
+          </div>
+          <svg
+            v-if="currentLocale === 'pt_br'"
             class="w-5 h-5 text-hytale-orange ml-auto"
             fill="none"
             viewBox="0 0 24 24"
