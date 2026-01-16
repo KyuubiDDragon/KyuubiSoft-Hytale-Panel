@@ -3,17 +3,21 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { statsApi, type StatsEntry } from '@/api/management'
+import { serverApi, type PluginMemoryInfo } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 
 const { t } = useI18n()
-const { stats, status, playerCount, refresh } = useServerStats()
+const { stats, status, playerCount, refresh, pluginAvailable, tps, mspt, maxPlayers: pluginMaxPlayers } = useServerStats()
+
+// Plugin memory data
+const pluginMemory = ref<PluginMemoryInfo | null>(null)
 
 // Historical data
 const history = ref<StatsEntry[]>([])
 const loading = ref(true)
 
 // Local history for current session (updated live)
-const localHistory = ref<{ timestamp: Date; cpu: number; memory: number; players: number }[]>([])
+const localHistory = ref<{ timestamp: Date; cpu: number; memory: number; players: number; tps: number | null }[]>([])
 const maxLocalHistory = 60 // 60 data points
 
 // Refresh interval
@@ -30,12 +34,24 @@ async function loadHistory() {
   }
 }
 
+async function fetchPluginMemory() {
+  try {
+    const response = await serverApi.getPluginMemory()
+    if (response.success && response.data) {
+      pluginMemory.value = response.data
+    }
+  } catch {
+    // Plugin memory not available
+  }
+}
+
 function addLocalEntry() {
   localHistory.value.push({
     timestamp: new Date(),
     cpu: stats.value?.cpu_percent || 0,
     memory: stats.value?.memory_percent || 0,
     players: playerCount.value,
+    tps: tps.value,
   })
 
   // Keep only last maxLocalHistory entries
@@ -48,6 +64,7 @@ function addLocalEntry() {
 const cpuData = computed(() => localHistory.value.map(h => h.cpu))
 const memoryData = computed(() => localHistory.value.map(h => h.memory))
 const playersData = computed(() => localHistory.value.map(h => h.players))
+const tpsData = computed(() => localHistory.value.map(h => h.tps ?? 20))
 
 const avgCpu = computed(() => {
   if (cpuData.value.length === 0) return 0
@@ -59,9 +76,33 @@ const avgMemory = computed(() => {
   return memoryData.value.reduce((a, b) => a + b, 0) / memoryData.value.length
 })
 
+const avgTps = computed(() => {
+  const validTps = localHistory.value.filter(h => h.tps !== null).map(h => h.tps as number)
+  if (validTps.length === 0) return null
+  return validTps.reduce((a, b) => a + b, 0) / validTps.length
+})
+
 const maxCpu = computed(() => Math.max(...cpuData.value, 0))
 const maxMemory = computed(() => Math.max(...memoryData.value, 0))
 const maxPlayers = computed(() => Math.max(...playersData.value, 1))
+const minTps = computed(() => {
+  const validTps = localHistory.value.filter(h => h.tps !== null).map(h => h.tps as number)
+  if (validTps.length === 0) return null
+  return Math.min(...validTps)
+})
+
+// TPS status color
+const tpsStatus = computed(() => {
+  if (tps.value === null) return 'gray'
+  if (tps.value >= 19) return 'green'
+  if (tps.value >= 15) return 'yellow'
+  return 'red'
+})
+
+// JVM Heap memory display
+const heapUsed = computed(() => pluginMemory.value?.heapUsed ?? null)
+const heapMax = computed(() => pluginMemory.value?.heapMax ?? null)
+const heapPercent = computed(() => pluginMemory.value?.heapUsagePercent ?? null)
 
 // Generate SVG path for a graph
 function generatePath(data: number[], maxValue: number, width: number, height: number): string {
@@ -92,11 +133,13 @@ function generateAreaPath(data: number[], maxValue: number, width: number, heigh
 onMounted(async () => {
   await loadHistory()
   await refresh()
+  await fetchPluginMemory()
   addLocalEntry()
 
   // Update every 5 seconds
   refreshInterval = setInterval(async () => {
     await refresh()
+    await fetchPluginMemory()
     addLocalEntry()
   }, 5000)
 })
@@ -120,7 +163,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Current Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
       <!-- CPU Card -->
       <Card>
         <div class="flex items-center gap-4">
@@ -136,7 +179,7 @@ onUnmounted(() => {
         </div>
       </Card>
 
-      <!-- Memory Card -->
+      <!-- Memory Card (JVM Heap when plugin available) -->
       <Card>
         <div class="flex items-center gap-4">
           <div class="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
@@ -145,9 +188,44 @@ onUnmounted(() => {
             </svg>
           </div>
           <div>
-            <p class="text-sm text-gray-400">{{ t('performance.memory') }}</p>
-            <p class="text-2xl font-bold text-white">{{ (stats?.memory_mb || 0).toFixed(0) }} MB</p>
-            <p class="text-xs text-gray-500">/ {{ (stats?.memory_limit_mb || 0).toFixed(0) }} MB</p>
+            <p class="text-sm text-gray-400">
+              {{ pluginAvailable && heapUsed !== null ? 'JVM Heap' : t('performance.memory') }}
+            </p>
+            <template v-if="pluginAvailable && heapUsed !== null && heapMax !== null">
+              <p class="text-2xl font-bold text-white">{{ (heapUsed / 1024 / 1024).toFixed(0) }} MB</p>
+              <p class="text-xs text-gray-500">/ {{ (heapMax / 1024 / 1024).toFixed(0) }} MB ({{ heapPercent?.toFixed(0) }}%)</p>
+            </template>
+            <template v-else>
+              <p class="text-2xl font-bold text-white">{{ (stats?.memory_mb || 0).toFixed(0) }} MB</p>
+              <p class="text-xs text-gray-500">/ {{ (stats?.memory_limit_mb || 0).toFixed(0) }} MB</p>
+            </template>
+          </div>
+        </div>
+      </Card>
+
+      <!-- TPS Card (only when plugin available) -->
+      <Card v-if="pluginAvailable">
+        <div class="flex items-center gap-4">
+          <div :class="[
+            'w-12 h-12 rounded-xl flex items-center justify-center',
+            tpsStatus === 'green' ? 'bg-green-500/20' : tpsStatus === 'yellow' ? 'bg-yellow-500/20' : tpsStatus === 'red' ? 'bg-red-500/20' : 'bg-gray-500/20'
+          ]">
+            <svg :class="[
+              'w-6 h-6',
+              tpsStatus === 'green' ? 'text-green-400' : tpsStatus === 'yellow' ? 'text-yellow-400' : tpsStatus === 'red' ? 'text-red-400' : 'text-gray-400'
+            ]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <p class="text-sm text-gray-400">TPS</p>
+            <p :class="[
+              'text-2xl font-bold',
+              tpsStatus === 'green' ? 'text-green-400' : tpsStatus === 'yellow' ? 'text-yellow-400' : tpsStatus === 'red' ? 'text-red-400' : 'text-gray-400'
+            ]">
+              {{ tps?.toFixed(1) ?? '-' }}
+            </p>
+            <p v-if="mspt !== null" class="text-xs text-gray-500">{{ mspt.toFixed(1) }} ms/tick</p>
           </div>
         </div>
       </Card>
@@ -163,6 +241,7 @@ onUnmounted(() => {
           <div>
             <p class="text-sm text-gray-400">{{ t('performance.players') }}</p>
             <p class="text-2xl font-bold text-white">{{ playerCount }}</p>
+            <p v-if="pluginMaxPlayers" class="text-xs text-gray-500">/ {{ pluginMaxPlayers }}</p>
           </div>
         </div>
       </Card>

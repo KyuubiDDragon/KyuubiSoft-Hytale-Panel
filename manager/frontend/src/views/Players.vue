@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { playersApi, type PlayerInfo, type PlayerHistoryEntry } from '@/api/players'
+import { serverApi, type PluginPlayer } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
@@ -11,12 +12,23 @@ const { t } = useI18n()
 // Tab state
 const activeTab = ref<'online' | 'offline'>('online')
 
-const players = ref<PlayerInfo[]>([])
+// Extended player info when plugin is available
+interface ExtendedPlayerInfo extends PlayerInfo {
+  uuid?: string
+  position?: { x: number; y: number; z: number }
+  world?: string
+  health?: number
+  gameMode?: string
+  ping?: number
+}
+
+const players = ref<ExtendedPlayerInfo[]>([])
 const offlinePlayers = ref<PlayerHistoryEntry[]>([])
 const loading = ref(true)
 const offlineLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
+const pluginAvailable = ref(false)
 
 // Selected player for actions
 const selectedPlayer = ref<string | null>(null)
@@ -53,6 +65,30 @@ let pollInterval: ReturnType<typeof setInterval> | null = null
 
 async function fetchPlayers() {
   try {
+    // Try plugin API first (more accurate and detailed)
+    try {
+      const pluginResponse = await serverApi.getPluginPlayers()
+      if (pluginResponse.success && pluginResponse.data) {
+        pluginAvailable.value = true
+        players.value = pluginResponse.data.players.map((p: PluginPlayer) => ({
+          name: p.name,
+          session_duration: p.joinedAt ? formatJoinedAt(p.joinedAt) : '-',
+          uuid: p.uuid,
+          position: p.position,
+          world: p.world,
+          health: p.health,
+          gameMode: p.gameMode,
+          ping: p.ping,
+        }))
+        error.value = ''
+        return
+      }
+    } catch {
+      // Plugin not available, fall back to standard API
+    }
+
+    // Fall back to standard API
+    pluginAvailable.value = false
     const response = await playersApi.getOnline()
     players.value = response.players
     error.value = ''
@@ -61,6 +97,18 @@ async function fetchPlayers() {
   } finally {
     loading.value = false
   }
+}
+
+function formatJoinedAt(joinedAt: string): string {
+  const joined = new Date(joinedAt)
+  const now = new Date()
+  const diff = now.getTime() - joined.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(minutes / 60)
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`
+  }
+  return `${minutes}m`
 }
 
 async function fetchOfflinePlayers() {
@@ -343,9 +391,17 @@ onUnmounted(() => {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-white">{{ t('players.title') }}</h1>
-        <p class="text-gray-400 mt-1">
-          {{ t('players.playerCount', { count: players.length }) }}
-        </p>
+        <div class="flex items-center gap-2 mt-1">
+          <p class="text-gray-400">
+            {{ t('players.playerCount', { count: players.length }) }}
+          </p>
+          <span
+            v-if="pluginAvailable"
+            class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30"
+          >
+            Plugin API
+          </span>
+        </div>
       </div>
       <Button variant="secondary" @click.stop="fetchPlayers" :class="{ 'animate-spin': loading }">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -410,13 +466,40 @@ onUnmounted(() => {
           class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
           <!-- Player Info -->
-          <div class="flex items-center gap-4">
-            <div class="w-10 h-10 bg-hytale-orange/20 rounded-lg flex items-center justify-center">
+          <div class="flex items-center gap-4 flex-1 min-w-0">
+            <div class="w-10 h-10 bg-hytale-orange/20 rounded-lg flex items-center justify-center flex-shrink-0">
               <span class="text-hytale-orange font-bold">{{ player.name[0].toUpperCase() }}</span>
             </div>
-            <div>
-              <p class="font-medium text-white">{{ player.name }}</p>
-              <p class="text-sm text-gray-500">{{ t('players.sessionTime') }}: {{ player.session_duration }}</p>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="font-medium text-white">{{ player.name }}</p>
+                <!-- Gamemode badge when plugin available -->
+                <span
+                  v-if="pluginAvailable && player.gameMode"
+                  class="px-2 py-0.5 text-xs rounded-full bg-dark-50 text-gray-400"
+                >
+                  {{ player.gameMode }}
+                </span>
+              </div>
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
+                <span>{{ t('players.sessionTime') }}: {{ player.session_duration }}</span>
+                <!-- Plugin-provided details -->
+                <span v-if="pluginAvailable && player.ping !== undefined">
+                  <span class="text-gray-600">Ping:</span>
+                  <span :class="player.ping < 100 ? 'text-green-400' : player.ping < 200 ? 'text-yellow-400' : 'text-red-400'">
+                    {{ player.ping }}ms
+                  </span>
+                </span>
+                <span v-if="pluginAvailable && player.health !== undefined">
+                  <span class="text-gray-600">HP:</span>
+                  <span :class="player.health > 15 ? 'text-green-400' : player.health > 8 ? 'text-yellow-400' : 'text-red-400'">
+                    {{ player.health.toFixed(0) }}
+                  </span>
+                </span>
+                <span v-if="pluginAvailable && player.position" class="text-gray-600">
+                  {{ Math.floor(player.position.x) }}, {{ Math.floor(player.position.y) }}, {{ Math.floor(player.position.z) }}
+                </span>
+              </div>
             </div>
           </div>
 

@@ -99,6 +99,48 @@ export interface PluginInstallResponse {
   error?: string
 }
 
+// Plugin API data interfaces
+export interface PluginServerInfo {
+  version: string
+  patchline: string
+  onlinePlayers: number
+  maxPlayers: number
+  worldCount: number
+  uptimeSeconds: number
+  startedAt: string
+  tps: number
+  mspt: number
+}
+
+export interface PluginPlayer {
+  uuid: string
+  name: string
+  position?: { x: number; y: number; z: number }
+  world?: string
+  health?: number
+  gameMode?: string
+  ping?: number
+  joinedAt?: string
+}
+
+export interface PluginPlayersResponse {
+  players: PluginPlayer[]
+  count: number
+}
+
+export interface PluginMemoryInfo {
+  heapUsed: number
+  heapMax: number
+  heapFree: number
+  heapUsagePercent: number
+}
+
+export interface PluginApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -178,6 +220,22 @@ export const serverApi = {
 
   async uninstallPlugin(): Promise<PluginInstallResponse> {
     const response = await api.delete<PluginInstallResponse>('/server/plugin/uninstall')
+    return response.data
+  },
+
+  // Plugin API data methods
+  async getPluginServerInfo(): Promise<PluginApiResponse<PluginServerInfo>> {
+    const response = await api.get<PluginApiResponse<PluginServerInfo>>('/server/plugin/info')
+    return response.data
+  },
+
+  async getPluginPlayers(): Promise<PluginApiResponse<PluginPlayersResponse>> {
+    const response = await api.get<PluginApiResponse<PluginPlayersResponse>>('/server/plugin/players')
+    return response.data
+  },
+
+  async getPluginMemory(): Promise<PluginApiResponse<PluginMemoryInfo>> {
+    const response = await api.get<PluginApiResponse<PluginMemoryInfo>>('/server/plugin/memory')
     return response.data
   },
 }

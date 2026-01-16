@@ -11,7 +11,7 @@ import PluginBanner from '@/components/dashboard/PluginBanner.vue'
 
 const { t } = useI18n()
 const router = useRouter()
-const { status, stats, playerCount, loading, error, refresh } = useServerStats()
+const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, mspt, maxPlayers, serverVersion } = useServerStats()
 
 // Server JVM memory stats
 const serverMemory = ref<ServerMemoryStats | null>(null)
@@ -177,6 +177,28 @@ const uptimeValue = computed(() => {
   return `${hours}h ${minutes}m`
 })
 
+// TPS value from plugin
+const tpsValue = computed(() => {
+  if (!pluginAvailable.value || tps.value === null) return null
+  return tps.value.toFixed(1)
+})
+
+// TPS status color
+const tpsStatus = computed((): 'success' | 'warning' | 'error' => {
+  if (!tps.value) return 'info' as 'success'
+  if (tps.value >= 19) return 'success'
+  if (tps.value >= 15) return 'warning'
+  return 'error'
+})
+
+// Player count with max players
+const playerCountDisplay = computed(() => {
+  if (maxPlayers.value) {
+    return `${playerCount.value} / ${maxPlayers.value}`
+  }
+  return playerCount.value.toString()
+})
+
 function handleAction(type: string, success: boolean) {
   if (success) {
     // Refresh stats after action
@@ -321,9 +343,18 @@ function refreshAll() {
 
       <StatusCard
         :title="t('dashboard.players')"
-        :value="playerCount.toString()"
+        :value="playerCountDisplay"
         status="info"
         icon="players"
+      />
+
+      <!-- TPS Card (only when plugin is available) -->
+      <StatusCard
+        v-if="pluginAvailable && tpsValue"
+        title="TPS"
+        :value="tpsValue"
+        :status="tpsStatus"
+        icon="cpu"
       />
 
       <!-- Auth Status Card -->

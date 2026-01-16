@@ -79,6 +79,14 @@ export function getInstalledVersion(): string | null {
 }
 
 /**
+ * Get the host for connecting to the plugin API
+ * Uses the game container name for Docker networking
+ */
+function getPluginHost(): string {
+  return process.env.GAME_CONTAINER_NAME || config.gameContainerName || 'hytale';
+}
+
+/**
  * Check if the KyuubiSoft API plugin is running and responding
  */
 export async function isPluginRunning(): Promise<boolean> {
@@ -86,7 +94,8 @@ export async function isPluginRunning(): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const response = await fetch(`http://localhost:${PLUGIN_PORT}/api/server/info`, {
+    const host = getPluginHost();
+    const response = await fetch(`http://${host}:${PLUGIN_PORT}/api/server/info`, {
       signal: controller.signal,
     });
 
@@ -131,7 +140,8 @@ export async function fetchFromPlugin<T>(endpoint: string): Promise<PluginApiRes
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(`http://localhost:${PLUGIN_PORT}${endpoint}`, {
+    const host = getPluginHost();
+    const response = await fetch(`http://${host}:${PLUGIN_PORT}${endpoint}`, {
       signal: controller.signal,
     });
 
