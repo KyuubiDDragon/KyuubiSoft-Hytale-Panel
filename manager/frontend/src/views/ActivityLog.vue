@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
 import { activityApi, type ActivityLogEntry } from '@/api/management'
+import { formatLogMessage } from '@/utils/formatItemPath'
 
 const { t } = useI18n()
 
@@ -197,7 +198,7 @@ onMounted(loadData)
           <!-- Entry Details -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-1">
-              <span class="font-medium text-white">{{ entry.action }}</span>
+              <span class="font-medium text-white">{{ formatLogMessage(entry.action) }}</span>
               <span
                 :class="[
                   'px-2 py-0.5 rounded text-xs font-medium',
@@ -210,9 +211,9 @@ onMounted(loadData)
             <div class="text-sm text-gray-400 space-y-0.5">
               <div v-if="entry.target" class="flex items-center gap-1">
                 <span class="text-gray-500">{{ t('activity.target') }}:</span>
-                <span class="text-gray-300">{{ entry.target }}</span>
+                <span class="text-gray-300">{{ formatLogMessage(entry.target) }}</span>
               </div>
-              <div v-if="entry.details" class="text-gray-500 truncate">{{ entry.details }}</div>
+              <div v-if="entry.details" class="text-gray-500 truncate">{{ formatLogMessage(entry.details) }}</div>
             </div>
           </div>
 

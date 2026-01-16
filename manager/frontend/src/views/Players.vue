@@ -6,6 +6,7 @@ import { serverApi, type PluginPlayer } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
+import { formatItemPath } from '@/utils/formatItemPath'
 
 const { t } = useI18n()
 
@@ -364,7 +365,7 @@ async function confirmGive() {
   try {
     await playersApi.give(selectedPlayer.value, giveItem.value, giveAmount.value)
     showGiveModal.value = false
-    showSuccess(t('players.give') + ': ' + giveAmount.value + 'x ' + giveItem.value)
+    showSuccess(t('players.give') + ': ' + giveAmount.value + 'x ' + formatItemPath(giveItem.value))
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {

@@ -3,6 +3,7 @@ import { ref, watch, nextTick, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConsoleStore } from '@/stores/console'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { formatLogMessage } from '@/utils/formatItemPath'
 
 const { t } = useI18n()
 const consoleStore = useConsoleStore()
@@ -389,7 +390,7 @@ onMounted(() => {
           'text-status-warning': log.level === 'WARN' || log.level === 'WARNING',
           'text-gray-500': log.level === 'DEBUG',
           'text-gray-300': log.level === 'INFO' || !log.level
-        }">{{ log.message }}</span>
+        }">{{ formatLogMessage(log.message) }}</span>
       </div>
     </div>
 
