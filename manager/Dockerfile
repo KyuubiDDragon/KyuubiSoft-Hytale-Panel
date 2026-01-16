@@ -54,6 +54,9 @@ RUN npm install --omit=dev && npm cache clean --force
 # Copy built backend from builder
 COPY --from=backend-builder /app/backend/dist ./dist
 
+# Copy assets (plugins, etc.)
+COPY --from=backend-builder /app/backend/assets ./assets
+
 # Copy frontend build from frontend builder
 COPY --from=frontend-builder /app/static ./static
 

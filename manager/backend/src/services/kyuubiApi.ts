@@ -189,9 +189,26 @@ export function isUpdateAvailable(): { available: boolean; currentVersion: strin
  * Get the path to the bundled plugin JAR
  */
 export function getBundledPluginPath(): string {
-  // The JAR is stored in the manager's assets folder
-  // __dirname is src/services, so we go up two levels to get to the backend root
-  return path.join(__dirname, '..', '..', 'assets', 'plugins', PLUGIN_JAR_NAME);
+  // Try multiple possible locations for the plugin JAR
+  const possiblePaths = [
+    // Relative to module location (works for both src/ and dist/)
+    path.join(__dirname, '..', '..', 'assets', 'plugins', PLUGIN_JAR_NAME),
+    // Docker container path (/app/assets/plugins/)
+    path.join('/app', 'assets', 'plugins', PLUGIN_JAR_NAME),
+    // Relative to cwd (fallback for development)
+    path.join(process.cwd(), 'assets', 'plugins', PLUGIN_JAR_NAME),
+    // Manager backend directory
+    path.join(process.cwd(), 'manager', 'backend', 'assets', 'plugins', PLUGIN_JAR_NAME),
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+
+  // Return the first path as default (will trigger proper error in installPlugin)
+  return possiblePaths[0];
 }
 
 /**
