@@ -3,6 +3,9 @@
 *.zip
 *.aot
 
+# Exception: Include bundled plugin JAR for manager
+!manager/backend/assets/plugins/*.jar
+
 # Local test data
 data/
 backups/

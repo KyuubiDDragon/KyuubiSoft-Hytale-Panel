@@ -77,6 +77,28 @@ export interface UpdateCheckResponse {
   message: string
 }
 
+// KyuubiSoft API Plugin interfaces
+export interface PluginStatus {
+  installed: boolean
+  running: boolean
+  version: string | null
+  port: number
+  error?: string
+}
+
+export interface PluginUpdateCheck {
+  available: boolean
+  currentVersion: string | null
+  latestVersion: string
+}
+
+export interface PluginInstallResponse {
+  success: boolean
+  message?: string
+  version?: string
+  error?: string
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -135,6 +157,27 @@ export const serverApi = {
 
   async checkForUpdates(): Promise<UpdateCheckResponse> {
     const response = await api.get<UpdateCheckResponse>('/server/check-update')
+    return response.data
+  },
+
+  // KyuubiSoft API Plugin methods
+  async getPluginStatus(): Promise<PluginStatus> {
+    const response = await api.get<PluginStatus>('/server/plugin/status')
+    return response.data
+  },
+
+  async checkPluginUpdate(): Promise<PluginUpdateCheck> {
+    const response = await api.get<PluginUpdateCheck>('/server/plugin/update-check')
+    return response.data
+  },
+
+  async installPlugin(): Promise<PluginInstallResponse> {
+    const response = await api.post<PluginInstallResponse>('/server/plugin/install')
+    return response.data
+  },
+
+  async uninstallPlugin(): Promise<PluginInstallResponse> {
+    const response = await api.delete<PluginInstallResponse>('/server/plugin/uninstall')
     return response.data
   },
 }

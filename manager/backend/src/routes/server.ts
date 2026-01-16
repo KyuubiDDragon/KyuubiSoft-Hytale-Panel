@@ -3,6 +3,7 @@ import { readdir, readFile, writeFile, stat } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../middleware/auth.js';
 import * as dockerService from '../services/docker.js';
+import * as kyuubiApiService from '../services/kyuubiApi.js';
 import { config } from '../config.js';
 
 const router = Router();
@@ -312,6 +313,128 @@ router.put('/config/:filename', authMiddleware, async (req: Request, res: Respon
   } catch (error) {
     res.status(500).json({
       error: 'Failed to save config',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// =============================================
+// KyuubiSoft API Plugin Routes
+// =============================================
+
+// GET /api/server/plugin/status - Get KyuubiSoft API plugin status
+router.get('/plugin/status', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const status = await kyuubiApiService.getPluginStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get plugin status',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/plugin/update-check - Check if plugin update is available
+router.get('/plugin/update-check', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const updateInfo = kyuubiApiService.isUpdateAvailable();
+    res.json(updateInfo);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to check for plugin updates',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/server/plugin/install - Install or update the KyuubiSoft API plugin
+router.post('/plugin/install', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await kyuubiApiService.installPlugin();
+    if (!result.success) {
+      res.status(500).json(result);
+      return;
+    }
+    res.json({
+      success: true,
+      message: 'Plugin installed successfully. Restart the server to activate.',
+      version: kyuubiApiService.PLUGIN_VERSION
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to install plugin'
+    });
+  }
+});
+
+// DELETE /api/server/plugin/uninstall - Uninstall the KyuubiSoft API plugin
+router.delete('/plugin/uninstall', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await kyuubiApiService.uninstallPlugin();
+    if (!result.success) {
+      res.status(500).json(result);
+      return;
+    }
+    res.json({
+      success: true,
+      message: 'Plugin uninstalled successfully. Restart the server to complete removal.'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to uninstall plugin'
+    });
+  }
+});
+
+// GET /api/server/plugin/players - Get players from plugin API (more accurate)
+router.get('/plugin/players', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await kyuubiApiService.getPlayersFromPlugin();
+    if (!result.success) {
+      res.status(503).json(result);
+      return;
+    }
+    res.json(result.data);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get players from plugin',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/plugin/info - Get server info from plugin API
+router.get('/plugin/info', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await kyuubiApiService.getServerInfoFromPlugin();
+    if (!result.success) {
+      res.status(503).json(result);
+      return;
+    }
+    res.json(result.data);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get server info from plugin',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/plugin/memory - Get memory stats from plugin API
+router.get('/plugin/memory', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const result = await kyuubiApiService.getMemoryFromPlugin();
+    if (!result.success) {
+      res.status(503).json(result);
+      return;
+    }
+    res.json(result.data);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get memory stats from plugin',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

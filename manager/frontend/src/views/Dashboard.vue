@@ -7,6 +7,7 @@ import { serverApi, type ServerMemoryStats, type UpdateCheckResponse } from '@/a
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
+import PluginBanner from '@/components/dashboard/PluginBanner.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -291,6 +292,9 @@ function refreshAll() {
     <div v-if="error" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
       <p class="text-status-error">{{ error }}</p>
     </div>
+
+    <!-- Plugin Status Banner -->
+    <PluginBanner />
 
     <!-- Status Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
