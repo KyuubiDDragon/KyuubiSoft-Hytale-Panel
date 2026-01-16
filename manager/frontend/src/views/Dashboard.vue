@@ -11,7 +11,7 @@ import PluginBanner from '@/components/dashboard/PluginBanner.vue'
 
 const { t } = useI18n()
 const router = useRouter()
-const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, mspt, maxPlayers, serverVersion } = useServerStats()
+const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, mspt, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
 
 // Server JVM memory stats
 const serverMemory = ref<ServerMemoryStats | null>(null)
@@ -162,6 +162,20 @@ const memoryPercent = computed(() => {
 })
 
 const uptimeValue = computed(() => {
+  // Prefer plugin uptime (more accurate - actual JVM uptime)
+  if (pluginAvailable.value && uptimeSeconds.value !== null) {
+    const totalSeconds = uptimeSeconds.value
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+
+    if (hours > 24) {
+      const days = Math.floor(hours / 24)
+      return `${days}d ${hours % 24}h`
+    }
+    return `${hours}h ${minutes}m`
+  }
+
+  // Fall back to Docker container uptime
   if (!status.value?.started_at) return '-'
   const started = new Date(status.value.started_at)
   const now = new Date()
@@ -421,18 +435,40 @@ function refreshAll() {
 
       <!-- Server Info Card -->
       <div class="card">
-        <div class="card-header">
+        <div class="card-header flex items-center justify-between">
           <h3 class="text-lg font-semibold text-white">Server Info</h3>
+          <span
+            v-if="pluginAvailable"
+            class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30"
+          >
+            Plugin API
+          </span>
         </div>
         <div class="card-body">
           <div class="space-y-3">
+            <!-- Plugin data (when available) -->
+            <template v-if="pluginAvailable">
+              <div class="flex justify-between">
+                <span class="text-gray-400">Version</span>
+                <span class="text-white font-mono">{{ serverVersion || '-' }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Patchline</span>
+                <span class="text-white font-mono">{{ patchline || '-' }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Worlds</span>
+                <span class="text-white">{{ worldCount ?? '-' }}</span>
+              </div>
+            </template>
+            <!-- Container info -->
             <div class="flex justify-between">
               <span class="text-gray-400">Container</span>
               <span class="text-white font-mono">{{ status?.name || '-' }}</span>
             </div>
-            <div class="flex justify-between">
+            <div v-if="!pluginAvailable" class="flex justify-between">
               <span class="text-gray-400">Container ID</span>
-              <span class="text-white font-mono">{{ status?.id || '-' }}</span>
+              <span class="text-white font-mono text-xs">{{ status?.id || '-' }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-gray-400">Status</span>

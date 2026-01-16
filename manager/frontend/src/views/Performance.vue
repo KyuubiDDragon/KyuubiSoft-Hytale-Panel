@@ -419,6 +419,64 @@ onUnmounted(() => {
           </svg>
         </div>
       </Card>
+
+      <!-- TPS Graph (only when plugin available) -->
+      <Card v-if="pluginAvailable" class="lg:col-span-2">
+        <div class="mb-4 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <h3 class="font-semibold text-white">TPS History</h3>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+              Plugin
+            </span>
+          </div>
+          <div class="flex items-center gap-4 text-sm">
+            <span class="text-gray-400">{{ t('performance.current') }}: <span :class="tpsStatus === 'green' ? 'text-green-400' : tpsStatus === 'yellow' ? 'text-yellow-400' : 'text-red-400'">{{ tps?.toFixed(1) ?? '-' }}</span></span>
+            <span class="text-gray-400">{{ t('performance.avg') }}: <span class="text-green-400">{{ avgTps?.toFixed(1) ?? '-' }}</span></span>
+            <span class="text-gray-400">Min: <span class="text-green-400">{{ minTps?.toFixed(1) ?? '-' }}</span></span>
+          </div>
+        </div>
+        <div class="relative h-32 bg-dark-100 rounded-lg overflow-hidden">
+          <svg class="w-full h-full" preserveAspectRatio="none">
+            <!-- Grid lines for TPS (20 = max, 15 = warning threshold) -->
+            <line x1="0" y1="25%" x2="100%" y2="25%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
+            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
+            <line x1="0" y1="75%" x2="100%" y2="75%" stroke="#ef4444" stroke-width="1" stroke-dasharray="4" opacity="0.3" />
+
+            <!-- Area -->
+            <path
+              :d="generateAreaPath(tpsData, 20, 800, 128)"
+              fill="url(#tpsGradient)"
+              class="transition-all duration-300"
+            />
+
+            <!-- Line -->
+            <path
+              :d="generatePath(tpsData, 20, 800, 128)"
+              fill="none"
+              stroke="#22c55e"
+              stroke-width="2"
+              class="transition-all duration-300"
+            />
+
+            <!-- Gradient definitions -->
+            <defs>
+              <linearGradient id="tpsGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#22c55e" stop-opacity="0.3" />
+                <stop offset="100%" stop-color="#22c55e" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+          </svg>
+
+          <!-- Y-axis labels for TPS -->
+          <div class="absolute left-2 top-0 h-full flex flex-col justify-between py-2 text-xs text-gray-500">
+            <span>20</span>
+            <span>15</span>
+            <span>10</span>
+            <span>5</span>
+            <span>0</span>
+          </div>
+        </div>
+      </Card>
     </div>
 
     <!-- Statistics Summary -->

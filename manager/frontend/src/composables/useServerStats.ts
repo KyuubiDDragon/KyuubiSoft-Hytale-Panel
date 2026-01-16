@@ -15,6 +15,9 @@ export function useServerStats(pollInterval = 5000) {
   const mspt = ref<number | null>(null)
   const maxPlayers = ref<number | null>(null)
   const serverVersion = ref<string | null>(null)
+  const patchline = ref<string | null>(null)
+  const worldCount = ref<number | null>(null)
+  const uptimeSeconds = ref<number | null>(null)
 
   let intervalId: ReturnType<typeof setInterval> | null = null
 
@@ -40,6 +43,9 @@ export function useServerStats(pollInterval = 5000) {
             mspt.value = pluginInfo.data.mspt
             maxPlayers.value = pluginInfo.data.maxPlayers
             serverVersion.value = pluginInfo.data.version
+            patchline.value = pluginInfo.data.patchline
+            worldCount.value = pluginInfo.data.worldCount
+            uptimeSeconds.value = pluginInfo.data.uptimeSeconds
           } else {
             // Plugin not available, fall back to old method
             pluginAvailable.value = false
@@ -47,6 +53,9 @@ export function useServerStats(pollInterval = 5000) {
             playerCount.value = playersData.count
             tps.value = null
             mspt.value = null
+            patchline.value = null
+            worldCount.value = null
+            uptimeSeconds.value = null
           }
         } catch {
           // Plugin API failed, fall back to old method
@@ -55,6 +64,9 @@ export function useServerStats(pollInterval = 5000) {
           playerCount.value = playersData.count
           tps.value = null
           mspt.value = null
+          patchline.value = null
+          worldCount.value = null
+          uptimeSeconds.value = null
         }
       } else {
         // Server not running
@@ -62,6 +74,9 @@ export function useServerStats(pollInterval = 5000) {
         playerCount.value = 0
         tps.value = null
         mspt.value = null
+        patchline.value = null
+        worldCount.value = null
+        uptimeSeconds.value = null
       }
 
       error.value = null
@@ -105,5 +120,8 @@ export function useServerStats(pollInterval = 5000) {
     mspt,
     maxPlayers,
     serverVersion,
+    patchline,
+    worldCount,
+    uptimeSeconds,
   }
 }
