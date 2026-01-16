@@ -12,6 +12,14 @@ export interface ScheduleConfig {
     welcome: string
     scheduled: ScheduledAnnouncement[]
   }
+  scheduledRestarts: {
+    enabled: boolean
+    times: string[]
+    warningMinutes: number[]
+    warningMessage: string
+    restartMessage: string
+    createBackup: boolean
+  }
   quickCommands: QuickCommand[]
 }
 
@@ -39,6 +47,11 @@ export interface SchedulerStatus {
   announcements: {
     enabled: boolean
     activeCount: number
+  }
+  scheduledRestarts: {
+    enabled: boolean
+    nextRestart: string | null
+    pendingRestart: { time: string; scheduledAt: string } | null
   }
 }
 
@@ -107,6 +120,16 @@ export const schedulerApi = {
 
   async broadcast(message: string): Promise<{ success: boolean }> {
     const response = await api.post('/scheduler/broadcast', { message })
+    return response.data
+  },
+
+  async cancelRestart(): Promise<{ success: boolean }> {
+    const response = await api.post('/scheduler/restart/cancel')
+    return response.data
+  },
+
+  async getRestartStatus(): Promise<{ enabled: boolean; nextRestart: string | null; pendingRestart: { time: string; scheduledAt: string } | null }> {
+    const response = await api.get('/scheduler/restart/status')
     return response.data
   },
 }

@@ -17,6 +17,14 @@ interface ScheduleConfig {
     welcome: string;
     scheduled: ScheduledAnnouncement[];
   };
+  scheduledRestarts: {
+    enabled: boolean;
+    times: string[]; // Array of times like ["03:00", "15:00"]
+    warningMinutes: number[]; // Warning intervals before restart, e.g. [30, 15, 5, 1]
+    warningMessage: string; // Message template, {minutes} placeholder
+    restartMessage: string; // Final message before restart
+    createBackup: boolean; // Create backup before restart
+  };
   quickCommands: QuickCommand[];
 }
 
@@ -50,6 +58,14 @@ const DEFAULT_CONFIG: ScheduleConfig = {
     welcome: '',
     scheduled: [],
   },
+  scheduledRestarts: {
+    enabled: false,
+    times: [],
+    warningMinutes: [30, 15, 5, 1],
+    warningMessage: 'Server restart in {minutes} minute(s)!',
+    restartMessage: 'Server is restarting now!',
+    createBackup: true,
+  },
   quickCommands: [
     { id: '1', name: 'Save World', command: '/save', icon: 'save', category: 'server' },
     { id: '2', name: 'List Players', command: '/list', icon: 'users', category: 'players' },
@@ -63,6 +79,9 @@ const DEFAULT_CONFIG: ScheduleConfig = {
 let schedulerConfig: ScheduleConfig = { ...DEFAULT_CONFIG };
 let backupTimer: NodeJS.Timeout | null = null;
 let announcementTimers: Map<string, NodeJS.Timeout> = new Map();
+let restartTimers: Map<string, NodeJS.Timeout> = new Map();
+let restartWarningTimers: NodeJS.Timeout[] = [];
+let pendingRestart: { time: string; scheduledAt: Date } | null = null;
 
 // Load configuration
 export function loadConfig(): ScheduleConfig {
@@ -168,6 +187,174 @@ async function sendAnnouncement(message: string): Promise<void> {
   }
 }
 
+// Calculate next restart time from configured times
+function getNextRestartTime(): { time: string; date: Date } | null {
+  if (!schedulerConfig.scheduledRestarts.enabled || schedulerConfig.scheduledRestarts.times.length === 0) {
+    return null;
+  }
+
+  const now = new Date();
+  let nearestRestart: { time: string; date: Date } | null = null;
+
+  for (const timeStr of schedulerConfig.scheduledRestarts.times) {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const restartDate = new Date(now);
+    restartDate.setHours(hours, minutes, 0, 0);
+
+    // If time already passed today, schedule for tomorrow
+    if (restartDate <= now) {
+      restartDate.setDate(restartDate.getDate() + 1);
+    }
+
+    if (!nearestRestart || restartDate < nearestRestart.date) {
+      nearestRestart = { time: timeStr, date: restartDate };
+    }
+  }
+
+  return nearestRestart;
+}
+
+// Send restart warning message
+async function sendRestartWarning(minutesLeft: number): Promise<void> {
+  const message = schedulerConfig.scheduledRestarts.warningMessage.replace('{minutes}', minutesLeft.toString());
+  await sendAnnouncement(message);
+  console.log(`[Scheduler] Sent restart warning: ${minutesLeft} minutes remaining`);
+}
+
+// Execute the scheduled restart
+async function executeScheduledRestart(): Promise<void> {
+  console.log('[Scheduler] Executing scheduled restart...');
+
+  // Send final restart message
+  await sendAnnouncement(schedulerConfig.scheduledRestarts.restartMessage);
+
+  // Wait a moment for the message to be sent
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // Create backup if enabled
+  if (schedulerConfig.scheduledRestarts.createBackup) {
+    console.log('[Scheduler] Creating pre-restart backup...');
+    const result = createBackup('scheduled_restart');
+    if (result.success) {
+      console.log(`[Scheduler] Pre-restart backup created: ${result.backup?.filename}`);
+    } else {
+      console.error('[Scheduler] Pre-restart backup failed:', result.error);
+    }
+  }
+
+  // Restart the server
+  const restartResult = await dockerService.restartContainer();
+  if (restartResult.success) {
+    console.log('[Scheduler] Server restart initiated successfully');
+  } else {
+    console.error('[Scheduler] Server restart failed:', restartResult.error);
+  }
+
+  // Clear pending restart
+  pendingRestart = null;
+
+  // Schedule next restart
+  scheduleNextRestart();
+}
+
+// Schedule a single restart with warnings
+function scheduleRestartWithWarnings(restartTime: Date, timeStr: string): void {
+  const now = Date.now();
+  const restartMs = restartTime.getTime();
+  const msUntilRestart = restartMs - now;
+
+  // Clear any existing warning timers
+  for (const timer of restartWarningTimers) {
+    clearTimeout(timer);
+  }
+  restartWarningTimers = [];
+
+  // Schedule warning messages
+  for (const warningMinutes of schedulerConfig.scheduledRestarts.warningMinutes) {
+    const warningMs = msUntilRestart - (warningMinutes * 60 * 1000);
+    if (warningMs > 0) {
+      const timer = setTimeout(() => {
+        sendRestartWarning(warningMinutes);
+      }, warningMs);
+      restartWarningTimers.push(timer);
+    }
+  }
+
+  // Schedule the actual restart
+  const restartTimer = setTimeout(() => {
+    executeScheduledRestart();
+  }, msUntilRestart);
+  restartTimers.set(timeStr, restartTimer);
+
+  // Store pending restart info
+  pendingRestart = { time: timeStr, scheduledAt: restartTime };
+
+  console.log(`[Scheduler] Restart scheduled for ${restartTime.toISOString()} (in ${Math.round(msUntilRestart / 60000)} minutes)`);
+}
+
+// Schedule the next restart
+function scheduleNextRestart(): void {
+  // Clear existing restart timers
+  for (const [, timer] of restartTimers) {
+    clearTimeout(timer);
+  }
+  restartTimers.clear();
+
+  for (const timer of restartWarningTimers) {
+    clearTimeout(timer);
+  }
+  restartWarningTimers = [];
+  pendingRestart = null;
+
+  if (!schedulerConfig.scheduledRestarts.enabled) {
+    return;
+  }
+
+  const nextRestart = getNextRestartTime();
+  if (nextRestart) {
+    scheduleRestartWithWarnings(nextRestart.date, nextRestart.time);
+  }
+}
+
+// Cancel pending restart
+export function cancelPendingRestart(): boolean {
+  if (!pendingRestart) {
+    return false;
+  }
+
+  // Clear timers
+  for (const [, timer] of restartTimers) {
+    clearTimeout(timer);
+  }
+  restartTimers.clear();
+
+  for (const timer of restartWarningTimers) {
+    clearTimeout(timer);
+  }
+  restartWarningTimers = [];
+
+  console.log(`[Scheduler] Cancelled pending restart that was scheduled for ${pendingRestart.scheduledAt.toISOString()}`);
+  pendingRestart = null;
+
+  // Re-schedule for the next time slot
+  setTimeout(() => {
+    scheduleNextRestart();
+  }, 60000); // Wait 1 minute before re-scheduling
+
+  return true;
+}
+
+// Get pending restart info
+export function getPendingRestart(): { time: string; scheduledAt: string } | null {
+  if (!pendingRestart) {
+    return null;
+  }
+  return {
+    time: pendingRestart.time,
+    scheduledAt: pendingRestart.scheduledAt.toISOString(),
+  };
+}
+
 // Start all schedulers
 export function startSchedulers(): void {
   loadConfig();
@@ -201,6 +388,9 @@ export function startSchedulers(): void {
       }
     }
   }
+
+  // Start scheduled restart scheduler
+  scheduleNextRestart();
 }
 
 // Stop all schedulers
@@ -211,10 +401,22 @@ export function stopSchedulers(): void {
     backupTimer = null;
   }
 
-  for (const [id, timer] of announcementTimers) {
+  for (const [, timer] of announcementTimers) {
     clearInterval(timer);
   }
   announcementTimers.clear();
+
+  // Stop restart timers
+  for (const [, timer] of restartTimers) {
+    clearTimeout(timer);
+  }
+  restartTimers.clear();
+
+  for (const timer of restartWarningTimers) {
+    clearTimeout(timer);
+  }
+  restartWarningTimers = [];
+  pendingRestart = null;
 
   console.log('[Scheduler] All schedulers stopped');
 }
@@ -277,10 +479,12 @@ export function deleteQuickCommand(id: string): boolean {
 export function getSchedulerStatus(): {
   backups: { enabled: boolean; nextRun: string | null; lastRun: string | null };
   announcements: { enabled: boolean; activeCount: number };
+  scheduledRestarts: { enabled: boolean; nextRestart: string | null; pendingRestart: { time: string; scheduledAt: string } | null };
 } {
   const nextBackup = getNextBackupTime();
   const backups = listBackups();
   const lastAutoBackup = backups.find(b => b.type === 'auto');
+  const nextRestart = getNextRestartTime();
 
   return {
     backups: {
@@ -291,6 +495,11 @@ export function getSchedulerStatus(): {
     announcements: {
       enabled: schedulerConfig.announcements.enabled,
       activeCount: announcementTimers.size,
+    },
+    scheduledRestarts: {
+      enabled: schedulerConfig.scheduledRestarts.enabled,
+      nextRestart: nextRestart?.date.toISOString() || null,
+      pendingRestart: getPendingRestart(),
     },
   };
 }

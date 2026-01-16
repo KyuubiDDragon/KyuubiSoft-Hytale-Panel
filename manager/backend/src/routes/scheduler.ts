@@ -110,4 +110,20 @@ router.post('/broadcast', authMiddleware, async (req: Request, res: Response) =>
   res.json(result);
 });
 
+// POST /api/scheduler/restart/cancel - Cancel pending restart
+router.post('/restart/cancel', authMiddleware, async (_req: Request, res: Response) => {
+  const cancelled = schedulerService.cancelPendingRestart();
+  if (cancelled) {
+    res.json({ success: true, message: 'Pending restart cancelled' });
+  } else {
+    res.status(404).json({ success: false, error: 'No pending restart to cancel' });
+  }
+});
+
+// GET /api/scheduler/restart/status - Get restart status
+router.get('/restart/status', authMiddleware, async (_req: Request, res: Response) => {
+  const status = schedulerService.getSchedulerStatus();
+  res.json(status.scheduledRestarts);
+});
+
 export default router;

@@ -24,8 +24,20 @@ const config = reactive<ScheduleConfig>({
     welcome: '',
     scheduled: [],
   },
+  scheduledRestarts: {
+    enabled: false,
+    times: [],
+    warningMinutes: [30, 15, 5, 1],
+    warningMessage: 'Server restart in {minutes} minute(s)!',
+    restartMessage: 'Server is restarting now!',
+    createBackup: true,
+  },
   quickCommands: [],
 })
+
+// New restart time input
+const newRestartTime = ref('03:00')
+const cancellingRestart = ref(false)
 
 // Quick command form
 const showCommandForm = ref(false)
@@ -91,6 +103,49 @@ async function saveAnnouncementsConfig() {
     error.value = t('errors.serverError')
   } finally {
     saving.value = false
+  }
+}
+
+// Scheduled Restarts
+function addRestartTime() {
+  if (!newRestartTime.value || config.scheduledRestarts.times.includes(newRestartTime.value)) return
+  config.scheduledRestarts.times.push(newRestartTime.value)
+  config.scheduledRestarts.times.sort()
+}
+
+function removeRestartTime(time: string) {
+  config.scheduledRestarts.times = config.scheduledRestarts.times.filter(t => t !== time)
+}
+
+async function saveRestartsConfig() {
+  try {
+    saving.value = true
+    error.value = null
+    await schedulerApi.saveConfig({ scheduledRestarts: config.scheduledRestarts })
+    successMessage.value = t('scheduler.saved')
+    setTimeout(() => { successMessage.value = null }, 3000)
+    // Reload status
+    status.value = await schedulerApi.getStatus()
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function cancelPendingRestart() {
+  try {
+    cancellingRestart.value = true
+    error.value = null
+    await schedulerApi.cancelRestart()
+    successMessage.value = t('scheduler.restartCancelled')
+    setTimeout(() => { successMessage.value = null }, 3000)
+    // Reload status
+    status.value = await schedulerApi.getStatus()
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    cancellingRestart.value = false
   }
 }
 
@@ -288,6 +343,151 @@ onMounted(() => {
           <div class="pt-4 border-t border-dark-50 flex justify-end">
             <button
               @click="saveBackupConfig"
+              :disabled="saving"
+              class="px-4 py-2 bg-hytale-orange text-dark rounded-lg font-medium hover:bg-hytale-yellow transition-colors disabled:opacity-50"
+            >
+              {{ t('common.save') }}
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <!-- Scheduled Restarts -->
+      <Card :title="t('scheduler.scheduledRestarts')">
+        <div class="space-y-4">
+          <!-- Enable Toggle -->
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-medium text-white">{{ t('scheduler.enableRestarts') }}</p>
+              <p class="text-sm text-gray-400">{{ t('scheduler.restartsDesc') }}</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="config.scheduledRestarts.enabled" class="sr-only peer">
+              <div class="w-11 h-6 bg-dark-50 rounded-full peer peer-checked:bg-hytale-orange peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+            </label>
+          </div>
+
+          <div v-if="config.scheduledRestarts.enabled" class="space-y-4 pt-4 border-t border-dark-50">
+            <!-- Restart Times List -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.restartTimes') }}</label>
+              <div v-if="config.scheduledRestarts.times.length > 0" class="flex flex-wrap gap-2 mb-3">
+                <div
+                  v-for="time in config.scheduledRestarts.times"
+                  :key="time"
+                  class="flex items-center gap-2 px-3 py-1.5 bg-dark-400 rounded-lg"
+                >
+                  <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span class="text-white font-mono">{{ time }}</span>
+                  <button
+                    @click="removeRestartTime(time)"
+                    class="text-gray-400 hover:text-red-400 transition-colors"
+                  >
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <p v-else class="text-sm text-gray-500 mb-3">{{ t('scheduler.noRestartTimes') }}</p>
+
+              <!-- Add Time -->
+              <div class="flex gap-3">
+                <input
+                  v-model="newRestartTime"
+                  type="time"
+                  class="bg-dark-400 text-white px-4 py-2 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+                />
+                <button
+                  @click="addRestartTime"
+                  class="px-4 py-2 bg-dark-50 text-white rounded-lg hover:bg-dark-100 transition-colors"
+                >
+                  {{ t('common.add') }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Warning Minutes -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.warningMinutes') }}</label>
+              <input
+                v-model="config.scheduledRestarts.warningMinutes"
+                type="text"
+                :placeholder="t('scheduler.warningMinutesPlaceholder')"
+                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none font-mono"
+                @change="config.scheduledRestarts.warningMinutes = ($event.target as HTMLInputElement).value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n))"
+              />
+              <p class="text-xs text-gray-500 mt-1">{{ t('scheduler.warningMinutesHint') }}</p>
+            </div>
+
+            <!-- Warning Message -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.warningMessage') }}</label>
+              <input
+                v-model="config.scheduledRestarts.warningMessage"
+                type="text"
+                :placeholder="t('scheduler.warningMessagePlaceholder')"
+                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              />
+              <p class="text-xs text-gray-500 mt-1">{{ t('scheduler.warningMessageHint') }}</p>
+            </div>
+
+            <!-- Restart Message -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.restartMessage') }}</label>
+              <input
+                v-model="config.scheduledRestarts.restartMessage"
+                type="text"
+                :placeholder="t('scheduler.restartMessagePlaceholder')"
+                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              />
+            </div>
+
+            <!-- Backup before Restart -->
+            <div class="flex items-center">
+              <label class="flex items-center cursor-pointer">
+                <input type="checkbox" v-model="config.scheduledRestarts.createBackup" class="sr-only peer">
+                <div class="w-5 h-5 bg-dark-50 rounded peer peer-checked:bg-hytale-orange flex items-center justify-center">
+                  <svg v-if="config.scheduledRestarts.createBackup" class="w-3 h-3 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span class="ml-2 text-sm text-gray-300">{{ t('scheduler.backupBeforeRestart') }}</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Status -->
+          <div v-if="status?.scheduledRestarts" class="pt-4 border-t border-dark-50">
+            <div class="text-sm text-gray-400 space-y-1">
+              <p v-if="status.scheduledRestarts.nextRestart">
+                {{ t('scheduler.nextRestart') }}: {{ new Date(status.scheduledRestarts.nextRestart).toLocaleString() }}
+              </p>
+              <div v-if="status.scheduledRestarts.pendingRestart" class="flex items-center gap-3 mt-2 p-3 bg-status-warning/10 border border-status-warning/20 rounded-lg">
+                <svg class="w-5 h-5 text-status-warning flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div class="flex-1">
+                  <p class="text-status-warning font-medium">{{ t('scheduler.pendingRestart') }}</p>
+                  <p class="text-gray-400 text-xs">{{ new Date(status.scheduledRestarts.pendingRestart.scheduledAt).toLocaleString() }}</p>
+                </div>
+                <button
+                  @click="cancelPendingRestart"
+                  :disabled="cancellingRestart"
+                  class="px-3 py-1.5 bg-status-error text-white rounded-lg text-sm font-medium hover:bg-status-error/80 transition-colors disabled:opacity-50"
+                >
+                  {{ t('scheduler.cancelRestart') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Save -->
+          <div class="pt-4 border-t border-dark-50 flex justify-end">
+            <button
+              @click="saveRestartsConfig"
               :disabled="saving"
               class="px-4 py-2 bg-hytale-orange text-dark rounded-lg font-medium hover:bg-hytale-yellow transition-colors disabled:opacity-50"
             >
