@@ -83,13 +83,49 @@ let restartTimers: Map<string, NodeJS.Timeout> = new Map();
 let restartWarningTimers: NodeJS.Timeout[] = [];
 let pendingRestart: { time: string; scheduledAt: Date } | null = null;
 
+// Deep merge helper for nested objects
+function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
+  const result = { ...target };
+
+  for (const key in source) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const sourceValue = source[key];
+      const targetValue = target[key];
+
+      if (
+        sourceValue !== null &&
+        typeof sourceValue === 'object' &&
+        !Array.isArray(sourceValue) &&
+        targetValue !== null &&
+        typeof targetValue === 'object' &&
+        !Array.isArray(targetValue)
+      ) {
+        // Recursively merge nested objects
+        (result as Record<string, unknown>)[key] = deepMerge(
+          targetValue as Record<string, unknown>,
+          sourceValue as Record<string, unknown>
+        );
+      } else {
+        // Direct assignment for primitives and arrays
+        (result as Record<string, unknown>)[key] = sourceValue;
+      }
+    }
+  }
+
+  return result;
+}
+
 // Load configuration
 export function loadConfig(): ScheduleConfig {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const data = fs.readFileSync(CONFIG_FILE, 'utf-8');
       const loaded = JSON.parse(data);
-      schedulerConfig = { ...DEFAULT_CONFIG, ...loaded };
+      // Use deep merge to preserve default values for missing nested properties
+      schedulerConfig = deepMerge(DEFAULT_CONFIG, loaded);
+      console.log('[Scheduler] Config loaded from file:', CONFIG_FILE);
+    } else {
+      console.log('[Scheduler] No config file found, using defaults');
     }
   } catch (error) {
     console.error('Failed to load scheduler config:', error);
@@ -100,8 +136,10 @@ export function loadConfig(): ScheduleConfig {
 // Save configuration
 export function saveConfig(config: Partial<ScheduleConfig>): boolean {
   try {
-    schedulerConfig = { ...schedulerConfig, ...config };
+    // Use deep merge to properly handle partial nested updates
+    schedulerConfig = deepMerge(schedulerConfig, config);
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(schedulerConfig, null, 2));
+    console.log('[Scheduler] Config saved to file:', CONFIG_FILE);
 
     // Restart schedulers with new config
     stopSchedulers();
@@ -358,6 +396,15 @@ export function getPendingRestart(): { time: string; scheduledAt: string } | nul
 // Start all schedulers
 export function startSchedulers(): void {
   loadConfig();
+
+  console.log('[Scheduler] Starting schedulers with config:', {
+    backups: { enabled: schedulerConfig.backups.enabled, schedule: schedulerConfig.backups.schedule },
+    announcements: { enabled: schedulerConfig.announcements.enabled },
+    scheduledRestarts: {
+      enabled: schedulerConfig.scheduledRestarts.enabled,
+      times: schedulerConfig.scheduledRestarts.times
+    }
+  });
 
   // Start backup scheduler
   if (schedulerConfig.backups.enabled) {
