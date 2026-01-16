@@ -1925,11 +1925,11 @@ router.post('/stackmart/install', authMiddleware, async (req: AuthenticatedReque
     const result = await installResourceFromStackMart(resourceId);
 
     if (result.success) {
-      const user = req.user?.username || 'system';
+      const user = req.user || 'system';
       logActivity(
         user,
         'install_stackmart',
-        'plugins',
+        'mod',
         true,
         result.resourceName || resourceId,
         `Installed ${result.resourceName} v${result.version} from StackMart`
@@ -2007,11 +2007,11 @@ router.delete('/stackmart/uninstall/:resourceId', authMiddleware, async (req: Au
     const result = await uninstallStackMart(resourceId);
 
     if (result.success) {
-      const user = req.user?.username || 'system';
+      const user = req.user || 'system';
       logActivity(
         user,
         'uninstall_stackmart',
-        'plugins',
+        'mod',
         true,
         resourceId,
         `Uninstalled StackMart resource: ${resourceId}`
