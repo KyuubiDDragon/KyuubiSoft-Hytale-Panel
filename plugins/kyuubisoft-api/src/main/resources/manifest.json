@@ -1,7 +1,7 @@
 {
-  "Id": "kyuubisoft-api",
+  "Id": "KyuubiDDragon:KyuubiSoftAPI",
   "Name": "KyuubiSoft API",
-  "Version": "1.0.2",
+  "Version": "1.0.3",
   "Description": "REST API for KyuubiSoft Panel - provides player data, server stats, and real-time events",
   "Author": "KyuubiDDragon",
   "Main": "com.kyuubisoft.api.KyuubiSoftAPI",
