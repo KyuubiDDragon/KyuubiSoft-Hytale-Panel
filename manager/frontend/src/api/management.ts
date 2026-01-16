@@ -410,6 +410,15 @@ export interface ModtaleInstallResult {
   projectTitle?: string
 }
 
+export interface ModtaleInstalledInfo {
+  projectId: string
+  projectTitle: string
+  version: string
+  filename: string
+  classification: ModtaleClassification
+  installedAt: string
+}
+
 export type ModtaleSortOption = 'relevance' | 'downloads' | 'updated' | 'newest' | 'rating' | 'favorites'
 export type ModtaleClassification = 'PLUGIN' | 'DATA' | 'ART' | 'SAVE' | 'MODPACK'
 
@@ -477,6 +486,16 @@ export const modtaleApi = {
 
   async refresh(): Promise<{ success: boolean; message: string }> {
     const response = await api.post<{ success: boolean; message: string }>('/management/modtale/refresh')
+    return response.data
+  },
+
+  async getInstalled(): Promise<{ installed: Record<string, ModtaleInstalledInfo> }> {
+    const response = await api.get<{ installed: Record<string, ModtaleInstalledInfo> }>('/management/modtale/installed')
+    return response.data
+  },
+
+  async uninstall(projectId: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.delete<{ success: boolean; error?: string }>(`/management/modtale/uninstall/${projectId}`)
     return response.data
   },
 }

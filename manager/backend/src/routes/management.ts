@@ -12,6 +12,7 @@ import {
   searchMods as modtaleSearch,
   getModDetails as modtaleGetDetails,
   installModFromModtale,
+  uninstallModtale,
   checkModtaleStatus,
   getTags as modtaleGetTags,
   getClassifications as modtaleGetClassifications,
@@ -21,6 +22,7 @@ import {
   clearModtaleCache,
   isValidProjectId,
   isValidVersion,
+  getInstalledModtaleInfo,
   type ModtaleSortOption,
   type ModtaleClassification,
 } from '../services/modtale.js';
@@ -1786,6 +1788,46 @@ router.post('/modtale/refresh', authMiddleware, async (_req: Request, res: Respo
     res.json({ success: true, message: 'Modtale cache cleared' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to refresh cache' });
+  }
+});
+
+// GET /api/management/modtale/installed - Get installed Modtale mods
+router.get('/modtale/installed', authMiddleware, async (_req: Request, res: Response) => {
+  try {
+    const installed = await getInstalledModtaleInfo();
+    res.json({ installed });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get installed mods' });
+  }
+});
+
+// DELETE /api/management/modtale/uninstall/:projectId - Uninstall a Modtale mod
+router.delete('/modtale/uninstall/:projectId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { projectId } = req.params;
+
+    if (!projectId || !isValidProjectId(projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID' });
+    }
+
+    const result = await uninstallModtale(projectId);
+
+    if (result.success) {
+      // Log the uninstall activity
+      await logActivity(
+        req.user || 'Admin',
+        'uninstall_modtale',
+        'mod',
+        true,
+        projectId,
+        `Uninstalled Modtale mod: ${projectId}`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Modtale uninstall error:', error);
+    res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
   }
 });
 

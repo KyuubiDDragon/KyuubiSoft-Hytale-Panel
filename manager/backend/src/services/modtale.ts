@@ -4,7 +4,7 @@
  * API Documentation: https://api.modtale.net
  */
 
-import { writeFile, mkdir, access } from 'fs/promises';
+import { writeFile, mkdir, access, readFile, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
@@ -109,6 +109,74 @@ function setCache<T>(key: string, data: T): void {
 export function clearModtaleCache(): void {
   cache.clear();
   console.log('Modtale cache cleared');
+}
+
+// ============== Installed Mods Tracking ==============
+
+interface InstalledModInfo {
+  projectId: string;
+  projectTitle: string;
+  version: string;
+  filename: string;
+  classification: ModtaleClassification;
+  installedAt: string;
+}
+
+interface InstalledModsData {
+  mods: Record<string, InstalledModInfo>;
+}
+
+const INSTALLED_MODS_FILE = 'modtale-installed.json';
+
+function getInstalledModsPath(): string {
+  return path.join(config.dataPath, INSTALLED_MODS_FILE);
+}
+
+async function loadInstalledMods(): Promise<InstalledModsData> {
+  try {
+    const filePath = getInstalledModsPath();
+    const data = await readFile(filePath, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return { mods: {} };
+  }
+}
+
+async function saveInstalledMods(data: InstalledModsData): Promise<void> {
+  try {
+    const filePath = getInstalledModsPath();
+    // Ensure data directory exists
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('Failed to save installed mods tracking:', e);
+  }
+}
+
+export async function getInstalledModtaleInfo(): Promise<Record<string, InstalledModInfo>> {
+  const data = await loadInstalledMods();
+  return data.mods;
+}
+
+export async function isModtaleModInstalled(projectId: string): Promise<InstalledModInfo | null> {
+  const data = await loadInstalledMods();
+  return data.mods[projectId] || null;
+}
+
+async function trackInstalledMod(info: InstalledModInfo): Promise<void> {
+  const data = await loadInstalledMods();
+  data.mods[info.projectId] = info;
+  await saveInstalledMods(data);
+}
+
+export async function untrackInstalledMod(projectId: string): Promise<boolean> {
+  const data = await loadInstalledMods();
+  if (data.mods[projectId]) {
+    delete data.mods[projectId];
+    await saveInstalledMods(data);
+    return true;
+  }
+  return false;
 }
 
 // ============== Security Validation ==============
@@ -531,7 +599,7 @@ export async function installModFromModtale(
   // Choose target directory based on classification
   switch (project.classification) {
     case 'PLUGIN':
-      targetPath = config.modsPath; // Plugins go to mods folder
+      targetPath = config.pluginsPath; // Plugins go to plugins folder
       break;
     case 'DATA':
     case 'ART':
@@ -568,6 +636,16 @@ export async function installModFromModtale(
   if (!downloaded) {
     return { success: false, error: 'Failed to download mod file' };
   }
+
+  // Track the installed mod
+  await trackInstalledMod({
+    projectId: project.id,
+    projectTitle: project.title,
+    version: safeVersion,
+    filename: validatedFilename,
+    classification: project.classification,
+    installedAt: new Date().toISOString(),
+  });
 
   return {
     success: true,
@@ -632,6 +710,57 @@ export async function getRecentMods(limit: number = 10): Promise<ModtaleProject[
   return result?.content || [];
 }
 
+/**
+ * Uninstall a Modtale mod
+ */
+export async function uninstallModtale(projectId: string): Promise<{ success: boolean; error?: string }> {
+  // Security: Validate projectId
+  if (!isValidProjectId(projectId)) {
+    return { success: false, error: 'Invalid project ID format' };
+  }
+
+  const installed = await isModtaleModInstalled(projectId);
+  if (!installed) {
+    return { success: false, error: 'Mod is not installed' };
+  }
+
+  // Determine the file path based on classification
+  let basePath: string;
+  switch (installed.classification) {
+    case 'PLUGIN':
+      basePath = config.pluginsPath;
+      break;
+    case 'DATA':
+    case 'ART':
+    case 'SAVE':
+      basePath = config.dataPath;
+      break;
+    case 'MODPACK':
+    default:
+      basePath = config.modsPath;
+  }
+
+  const filePath = path.join(basePath, installed.filename);
+  const resolvedPath = path.resolve(filePath);
+  const resolvedBase = path.resolve(basePath);
+
+  // Security: Verify path is within allowed directory
+  if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
+    return { success: false, error: 'Invalid file path' };
+  }
+
+  try {
+    await unlink(filePath);
+  } catch (e) {
+    console.error('Failed to delete mod file:', e);
+    // Continue to untrack even if file doesn't exist
+  }
+
+  await untrackInstalledMod(projectId);
+
+  return { success: true };
+}
+
 export default {
   searchMods,
   getModDetails,
@@ -639,11 +768,14 @@ export default {
   getClassifications,
   getGameVersions,
   installModFromModtale,
+  uninstallModtale,
   checkModtaleStatus,
   getFeaturedMods,
   getRecentMods,
   clearModtaleCache,
   isValidProjectId,
   isValidVersion,
+  getInstalledModtaleInfo,
+  isModtaleModInstalled,
   MODTALE_TAGS,
 };

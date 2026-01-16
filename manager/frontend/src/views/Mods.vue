@@ -16,6 +16,7 @@ import {
   type ModtaleStatus,
   type ModtaleSortOption,
   type ModtaleClassification,
+  type ModtaleInstalledInfo,
 } from '@/api/management'
 
 const { t } = useI18n()
@@ -62,10 +63,12 @@ const modtaleTotalPages = ref(0)
 const modtaleTotalElements = ref(0)
 const modtaleInstallingId = ref<string | null>(null)
 const modtaleInstallSuccess = ref<string | null>(null)
+const modtaleUninstallingId = ref<string | null>(null)
 const showModtaleSettings = ref(false)
 const showModtaleDetail = ref(false)
 const modtaleDetailProject = ref<ModtaleProjectDetails | null>(null)
 const modtaleDetailLoading = ref(false)
+const modtaleInstalled = ref<Record<string, ModtaleInstalledInfo>>({})
 
 async function loadData() {
   loading.value = true
@@ -328,6 +331,15 @@ async function loadModtaleStatus() {
   }
 }
 
+async function loadModtaleInstalled() {
+  try {
+    const result = await modtaleApi.getInstalled()
+    modtaleInstalled.value = result.installed
+  } catch (e) {
+    console.error('Failed to load installed Modtale mods:', e)
+  }
+}
+
 async function loadModtaleTags() {
   try {
     const result = await modtaleApi.getTags()
@@ -368,6 +380,8 @@ async function switchToModtale() {
   if (!modtaleStatus.value) {
     await loadModtaleStatus()
   }
+  // Always load installed mods to check for updates
+  loadModtaleInstalled()
   if (modtaleAvailableTags.value.length === 0) {
     loadModtaleTags()
   }
@@ -384,7 +398,7 @@ async function installFromModtale(project: ModtaleProject) {
     const result = await modtaleApi.install(project.id)
     if (result.success) {
       modtaleInstallSuccess.value = project.id
-      await loadData()
+      await Promise.all([loadData(), loadModtaleInstalled()])
       setTimeout(() => { modtaleInstallSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -394,6 +408,33 @@ async function installFromModtale(project: ModtaleProject) {
   } finally {
     modtaleInstallingId.value = null
   }
+}
+
+async function uninstallFromModtale(project: ModtaleProject) {
+  if (!confirm(t('mods.confirmUninstall', { name: project.title }))) return
+
+  modtaleUninstallingId.value = project.id
+  error.value = ''
+  try {
+    const result = await modtaleApi.uninstall(project.id)
+    if (result.success) {
+      await Promise.all([loadData(), loadModtaleInstalled()])
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    modtaleUninstallingId.value = null
+  }
+}
+
+function isModtaleInstalled(projectId: string): boolean {
+  return !!modtaleInstalled.value[projectId]
+}
+
+function getInstalledVersion(projectId: string): string | null {
+  return modtaleInstalled.value[projectId]?.version || null
 }
 
 async function openModtaleDetail(project: ModtaleProject) {
@@ -937,6 +978,9 @@ onMounted(loadData)
                   <span :class="['px-2 py-0.5 rounded text-xs', getClassificationColor(mod.classification)]">
                     {{ mod.classification }}
                   </span>
+                  <span v-if="isModtaleInstalled(mod.id)" class="px-2 py-0.5 rounded text-xs bg-status-success/20 text-status-success">
+                    {{ t('mods.installed') }} {{ getInstalledVersion(mod.id) }}
+                  </span>
                   <span v-if="modtaleInstallSuccess === mod.id" class="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 animate-pulse">
                     {{ t('mods.installSuccess') }}
                   </span>
@@ -967,7 +1011,39 @@ onMounted(loadData)
 
             <!-- Actions -->
             <div class="flex items-center gap-2 shrink-0 ml-4">
+              <!-- Uninstall Button (if installed) -->
               <button
+                v-if="isModtaleInstalled(mod.id)"
+                @click.stop="uninstallFromModtale(mod)"
+                :disabled="modtaleUninstallingId === mod.id"
+                class="px-4 py-2 bg-status-error/20 text-status-error font-medium rounded-lg hover:bg-status-error/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg v-if="modtaleUninstallingId === mod.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                {{ t('mods.uninstall') }}
+              </button>
+              <!-- Reinstall Button (if installed) -->
+              <button
+                v-if="isModtaleInstalled(mod.id)"
+                @click.stop="installFromModtale(mod)"
+                :disabled="modtaleInstallingId === mod.id"
+                class="px-4 py-2 bg-hytale-orange/20 text-hytale-orange font-medium rounded-lg hover:bg-hytale-orange/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg v-if="modtaleInstallingId === mod.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {{ t('mods.update') }}
+              </button>
+              <!-- Install Button (if not installed) -->
+              <button
+                v-if="!isModtaleInstalled(mod.id)"
                 @click.stop="installFromModtale(mod)"
                 :disabled="modtaleInstallingId === mod.id"
                 class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-lg hover:from-cyan-400 hover:to-blue-400 transition-colors flex items-center gap-2 disabled:opacity-50"
