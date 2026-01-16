@@ -397,7 +397,7 @@ router.get('/plugin/players', authMiddleware, async (_req: Request, res: Respons
       res.status(503).json(result);
       return;
     }
-    res.json(result.data);
+    res.json(result);
   } catch (error) {
     res.status(500).json({
       error: 'Failed to get players from plugin',
@@ -414,7 +414,7 @@ router.get('/plugin/info', authMiddleware, async (_req: Request, res: Response) 
       res.status(503).json(result);
       return;
     }
-    res.json(result.data);
+    res.json(result);
   } catch (error) {
     res.status(500).json({
       error: 'Failed to get server info from plugin',
@@ -431,7 +431,7 @@ router.get('/plugin/memory', authMiddleware, async (_req: Request, res: Response
       res.status(503).json(result);
       return;
     }
-    res.json(result.data);
+    res.json(result);
   } catch (error) {
     res.status(500).json({
       error: 'Failed to get memory stats from plugin',
