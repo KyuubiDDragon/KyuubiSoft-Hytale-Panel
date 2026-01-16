@@ -1,10 +1,10 @@
 {
   "Id": "kyuubisoft-api",
   "Name": "KyuubiSoft API",
-  "Version": "1.0.1",
+  "Version": "1.0.2",
   "Description": "REST API for KyuubiSoft Panel - provides player data, server stats, and real-time events",
   "Author": "KyuubiDDragon",
   "Main": "com.kyuubisoft.api.KyuubiSoftAPI",
-  "Dependencies": [],
+  "Dependencies": {},
   "Website": "https://github.com/KyuubiDDragon/Hytale-Server"
 }
