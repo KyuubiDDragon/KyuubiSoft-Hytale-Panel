@@ -112,8 +112,10 @@ export function createBackup(name?: string): ActionResponse & { backup?: BackupI
 
   try {
     // Create tarball using tar command (paths are validated, using single quotes for safety)
+    // Timeout increased to 30 minutes for large backups (1GB+)
     execSync(`tar -czf '${backupFile}' -C '${config.dataPath}' .`, {
-      timeout: 300000, // 5 minutes
+      timeout: 1800000, // 30 minutes
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
     });
 
     const stat = fs.statSync(backupFile);
@@ -188,8 +190,10 @@ export function restoreBackup(backupId: string): ActionResponse {
     fs.mkdirSync(tempDir, { recursive: true });
 
     // Extract backup (paths are validated, using single quotes for safety)
+    // Timeout increased to 30 minutes for large backups (1GB+)
     execSync(`tar -xzf '${filePath}' -C '${tempDir}'`, {
-      timeout: 300000,
+      timeout: 1800000, // 30 minutes
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
     });
 
     // Clear current data and move restored data

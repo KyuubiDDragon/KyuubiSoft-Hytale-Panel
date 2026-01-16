@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
 import { authMiddleware } from '../middleware/auth.js';
 import * as backupService from '../services/backup.js';
 
@@ -74,7 +75,24 @@ router.get('/:id/download', authMiddleware, (req: Request, res: Response) => {
     return;
   }
 
-  res.download(filePath);
+  // Use streaming for large file downloads to prevent memory exhaustion
+  const stat = fs.statSync(filePath);
+  const filename = filePath.split('/').pop() || 'backup.tar.gz';
+
+  res.setHeader('Content-Type', 'application/gzip');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', stat.size);
+
+  const readStream = fs.createReadStream(filePath);
+
+  readStream.on('error', (err) => {
+    console.error('Backup download stream error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ detail: 'Error streaming backup file' });
+    }
+  });
+
+  readStream.pipe(res);
 });
 
 export default router;
