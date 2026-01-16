@@ -447,8 +447,11 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
 
       // Token exists and no failures = authenticated
       // hasAuthRequired alone is not enough to invalidate a valid token
+      // Token file on disk = persistent authentication
       await saveAuthStatus({
         authenticated: true,
+        persistent: true,
+        persistenceType: 'disk',
         lastChecked: Date.now(),
       });
 
