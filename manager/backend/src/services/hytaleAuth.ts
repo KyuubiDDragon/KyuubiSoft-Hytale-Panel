@@ -466,25 +466,37 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
       };
     }
 
-    // Priority 4: Server is asking for authentication
-    if (hasAuthRequired || hasAuthFailure) {
+    // Priority 4: Check saved status - if we were authenticated before and no failures, stay authenticated
+    // This is important for memory-only auth where there's no token file
+    if (status.authenticated) {
+      // Only invalidate if there are explicit failure messages
+      if (hasAuthFailure) {
+        await saveAuthStatus({
+          authenticated: false,
+          lastChecked: Date.now(),
+        });
+        return {
+          success: false,
+          error: 'Authentication may have expired. Please re-authenticate.',
+        };
+      }
+
+      // Was authenticated before and no failures = still authenticated
       await saveAuthStatus({
-        authenticated: false,
+        ...status,
         lastChecked: Date.now(),
       });
-
-      return {
-        success: false,
-        error: 'Server requires authentication. Please initiate the authentication process.',
-      };
-    }
-
-    // No clear indicators - check saved status
-    if (status.authenticated) {
-      // Was authenticated before, assume still valid
       return {
         success: true,
         message: 'Server appears to be authenticated.',
+      };
+    }
+
+    // Priority 5: Server is asking for authentication (only if not already authenticated)
+    if (hasAuthRequired) {
+      return {
+        success: false,
+        error: 'Server requires authentication. Please initiate the authentication process.',
       };
     }
 
