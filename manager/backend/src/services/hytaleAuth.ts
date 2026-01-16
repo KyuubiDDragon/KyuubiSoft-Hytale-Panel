@@ -224,15 +224,26 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
 }
 
 /**
- * Lists all files in the auth directories (both 'auth' and '.auth')
+ * Gets the base Hytale path (parent of serverPath)
+ * e.g., if serverPath is /opt/hytale/server, returns /opt/hytale
+ */
+function getHytaleBasePath(): string {
+  return path.dirname(config.serverPath);
+}
+
+/**
+ * Lists all files in the auth directories
+ * Checks both /opt/hytale/auth and /opt/hytale/server/auth
  */
 export async function listAuthFiles(): Promise<string[]> {
   const allFiles: string[] = [];
+  const basePath = getHytaleBasePath();
 
-  // Check both 'auth' (without dot) and '.auth' (with dot) directories
+  // Check auth directories at different locations
   const authDirs = [
-    path.join(config.serverPath, 'auth'),
-    path.join(config.serverPath, '.auth'),
+    path.join(basePath, 'auth'),           // /opt/hytale/auth (main auth folder)
+    path.join(config.serverPath, 'auth'),  // /opt/hytale/server/auth
+    path.join(config.serverPath, '.auth'), // /opt/hytale/server/.auth
   ];
 
   for (const authDir of authDirs) {
@@ -310,8 +321,16 @@ async function checkTokenFileExists(): Promise<boolean> {
     // First, list what's in the auth directory
     const authFiles = await listAuthFiles();
 
-    // Try common token file locations (both 'auth' and '.auth' directories)
+    const basePath = getHytaleBasePath();
+
+    // Try common token file locations
     const possiblePaths = [
+      // Main auth folder at /opt/hytale/auth (same level as server)
+      path.join(basePath, 'auth', 'credentials.json'),
+      path.join(basePath, 'auth', 'credentials.enc'),
+      path.join(basePath, 'auth', 'auth.enc'),
+      path.join(basePath, 'auth', 'token'),
+      path.join(basePath, 'auth', 'oauth_token'),
       // Root server folder
       path.join(config.serverPath, 'auth.enc'),
       path.join(config.serverPath, '.hytale_token'),
@@ -321,18 +340,14 @@ async function checkTokenFileExists(): Promise<boolean> {
       // Config folder
       path.join(config.serverPath, 'config', 'auth_token'),
       path.join(config.serverPath, 'config', 'oauth_token.json'),
-      // 'auth' folder (without dot)
+      // 'auth' subfolder in server
       path.join(config.serverPath, 'auth', 'credentials.json'),
       path.join(config.serverPath, 'auth', 'credentials.enc'),
       path.join(config.serverPath, 'auth', 'auth.enc'),
-      path.join(config.serverPath, 'auth', 'token'),
-      path.join(config.serverPath, 'auth', 'oauth_token'),
-      // '.auth' folder (with dot)
+      // '.auth' subfolder in server
       path.join(config.serverPath, '.auth', 'credentials.json'),
       path.join(config.serverPath, '.auth', 'credentials.enc'),
       path.join(config.serverPath, '.auth', 'auth.enc'),
-      path.join(config.serverPath, '.auth', 'token'),
-      path.join(config.serverPath, '.auth', 'oauth_token'),
     ];
 
     for (const tokenPath of possiblePaths) {
