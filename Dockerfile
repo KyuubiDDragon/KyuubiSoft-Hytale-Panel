@@ -40,9 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     ca-certificates \
     dbus \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
-    && echo $TZ > /etc/timezone
+    && rm -rf /var/lib/apt/lists/*
+# Note: Timezone is set at runtime in entrypoint.sh using TZ env variable
 
 # ============================================================
 # Create user and directories
