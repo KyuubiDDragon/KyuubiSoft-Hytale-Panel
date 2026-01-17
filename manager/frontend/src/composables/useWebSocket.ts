@@ -1,7 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConsoleStore } from '@/stores/console'
-import api from '@/services/api'
+import { consoleApi } from '@/api/console'
 
 export function useWebSocket() {
   const authStore = useAuthStore()
@@ -175,14 +175,12 @@ export function useWebSocket() {
 
     isLoadingLogs.value = true
     try {
-      const response = await api.get('/console/logs', {
-        params: { tail: limit }
-      })
+      const response = await consoleApi.getLogs(limit)
 
-      if (response.data.logs && response.data.logs.length > 0) {
+      if (response.logs && response.logs.length > 0) {
         // Clear existing logs and add all fetched logs
         consoleStore.clearLogs()
-        for (const log of response.data.logs) {
+        for (const log of response.logs) {
           consoleStore.addLog({
             timestamp: log.timestamp,
             level: log.level,
@@ -191,7 +189,7 @@ export function useWebSocket() {
         }
       }
 
-      return response.data.count
+      return response.count
     } catch (error) {
       console.error('Failed to load logs:', error)
       throw error
