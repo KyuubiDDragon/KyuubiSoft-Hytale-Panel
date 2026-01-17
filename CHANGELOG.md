@@ -6,6 +6,11 @@ All notable changes to the Hytale Server Manager will be documented in this file
 
 ### Added
 
+- **Reverse Proxy Support**: Added `TRUST_PROXY` environment variable for domain routing behind reverse proxies
+  - Enables proper handling of `X-Forwarded-*` headers when running behind nginx, traefik, caddy, etc.
+  - Required for HTTPS access via custom domains (e.g., `manager.example.com`)
+  - Set `TRUST_PROXY=true` in `.env` when using a reverse proxy
+
 - **Patchline Toggle**: Added UI toggle in Settings to switch between "release" and "pre-release" patchlines without editing the .env file
   - Panel stores patchline preference in `/opt/hytale/data/panel-config.json`
   - When patchline changes, server files (HytaleServer.jar, Assets.zip, .hytale-version) are automatically deleted to trigger redownload on next container restart
