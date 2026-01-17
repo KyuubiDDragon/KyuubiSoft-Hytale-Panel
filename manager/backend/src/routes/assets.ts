@@ -15,14 +15,13 @@ router.post('/extract', authMiddleware, (_req: Request, res: Response) => {
   const result = assetService.extractAssets();
 
   if (!result.success) {
-    res.status(500).json(result);
+    res.status(400).json(result);
     return;
   }
 
   res.json({
     success: true,
-    message: `Assets extracted successfully (${result.fileCount} files)`,
-    fileCount: result.fileCount,
+    message: result.message || 'Extraction started',
   });
 });
 

@@ -6,7 +6,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { spawn } from 'child_process';
 import crypto from 'crypto';
 import { config } from '../config.js';
 import { isPathSafe, safePathJoin } from '../utils/pathSecurity.js';
@@ -43,11 +43,26 @@ interface AssetStatus {
   extracted: boolean;
   sourceExists: boolean;
   sourceFile: string | null;
+  sourceSize: number;
   extractedAt: string | null;
   fileCount: number;
   needsUpdate: boolean;
   totalSize: number;
+  extracting: boolean;
+  extractProgress: ExtractionProgress | null;
 }
+
+interface ExtractionProgress {
+  started: string;
+  filesExtracted: number;
+  currentFile: string;
+  status: 'running' | 'completed' | 'failed';
+  error?: string;
+}
+
+// Global extraction state
+let extractionInProgress = false;
+let extractionProgress: ExtractionProgress | null = null;
 
 interface SearchResult {
   path: string;
@@ -84,13 +99,29 @@ export function findAssetsArchive(): string | null {
 }
 
 /**
- * Calculate hash of the assets archive for version tracking
+ * Calculate hash of the assets archive for version tracking (streaming for large files)
  */
-function calculateFileHash(filePath: string): string {
-  const fileBuffer = fs.readFileSync(filePath);
+function calculateFileHashSync(filePath: string): string {
+  // For large files, use file stats (size + mtime) as a quick hash
+  // This avoids loading multi-GB files into memory
+  const stat = fs.statSync(filePath);
   const hashSum = crypto.createHash('sha256');
-  hashSum.update(fileBuffer);
-  return hashSum.digest('hex').substring(0, 16); // Short hash is sufficient
+  hashSum.update(`${stat.size}-${stat.mtimeMs}`);
+  return hashSum.digest('hex').substring(0, 16);
+}
+
+/**
+ * Calculate hash of a large file using streams (async version)
+ */
+async function calculateFileHashAsync(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hashSum = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+
+    stream.on('data', (chunk) => hashSum.update(chunk));
+    stream.on('end', () => resolve(hashSum.digest('hex').substring(0, 16)));
+    stream.on('error', reject);
+  });
 }
 
 /**
@@ -176,33 +207,79 @@ export function getAssetStatus(): AssetStatus {
   const meta = readAssetMeta();
 
   let needsUpdate = false;
+  let sourceSize = 0;
 
-  if (sourceFile && meta) {
-    const currentHash = calculateFileHash(sourceFile);
-    needsUpdate = currentHash !== meta.sourceHash;
+  if (sourceFile) {
+    try {
+      const stat = fs.statSync(sourceFile);
+      sourceSize = stat.size;
+    } catch {
+      // Ignore
+    }
+
+    if (meta) {
+      const currentHash = calculateFileHashSync(sourceFile);
+      needsUpdate = currentHash !== meta.sourceHash;
+    }
   }
 
   return {
     extracted: meta !== null && fs.existsSync(config.assetsPath),
     sourceExists: sourceFile !== null,
     sourceFile: sourceFile,
+    sourceSize: sourceSize,
     extractedAt: meta?.extractedAt || null,
     fileCount: meta?.fileCount || 0,
     needsUpdate: needsUpdate,
     totalSize: fs.existsSync(config.assetsPath) ? getDirectorySize(config.assetsPath) : 0,
+    extracting: extractionInProgress,
+    extractProgress: extractionProgress,
   };
 }
 
 /**
- * Extract assets from the archive
+ * Extract assets from the archive (async with progress tracking)
  */
-export function extractAssets(): { success: boolean; error?: string; fileCount?: number } {
+export function extractAssets(): { success: boolean; error?: string; message?: string } {
   const sourceFile = findAssetsArchive();
 
   if (!sourceFile) {
     return { success: false, error: 'Assets.zip not found in server or data directory' };
   }
 
+  if (extractionInProgress) {
+    return { success: false, error: 'Extraction already in progress' };
+  }
+
+  // Start extraction in background
+  extractionInProgress = true;
+  extractionProgress = {
+    started: new Date().toISOString(),
+    filesExtracted: 0,
+    currentFile: 'Starting...',
+    status: 'running',
+  };
+
+  // Run extraction asynchronously
+  runExtraction(sourceFile).catch((err) => {
+    console.error('[Assets] Extraction error:', err);
+    if (extractionProgress) {
+      extractionProgress.status = 'failed';
+      extractionProgress.error = err.message || 'Unknown error';
+    }
+    extractionInProgress = false;
+  });
+
+  return {
+    success: true,
+    message: 'Extraction started. Check status for progress.'
+  };
+}
+
+/**
+ * Internal async extraction function
+ */
+async function runExtraction(sourceFile: string): Promise<void> {
   try {
     // Create assets directory if it doesn't exist
     if (!fs.existsSync(config.assetsPath)) {
@@ -210,6 +287,10 @@ export function extractAssets(): { success: boolean; error?: string; fileCount?:
     }
 
     // Clear existing assets (except meta file)
+    if (extractionProgress) {
+      extractionProgress.currentFile = 'Clearing old files...';
+    }
+
     const existingItems = fs.readdirSync(config.assetsPath);
     for (const item of existingItems) {
       if (item === ASSET_META_FILE) continue;
@@ -217,18 +298,70 @@ export function extractAssets(): { success: boolean; error?: string; fileCount?:
       fs.rmSync(itemPath, { recursive: true, force: true });
     }
 
-    // Extract using unzip command
-    // Timeout of 10 minutes for large archives
-    execSync(`unzip -q -o '${sourceFile}' -d '${config.assetsPath}'`, {
-      timeout: 600000, // 10 minutes
-      maxBuffer: 1024 * 1024 * 50, // 50MB buffer
+    // Extract using unzip command with verbose output to track progress
+    if (extractionProgress) {
+      extractionProgress.currentFile = 'Extracting...';
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      // Use unzip with verbose mode to track files
+      const unzip = spawn('unzip', ['-o', sourceFile, '-d', config.assetsPath], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let fileCount = 0;
+      let lastFile = '';
+
+      unzip.stdout.on('data', (data: Buffer) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+          // unzip outputs "  inflating: filename" or "   creating: dirname/"
+          const match = line.match(/(?:inflating|creating|extracting):\s+(.+)/);
+          if (match) {
+            fileCount++;
+            lastFile = match[1].trim();
+            if (extractionProgress) {
+              extractionProgress.filesExtracted = fileCount;
+              extractionProgress.currentFile = lastFile.length > 50
+                ? '...' + lastFile.slice(-47)
+                : lastFile;
+            }
+          }
+        }
+      });
+
+      unzip.stderr.on('data', (data: Buffer) => {
+        console.error('[Assets] unzip stderr:', data.toString());
+      });
+
+      unzip.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`unzip exited with code ${code}`));
+        }
+      });
+
+      unzip.on('error', (err) => {
+        reject(err);
+      });
+
+      // Timeout after 60 minutes
+      setTimeout(() => {
+        unzip.kill();
+        reject(new Error('Extraction timed out after 60 minutes'));
+      }, 60 * 60 * 1000);
     });
 
-    // Count extracted files
+    // Count final files
+    if (extractionProgress) {
+      extractionProgress.currentFile = 'Finalizing...';
+    }
+
     const fileCount = countFiles(config.assetsPath);
 
     // Calculate hash and save metadata
-    const sourceHash = calculateFileHash(sourceFile);
+    const sourceHash = calculateFileHashSync(sourceFile);
     writeAssetMeta({
       sourceHash,
       extractedAt: new Date().toISOString(),
@@ -236,12 +369,22 @@ export function extractAssets(): { success: boolean; error?: string; fileCount?:
       fileCount,
     });
 
-    return { success: true, fileCount };
+    if (extractionProgress) {
+      extractionProgress.filesExtracted = fileCount;
+      extractionProgress.currentFile = 'Complete';
+      extractionProgress.status = 'completed';
+    }
+
+    console.log(`[Assets] Extraction complete: ${fileCount} files`);
   } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Extraction failed'
-    };
+    console.error('[Assets] Extraction failed:', error);
+    if (extractionProgress) {
+      extractionProgress.status = 'failed';
+      extractionProgress.error = error instanceof Error ? error.message : 'Unknown error';
+    }
+    throw error;
+  } finally {
+    extractionInProgress = false;
   }
 }
 

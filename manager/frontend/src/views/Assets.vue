@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { assetsApi, type AssetStatus, type AssetFileInfo, type FileContent, type SearchResult } from '@/api/assets'
 
@@ -22,12 +22,14 @@ const showSearch = ref(false)
 const loading = ref(true)
 const loadingFiles = ref(false)
 const loadingContent = ref(false)
-const extracting = ref(false)
 const clearing = ref(false)
 
 // Messages
 const error = ref('')
 const success = ref('')
+
+// Polling for extraction progress
+let progressPollInterval: ReturnType<typeof setInterval> | null = null
 
 // Computed
 const breadcrumbs = computed(() => {
@@ -52,12 +54,28 @@ const fileTypeIcon = computed(() => (file: AssetFileInfo) => {
 })
 
 // Methods
-async function loadStatus() {
-  loading.value = true
+async function loadStatus(showLoading = true) {
+  if (showLoading) loading.value = true
   error.value = ''
   try {
     status.value = await assetsApi.getStatus()
-    if (status.value.extracted) {
+
+    // Start/stop polling based on extraction state
+    if (status.value.extracting && !progressPollInterval) {
+      startProgressPolling()
+    } else if (!status.value.extracting && progressPollInterval) {
+      stopProgressPolling()
+      // Check if extraction just completed
+      if (status.value.extractProgress?.status === 'completed') {
+        success.value = t('assets.extractSuccess')
+        setTimeout(() => success.value = '', 5000)
+        await loadDirectory('')
+      } else if (status.value.extractProgress?.status === 'failed') {
+        error.value = status.value.extractProgress.error || 'Extraction failed'
+      }
+    }
+
+    if (status.value.extracted && !status.value.extracting && files.value.length === 0) {
       await loadDirectory('')
     }
   } catch (e) {
@@ -67,19 +85,33 @@ async function loadStatus() {
   }
 }
 
+function startProgressPolling() {
+  if (progressPollInterval) return
+  progressPollInterval = setInterval(() => {
+    loadStatus(false)
+  }, 1000) // Poll every second
+}
+
+function stopProgressPolling() {
+  if (progressPollInterval) {
+    clearInterval(progressPollInterval)
+    progressPollInterval = null
+  }
+}
+
 async function extractAssets() {
-  extracting.value = true
   error.value = ''
   success.value = ''
   try {
     const result = await assetsApi.extract()
-    success.value = t('assets.extractSuccess')
-    await loadStatus()
-    setTimeout(() => success.value = '', 5000)
+    if (result.success) {
+      // Extraction started in background, start polling
+      await loadStatus(false)
+    } else {
+      error.value = result.error || 'Failed to start extraction'
+    }
   } catch (e) {
-    error.value = 'Extraction failed'
-  } finally {
-    extracting.value = false
+    error.value = 'Failed to start extraction'
   }
 }
 
@@ -221,6 +253,7 @@ watch(searchQuery, () => {
 })
 
 onMounted(loadStatus)
+onUnmounted(stopProgressPolling)
 </script>
 
 <template>
@@ -324,6 +357,35 @@ onMounted(loadStatus)
       </div>
     </div>
 
+    <!-- Extraction Progress Card -->
+    <div v-else-if="status && status.extracting" class="card">
+      <div class="card-header">
+        <h3 class="text-lg font-semibold text-white">{{ t('assets.extracting') }}</h3>
+      </div>
+      <div class="card-body">
+        <div class="text-center py-8">
+          <svg class="w-16 h-16 mx-auto text-hytale-orange mb-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <div v-if="status.extractProgress">
+            <p class="text-2xl font-bold text-white mb-2">
+              {{ status.extractProgress.filesExtracted.toLocaleString() }} files
+            </p>
+            <p class="text-gray-400 mb-4 font-mono text-sm truncate max-w-md mx-auto">
+              {{ status.extractProgress.currentFile }}
+            </p>
+            <p class="text-gray-500 text-xs">
+              Started: {{ formatDate(status.extractProgress.started) }}
+            </p>
+          </div>
+          <p v-else class="text-gray-400">{{ t('assets.extracting') }}</p>
+          <p class="text-gray-500 text-sm mt-4">
+            Source: {{ formatSize(status.sourceSize) }} - This may take several minutes for large archives
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Status Card (when not extracted) -->
     <div v-else-if="status && !status.extracted" class="card">
       <div class="card-header">
@@ -335,17 +397,19 @@ onMounted(loadStatus)
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
           </svg>
           <p class="text-gray-400 mb-2">{{ t('assets.notExtracted') }}</p>
-          <p v-if="status.sourceExists" class="text-gray-500 text-sm mb-4">
+          <p v-if="status.sourceExists" class="text-gray-500 text-sm mb-2">
             {{ t('assets.sourceFile') }}: {{ status.sourceFile?.split('/').pop() }}
           </p>
-          <p v-else class="text-status-error text-sm mb-4">{{ t('assets.sourceNotFound') }}</p>
+          <p v-if="status.sourceExists && status.sourceSize" class="text-gray-500 text-sm mb-4">
+            {{ t('assets.size') }}: {{ formatSize(status.sourceSize) }}
+          </p>
+          <p v-if="!status.sourceExists" class="text-status-error text-sm mb-4">{{ t('assets.sourceNotFound') }}</p>
           <button
             v-if="status.sourceExists"
             @click="extractAssets"
-            :disabled="extracting"
-            class="px-6 py-3 bg-hytale-orange hover:bg-hytale-orange/80 disabled:bg-gray-600 text-white font-medium rounded-lg transition-colors"
+            class="px-6 py-3 bg-hytale-orange hover:bg-hytale-orange/80 text-white font-medium rounded-lg transition-colors"
           >
-            {{ extracting ? t('assets.extracting') : t('assets.extract') }}
+            {{ t('assets.extract') }}
           </button>
         </div>
       </div>
@@ -377,14 +441,14 @@ onMounted(loadStatus)
             <div class="flex items-center gap-2">
               <button
                 @click="extractAssets"
-                :disabled="extracting"
+                :disabled="status.extracting"
                 class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-white text-sm rounded-lg transition-colors"
               >
-                {{ extracting ? t('assets.extracting') : t('assets.reExtract') }}
+                {{ status.extracting ? t('assets.extracting') : t('assets.reExtract') }}
               </button>
               <button
                 @click="clearCache"
-                :disabled="clearing"
+                :disabled="clearing || status.extracting"
                 class="px-3 py-1.5 bg-gray-700 hover:bg-status-error/20 hover:text-status-error disabled:bg-gray-800 text-gray-400 text-sm rounded-lg transition-colors"
               >
                 {{ clearing ? t('assets.clearing') : t('assets.clearCache') }}
