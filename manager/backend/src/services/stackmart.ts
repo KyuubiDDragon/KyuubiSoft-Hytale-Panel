@@ -246,7 +246,9 @@ async function stackmartRequest<T>(
 
   try {
     const baseUrl = isPublic ? STACKMART_PUBLIC_API : STACKMART_API_BASE + '/api';
-    const url = new URL(endpoint, baseUrl);
+    // Ensure endpoint doesn't start with / to properly append to base URL
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+    const url = new URL(`${baseUrl}/${cleanEndpoint}`);
 
     const headers: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (compatible; KyuubiSoft-HytalePanel/1.0)',
