@@ -105,9 +105,17 @@ export const permissionsApi = {
 
 // ============== WORLDS ==============
 
+export interface WorldFileInfo {
+  name: string
+  path: string  // relative path within world (e.g., "config.json" or "resources/Time.json")
+  size: number
+  lastModified: string
+}
+
 export interface WorldInfo {
   name: string
   hasConfig: boolean
+  files: WorldFileInfo[]  // All editable JSON files in this world
 }
 
 export interface WorldClientEffects {
@@ -144,6 +152,14 @@ export interface WorldConfig {
   raw?: Record<string, unknown>
 }
 
+export interface WorldFileContent {
+  worldName: string
+  filePath: string
+  fileName: string
+  content: Record<string, unknown>
+  raw: string
+}
+
 export const worldsApi = {
   async get(): Promise<{ worlds: WorldInfo[] }> {
     const response = await api.get<{ worlds: WorldInfo[] }>('/management/worlds')
@@ -157,6 +173,20 @@ export const worldsApi = {
 
   async updateConfig(worldName: string, updates: Partial<WorldConfig>): Promise<{ success: boolean; message?: string }> {
     const response = await api.put<{ success: boolean; message?: string }>(`/management/worlds/${encodeURIComponent(worldName)}/config`, updates)
+    return response.data
+  },
+
+  // Generic file read/write for any JSON file in a world
+  async getFile(worldName: string, filePath: string): Promise<WorldFileContent> {
+    const response = await api.get<WorldFileContent>(`/management/worlds/${encodeURIComponent(worldName)}/files/${filePath}`)
+    return response.data
+  },
+
+  async updateFile(worldName: string, filePath: string, content: Record<string, unknown> | string): Promise<{ success: boolean; message?: string }> {
+    const response = await api.put<{ success: boolean; message?: string }>(
+      `/management/worlds/${encodeURIComponent(worldName)}/files/${filePath}`,
+      { content }
+    )
     return response.data
   },
 }

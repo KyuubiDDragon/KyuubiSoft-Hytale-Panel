@@ -1,22 +1,39 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { worldsApi, type WorldInfo, type WorldConfig } from '@/api/management'
+import { worldsApi, type WorldInfo, type WorldConfig, type WorldFileInfo } from '@/api/management'
 
 const { t } = useI18n()
 
 // State
 const worlds = ref<WorldInfo[]>([])
 const selectedWorld = ref<string | null>(null)
+const selectedFile = ref<string | null>(null) // File path within world
 const worldConfig = ref<WorldConfig | null>(null)
+const fileContent = ref<string>('')
 const loading = ref(true)
-const loadingConfig = ref(false)
+const loadingFile = ref(false)
 const saving = ref(false)
 const error = ref('')
 const saveSuccess = ref(false)
+const expandedWorlds = ref<Set<string>>(new Set())
 
-// Editable form state
+// Editable form state (for config.json special handling)
 const form = ref<Partial<WorldConfig>>({})
+
+// Computed: Is the selected file config.json?
+const isConfigJson = computed(() => selectedFile.value === 'config.json')
+
+// Computed: Get selected world's files
+const selectedWorldFiles = computed(() => {
+  const world = worlds.value.find(w => w.name === selectedWorld.value)
+  if (!world || !world.files) return { root: [], resources: [] }
+
+  const root = world.files.filter(f => !f.path.includes('/'))
+  const resources = world.files.filter(f => f.path.startsWith('resources/'))
+
+  return { root, resources }
+})
 
 async function loadWorlds() {
   loading.value = true
@@ -24,11 +41,19 @@ async function loadWorlds() {
   try {
     const data = await worldsApi.get()
     worlds.value = data.worlds
-    // Auto-select first world with config
-    if (data.worlds.length > 0 && !selectedWorld.value) {
-      const worldWithConfig = data.worlds.find(w => w.hasConfig)
-      if (worldWithConfig) {
-        selectWorld(worldWithConfig.name)
+    // Auto-expand first world
+    if (data.worlds.length > 0) {
+      expandedWorlds.value.add(data.worlds[0].name)
+      if (!selectedWorld.value) {
+        selectedWorld.value = data.worlds[0].name
+        // Auto-select config.json
+        const world = data.worlds[0]
+        if (world.files && world.files.length > 0) {
+          const configFile = world.files.find(f => f.path === 'config.json')
+          if (configFile) {
+            selectFile(world.name, configFile.path)
+          }
+        }
       }
     }
   } catch (e) {
@@ -38,54 +63,95 @@ async function loadWorlds() {
   }
 }
 
-async function selectWorld(worldName: string) {
+function toggleWorld(worldName: string) {
+  if (expandedWorlds.value.has(worldName)) {
+    expandedWorlds.value.delete(worldName)
+  } else {
+    expandedWorlds.value.add(worldName)
+  }
+  // Also select this world
   selectedWorld.value = worldName
-  loadingConfig.value = true
+}
+
+async function selectFile(worldName: string, filePath: string) {
+  selectedWorld.value = worldName
+  selectedFile.value = filePath
+  loadingFile.value = true
   error.value = ''
   saveSuccess.value = false
+
   try {
-    worldConfig.value = await worldsApi.getConfig(worldName)
-    // Initialize form with current values
-    form.value = {
-      isTicking: worldConfig.value.isTicking,
-      isBlockTicking: worldConfig.value.isBlockTicking,
-      isPvpEnabled: worldConfig.value.isPvpEnabled,
-      isFallDamageEnabled: worldConfig.value.isFallDamageEnabled,
-      isGameTimePaused: worldConfig.value.isGameTimePaused,
-      isSpawningNPC: worldConfig.value.isSpawningNPC,
-      isAllNPCFrozen: worldConfig.value.isAllNPCFrozen,
-      isSpawnMarkersEnabled: worldConfig.value.isSpawnMarkersEnabled,
-      isObjectiveMarkersEnabled: worldConfig.value.isObjectiveMarkersEnabled,
-      isSavingPlayers: worldConfig.value.isSavingPlayers,
-      isSavingChunks: worldConfig.value.isSavingChunks,
-      saveNewChunks: worldConfig.value.saveNewChunks,
-      isUnloadingChunks: worldConfig.value.isUnloadingChunks,
-      daytimeDurationSecondsOverride: worldConfig.value.daytimeDurationSecondsOverride,
-      nighttimeDurationSecondsOverride: worldConfig.value.nighttimeDurationSecondsOverride,
-      clientEffects: worldConfig.value.clientEffects ? { ...worldConfig.value.clientEffects } : {},
+    if (filePath === 'config.json') {
+      // Use specialized config endpoint for config.json
+      worldConfig.value = await worldsApi.getConfig(worldName)
+      // Initialize form with current values
+      form.value = {
+        isTicking: worldConfig.value.isTicking,
+        isBlockTicking: worldConfig.value.isBlockTicking,
+        isPvpEnabled: worldConfig.value.isPvpEnabled,
+        isFallDamageEnabled: worldConfig.value.isFallDamageEnabled,
+        isGameTimePaused: worldConfig.value.isGameTimePaused,
+        isSpawningNPC: worldConfig.value.isSpawningNPC,
+        isAllNPCFrozen: worldConfig.value.isAllNPCFrozen,
+        isSpawnMarkersEnabled: worldConfig.value.isSpawnMarkersEnabled,
+        isObjectiveMarkersEnabled: worldConfig.value.isObjectiveMarkersEnabled,
+        isSavingPlayers: worldConfig.value.isSavingPlayers,
+        isSavingChunks: worldConfig.value.isSavingChunks,
+        saveNewChunks: worldConfig.value.saveNewChunks,
+        isUnloadingChunks: worldConfig.value.isUnloadingChunks,
+        daytimeDurationSecondsOverride: worldConfig.value.daytimeDurationSecondsOverride,
+        nighttimeDurationSecondsOverride: worldConfig.value.nighttimeDurationSecondsOverride,
+        clientEffects: worldConfig.value.clientEffects ? { ...worldConfig.value.clientEffects } : {},
+      }
+      fileContent.value = ''
+    } else {
+      // Use generic file endpoint for other files
+      const data = await worldsApi.getFile(worldName, filePath)
+      fileContent.value = JSON.stringify(data.content, null, 2)
+      worldConfig.value = null
     }
   } catch (e) {
-    error.value = 'Failed to load world config'
+    error.value = `Failed to load ${filePath}`
     worldConfig.value = null
+    fileContent.value = ''
   } finally {
-    loadingConfig.value = false
+    loadingFile.value = false
   }
 }
 
-async function saveConfig() {
-  if (!selectedWorld.value) return
+async function saveFile() {
+  if (!selectedWorld.value || !selectedFile.value) return
+
   saving.value = true
   error.value = ''
   saveSuccess.value = false
+
   try {
-    await worldsApi.updateConfig(selectedWorld.value, form.value)
+    if (selectedFile.value === 'config.json') {
+      // Use specialized config endpoint
+      await worldsApi.updateConfig(selectedWorld.value, form.value)
+    } else {
+      // Parse and save generic file
+      const content = JSON.parse(fileContent.value)
+      await worldsApi.updateFile(selectedWorld.value, selectedFile.value, content)
+    }
     saveSuccess.value = true
     setTimeout(() => saveSuccess.value = false, 3000)
   } catch (e) {
-    error.value = 'Failed to save config'
+    if (e instanceof SyntaxError) {
+      error.value = 'Invalid JSON syntax'
+    } else {
+      error.value = 'Failed to save file'
+    }
   } finally {
     saving.value = false
   }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 onMounted(loadWorlds)
@@ -127,42 +193,86 @@ onMounted(loadWorlds)
       </div>
     </div>
 
-    <!-- World selector and config -->
+    <!-- World tree and editor -->
     <div v-else class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      <!-- World list -->
+      <!-- File tree -->
       <div class="card lg:col-span-1">
         <div class="card-header">
-          <h3 class="text-lg font-semibold text-white">Worlds</h3>
+          <h3 class="text-lg font-semibold text-white">{{ t('worlds.files') || 'Files' }}</h3>
         </div>
-        <div class="card-body p-0">
-          <div class="divide-y divide-gray-700">
+        <div class="card-body p-0 max-h-[600px] overflow-y-auto">
+          <div v-for="world in worlds" :key="world.name">
+            <!-- World folder -->
             <button
-              v-for="world in worlds"
-              :key="world.name"
-              @click="world.hasConfig && selectWorld(world.name)"
-              class="w-full px-4 py-3 text-left transition-colors flex items-center gap-3"
-              :class="[
-                selectedWorld === world.name ? 'bg-hytale-orange/20 border-l-2 border-hytale-orange' : '',
-                world.hasConfig ? 'hover:bg-gray-700/50 cursor-pointer' : 'opacity-50 cursor-not-allowed'
-              ]"
+              @click="toggleWorld(world.name)"
+              class="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2 border-b border-gray-700"
             >
-              <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg
+                class="w-4 h-4 text-gray-400 transition-transform"
+                :class="{ 'rotate-90': expandedWorlds.has(world.name) }"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+              <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <div class="flex-1">
-                <span class="text-white">{{ world.name }}</span>
-                <span v-if="!world.hasConfig" class="text-xs text-gray-500 block">No config</span>
-              </div>
+              <span class="text-white font-medium">{{ world.name }}</span>
+              <span class="text-xs text-gray-500 ml-auto">{{ world.files?.length || 0 }} files</span>
             </button>
+
+            <!-- Files in world -->
+            <div v-if="expandedWorlds.has(world.name) && selectedWorld === world.name" class="bg-gray-800/50">
+              <!-- Root files -->
+              <button
+                v-for="file in selectedWorldFiles.root"
+                :key="file.path"
+                @click="selectFile(world.name, file.path)"
+                class="w-full pl-10 pr-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                :class="{ 'bg-hytale-orange/20 border-l-2 border-hytale-orange': selectedFile === file.path }"
+              >
+                <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-gray-300 text-sm">{{ file.name }}</span>
+                <span class="text-xs text-gray-500 ml-auto">{{ formatFileSize(file.size) }}</span>
+              </button>
+
+              <!-- Resources folder header -->
+              <div v-if="selectedWorldFiles.resources.length > 0" class="pl-10 pr-4 py-2 flex items-center gap-2 text-gray-500">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span class="text-xs">resources/</span>
+              </div>
+
+              <!-- Resource files -->
+              <button
+                v-for="file in selectedWorldFiles.resources"
+                :key="file.path"
+                @click="selectFile(world.name, file.path)"
+                class="w-full pl-14 pr-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                :class="{ 'bg-hytale-orange/20 border-l-2 border-hytale-orange': selectedFile === file.path }"
+              >
+                <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-gray-300 text-sm">{{ file.name }}</span>
+                <span class="text-xs text-gray-500 ml-auto">{{ formatFileSize(file.size) }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Config editor -->
-      <div v-if="worldConfig && !loadingConfig" class="lg:col-span-3 space-y-6">
-        <!-- Save button -->
+      <!-- File editor -->
+      <div v-if="selectedFile && !loadingFile" class="lg:col-span-3 space-y-6">
+        <!-- Header with save button -->
         <div class="flex items-center justify-between">
-          <h2 class="text-xl font-semibold text-white">{{ worldConfig.displayName || worldConfig.name }}</h2>
+          <div>
+            <h2 class="text-xl font-semibold text-white">{{ selectedFile }}</h2>
+            <p class="text-sm text-gray-400">{{ selectedWorld }}</p>
+          </div>
           <div class="flex items-center gap-3">
             <span v-if="saveSuccess" class="text-status-success flex items-center gap-1">
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -171,7 +281,7 @@ onMounted(loadWorlds)
               Saved
             </span>
             <button
-              @click="saveConfig"
+              @click="saveFile"
               :disabled="saving"
               class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/80 disabled:bg-gray-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
             >
@@ -183,232 +293,143 @@ onMounted(loadWorlds)
           </div>
         </div>
 
-        <!-- World Info -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="text-lg font-semibold text-white">World Info</h3>
-          </div>
-          <div class="card-body">
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <span class="text-gray-400 text-sm">Seed</span>
-                <p class="text-white font-mono">{{ worldConfig.seed }}</p>
-              </div>
-              <div>
-                <span class="text-gray-400 text-sm">Game Time</span>
-                <p class="text-white font-mono text-sm">{{ worldConfig.gameTime || 'N/A' }}</p>
+        <!-- Specialized config.json editor -->
+        <template v-if="isConfigJson && worldConfig">
+          <!-- World Info -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="text-lg font-semibold text-white">World Info</h3>
+            </div>
+            <div class="card-body">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <span class="text-gray-400 text-sm">Seed</span>
+                  <p class="text-white font-mono">{{ worldConfig.seed }}</p>
+                </div>
+                <div>
+                  <span class="text-gray-400 text-sm">Game Time</span>
+                  <p class="text-white font-mono text-sm">{{ worldConfig.gameTime || 'N/A' }}</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Gameplay Settings -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="text-lg font-semibold text-white">Gameplay</h3>
-          </div>
-          <div class="card-body">
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isPvpEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">PvP Enabled</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isFallDamageEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Fall Damage</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isSpawningNPC" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">NPC Spawning</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isAllNPCFrozen" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Freeze All NPCs</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isSpawnMarkersEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Spawn Markers</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isObjectiveMarkersEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Objective Markers</span>
-              </label>
+          <!-- Gameplay Settings -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="text-lg font-semibold text-white">Gameplay</h3>
             </div>
-          </div>
-        </div>
-
-        <!-- Time Settings -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="text-lg font-semibold text-white">Time & Day/Night Cycle</h3>
-          </div>
-          <div class="card-body space-y-4">
-            <label class="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" v-model="form.isGameTimePaused" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-              <span class="text-white">Pause Game Time</span>
-            </label>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Daytime Duration (seconds)</label>
-                <input
-                  type="number"
-                  v-model.number="form.daytimeDurationSecondsOverride"
-                  placeholder="Default"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
-                <p class="text-xs text-gray-500 mt-1">Leave empty for default. e.g. 600 = 10 minutes</p>
-              </div>
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Nighttime Duration (seconds)</label>
-                <input
-                  type="number"
-                  v-model.number="form.nighttimeDurationSecondsOverride"
-                  placeholder="Default"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
-                <p class="text-xs text-gray-500 mt-1">Leave empty for default. e.g. 300 = 5 minutes</p>
+            <div class="card-body">
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isPvpEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">PvP Enabled</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isFallDamageEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Fall Damage</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isSpawningNPC" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">NPC Spawning</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isAllNPCFrozen" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Freeze All NPCs</span>
+                </label>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- World Ticking -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="text-lg font-semibold text-white">World Ticking</h3>
-          </div>
-          <div class="card-body">
-            <div class="grid grid-cols-2 gap-4">
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">World Ticking</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isBlockTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Block Ticking</span>
-              </label>
+          <!-- World Ticking -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="text-lg font-semibold text-white">World Ticking</h3>
             </div>
-          </div>
-        </div>
-
-        <!-- Storage Settings -->
-        <div class="card">
-          <div class="card-header">
-            <h3 class="text-lg font-semibold text-white">Storage & Saving</h3>
-          </div>
-          <div class="card-body">
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isSavingPlayers" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Save Players</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isSavingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Save Chunks</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.saveNewChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Save New Chunks</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" v-model="form.isUnloadingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                <span class="text-white">Unload Chunks</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Visual Effects -->
-        <div class="card" v-if="form.clientEffects">
-          <div class="card-header">
-            <h3 class="text-lg font-semibold text-white">Visual Effects</h3>
-          </div>
-          <div class="card-body space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Sun Height %</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  v-model.number="form.clientEffects.sunHeightPercent"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
-              </div>
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Sun Angle (degrees)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  v-model.number="form.clientEffects.sunAngleDegrees"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
-              </div>
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Sun Intensity</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  v-model.number="form.clientEffects.sunIntensity"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
-              </div>
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Bloom Intensity</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  v-model.number="form.clientEffects.bloomIntensity"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
-              </div>
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Bloom Power</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  v-model.number="form.clientEffects.bloomPower"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
-              </div>
-              <div>
-                <label class="block text-gray-400 text-sm mb-1">Sunshaft Intensity</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  v-model.number="form.clientEffects.sunshaftIntensity"
-                  class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                >
+            <div class="card-body">
+              <div class="grid grid-cols-2 gap-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">World Ticking</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isBlockTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Block Ticking</span>
+                </label>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Raw JSON (collapsible) -->
-        <details class="card">
-          <summary class="card-header cursor-pointer hover:bg-gray-700/50">
-            <h3 class="text-lg font-semibold text-white">Raw Config JSON</h3>
-          </summary>
-          <div class="card-body">
-            <pre class="bg-gray-900 p-4 rounded-lg text-sm text-gray-300 overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
+          <!-- Storage Settings -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="text-lg font-semibold text-white">Storage & Saving</h3>
+            </div>
+            <div class="card-body">
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isSavingPlayers" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Save Players</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isSavingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Save Chunks</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.saveNewChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Save New Chunks</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isUnloadingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Unload Chunks</span>
+                </label>
+              </div>
+            </div>
           </div>
-        </details>
+
+          <!-- Raw JSON (collapsible) -->
+          <details class="card">
+            <summary class="card-header cursor-pointer hover:bg-gray-700/50">
+              <h3 class="text-lg font-semibold text-white">Raw Config JSON</h3>
+            </summary>
+            <div class="card-body">
+              <pre class="bg-gray-900 p-4 rounded-lg text-sm text-gray-300 overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
+            </div>
+          </details>
+        </template>
+
+        <!-- Generic JSON editor for other files -->
+        <template v-else>
+          <div class="card">
+            <div class="card-header">
+              <h3 class="text-lg font-semibold text-white">JSON Editor</h3>
+            </div>
+            <div class="card-body">
+              <textarea
+                v-model="fileContent"
+                class="w-full h-[500px] px-4 py-3 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 font-mono text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange resize-none"
+                spellcheck="false"
+              ></textarea>
+              <p class="text-xs text-gray-500 mt-2">Edit the JSON content above and click Save Changes to apply.</p>
+            </div>
+          </div>
+        </template>
       </div>
 
-      <!-- Loading config state -->
-      <div v-else-if="loadingConfig" class="lg:col-span-3 flex items-center justify-center py-12">
+      <!-- Loading file state -->
+      <div v-else-if="loadingFile" class="lg:col-span-3 flex items-center justify-center py-12">
         <svg class="w-8 h-8 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </div>
 
-      <!-- Select world prompt -->
+      <!-- Select file prompt -->
       <div v-else class="lg:col-span-3 card">
         <div class="card-body text-center py-12">
           <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <p class="text-gray-400">Select a world from the list to edit its configuration.</p>
+          <p class="text-gray-400">Select a file from the tree to view and edit its contents.</p>
         </div>
       </div>
     </div>
