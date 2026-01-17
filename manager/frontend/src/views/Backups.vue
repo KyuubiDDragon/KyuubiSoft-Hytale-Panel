@@ -57,9 +57,24 @@ function handleDelete(id: string) {
   showDeleteModal.value = true
 }
 
-function handleDownload(id: string) {
-  const url = backupApi.getDownloadUrl(id)
-  window.open(url, '_blank')
+async function handleDownload(id: string) {
+  try {
+    const { blob, filename } = await backupApi.download(id)
+
+    // Create a temporary download link
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+
+    // Cleanup
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (err) {
+    error.value = t('errors.serverError')
+  }
 }
 
 async function confirmRestore() {

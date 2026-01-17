@@ -65,4 +65,23 @@ export const backupApi = {
   getDownloadUrl(backupId: string): string {
     return `/api/backups/${backupId}/download`
   },
+
+  async download(backupId: string): Promise<{ blob: Blob; filename: string }> {
+    const response = await api.get(`/backups/${backupId}/download`, {
+      responseType: 'blob',
+      timeout: BACKUP_TIMEOUT,
+    })
+
+    // Extract filename from Content-Disposition header or use default
+    const contentDisposition = response.headers['content-disposition']
+    let filename = `backup-${backupId}.tar.gz`
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^";\n]+)"?/)
+      if (match) {
+        filename = match[1]
+      }
+    }
+
+    return { blob: response.data, filename }
+  },
 }
