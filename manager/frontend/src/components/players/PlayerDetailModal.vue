@@ -117,9 +117,8 @@ const avatarFailed = ref(false)
 
 // Get player avatar URL - try to load from assets
 function getAvatarUrl(): string {
-  // Try common paths for player/character textures
-  // These are potential paths where Hytale might store player textures
-  return assetsApi.getItemIconUrl('Player_Default')
+  // Use dedicated player avatar endpoint that searches for character textures
+  return assetsApi.getPlayerAvatarUrl()
 }
 
 // Handle avatar load error
