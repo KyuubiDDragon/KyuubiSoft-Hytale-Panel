@@ -4,8 +4,17 @@ import path from 'path';
 import { config } from '../config.js';
 import type { PlayerInfo } from '../types/index.js';
 
+// Extended online player info
+interface OnlinePlayerData {
+  joinedAt: Date;
+  uuid?: string;
+  ip?: string;
+  world?: string;
+  lastActivity?: Date;
+}
+
 // Player tracking state
-const onlinePlayers: Map<string, Date> = new Map();
+const onlinePlayers: Map<string, OnlinePlayerData> = new Map();
 let onlinePlayersLoaded = false;
 
 // Blacklist of names that should never be considered players
@@ -57,6 +66,10 @@ async function getOnlinePlayersPath(): Promise<string> {
 interface OnlinePlayerEntry {
   name: string;
   joinedAt: string;
+  uuid?: string;
+  ip?: string;
+  world?: string;
+  lastActivity?: string;
 }
 
 async function loadOnlinePlayers(): Promise<void> {
@@ -67,7 +80,13 @@ async function loadOnlinePlayers(): Promise<void> {
     if (Array.isArray(data)) {
       for (const entry of data) {
         if (isValidPlayerName(entry.name)) {
-          onlinePlayers.set(entry.name, new Date(entry.joinedAt));
+          onlinePlayers.set(entry.name, {
+            joinedAt: new Date(entry.joinedAt),
+            uuid: entry.uuid,
+            ip: entry.ip,
+            world: entry.world,
+            lastActivity: entry.lastActivity ? new Date(entry.lastActivity) : undefined,
+          });
         }
       }
       console.log(`[Players] Loaded ${onlinePlayers.size} online players from persistent storage`);
@@ -81,8 +100,15 @@ async function loadOnlinePlayers(): Promise<void> {
 
 async function saveOnlinePlayers(): Promise<void> {
   const data: OnlinePlayerEntry[] = [];
-  for (const [name, joinedAt] of onlinePlayers) {
-    data.push({ name, joinedAt: joinedAt.toISOString() });
+  for (const [name, playerData] of onlinePlayers) {
+    data.push({
+      name,
+      joinedAt: playerData.joinedAt.toISOString(),
+      uuid: playerData.uuid,
+      ip: playerData.ip,
+      world: playerData.world,
+      lastActivity: playerData.lastActivity?.toISOString(),
+    });
   }
   await writeFile(await getOnlinePlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
 }
@@ -135,10 +161,10 @@ function recordPlayerJoin(name: string, uuid?: string): void {
 
 function recordPlayerLeave(name: string): void {
   const existing = playerHistory.get(name);
-  const joinTime = onlinePlayers.get(name);
+  const playerData = onlinePlayers.get(name);
 
-  if (existing && joinTime) {
-    const sessionDuration = Math.floor((Date.now() - joinTime.getTime()) / 1000);
+  if (existing && playerData) {
+    const sessionDuration = Math.floor((Date.now() - playerData.joinedAt.getTime()) / 1000);
     existing.playTime += sessionDuration;
     existing.lastSeen = new Date().toISOString();
 
@@ -182,6 +208,73 @@ const JOIN_PATTERNS = [
   /(\w+)\s+has joined the game/i,
   /(\w+)\s+logged in with entity id/i,
 ];
+
+// Additional patterns to extract more player info
+const UUID_PATTERNS = [
+  /UUID of player (\w+) is ([a-f0-9-]+)/i,
+  /(\w+)\[.*?([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i,
+  /Identity token validated for (\w+).*?([a-f0-9-]{36})/i,
+];
+
+const IP_PATTERNS = [
+  /(\w+)\[\/([0-9.]+):\d+\]/i,
+  /(\w+) logged in with.*from \/([0-9.]+)/i,
+  /Connection from \/([0-9.]+):\d+.*player[:\s]+(\w+)/i,
+  /(\w+).*connected from ([0-9.]+)/i,
+];
+
+const WORLD_PATTERNS = [
+  /\[World\|(\w+)\]\s+Player '(\w+)'/i,
+  /(\w+) joined world '?(\w+)'?/i,
+  /Adding player '(\w+)' to world '?(\w+)'?/i,
+];
+
+// Helper to extract additional info from log line
+function extractPlayerInfo(line: string, playerName: string): Partial<OnlinePlayerData> {
+  const info: Partial<OnlinePlayerData> = {};
+
+  // Try to extract UUID
+  for (const pattern of UUID_PATTERNS) {
+    const match = pattern.exec(line);
+    if (match) {
+      // Check if player name matches (could be in different capture groups)
+      if (match[1]?.toLowerCase() === playerName.toLowerCase()) {
+        info.uuid = match[2];
+      } else if (match[2]?.toLowerCase() === playerName.toLowerCase()) {
+        info.uuid = match[1];
+      }
+      break;
+    }
+  }
+
+  // Try to extract IP
+  for (const pattern of IP_PATTERNS) {
+    const match = pattern.exec(line);
+    if (match) {
+      if (match[1]?.toLowerCase() === playerName.toLowerCase()) {
+        info.ip = match[2];
+      } else if (match[2]?.toLowerCase() === playerName.toLowerCase()) {
+        info.ip = match[1];
+      }
+      break;
+    }
+  }
+
+  // Try to extract World
+  for (const pattern of WORLD_PATTERNS) {
+    const match = pattern.exec(line);
+    if (match) {
+      if (match[1]?.toLowerCase() === playerName.toLowerCase()) {
+        info.world = match[2];
+      } else if (match[2]?.toLowerCase() === playerName.toLowerCase()) {
+        info.world = match[1];
+      }
+      break;
+    }
+  }
+
+  return info;
+}
 
 const LEAVE_PATTERNS = [
   // Hytale Server specific patterns (from actual logs)
@@ -228,9 +321,26 @@ export async function scanLogs(): Promise<void> {
       const match = pattern.exec(line);
       if (match) {
         const player = match[1];
-        if (isValidPlayerName(player) && !onlinePlayers.has(player)) {
-          onlinePlayers.set(player, new Date());
-          changed = true;
+        if (isValidPlayerName(player)) {
+          const existing = onlinePlayers.get(player);
+          if (!existing) {
+            // New player - extract additional info
+            const extraInfo = extractPlayerInfo(line, player);
+            onlinePlayers.set(player, {
+              joinedAt: new Date(),
+              lastActivity: new Date(),
+              ...extraInfo,
+            });
+            changed = true;
+          } else {
+            // Update existing player info if we find more details
+            const extraInfo = extractPlayerInfo(line, player);
+            if (extraInfo.uuid && !existing.uuid) existing.uuid = extraInfo.uuid;
+            if (extraInfo.ip && !existing.ip) existing.ip = extraInfo.ip;
+            if (extraInfo.world) existing.world = extraInfo.world;
+            existing.lastActivity = new Date();
+            changed = true;
+          }
         }
         break;
       }
@@ -262,11 +372,11 @@ export async function getOnlinePlayers(): Promise<PlayerInfo[]> {
   const now = new Date();
   const players: PlayerInfo[] = [];
 
-  for (const [name, joinedAt] of onlinePlayers) {
-    const durationMs = now.getTime() - joinedAt.getTime();
+  for (const [name, playerData] of onlinePlayers) {
+    const durationMs = now.getTime() - playerData.joinedAt.getTime();
     players.push({
       name,
-      joined_at: joinedAt.toISOString(),
+      joined_at: playerData.joinedAt.toISOString(),
       session_duration_seconds: Math.floor(durationMs / 1000),
       session_duration: formatDuration(durationMs),
     });
@@ -328,8 +438,27 @@ export function processLogLine(line: string): { event: 'join' | 'leave'; player:
       if (!isValidPlayerName(player)) {
         continue;
       }
-      onlinePlayers.set(player, new Date());
-      recordPlayerJoin(player);
+
+      // Extract additional info from the log line
+      const extraInfo = extractPlayerInfo(line, player);
+      const existing = onlinePlayers.get(player);
+
+      if (existing) {
+        // Update existing player with new info
+        if (extraInfo.uuid && !existing.uuid) existing.uuid = extraInfo.uuid;
+        if (extraInfo.ip && !existing.ip) existing.ip = extraInfo.ip;
+        if (extraInfo.world) existing.world = extraInfo.world;
+        existing.lastActivity = new Date();
+      } else {
+        // New player
+        onlinePlayers.set(player, {
+          joinedAt: new Date(),
+          lastActivity: new Date(),
+          ...extraInfo,
+        });
+      }
+
+      recordPlayerJoin(player, extraInfo.uuid);
       // Persist the change
       saveOnlinePlayers().catch(err => console.error('Failed to save online players:', err));
       return { event: 'join', player };
