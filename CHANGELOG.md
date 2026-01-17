@@ -34,6 +34,12 @@ All notable changes to the Hytale Server Manager will be documented in this file
   - Backend limit increased from 1,000 to 10,000 logs
   - `tail=0` parameter loads all available logs
 
+- **Enhanced Update Check**: Update check now shows both release and pre-release versions
+  - Backend checks both patchlines in parallel for faster results
+  - Dashboard displays version cards for both release and pre-release
+  - Active patchline is highlighted with colored border
+  - "Update available!" indicator shown for each patchline with updates
+
 ### Fixed
 
 - **Manager Container Healthcheck**: Fixed container showing "unhealthy" status
@@ -57,3 +63,7 @@ All notable changes to the Hytale Server Manager will be documented in this file
 - **Console Store Reactivity**: Fixed logs not always updating in the UI
   - Changed from `slice()` to `splice()` for in-place array modification
   - Added update counter (`logsUpdated`) for guaranteed reactivity
+
+- **Dashboard Patchline Display**: Fixed dashboard showing wrong patchline after switching
+  - Now prioritizes panel setting (user's configuration) over plugin value
+  - Plugin value is only used as fallback when panel setting unavailable
