@@ -245,9 +245,48 @@ function refreshAll() {
 
 <template>
   <div class="space-y-6">
-    <!-- Authentication Banner -->
+    <!-- Server Authentication Required Banner (after download complete) -->
     <div
-      v-if="showAuthBanner && status?.running"
+      v-if="showAuthBanner && status?.running && hytaleAuthStatus.serverAuthRequired && hytaleAuthStatus.authType === 'downloader'"
+      class="bg-gradient-to-r from-hytale-orange/30 to-status-success/20 border-2 border-hytale-orange rounded-lg p-4"
+    >
+      <div class="flex items-start gap-4">
+        <div class="flex-shrink-0">
+          <svg class="w-8 h-8 text-hytale-orange animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-white mb-1">
+            {{ t('dashboard.downloadComplete') }}
+          </h3>
+          <p class="text-gray-300 text-sm mb-3">
+            {{ t('dashboard.downloadCompleteDesc') }}
+          </p>
+          <button
+            @click="goToSettings"
+            class="btn btn-primary inline-flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            {{ t('dashboard.authenticateServer') }}
+          </button>
+        </div>
+        <button
+          @click="showAuthBanner = false"
+          class="flex-shrink-0 text-gray-400 hover:text-white"
+        >
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- General Authentication Banner -->
+    <div
+      v-else-if="showAuthBanner && status?.running"
       class="bg-gradient-to-r from-status-warning/20 to-hytale-orange/20 border-2 border-status-warning rounded-lg p-4"
     >
       <div class="flex items-start gap-4">

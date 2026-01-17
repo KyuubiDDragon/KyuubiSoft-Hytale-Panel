@@ -13,6 +13,8 @@ export interface HytaleAuthStatus {
   lastChecked?: number;
   persistent?: boolean; // Whether the token is saved to disk or only in memory
   persistenceType?: string; // 'disk' or 'memory'
+  serverAuthRequired?: boolean; // True when server shows "No server tokens configured"
+  authType?: 'none' | 'downloader' | 'server'; // What type of auth is present
 }
 
 export interface HytaleDeviceCodeResponse {
@@ -519,6 +521,34 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
       };
     }
 
+    // Check logs for "No server tokens configured" - indicates server needs auth after download
+    const logs = await getLogs(200);
+    const cleanLogs = stripAnsiCodes(logs);
+
+    const serverAuthNeeded = /no server tokens configured/i.test(cleanLogs);
+
+    // Check if downloader credentials exist (meaning download auth was done)
+    const downloaderCredsExist = await checkDownloaderCredentialsExist();
+
+    if (serverAuthNeeded) {
+      console.log('[HytaleAuth] Server requires authentication (detected "No server tokens configured")');
+
+      // Update status to indicate server auth is specifically required
+      await saveAuthStatus({
+        authenticated: false,
+        serverAuthRequired: true,
+        authType: downloaderCredsExist ? 'downloader' : 'none',
+        lastChecked: Date.now(),
+      });
+
+      return {
+        success: false,
+        error: downloaderCredsExist
+          ? 'Download complete. Server requires separate authentication. Click "Initiate Auth" to authenticate the server.'
+          : 'Server requires authentication. Click "Initiate Auth" to start device login.',
+      };
+    }
+
     // Not authenticated
     return {
       success: false,
@@ -530,6 +560,28 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
       error: error instanceof Error ? error.message : 'Unknown error occurred',
     };
   }
+}
+
+/**
+ * Checks if downloader credentials exist (separate from server auth)
+ */
+async function checkDownloaderCredentialsExist(): Promise<boolean> {
+  const basePath = getHytaleBasePath();
+  const credPaths = [
+    path.join(basePath, 'auth', 'credentials.json'),
+    path.join(basePath, 'auth', 'oauth_credentials.json'),
+    path.join(basePath, 'downloader', '.hytale-downloader-credentials.json'),
+  ];
+
+  for (const credPath of credPaths) {
+    try {
+      await fs.access(credPath);
+      return true;
+    } catch {
+      // Continue checking
+    }
+  }
+  return false;
 }
 
 /**

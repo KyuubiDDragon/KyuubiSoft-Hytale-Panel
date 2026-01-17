@@ -24,6 +24,8 @@ export interface HytaleAuthStatus {
   lastChecked?: number
   persistent?: boolean
   persistenceType?: string // 'disk' or 'memory'
+  serverAuthRequired?: boolean // True when server shows "No server tokens configured"
+  authType?: 'none' | 'downloader' | 'server' // What type of auth is present
 }
 
 export interface HytaleDeviceCodeResponse {
