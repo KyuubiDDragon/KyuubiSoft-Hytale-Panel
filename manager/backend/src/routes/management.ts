@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { readFile, writeFile, readdir, stat, unlink } from 'fs/promises';
+import { readFile, writeFile, readdir, stat, unlink, realpath } from 'fs/promises';
 import path from 'path';
 import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.js';
@@ -716,7 +716,7 @@ async function scanWorldFiles(worldPath: string): Promise<WorldFileInfo[]> {
   return files;
 }
 
-async function scanWorldsInPath(worldsPath: string): Promise<WorldInfo[]> {
+async function scanWorldsInPath(worldsPath: string, seenRealPaths: Set<string>): Promise<WorldInfo[]> {
   const worlds: WorldInfo[] = [];
   try {
     const entries = await readdir(worldsPath, { withFileTypes: true });
@@ -726,6 +726,15 @@ async function scanWorldsInPath(worldsPath: string): Promise<WorldInfo[]> {
 
       const entryPath = path.join(worldsPath, entry.name);
       try {
+        // Resolve symlinks to get the real path
+        const realEntryPath = await realpath(entryPath);
+
+        // Skip if we've already seen this real path (prevents duplicates from symlinks)
+        if (seenRealPaths.has(realEntryPath)) {
+          continue;
+        }
+        seenRealPaths.add(realEntryPath);
+
         const stats = await stat(entryPath);
 
         // Check if this is a real world by looking for config.json
@@ -770,17 +779,13 @@ router.get('/worlds', authMiddleware, async (_req: Request, res: Response) => {
   try {
     let worlds: WorldInfo[] = [];
     const checkedPaths: string[] = [];
+    const seenRealPaths = new Set<string>(); // Track real paths to prevent symlink duplicates
 
     // Check all possible world paths
     for (const worldsPath of getWorldsPaths()) {
       checkedPaths.push(worldsPath);
-      const found = await scanWorldsInPath(worldsPath);
-      // Avoid duplicates
-      for (const world of found) {
-        if (!worlds.some(w => w.path === world.path)) {
-          worlds.push(world);
-        }
-      }
+      const found = await scanWorldsInPath(worldsPath, seenRealPaths);
+      worlds.push(...found);
     }
 
     res.json({ worlds, checkedPaths });
