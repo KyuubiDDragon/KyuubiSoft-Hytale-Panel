@@ -112,6 +112,28 @@ const playerInitial = computed(() => {
   return props.playerName?.[0]?.toUpperCase() || '?'
 })
 
+// Avatar state
+const avatarFailed = ref(false)
+
+// Get player avatar URL - try to load from assets
+function getAvatarUrl(): string {
+  // Try common paths for player/character textures
+  // These are potential paths where Hytale might store player textures
+  return assetsApi.getItemIconUrl('Player_Default')
+}
+
+// Handle avatar load error
+function onAvatarError() {
+  avatarFailed.value = true
+}
+
+// Reset avatar state when modal opens
+watch(() => props.open, (isOpen) => {
+  if (isOpen) {
+    avatarFailed.value = false
+  }
+})
+
 // Health percentage and color
 const healthPercent = computed(() => {
   if (!details.value?.stats) return 0
@@ -329,14 +351,31 @@ const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.
           <div class="flex items-center justify-between px-6 py-4 border-b border-dark-50">
             <div class="flex items-center gap-4">
               <!-- Player Avatar -->
-              <div class="w-12 h-12 bg-hytale-orange/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                <span class="text-hytale-orange font-bold text-xl">{{ playerInitial }}</span>
+              <div class="w-16 h-16 rounded-lg flex-shrink-0 overflow-hidden bg-gradient-to-br from-hytale-orange/30 to-hytale-orange/10 border border-hytale-orange/20">
+                <!-- Try to load avatar from assets -->
+                <img
+                  v-if="!avatarFailed && assetsExtracted"
+                  :src="getAvatarUrl()"
+                  :alt="playerName"
+                  class="w-full h-full object-cover"
+                  @error="onAvatarError"
+                />
+                <!-- Fallback: Stylized player silhouette with initial -->
+                <div v-else class="w-full h-full flex items-center justify-center relative">
+                  <!-- Player silhouette SVG -->
+                  <svg class="w-10 h-10 text-hytale-orange/40 absolute" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                  </svg>
+                  <!-- Initial overlay -->
+                  <span class="text-hytale-orange font-bold text-2xl relative z-10 drop-shadow-lg">{{ playerInitial }}</span>
+                </div>
               </div>
               <div>
                 <h3 class="text-lg font-semibold text-white">{{ playerName }}</h3>
                 <p v-if="details?.uuid" class="text-xs text-gray-500 font-mono truncate max-w-[200px]">
                   {{ details.uuid }}
                 </p>
+                <!-- Online/Offline indicator could go here -->
               </div>
             </div>
             <button
