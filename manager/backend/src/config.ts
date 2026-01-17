@@ -25,6 +25,7 @@ export const config = {
   dataPath: process.env.DATA_PATH || '/opt/hytale/data',
   modsPath: process.env.MODS_PATH || '/opt/hytale/mods',
   pluginsPath: process.env.PLUGINS_PATH || '/opt/hytale/plugins',
+  assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets', // Extracted assets cache (not backed up)
 
   // Server
   port: parseInt(process.env.MANAGER_PORT || '18080', 10),

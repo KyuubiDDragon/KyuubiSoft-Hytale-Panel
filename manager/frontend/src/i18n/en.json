@@ -49,7 +49,8 @@
     "management": "Management",
     "data": "Data",
     "scheduler": "Scheduler",
-    "statistics": "Statistics"
+    "statistics": "Statistics",
+    "assets": "Asset Explorer"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -613,5 +614,55 @@
     "notInstalled": "EasyWebMap Not Installed",
     "notInstalledDesc": "The EasyWebMap mod is not installed. Install it from the Mod Store to enable the live web map feature.",
     "goToModStore": "Go to Mod Store"
+  },
+  "assets": {
+    "title": "Asset Explorer",
+    "subtitle": "Browse and analyze Hytale game assets",
+    "status": "Status",
+    "extracted": "Extracted",
+    "notExtracted": "Not extracted",
+    "sourceFile": "Source File",
+    "sourceNotFound": "Assets.zip not found",
+    "fileCount": "Files",
+    "totalSize": "Total Size",
+    "extractedAt": "Extracted at",
+    "needsUpdate": "Update available",
+    "extract": "Extract Assets",
+    "extracting": "Extracting...",
+    "reExtract": "Re-extract",
+    "clearCache": "Clear Cache",
+    "clearing": "Clearing...",
+    "extractSuccess": "Assets extracted successfully",
+    "clearSuccess": "Asset cache cleared",
+    "browse": "Browse",
+    "search": "Search",
+    "searchPlaceholder": "Search files...",
+    "searchContent": "Also search file content",
+    "noResults": "No results",
+    "noFiles": "No files in this folder",
+    "file": "File",
+    "folder": "Folder",
+    "size": "Size",
+    "modified": "Modified",
+    "path": "Path",
+    "preview": "Preview",
+    "download": "Download",
+    "copyPath": "Copy Path",
+    "backToParent": "Parent Folder",
+    "root": "Root",
+    "viewer": {
+      "json": "JSON Viewer",
+      "image": "Image Preview",
+      "text": "Text Viewer",
+      "hex": "Hex Viewer",
+      "unsupported": "Preview not available"
+    },
+    "filters": {
+      "all": "All Files",
+      "json": "JSON Files",
+      "images": "Images",
+      "text": "Text Files",
+      "other": "Other"
+    }
   }
 }

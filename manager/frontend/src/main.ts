@@ -24,6 +24,7 @@ import ActivityLog from './views/ActivityLog.vue'
 import Scheduler from './views/Scheduler.vue'
 import Statistics from './views/Statistics.vue'
 import WebMap from './views/WebMap.vue'
+import Assets from './views/Assets.vue'
 
 // Import auth store
 import { useAuthStore } from './stores/auth'
@@ -90,6 +91,12 @@ const router = createRouter({
       path: '/mods',
       name: 'mods',
       component: Mods,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/assets',
+      name: 'assets',
+      component: Assets,
       meta: { requiresAuth: true },
     },
     {

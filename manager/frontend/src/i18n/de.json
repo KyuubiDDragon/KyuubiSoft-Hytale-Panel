@@ -49,7 +49,8 @@
     "management": "Verwaltung",
     "data": "Daten",
     "scheduler": "Planer",
-    "statistics": "Statistiken"
+    "statistics": "Statistiken",
+    "assets": "Asset Explorer"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -613,5 +614,55 @@
     "notInstalled": "EasyWebMap nicht installiert",
     "notInstalledDesc": "Das EasyWebMap-Mod ist nicht installiert. Installiere es über den Mod Store, um die Live-Webkarte zu aktivieren.",
     "goToModStore": "Zum Mod Store"
+  },
+  "assets": {
+    "title": "Asset Explorer",
+    "subtitle": "Hytale Spiel-Assets durchsuchen und analysieren",
+    "status": "Status",
+    "extracted": "Entpackt",
+    "notExtracted": "Nicht entpackt",
+    "sourceFile": "Quelldatei",
+    "sourceNotFound": "Assets.zip nicht gefunden",
+    "fileCount": "Dateien",
+    "totalSize": "Gesamtgröße",
+    "extractedAt": "Entpackt am",
+    "needsUpdate": "Update verfügbar",
+    "extract": "Assets entpacken",
+    "extracting": "Entpacke...",
+    "reExtract": "Neu entpacken",
+    "clearCache": "Cache leeren",
+    "clearing": "Lösche...",
+    "extractSuccess": "Assets erfolgreich entpackt",
+    "clearSuccess": "Asset-Cache gelöscht",
+    "browse": "Durchsuchen",
+    "search": "Suchen",
+    "searchPlaceholder": "Dateien suchen...",
+    "searchContent": "Auch in Dateiinhalt suchen",
+    "noResults": "Keine Ergebnisse",
+    "noFiles": "Keine Dateien in diesem Ordner",
+    "file": "Datei",
+    "folder": "Ordner",
+    "size": "Größe",
+    "modified": "Geändert",
+    "path": "Pfad",
+    "preview": "Vorschau",
+    "download": "Herunterladen",
+    "copyPath": "Pfad kopieren",
+    "backToParent": "Übergeordneter Ordner",
+    "root": "Wurzelverzeichnis",
+    "viewer": {
+      "json": "JSON Viewer",
+      "image": "Bildvorschau",
+      "text": "Text Viewer",
+      "hex": "Hex Viewer",
+      "unsupported": "Vorschau nicht verfügbar"
+    },
+    "filters": {
+      "all": "Alle Dateien",
+      "json": "JSON Dateien",
+      "images": "Bilder",
+      "text": "Text Dateien",
+      "other": "Andere"
+    }
   }
 }

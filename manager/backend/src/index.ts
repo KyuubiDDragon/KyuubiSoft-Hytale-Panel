@@ -18,6 +18,7 @@ import backupRoutes from './routes/backup.js';
 import playersRoutes from './routes/players.js';
 import managementRoutes from './routes/management.js';
 import schedulerRoutes from './routes/scheduler.js';
+import assetsRoutes from './routes/assets.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
@@ -59,6 +60,7 @@ app.use('/api/backups', backupRoutes);
 app.use('/api/players', playersRoutes);
 app.use('/api/management', managementRoutes);
 app.use('/api/scheduler', schedulerRoutes);
+app.use('/api/assets', assetsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

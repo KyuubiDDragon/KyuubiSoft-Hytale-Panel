@@ -49,7 +49,8 @@
     "management": "Gerenciamento",
     "data": "Dados",
     "scheduler": "Agendador",
-    "statistics": "Estatísticas"
+    "statistics": "Estatísticas",
+    "assets": "Explorador de Assets"
   },
   "dashboard": {
     "title": "Painel",
@@ -613,5 +614,55 @@
     "notInstalled": "EasyWebMap Não Instalado",
     "notInstalledDesc": "O mod EasyWebMap não está instalado. Instale-o na Loja de Mods para ativar o recurso de mapa web ao vivo.",
     "goToModStore": "Ir para Loja de Mods"
+  },
+  "assets": {
+    "title": "Explorador de Assets",
+    "subtitle": "Navegar e analisar assets do jogo Hytale",
+    "status": "Status",
+    "extracted": "Extraído",
+    "notExtracted": "Não extraído",
+    "sourceFile": "Arquivo Fonte",
+    "sourceNotFound": "Assets.zip não encontrado",
+    "fileCount": "Arquivos",
+    "totalSize": "Tamanho Total",
+    "extractedAt": "Extraído em",
+    "needsUpdate": "Atualização disponível",
+    "extract": "Extrair Assets",
+    "extracting": "Extraindo...",
+    "reExtract": "Re-extrair",
+    "clearCache": "Limpar Cache",
+    "clearing": "Limpando...",
+    "extractSuccess": "Assets extraídos com sucesso",
+    "clearSuccess": "Cache de assets limpo",
+    "browse": "Navegar",
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar arquivos...",
+    "searchContent": "Buscar também no conteúdo",
+    "noResults": "Sem resultados",
+    "noFiles": "Sem arquivos nesta pasta",
+    "file": "Arquivo",
+    "folder": "Pasta",
+    "size": "Tamanho",
+    "modified": "Modificado",
+    "path": "Caminho",
+    "preview": "Prévia",
+    "download": "Baixar",
+    "copyPath": "Copiar Caminho",
+    "backToParent": "Pasta Pai",
+    "root": "Raiz",
+    "viewer": {
+      "json": "Visualizador JSON",
+      "image": "Prévia de Imagem",
+      "text": "Visualizador de Texto",
+      "hex": "Visualizador Hex",
+      "unsupported": "Prévia não disponível"
+    },
+    "filters": {
+      "all": "Todos os Arquivos",
+      "json": "Arquivos JSON",
+      "images": "Imagens",
+      "text": "Arquivos de Texto",
+      "other": "Outros"
+    }
   }
 }
