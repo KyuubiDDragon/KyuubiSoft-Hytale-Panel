@@ -1,8 +1,145 @@
 import { getLogs } from './docker.js';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, readdir } from 'fs/promises';
 import path from 'path';
 import { config } from '../config.js';
 import type { PlayerInfo } from '../types/index.js';
+
+// ============================================================
+// Player Data File Interfaces (from server/universe/players/)
+// ============================================================
+
+export interface PlayerFileInventoryItem {
+  Id: string;
+  Quantity: number;
+  Durability: number;
+  MaxDurability: number;
+  OverrideDroppedItemAnimation?: boolean;
+}
+
+export interface PlayerFileInventoryContainer {
+  Id: string;
+  Capacity: number;
+  Items: Record<string, PlayerFileInventoryItem>;
+}
+
+export interface PlayerFileInventory {
+  Version: number;
+  Storage: PlayerFileInventoryContainer;
+  Armor: PlayerFileInventoryContainer;
+  HotBar: PlayerFileInventoryContainer;
+  Utility: PlayerFileInventoryContainer;
+  Backpack: PlayerFileInventoryContainer;
+  Tool?: PlayerFileInventoryContainer;
+  ActiveHotbarSlot: number;
+  ActiveToolsSlot?: number;
+  ActiveUtilitySlot?: number;
+  SortType?: string;
+}
+
+export interface PlayerFileStat {
+  Id: string;
+  Value: number;
+  Modifiers?: Record<string, unknown>;
+}
+
+export interface PlayerFileEntityStats {
+  Version: number;
+  Stats: Record<string, PlayerFileStat>;
+}
+
+export interface PlayerFileTransform {
+  Position: { X: number; Y: number; Z: number };
+  Rotation: { Pitch: number; Yaw: number; Roll: number };
+}
+
+export interface PlayerFilePlayerData {
+  BlockIdVersion?: number;
+  World?: string;
+  KnownRecipes?: string[];
+  DiscoveredZones?: string[];
+  DiscoveredInstances?: unknown[];
+  PerWorldData?: Record<string, unknown>;
+  ReputationData?: Record<string, unknown>;
+  ActiveObjectiveUUIDs?: string[];
+}
+
+export interface PlayerFileMemory {
+  Id: string;
+  NPCRole: string;
+  TranslationKey: string;
+  IsMemoriesNameOverridden: boolean;
+  CapturedTimestamp: number;
+  FoundLocationNameKey: string;
+}
+
+export interface PlayerFileComponents {
+  Transform?: PlayerFileTransform;
+  Player?: {
+    Version: number;
+    UUID?: { $binary: string; $type: string };
+    Inventory?: PlayerFileInventory;
+    PlayerData?: PlayerFilePlayerData;
+    GameMode?: string;
+    HotbarManager?: unknown;
+    BlockPlacementOverride?: boolean;
+  };
+  EntityStats?: PlayerFileEntityStats;
+  DisplayName?: { DisplayName: { RawText: string } };
+  PlayerMemories?: { Capacity: number; Memories: PlayerFileMemory[] };
+  HeadRotation?: { Rotation: { Pitch: number; Yaw: number; Roll: number } };
+  UniqueItemUsages?: { UniqueItemUsed: string[] };
+}
+
+export interface PlayerFileData {
+  Components: PlayerFileComponents;
+}
+
+// Parsed player inventory for API response
+export interface ParsedInventoryItem {
+  slot: number;
+  itemId: string;
+  displayName: string;
+  amount: number;
+  durability: number;
+  maxDurability: number;
+}
+
+export interface ParsedPlayerInventory {
+  uuid: string;
+  name: string;
+  storage: ParsedInventoryItem[];
+  armor: ParsedInventoryItem[];
+  hotbar: ParsedInventoryItem[];
+  utility: ParsedInventoryItem[];
+  backpack: ParsedInventoryItem[];
+  tools: ParsedInventoryItem[];
+  activeHotbarSlot: number;
+  totalSlots: number;
+  usedSlots: number;
+}
+
+export interface ParsedPlayerStats {
+  health: number;
+  maxHealth: number;
+  stamina: number;
+  maxStamina: number;
+  oxygen: number;
+  mana: number;
+  immunity: number;
+}
+
+export interface ParsedPlayerDetails {
+  uuid: string;
+  name: string;
+  world: string;
+  gameMode: string;
+  position: { x: number; y: number; z: number } | null;
+  rotation: { pitch: number; yaw: number; roll: number } | null;
+  stats: ParsedPlayerStats;
+  discoveredZones: string[];
+  memoriesCount: number;
+  uniqueItemsUsed: string[];
+}
 
 // Single unified player entry - all data in one place
 export interface PlayerEntry {
@@ -465,3 +602,242 @@ export async function getDailyActivity(days: number = 7): Promise<DailyActivity[
 
 // Export PlayerHistoryEntry as alias for backwards compatibility
 export type PlayerHistoryEntry = PlayerEntry;
+
+// ============================================================
+// Player Data File Reading (from server/universe/players/)
+// ============================================================
+
+/**
+ * Get path to universe players directory
+ */
+function getUniversePlayersPath(): string {
+  return path.join(config.serverPath, 'universe', 'players');
+}
+
+/**
+ * Convert item ID to display name (e.g., "Weapon_Sword_Adamantite" -> "Adamantite Sword")
+ */
+function formatItemName(itemId: string): string {
+  // Remove common prefixes and format
+  const parts = itemId.split('_');
+  // Reverse certain patterns for readability
+  if (parts[0] === 'Weapon' || parts[0] === 'Tool' || parts[0] === 'Armor' || parts[0] === 'Food') {
+    // "Weapon_Sword_Adamantite" -> "Adamantite Sword"
+    const type = parts.slice(1, -1).join(' ');
+    const material = parts[parts.length - 1];
+    return `${material} ${type}`.trim();
+  }
+  // Default: just replace underscores with spaces
+  return parts.join(' ');
+}
+
+/**
+ * Parse inventory container to list of items
+ */
+function parseInventoryContainer(container: PlayerFileInventoryContainer | undefined): ParsedInventoryItem[] {
+  if (!container || !container.Items) return [];
+
+  const items: ParsedInventoryItem[] = [];
+  for (const [slotStr, item] of Object.entries(container.Items)) {
+    const slot = parseInt(slotStr, 10);
+    items.push({
+      slot,
+      itemId: item.Id,
+      displayName: formatItemName(item.Id),
+      amount: item.Quantity,
+      durability: item.Durability,
+      maxDurability: item.MaxDurability,
+    });
+  }
+  return items.sort((a, b) => a.slot - b.slot);
+}
+
+/**
+ * Find player UUID by name from our players list
+ */
+async function findPlayerUuidByName(playerName: string): Promise<string | null> {
+  await loadPlayers();
+  const player = players.get(playerName);
+  if (player?.uuid) {
+    return player.uuid;
+  }
+
+  // Try to find by scanning player files
+  try {
+    const playersDir = getUniversePlayersPath();
+    const files = await readdir(playersDir);
+
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+
+      try {
+        const content = await readFile(path.join(playersDir, file), 'utf-8');
+        const data: PlayerFileData = JSON.parse(content);
+        const displayName = data.Components?.DisplayName?.DisplayName?.RawText;
+
+        if (displayName?.toLowerCase() === playerName.toLowerCase()) {
+          return file.replace('.json', '');
+        }
+      } catch {
+        // Skip invalid files
+      }
+    }
+  } catch {
+    // Directory might not exist
+  }
+
+  return null;
+}
+
+/**
+ * Read raw player data from JSON file
+ */
+async function readPlayerFile(uuid: string): Promise<PlayerFileData | null> {
+  try {
+    const filePath = path.join(getUniversePlayersPath(), `${uuid}.json`);
+    const content = await readFile(filePath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get player inventory by name
+ */
+export async function getPlayerInventoryFromFile(playerName: string): Promise<ParsedPlayerInventory | null> {
+  const uuid = await findPlayerUuidByName(playerName);
+  if (!uuid) return null;
+
+  const data = await readPlayerFile(uuid);
+  if (!data) return null;
+
+  const inventory = data.Components?.Player?.Inventory;
+  if (!inventory) return null;
+
+  const displayName = data.Components?.DisplayName?.DisplayName?.RawText || playerName;
+
+  const storage = parseInventoryContainer(inventory.Storage);
+  const armor = parseInventoryContainer(inventory.Armor);
+  const hotbar = parseInventoryContainer(inventory.HotBar);
+  const utility = parseInventoryContainer(inventory.Utility);
+  const backpack = parseInventoryContainer(inventory.Backpack);
+  const tools = parseInventoryContainer(inventory.Tool);
+
+  const allItems = [...storage, ...armor, ...hotbar, ...utility, ...backpack, ...tools];
+
+  return {
+    uuid,
+    name: displayName,
+    storage,
+    armor,
+    hotbar,
+    utility,
+    backpack,
+    tools,
+    activeHotbarSlot: inventory.ActiveHotbarSlot || 0,
+    totalSlots: (inventory.Storage?.Capacity || 0) +
+                (inventory.Armor?.Capacity || 0) +
+                (inventory.HotBar?.Capacity || 0) +
+                (inventory.Utility?.Capacity || 0) +
+                (inventory.Backpack?.Capacity || 0),
+    usedSlots: allItems.length,
+  };
+}
+
+/**
+ * Get player details by name
+ */
+export async function getPlayerDetailsFromFile(playerName: string): Promise<ParsedPlayerDetails | null> {
+  const uuid = await findPlayerUuidByName(playerName);
+  if (!uuid) return null;
+
+  const data = await readPlayerFile(uuid);
+  if (!data) return null;
+
+  const components = data.Components;
+  const player = components?.Player;
+  const entityStats = components?.EntityStats;
+  const transform = components?.Transform;
+  const displayName = components?.DisplayName?.DisplayName?.RawText || playerName;
+
+  // Parse stats
+  const healthStat = entityStats?.Stats?.Health;
+  const staminaStat = entityStats?.Stats?.Stamina;
+  const oxygenStat = entityStats?.Stats?.Oxygen;
+  const manaStat = entityStats?.Stats?.Mana;
+  const immunityStat = entityStats?.Stats?.Immunity;
+
+  // Calculate max health from modifiers
+  let maxHealth = 100; // Base health
+  if (healthStat?.Modifiers) {
+    for (const mod of Object.values(healthStat.Modifiers)) {
+      if ((mod as { Amount?: number }).Amount) {
+        maxHealth += (mod as { Amount: number }).Amount;
+      }
+    }
+  }
+
+  return {
+    uuid,
+    name: displayName,
+    world: player?.PlayerData?.World || 'unknown',
+    gameMode: player?.GameMode || 'unknown',
+    position: transform?.Position ? {
+      x: Math.round(transform.Position.X * 100) / 100,
+      y: Math.round(transform.Position.Y * 100) / 100,
+      z: Math.round(transform.Position.Z * 100) / 100,
+    } : null,
+    rotation: transform?.Rotation ? {
+      pitch: transform.Rotation.Pitch,
+      yaw: transform.Rotation.Yaw,
+      roll: transform.Rotation.Roll,
+    } : null,
+    stats: {
+      health: healthStat?.Value || 0,
+      maxHealth,
+      stamina: staminaStat?.Value || 0,
+      maxStamina: 10, // Default max stamina
+      oxygen: oxygenStat?.Value || 100,
+      mana: manaStat?.Value || 0,
+      immunity: immunityStat?.Value || 0,
+    },
+    discoveredZones: player?.PlayerData?.DiscoveredZones || [],
+    memoriesCount: components?.PlayerMemories?.Memories?.length || 0,
+    uniqueItemsUsed: components?.UniqueItemUsages?.UniqueItemUsed || [],
+  };
+}
+
+/**
+ * Get all available player files (for listing all known players)
+ */
+export async function getAllPlayerFiles(): Promise<{ uuid: string; name: string }[]> {
+  try {
+    const playersDir = getUniversePlayersPath();
+    const files = await readdir(playersDir);
+    const result: { uuid: string; name: string }[] = [];
+
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+
+      try {
+        const content = await readFile(path.join(playersDir, file), 'utf-8');
+        const data: PlayerFileData = JSON.parse(content);
+        const displayName = data.Components?.DisplayName?.DisplayName?.RawText;
+
+        if (displayName) {
+          result.push({
+            uuid: file.replace('.json', ''),
+            name: displayName,
+          });
+        }
+      } catch {
+        // Skip invalid files
+      }
+    }
+
+    return result;
+  } catch {
+    return [];
+  }
+}

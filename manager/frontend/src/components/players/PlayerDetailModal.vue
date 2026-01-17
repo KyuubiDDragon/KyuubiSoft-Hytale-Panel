@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { serverApi, type PluginPlayerDetails, type PluginPlayerInventory, type PluginPlayerAppearance } from '@/api/server'
-import Modal from '@/components/ui/Modal.vue'
+import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
 import Button from '@/components/ui/Button.vue'
 
 const props = defineProps<{
@@ -18,14 +17,13 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 // Tab state
-const activeTab = ref<'info' | 'inventory' | 'appearance'>('info')
+const activeTab = ref<'info' | 'inventory' | 'stats'>('info')
 
 // Data states
 const loading = ref(false)
 const error = ref('')
-const details = ref<PluginPlayerDetails | null>(null)
-const inventory = ref<PluginPlayerInventory | null>(null)
-const appearance = ref<PluginPlayerAppearance | null>(null)
+const details = ref<FilePlayerDetails | null>(null)
+const inventory = ref<FilePlayerInventory | null>(null)
 
 // Fetch data when modal opens
 watch(() => props.open, async (isOpen) => {
@@ -36,7 +34,6 @@ watch(() => props.open, async (isOpen) => {
     activeTab.value = 'info'
     details.value = null
     inventory.value = null
-    appearance.value = null
     error.value = ''
   }
 })
@@ -46,11 +43,10 @@ async function fetchAllData() {
   error.value = ''
 
   try {
-    // Fetch all data in parallel
-    const [detailsRes, inventoryRes, appearanceRes] = await Promise.all([
-      serverApi.getPluginPlayerDetails(props.playerName).catch(() => null),
-      serverApi.getPluginPlayerInventory(props.playerName).catch(() => null),
-      serverApi.getPluginPlayerAppearance(props.playerName).catch(() => null)
+    // Fetch file-based data in parallel
+    const [detailsRes, inventoryRes] = await Promise.all([
+      serverApi.getFilePlayerDetails(props.playerName).catch(() => null),
+      serverApi.getFilePlayerInventory(props.playerName).catch(() => null)
     ])
 
     if (detailsRes?.success && detailsRes.data) {
@@ -59,12 +55,9 @@ async function fetchAllData() {
     if (inventoryRes?.success && inventoryRes.data) {
       inventory.value = inventoryRes.data
     }
-    if (appearanceRes?.success && appearanceRes.data) {
-      appearance.value = appearanceRes.data
-    }
 
-    if (!details.value && !inventory.value && !appearance.value) {
-      error.value = t('players.pluginRequired')
+    if (!details.value && !inventory.value) {
+      error.value = t('players.details.noSavedData')
     }
   } catch (err) {
     error.value = t('errors.connectionFailed')
@@ -73,45 +66,81 @@ async function fetchAllData() {
   }
 }
 
-// Format health as hearts
-function formatHealth(health: number, maxHealth: number): string {
-  const hearts = Math.ceil(health / 2)
-  const maxHearts = Math.ceil(maxHealth / 2)
-  return `${hearts}/${maxHearts}`
-}
-
-// Health color based on percentage
-const healthColor = computed(() => {
-  if (!details.value?.health || !details.value?.maxHealth) return 'text-gray-400'
-  const percentage = (details.value.health / details.value.maxHealth) * 100
-  if (percentage > 75) return 'text-green-400'
-  if (percentage > 40) return 'text-yellow-400'
-  return 'text-red-400'
-})
-
 // Get player initial for avatar
 const playerInitial = computed(() => {
   return props.playerName?.[0]?.toUpperCase() || '?'
 })
 
-// Generate inventory grid (36 slots like Minecraft)
-const inventoryGrid = computed(() => {
-  const grid = Array(36).fill(null)
-  if (inventory.value?.items) {
-    for (const item of inventory.value.items) {
-      if (item.slot >= 0 && item.slot < 36) {
-        grid[item.slot] = item
-      }
+// Health percentage and color
+const healthPercent = computed(() => {
+  if (!details.value?.stats) return 0
+  return Math.min(100, (details.value.stats.health / details.value.stats.maxHealth) * 100)
+})
+
+const healthColor = computed(() => {
+  const p = healthPercent.value
+  if (p > 75) return 'bg-green-500'
+  if (p > 40) return 'bg-yellow-500'
+  return 'bg-red-500'
+})
+
+// Stamina percentage
+const staminaPercent = computed(() => {
+  if (!details.value?.stats) return 0
+  return Math.min(100, (details.value.stats.stamina / details.value.stats.maxStamina) * 100)
+})
+
+// Format durability percentage
+function getDurabilityPercent(item: FileInventoryItem): number {
+  if (!item.maxDurability || item.maxDurability === 0) return 100
+  return Math.min(100, (item.durability / item.maxDurability) * 100)
+}
+
+function getDurabilityColor(item: FileInventoryItem): string {
+  const p = getDurabilityPercent(item)
+  if (p > 60) return 'bg-green-500'
+  if (p > 30) return 'bg-yellow-500'
+  return 'bg-red-500'
+}
+
+// Get icon for item type
+function getItemIcon(itemId: string): string {
+  const id = itemId.toLowerCase()
+  if (id.includes('sword') || id.includes('weapon')) return 'sword'
+  if (id.includes('axe') || id.includes('hatchet')) return 'axe'
+  if (id.includes('pickaxe')) return 'pickaxe'
+  if (id.includes('bow')) return 'bow'
+  if (id.includes('arrow')) return 'arrow'
+  if (id.includes('armor') || id.includes('chest') || id.includes('head') || id.includes('legs') || id.includes('hands')) return 'armor'
+  if (id.includes('shield')) return 'shield'
+  if (id.includes('food') || id.includes('meat') || id.includes('kebab')) return 'food'
+  if (id.includes('potion')) return 'potion'
+  if (id.includes('torch')) return 'torch'
+  if (id.includes('tool') || id.includes('repair')) return 'tool'
+  if (id.includes('teleporter')) return 'teleport'
+  if (id.includes('ingredient') || id.includes('hide') || id.includes('chitin')) return 'ingredient'
+  if (id.includes('plant') || id.includes('flower') || id.includes('cactus')) return 'plant'
+  if (id.includes('rock') || id.includes('soil') || id.includes('cobble')) return 'block'
+  return 'item'
+}
+
+// Generate grid for a container with specified capacity
+function generateGrid(items: FileInventoryItem[], capacity: number): (FileInventoryItem | null)[] {
+  const grid: (FileInventoryItem | null)[] = Array(capacity).fill(null)
+  for (const item of items) {
+    if (item.slot >= 0 && item.slot < capacity) {
+      grid[item.slot] = item
     }
   }
   return grid
-})
-
-// Format item name from ID (e.g., "hytale:diamond_sword" -> "Diamond Sword")
-function formatItemName(itemId: string): string {
-  const name = itemId.split(':').pop() || itemId
-  return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
+
+// Computed inventory grids
+const hotbarGrid = computed(() => inventory.value ? generateGrid(inventory.value.hotbar, 9) : [])
+const armorGrid = computed(() => inventory.value ? generateGrid(inventory.value.armor, 4) : [])
+const utilityGrid = computed(() => inventory.value ? generateGrid(inventory.value.utility, 4) : [])
+const storageGrid = computed(() => inventory.value ? generateGrid(inventory.value.storage, 36) : [])
+const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.value.backpack, 18) : [])
 </script>
 
 <template>
@@ -125,7 +154,7 @@ function formatItemName(itemId: string): string {
         />
 
         <!-- Modal -->
-        <div class="relative bg-dark-200 rounded-xl border border-dark-50 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        <div class="relative bg-dark-200 rounded-xl border border-dark-50 shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-dark-50">
             <div class="flex items-center gap-4">
@@ -135,8 +164,8 @@ function formatItemName(itemId: string): string {
               </div>
               <div>
                 <h3 class="text-lg font-semibold text-white">{{ playerName }}</h3>
-                <p v-if="playerUuid || details?.uuid" class="text-xs text-gray-500 font-mono">
-                  {{ playerUuid || details?.uuid }}
+                <p v-if="details?.uuid" class="text-xs text-gray-500 font-mono truncate max-w-[200px]">
+                  {{ details.uuid }}
                 </p>
               </div>
             </div>
@@ -175,15 +204,15 @@ function formatItemName(itemId: string): string {
               {{ t('players.details.inventory') }}
             </button>
             <button
-              @click="activeTab = 'appearance'"
+              @click="activeTab = 'stats'"
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
-                activeTab === 'appearance'
+                activeTab === 'stats'
                   ? 'bg-dark-100 text-white'
                   : 'text-gray-400 hover:text-white'
               ]"
             >
-              {{ t('players.details.appearance') }}
+              {{ t('players.details.stats') }}
             </button>
           </div>
 
@@ -206,7 +235,6 @@ function formatItemName(itemId: string): string {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               <p class="text-gray-400">{{ error }}</p>
-              <p class="text-gray-500 text-sm mt-2">{{ t('players.pluginHint') }}</p>
             </div>
 
             <!-- Info Tab -->
@@ -232,20 +260,7 @@ function formatItemName(itemId: string): string {
                     </svg>
                     {{ t('players.details.gamemode') }}
                   </div>
-                  <p class="text-white font-medium capitalize">{{ details.gamemode || 'Unknown' }}</p>
-                </div>
-
-                <!-- Health -->
-                <div class="bg-dark-200 rounded-lg p-4">
-                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                    </svg>
-                    {{ t('players.details.health') }}
-                  </div>
-                  <p :class="['font-medium', healthColor]">
-                    {{ details.health?.toFixed(1) || '?' }} / {{ details.maxHealth?.toFixed(1) || '?' }}
-                  </p>
+                  <p class="text-white font-medium capitalize">{{ details.gameMode || 'Unknown' }}</p>
                 </div>
 
                 <!-- Position -->
@@ -259,28 +274,43 @@ function formatItemName(itemId: string): string {
                   </div>
                   <p class="text-white font-medium font-mono text-sm">
                     <span v-if="details.position">
-                      {{ details.position.x.toFixed(1) }}, {{ details.position.y.toFixed(1) }}, {{ details.position.z.toFixed(1) }}
+                      {{ details.position.x }}, {{ details.position.y }}, {{ details.position.z }}
                     </span>
                     <span v-else class="text-gray-500">-</span>
                   </p>
                 </div>
 
-                <!-- Rotation -->
-                <div class="bg-dark-200 rounded-lg p-4 col-span-2">
+                <!-- Discovered Zones -->
+                <div class="bg-dark-200 rounded-lg p-4">
                   <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                     </svg>
-                    {{ t('players.details.rotation') }}
+                    {{ t('players.details.discoveredZones') }}
                   </div>
-                  <div class="flex gap-6">
-                    <p class="text-white font-mono text-sm">
-                      Yaw: <span class="text-hytale-orange">{{ details.yaw?.toFixed(1) || '0' }}</span>
-                    </p>
-                    <p class="text-white font-mono text-sm">
-                      Pitch: <span class="text-hytale-orange">{{ details.pitch?.toFixed(1) || '0' }}</span>
-                    </p>
+                  <p class="text-white font-medium">{{ details.discoveredZones?.length || 0 }}</p>
+                </div>
+
+                <!-- Memories -->
+                <div class="bg-dark-200 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    {{ t('players.details.memories') }}
                   </div>
+                  <p class="text-white font-medium">{{ details.memoriesCount || 0 }} NPCs</p>
+                </div>
+
+                <!-- Unique Items Used -->
+                <div class="bg-dark-200 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    {{ t('players.details.uniqueItems') }}
+                  </div>
+                  <p class="text-white font-medium">{{ details.uniqueItemsUsed?.length || 0 }}</p>
                 </div>
               </div>
 
@@ -294,41 +324,169 @@ function formatItemName(itemId: string): string {
 
             <!-- Inventory Tab -->
             <div v-else-if="activeTab === 'inventory'">
-              <div v-if="inventory" class="space-y-4">
-                <!-- Inventory Stats -->
-                <div class="flex items-center justify-between text-sm text-gray-400 mb-2">
-                  <span>{{ t('players.details.slots') }}: {{ inventory.usedSlots }} / {{ inventory.totalSlots }}</span>
-                </div>
-
-                <!-- Inventory Grid -->
-                <div class="grid grid-cols-9 gap-1">
-                  <div
-                    v-for="(item, index) in inventoryGrid"
-                    :key="index"
-                    :class="[
-                      'aspect-square rounded border flex items-center justify-center relative group',
-                      item ? 'bg-dark-200 border-dark-50 cursor-pointer hover:border-hytale-orange/50' : 'bg-dark-300/50 border-dark-100'
-                    ]"
-                    :title="item ? `${formatItemName(item.itemId)} x${item.amount}` : `Slot ${index}`"
-                  >
-                    <template v-if="item">
-                      <!-- Item icon placeholder -->
-                      <div class="w-6 h-6 bg-hytale-orange/20 rounded flex items-center justify-center">
-                        <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </div>
-                      <!-- Amount badge -->
-                      <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[10px] font-bold text-white">
-                        {{ item.amount }}
-                      </span>
-                    </template>
+              <div v-if="inventory" class="space-y-6">
+                <!-- Hotbar -->
+                <div>
+                  <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
+                    </svg>
+                    Hotbar
+                    <span class="text-xs text-gray-500">({{ inventory.hotbar.length }}/9)</span>
+                  </h4>
+                  <div class="grid grid-cols-9 gap-1">
+                    <div
+                      v-for="(item, index) in hotbarGrid"
+                      :key="`hotbar-${index}`"
+                      :class="[
+                        'aspect-square rounded border flex flex-col items-center justify-center relative group',
+                        item ? 'bg-dark-200 border-hytale-orange/30' : 'bg-dark-300/50 border-dark-100',
+                        index === inventory.activeHotbarSlot ? 'ring-2 ring-hytale-orange' : ''
+                      ]"
+                      :title="item ? `${item.displayName} x${item.amount}` : `Slot ${index + 1}`"
+                    >
+                      <template v-if="item">
+                        <div class="w-7 h-7 bg-hytale-orange/20 rounded flex items-center justify-center">
+                          <span class="text-hytale-orange text-xs font-bold">{{ getItemIcon(item.itemId)[0].toUpperCase() }}</span>
+                        </div>
+                        <span v-if="item.amount > 1" class="absolute bottom-0.5 right-1 text-[10px] font-bold text-white drop-shadow">
+                          {{ item.amount }}
+                        </span>
+                        <!-- Durability bar -->
+                        <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-dark-300 rounded-b overflow-hidden">
+                          <div :class="['h-full transition-all', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
+                        </div>
+                      </template>
+                    </div>
                   </div>
                 </div>
 
-                <!-- Empty inventory message -->
-                <div v-if="inventory.usedSlots === 0" class="text-center text-gray-500 py-4">
-                  {{ t('players.details.emptyInventory') }}
+                <!-- Armor + Utility Row -->
+                <div class="grid grid-cols-2 gap-4">
+                  <!-- Armor -->
+                  <div>
+                    <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      {{ t('players.details.armor') }}
+                    </h4>
+                    <div class="grid grid-cols-4 gap-1">
+                      <div
+                        v-for="(item, index) in armorGrid"
+                        :key="`armor-${index}`"
+                        :class="[
+                          'aspect-square rounded border flex flex-col items-center justify-center relative',
+                          item ? 'bg-dark-200 border-blue-500/30' : 'bg-dark-300/50 border-dark-100'
+                        ]"
+                        :title="item ? `${item.displayName}` : ['Head', 'Chest', 'Hands', 'Legs'][index]"
+                      >
+                        <template v-if="item">
+                          <div class="w-6 h-6 bg-blue-500/20 rounded flex items-center justify-center">
+                            <span class="text-blue-400 text-xs font-bold">{{ ['H', 'C', 'G', 'L'][index] }}</span>
+                          </div>
+                          <!-- Durability bar -->
+                          <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-dark-300 rounded-b overflow-hidden">
+                            <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
+                          </div>
+                        </template>
+                        <span v-else class="text-[10px] text-gray-600">{{ ['H', 'C', 'G', 'L'][index] }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Utility -->
+                  <div>
+                    <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {{ t('players.details.utility') }}
+                    </h4>
+                    <div class="grid grid-cols-4 gap-1">
+                      <div
+                        v-for="(item, index) in utilityGrid"
+                        :key="`utility-${index}`"
+                        :class="[
+                          'aspect-square rounded border flex items-center justify-center relative',
+                          item ? 'bg-dark-200 border-purple-500/30' : 'bg-dark-300/50 border-dark-100'
+                        ]"
+                        :title="item ? `${item.displayName} x${item.amount}` : `Utility ${index + 1}`"
+                      >
+                        <template v-if="item">
+                          <div class="w-6 h-6 bg-purple-500/20 rounded flex items-center justify-center">
+                            <span class="text-purple-400 text-xs font-bold">U</span>
+                          </div>
+                          <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white">
+                            {{ item.amount }}
+                          </span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Storage -->
+                <div>
+                  <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    Storage
+                    <span class="text-xs text-gray-500">({{ inventory.storage.length }}/36)</span>
+                  </h4>
+                  <div class="grid grid-cols-9 gap-1">
+                    <div
+                      v-for="(item, index) in storageGrid"
+                      :key="`storage-${index}`"
+                      :class="[
+                        'aspect-square rounded border flex items-center justify-center relative',
+                        item ? 'bg-dark-200 border-dark-50' : 'bg-dark-300/50 border-dark-100'
+                      ]"
+                      :title="item ? `${item.displayName} x${item.amount}` : `Slot ${index + 1}`"
+                    >
+                      <template v-if="item">
+                        <div class="w-6 h-6 bg-gray-600/30 rounded flex items-center justify-center">
+                          <span class="text-gray-300 text-[10px] font-bold">{{ getItemIcon(item.itemId)[0].toUpperCase() }}</span>
+                        </div>
+                        <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow">
+                          {{ item.amount }}
+                        </span>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Backpack -->
+                <div v-if="inventory.backpack.length > 0">
+                  <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                    Backpack
+                    <span class="text-xs text-gray-500">({{ inventory.backpack.length }}/18)</span>
+                  </h4>
+                  <div class="grid grid-cols-9 gap-1">
+                    <div
+                      v-for="(item, index) in backpackGrid"
+                      :key="`backpack-${index}`"
+                      :class="[
+                        'aspect-square rounded border flex items-center justify-center relative',
+                        item ? 'bg-dark-200 border-amber-500/30' : 'bg-dark-300/50 border-dark-100'
+                      ]"
+                      :title="item ? `${item.displayName} x${item.amount}` : `Backpack ${index + 1}`"
+                    >
+                      <template v-if="item">
+                        <div class="w-6 h-6 bg-amber-500/20 rounded flex items-center justify-center">
+                          <span class="text-amber-400 text-[10px] font-bold">{{ getItemIcon(item.itemId)[0].toUpperCase() }}</span>
+                        </div>
+                        <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow">
+                          {{ item.amount }}
+                        </span>
+                      </template>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -337,73 +495,84 @@ function formatItemName(itemId: string): string {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
                 <p class="text-gray-400">{{ t('players.details.inventoryUnavailable') }}</p>
-                <p class="text-gray-500 text-sm mt-1">{{ t('players.details.inventoryHint') }}</p>
               </div>
             </div>
 
-            <!-- Appearance Tab -->
-            <div v-else-if="activeTab === 'appearance'">
-              <div v-if="appearance" class="space-y-4">
-                <!-- Player Model Placeholder -->
-                <div class="flex justify-center mb-6">
-                  <div class="w-32 h-48 bg-dark-200 rounded-lg border border-dark-50 flex items-center justify-center">
-                    <div class="text-center">
-                      <div class="w-16 h-16 bg-hytale-orange/20 rounded-lg mx-auto flex items-center justify-center mb-2">
-                        <span class="text-hytale-orange font-bold text-2xl">{{ playerInitial }}</span>
-                      </div>
-                      <p class="text-xs text-gray-500">{{ t('players.details.modelPreview') }}</p>
+            <!-- Stats Tab -->
+            <div v-else-if="activeTab === 'stats'">
+              <div v-if="details?.stats" class="space-y-6">
+                <!-- Health Bar -->
+                <div class="bg-dark-200 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2 text-gray-300">
+                      <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                      </svg>
+                      {{ t('players.details.health') }}
                     </div>
+                    <span class="text-white font-mono">
+                      {{ details.stats.health.toFixed(1) }} / {{ details.stats.maxHealth.toFixed(1) }}
+                    </span>
+                  </div>
+                  <div class="h-4 bg-dark-300 rounded-full overflow-hidden">
+                    <div :class="['h-full transition-all duration-300', healthColor]" :style="{ width: `${healthPercent}%` }"></div>
                   </div>
                 </div>
 
-                <!-- Appearance Info -->
-                <div class="grid grid-cols-2 gap-4">
-                  <div class="bg-dark-200 rounded-lg p-4">
-                    <div class="text-gray-400 text-sm mb-1">{{ t('players.details.modelType') }}</div>
-                    <p class="text-white font-medium capitalize">{{ appearance.modelType || 'Default' }}</p>
+                <!-- Stamina Bar -->
+                <div class="bg-dark-200 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2 text-gray-300">
+                      <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      {{ t('players.details.stamina') }}
+                    </div>
+                    <span class="text-white font-mono">
+                      {{ details.stats.stamina.toFixed(1) }} / {{ details.stats.maxStamina.toFixed(1) }}
+                    </span>
                   </div>
-
-                  <div class="bg-dark-200 rounded-lg p-4">
-                    <div class="text-gray-400 text-sm mb-1">{{ t('players.details.skinId') }}</div>
-                    <p class="text-white font-medium font-mono text-sm">{{ appearance.skinId || '-' }}</p>
+                  <div class="h-4 bg-dark-300 rounded-full overflow-hidden">
+                    <div class="h-full bg-yellow-500 transition-all duration-300" :style="{ width: `${staminaPercent}%` }"></div>
                   </div>
                 </div>
 
-                <!-- Customization -->
-                <div v-if="appearance.customization" class="bg-dark-200 rounded-lg p-4">
-                  <div class="text-gray-400 text-sm mb-3">{{ t('players.details.customization') }}</div>
-                  <div class="grid grid-cols-2 gap-3 text-sm">
-                    <div v-if="appearance.customization.hairStyle">
-                      <span class="text-gray-500">{{ t('players.details.hairStyle') }}:</span>
-                      <span class="text-white ml-2">{{ appearance.customization.hairStyle }}</span>
-                    </div>
-                    <div v-if="appearance.customization.hairColor">
-                      <span class="text-gray-500">{{ t('players.details.hairColor') }}:</span>
-                      <span class="text-white ml-2">{{ appearance.customization.hairColor }}</span>
-                    </div>
-                    <div v-if="appearance.customization.eyeColor">
-                      <span class="text-gray-500">{{ t('players.details.eyeColor') }}:</span>
-                      <span class="text-white ml-2">{{ appearance.customization.eyeColor }}</span>
-                    </div>
-                    <div v-if="appearance.customization.bodyType">
-                      <span class="text-gray-500">{{ t('players.details.bodyType') }}:</span>
-                      <span class="text-white ml-2">{{ appearance.customization.bodyType }}</span>
-                    </div>
+                <!-- Other Stats Grid -->
+                <div class="grid grid-cols-3 gap-4">
+                  <!-- Oxygen -->
+                  <div class="bg-dark-200 rounded-lg p-4 text-center">
+                    <svg class="w-6 h-6 text-cyan-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                    </svg>
+                    <div class="text-gray-400 text-xs mb-1">{{ t('players.details.oxygen') }}</div>
+                    <div class="text-white font-bold">{{ details.stats.oxygen.toFixed(0) }}%</div>
                   </div>
 
-                  <!-- No customization data -->
-                  <p v-if="!appearance.customization.hairStyle && !appearance.customization.hairColor && !appearance.customization.eyeColor && !appearance.customization.bodyType" class="text-gray-500 text-sm">
-                    {{ t('players.details.noCustomization') }}
-                  </p>
+                  <!-- Mana -->
+                  <div class="bg-dark-200 rounded-lg p-4 text-center">
+                    <svg class="w-6 h-6 text-blue-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <div class="text-gray-400 text-xs mb-1">{{ t('players.details.mana') }}</div>
+                    <div class="text-white font-bold">{{ details.stats.mana.toFixed(0) }}</div>
+                  </div>
+
+                  <!-- Immunity -->
+                  <div class="bg-dark-200 rounded-lg p-4 text-center">
+                    <svg class="w-6 h-6 text-green-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <div class="text-gray-400 text-xs mb-1">{{ t('players.details.immunity') }}</div>
+                    <div class="text-white font-bold">{{ details.stats.immunity.toFixed(0) }}</div>
+                  </div>
                 </div>
               </div>
 
               <div v-else class="flex flex-col items-center justify-center h-48 text-center">
                 <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                <p class="text-gray-400">{{ t('players.details.appearanceUnavailable') }}</p>
-                <p class="text-gray-500 text-sm mt-1">{{ t('players.details.appearanceHint') }}</p>
+                <p class="text-gray-400">{{ t('players.details.noStats') }}</p>
               </div>
             </div>
           </div>

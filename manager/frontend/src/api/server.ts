@@ -211,6 +211,53 @@ export interface PluginPlayerAppearance {
   customization?: PluginAppearanceCustomization
 }
 
+// File-based player data interfaces (from server/universe/players/)
+export interface FileInventoryItem {
+  slot: number
+  itemId: string
+  displayName: string
+  amount: number
+  durability: number
+  maxDurability: number
+}
+
+export interface FilePlayerInventory {
+  uuid: string
+  name: string
+  storage: FileInventoryItem[]
+  armor: FileInventoryItem[]
+  hotbar: FileInventoryItem[]
+  utility: FileInventoryItem[]
+  backpack: FileInventoryItem[]
+  tools: FileInventoryItem[]
+  activeHotbarSlot: number
+  totalSlots: number
+  usedSlots: number
+}
+
+export interface FilePlayerStats {
+  health: number
+  maxHealth: number
+  stamina: number
+  maxStamina: number
+  oxygen: number
+  mana: number
+  immunity: number
+}
+
+export interface FilePlayerDetails {
+  uuid: string
+  name: string
+  world: string
+  gameMode: string
+  position: { x: number; y: number; z: number } | null
+  rotation: { pitch: number; yaw: number; roll: number } | null
+  stats: FilePlayerStats
+  discoveredZones: string[]
+  memoriesCount: number
+  uniqueItemsUsed: string[]
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -332,6 +379,17 @@ export const serverApi = {
 
   async getPluginPlayerAppearance(playerName: string): Promise<PluginApiResponse<PluginPlayerAppearance>> {
     const response = await api.get<PluginApiResponse<PluginPlayerAppearance>>(`/server/plugin/players/${encodeURIComponent(playerName)}/appearance`)
+    return response.data
+  },
+
+  // File-based player data methods (reads from server/universe/players/)
+  async getFilePlayerDetails(playerName: string): Promise<PluginApiResponse<FilePlayerDetails>> {
+    const response = await api.get<PluginApiResponse<FilePlayerDetails>>(`/server/players/${encodeURIComponent(playerName)}/file/details`)
+    return response.data
+  },
+
+  async getFilePlayerInventory(playerName: string): Promise<PluginApiResponse<FilePlayerInventory>> {
+    const response = await api.get<PluginApiResponse<FilePlayerInventory>>(`/server/players/${encodeURIComponent(playerName)}/file/inventory`)
     return response.data
   },
 }
