@@ -179,10 +179,11 @@ export async function postToPlugin<T>(endpoint: string, body?: unknown): Promise
 
     clearTimeout(timeoutId);
 
-    const data = await response.json();
+    const data = await response.json() as Record<string, unknown>;
     return {
       success: response.ok,
-      ...data,
+      data: data.data as T,
+      error: data.error as string | undefined,
     };
   } catch (error) {
     return {
