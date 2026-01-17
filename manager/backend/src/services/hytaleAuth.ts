@@ -388,119 +388,43 @@ async function checkTokenFileExists(): Promise<boolean> {
 
 /**
  * Checks if the authentication has been completed by the user
- * This can be done by checking server logs or attempting to verify auth status
+ * Checks for real server auth tokens (auth.enc), not downloader credentials
  */
 export async function checkAuthCompletion(): Promise<ActionResponse> {
   try {
     const status = await getAuthStatus();
+    const basePath = getHytaleBasePath();
 
-    // First, check if token file exists (most reliable method)
-    const tokenFileExists = await checkTokenFileExists();
-
-    // Get recent logs to check for auth status
-    const logs = await getLogs(200);
-    const cleanLogs = stripAnsiCodes(logs);
-
-    // Look for success indicators in logs
-    // These patterns indicate successful authentication
-    const authSuccessPatterns = [
-      /authentication\s+successful/i,
-      /successfully\s+authenticated/i,
-      /logged\s+in\s+as/i,
-      /auth(?:entication)?\s+complete/i,
-      /token\s+(?:received|saved|stored)/i,
-      /server\s+authenticated/i,
-      /provider\s+authenticated/i,
-      /refresh\s+token\s+saved/i,
+    // Check for REAL server token files (auth.enc)
+    // These are created by /auth login device with persistence Encrypted
+    // NOT credentials.json/oauth_credentials.json (those are downloader credentials)
+    const serverTokenPaths = [
+      path.join(basePath, 'auth', 'auth.enc'),
+      path.join(config.serverPath, '.auth', 'auth.enc'),
+      path.join(config.serverPath, 'auth.enc'),
     ];
 
-    // Look for auth required messages (server asking for authentication)
-    // Note: Only match patterns that indicate the server is currently asking for auth,
-    // NOT patterns that indicate the user initiated auth (like "/auth login")
-    const authRequiredPatterns = [
-      /authentication\s+required/i,
-      /please\s+authenticate/i,
-      /missing\s+authentication/i,
-    ];
-
-    // Look for auth failure patterns
-    const authFailurePatterns = [
-      /authentication\s+failed/i,
-      /invalid\s+(?:token|credentials)/i,
-      /token\s+expired/i,
-      /unauthorized/i,
-    ];
-
-    // Check if persistence is to disk or memory only
-    const persistenceDiskPattern = /persistence\.(?:disk|file)/i;
-    const persistenceMemoryPattern = /persistence\.memory/i;
-
-    const hasSuccessMessage = authSuccessPatterns.some(pattern => pattern.test(cleanLogs));
-    const hasAuthRequired = authRequiredPatterns.some(pattern => pattern.test(cleanLogs));
-    const hasAuthFailure = authFailurePatterns.some(pattern => pattern.test(cleanLogs));
-    const hasPersistenceDisk = persistenceDiskPattern.test(cleanLogs);
-    const hasPersistenceMemory = persistenceMemoryPattern.test(cleanLogs);
-
-    // Priority 1: Token file exists = authenticated (most reliable)
-    if (tokenFileExists) {
-      // Only consider auth failed if there are RECENT failure messages
-      // hasAuthFailure indicates token expired/invalid in the recent logs
-      if (hasAuthFailure) {
+    for (const tokenPath of serverTokenPaths) {
+      try {
+        await fs.access(tokenPath);
+        console.log(`[HytaleAuth] Found server auth token at: ${tokenPath}`);
         await saveAuthStatus({
-          authenticated: false,
+          authenticated: true,
+          persistent: true,
+          persistenceType: 'disk',
           lastChecked: Date.now(),
         });
         return {
-          success: false,
-          error: 'Authentication token exists but may be invalid or expired. Please re-authenticate.',
-        };
-      }
-
-      // Token exists and no failures = authenticated
-      // hasAuthRequired alone is not enough to invalidate a valid token
-      // Token file on disk = persistent authentication
-      await saveAuthStatus({
-        authenticated: true,
-        persistent: true,
-        persistenceType: 'disk',
-        lastChecked: Date.now(),
-      });
-
-      return {
-        success: true,
-        message: 'Server is authenticated.',
-      };
-    }
-
-    // Priority 2: Success message in logs
-    if (hasSuccessMessage) {
-      // Check if it's persistent or memory-only
-      const isPersistent = hasPersistenceDisk || tokenFileExists;
-      const persistenceType = hasPersistenceDisk ? 'disk' : hasPersistenceMemory ? 'memory' : 'unknown';
-
-      await saveAuthStatus({
-        authenticated: true,
-        persistent: isPersistent,
-        persistenceType,
-        lastChecked: Date.now(),
-      });
-
-      if (!isPersistent && hasPersistenceMemory) {
-        return {
           success: true,
-          message: 'Authentication successful, but token is stored in memory only. You will need to re-authenticate after server restart.',
+          message: 'Server is authenticated.',
         };
+      } catch {
+        // File doesn't exist, continue
       }
-
-      return {
-        success: true,
-        message: 'Authentication completed successfully!',
-      };
     }
 
-    // Priority 3: If there's a pending device code, check expiration
+    // If there's a pending device code, check expiration
     if (status.deviceCode) {
-      // Check if the device code has expired
       if (status.expiresAt && Date.now() > status.expiresAt) {
         await saveAuthStatus({ authenticated: false });
         return {
@@ -509,56 +433,24 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
         };
       }
 
-      // Not authenticated yet, but not expired
-      await saveAuthStatus({
-        ...status,
-        lastChecked: Date.now(),
-      });
-
       return {
         success: false,
         error: 'Authentication not yet completed. Please complete the authentication in your browser.',
       };
     }
 
-    // Priority 4: Check saved status - if we were authenticated before and no failures, stay authenticated
-    // This is important for memory-only auth where there's no token file
+    // Check saved status (for memory-only auth)
     if (status.authenticated) {
-      // Only invalidate if there are explicit failure messages
-      if (hasAuthFailure) {
-        await saveAuthStatus({
-          authenticated: false,
-          lastChecked: Date.now(),
-        });
-        return {
-          success: false,
-          error: 'Authentication may have expired. Please re-authenticate.',
-        };
-      }
-
-      // Was authenticated before and no failures = still authenticated
-      await saveAuthStatus({
-        ...status,
-        lastChecked: Date.now(),
-      });
       return {
         success: true,
-        message: 'Server appears to be authenticated.',
+        message: 'Server appears to be authenticated (memory only - will need re-auth after restart).',
       };
     }
 
-    // Priority 5: Server is asking for authentication (only if not already authenticated)
-    if (hasAuthRequired) {
-      return {
-        success: false,
-        error: 'Server requires authentication. Please initiate the authentication process.',
-      };
-    }
-
-    // Default: not authenticated
+    // Not authenticated
     return {
       success: false,
-      error: 'Authentication status unclear. Please check server logs or initiate authentication.',
+      error: 'Server requires authentication. Run /auth persistence Encrypted then /auth login device.',
     };
   } catch (error) {
     return {
