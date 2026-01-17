@@ -16,9 +16,30 @@ export interface PlayerHistoryEntry {
   sessionCount: number
 }
 
+// Unified player entry from JSON files with online status
+export interface UnifiedPlayerEntry {
+  name: string
+  uuid: string
+  online: boolean
+  world?: string
+  gameMode?: string
+  position?: { x: number; y: number; z: number }
+  health?: number
+  maxHealth?: number
+  lastSeen?: string
+  playTime?: number
+  sessionCount?: number
+}
+
 export interface PlayersResponse {
   players: PlayerInfo[]
   count: number
+}
+
+export interface UnifiedPlayersResponse {
+  players: UnifiedPlayerEntry[]
+  count: number
+  onlineCount: number
 }
 
 export interface PlayerHistoryResponse {
@@ -50,6 +71,11 @@ export const playersApi = {
 
   async getOffline(): Promise<PlayerHistoryResponse> {
     const response = await api.get<PlayerHistoryResponse>('/players/offline')
+    return response.data
+  },
+
+  async getAll(): Promise<UnifiedPlayersResponse> {
+    const response = await api.get<UnifiedPlayersResponse>('/players/all')
     return response.data
   },
 

@@ -841,3 +841,107 @@ export async function getAllPlayerFiles(): Promise<{ uuid: string; name: string 
     return [];
   }
 }
+
+// Unified player entry with data from JSON files and online status
+export interface UnifiedPlayerEntry {
+  name: string;
+  uuid: string;
+  online: boolean;
+  world?: string;
+  gameMode?: string;
+  position?: { x: number; y: number; z: number };
+  health?: number;
+  maxHealth?: number;
+  // From session tracking
+  lastSeen?: string;
+  playTime?: number;
+  sessionCount?: number;
+}
+
+/**
+ * Get all players from JSON files with online status merged in
+ * This is the primary source of truth - all players who have ever played
+ */
+export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
+  await loadPlayers(); // Load session tracking data
+
+  try {
+    const playersDir = getUniversePlayersPath();
+    const files = await readdir(playersDir);
+    const result: UnifiedPlayerEntry[] = [];
+
+    // Get list of online player names for quick lookup
+    const onlinePlayerNames = new Set(
+      Array.from(players.values())
+        .filter(p => p.online)
+        .map(p => p.name.toLowerCase())
+    );
+
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+
+      try {
+        const content = await readFile(path.join(playersDir, file), 'utf-8');
+        const data: PlayerFileData = JSON.parse(content);
+        const displayName = data.Components?.DisplayName?.DisplayName?.RawText;
+
+        if (!displayName) continue;
+
+        const uuid = file.replace('.json', '');
+        const isOnline = onlinePlayerNames.has(displayName.toLowerCase());
+
+        // Get session tracking data if available
+        const sessionData = players.get(displayName);
+
+        // Extract data from player file
+        const transform = data.Components?.Transform;
+        const playerData = data.Components?.Player;
+        const entityStats = data.Components?.EntityStats;
+        const healthStat = entityStats?.Stats?.Health;
+
+        // Calculate max health
+        let maxHealth = 100;
+        if (healthStat?.Modifiers) {
+          for (const mod of Object.values(healthStat.Modifiers)) {
+            if ((mod as { Amount?: number }).Amount) {
+              maxHealth += (mod as { Amount: number }).Amount;
+            }
+          }
+        }
+
+        result.push({
+          name: displayName,
+          uuid,
+          online: isOnline,
+          world: playerData?.PlayerData?.World,
+          gameMode: playerData?.GameMode,
+          position: transform?.Position ? {
+            x: Math.round(transform.Position.X * 100) / 100,
+            y: Math.round(transform.Position.Y * 100) / 100,
+            z: Math.round(transform.Position.Z * 100) / 100,
+          } : undefined,
+          health: healthStat?.Value,
+          maxHealth,
+          lastSeen: sessionData?.lastSeen,
+          playTime: sessionData?.playTime,
+          sessionCount: sessionData?.sessionCount,
+        });
+      } catch {
+        // Skip invalid files
+      }
+    }
+
+    // Sort: online first, then by last seen (most recent first)
+    result.sort((a, b) => {
+      if (a.online !== b.online) return a.online ? -1 : 1;
+      if (a.lastSeen && b.lastSeen) {
+        return new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime();
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return result;
+  } catch {
+    return [];
+  }
+}

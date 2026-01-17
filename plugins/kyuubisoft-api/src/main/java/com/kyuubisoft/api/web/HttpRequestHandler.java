@@ -43,6 +43,7 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     private static final Pattern PLAYER_KILL_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/kill$");
     private static final Pattern PLAYER_TELEPORT_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/teleport$");
     private static final Pattern PLAYER_GAMEMODE_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/gamemode$");
+    private static final Pattern PLAYER_INVENTORY_CLEAR_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/inventory/clear$");
 
     private final PlayersHandler playersHandler = new PlayersHandler();
     private final WorldsHandler worldsHandler = new WorldsHandler();
@@ -104,6 +105,11 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
                         sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Gamemode required");
                         return;
                     }
+                }
+                // POST /api/players/{name}/inventory/clear
+                else if ((matcher = PLAYER_INVENTORY_CLEAR_PATTERN.matcher(uri)).matches()) {
+                    String playerName = matcher.group(1);
+                    response = playersHandler.clearInventory(playerName);
                 }
                 else {
                     sendError(ctx, HttpResponseStatus.NOT_FOUND, "POST endpoint not found: " + uri);

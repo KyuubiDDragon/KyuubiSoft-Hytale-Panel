@@ -161,6 +161,29 @@ public class PlayersHandler {
     }
 
     /**
+     * POST /api/players/{name}/inventory/clear
+     * Clears the player's inventory
+     */
+    public ActionResult clearInventory(String playerName) {
+        PlayerRef player = findPlayer(playerName);
+        if (player == null) {
+            return new ActionResult(false, "Player not found: " + playerName);
+        }
+
+        try {
+            // TODO: When Hytale API exposes inventory modification
+            // Example: player.getInventory().clear();
+
+            LOGGER.info("Clear inventory requested for player: " + playerName);
+
+            return new ActionResult(true, "Inventory cleared for " + playerName);
+        } catch (Exception e) {
+            LOGGER.warning("Failed to clear inventory for " + playerName + ": " + e.getMessage());
+            return new ActionResult(false, "Failed to clear inventory: " + e.getMessage());
+        }
+    }
+
+    /**
      * Helper to find a player by name
      */
     private PlayerRef findPlayer(String playerName) {

@@ -352,6 +352,73 @@ router.get('/item-icon/:itemId', (req: Request, res: Response) => {
   });
 });
 
+// GET /api/assets/player-avatar - Get a player avatar/face texture
+// Searches for player character textures in the assets
+router.get('/player-avatar', (req: Request, res: Response) => {
+  // Search for player/character face/avatar textures
+  const searchTerms = [
+    'character',
+    'player',
+    'face',
+    'head',
+    'avatar',
+    'portrait',
+    'npc_human',
+    'human_face',
+  ];
+
+  for (const term of searchTerms) {
+    const results = assetService.searchAssets(term, {
+      extensions: ['.png', '.jpg', '.jpeg'],
+      maxResults: 20,
+      useGlob: false,
+    });
+
+    // Look for face/head/portrait specifically
+    for (const result of results) {
+      const pathLower = result.path.toLowerCase();
+      if (pathLower.includes('face') ||
+          pathLower.includes('head') ||
+          pathLower.includes('portrait') ||
+          pathLower.includes('icon') ||
+          pathLower.includes('avatar')) {
+        const fileResult = assetService.readAssetFile(result.path);
+        if (fileResult.success && fileResult.isBinary && fileResult.mimeType?.startsWith('image/')) {
+          res.setHeader('Content-Type', fileResult.mimeType);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.send(Buffer.from(fileResult.content as string, 'base64'));
+          return;
+        }
+      }
+    }
+  }
+
+  // Not found
+  res.status(404).json({ detail: 'Player avatar texture not found in assets' });
+});
+
+// GET /api/assets/player-avatar-search - Debug: Search for player-related textures
+router.get('/player-avatar-search', authMiddleware, (req: Request, res: Response) => {
+  const searchTerms = ['character', 'player', 'face', 'head', 'avatar', 'portrait', 'human', 'npc'];
+  const allResults: { term: string; paths: string[] }[] = [];
+
+  for (const term of searchTerms) {
+    const results = assetService.searchAssets(term, {
+      extensions: ['.png', '.jpg', '.jpeg'],
+      maxResults: 20,
+      useGlob: false,
+    });
+    if (results.length > 0) {
+      allResults.push({
+        term,
+        paths: results.map(r => r.path),
+      });
+    }
+  }
+
+  res.json({ results: allResults });
+});
+
 // GET /api/assets/item-icon-search/:itemId - Search for item icon path
 // Returns the path if found, useful for debugging/checking if icon exists
 router.get('/item-icon-search/:itemId', authMiddleware, (req: Request, res: Response) => {

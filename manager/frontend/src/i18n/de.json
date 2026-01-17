@@ -172,6 +172,7 @@
     "noPlayers": "Keine Spieler online",
     "noOfflinePlayers": "Keine Offline-Spieler im Verlauf",
     "playerCount": "{count} Spieler online",
+    "total": "gesamt",
     "offlineCount": "{count} Spieler offline",
     "messagePlaceholder": "Nachricht senden...",
     "op": "OP",

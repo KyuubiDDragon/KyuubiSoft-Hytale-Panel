@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version)
-export const PLUGIN_VERSION = '1.0.6';
+export const PLUGIN_VERSION = '1.0.7';
 export const PLUGIN_PORT = 18085;
 export const PLUGIN_JAR_NAME = `KyuubiSoftAPI-${PLUGIN_VERSION}.jar`;
 
@@ -162,6 +162,37 @@ export async function fetchFromPlugin<T>(endpoint: string): Promise<PluginApiRes
 }
 
 /**
+ * POST to the KyuubiSoft API plugin (for actions)
+ */
+export async function postToPlugin<T>(endpoint: string, body?: unknown): Promise<PluginApiResponse & { data?: T }> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const host = getPluginHost();
+    const response = await fetch(`http://${host}:${PLUGIN_PORT}${endpoint}`, {
+      method: 'POST',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    const data = await response.json();
+    return {
+      success: response.ok,
+      ...data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to connect to plugin'
+    };
+  }
+}
+
+/**
  * Get players from the plugin API (more accurate than log parsing)
  */
 export async function getPlayersFromPlugin(): Promise<PluginApiResponse> {
@@ -201,6 +232,20 @@ export async function getPlayerInventoryFromPlugin(playerName: string): Promise<
  */
 export async function getPlayerAppearanceFromPlugin(playerName: string): Promise<PluginApiResponse> {
   return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/appearance`);
+}
+
+/**
+ * Heal a player via the plugin API
+ */
+export async function healPlayerViaPlugin(playerName: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/heal`);
+}
+
+/**
+ * Clear a player's inventory via the plugin API
+ */
+export async function clearInventoryViaPlugin(playerName: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/inventory/clear`);
 }
 
 /**

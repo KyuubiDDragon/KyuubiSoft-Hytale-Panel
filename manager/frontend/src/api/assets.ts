@@ -123,8 +123,17 @@ export const assetsApi = {
     return `/api/assets/item-icon/${encodeURIComponent(itemId)}`
   },
 
+  getPlayerAvatarUrl(): string {
+    return '/api/assets/player-avatar'
+  },
+
   async searchItemIcon(itemId: string): Promise<{ itemId: string; found: boolean; paths: string[] }> {
     const response = await api.get(`/assets/item-icon-search/${encodeURIComponent(itemId)}`)
+    return response.data
+  },
+
+  async searchPlayerAvatar(): Promise<{ results: { term: string; paths: string[] }[] }> {
+    const response = await api.get('/assets/player-avatar-search')
     return response.data
   },
 }
