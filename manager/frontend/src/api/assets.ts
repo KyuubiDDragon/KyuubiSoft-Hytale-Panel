@@ -1,16 +1,24 @@
 import api from './client'
 
-// Extended timeout for extraction (10 minutes)
-const EXTRACT_TIMEOUT = 10 * 60 * 1000
+export interface ExtractionProgress {
+  started: string
+  filesExtracted: number
+  currentFile: string
+  status: 'running' | 'completed' | 'failed'
+  error?: string
+}
 
 export interface AssetStatus {
   extracted: boolean
   sourceExists: boolean
   sourceFile: string | null
+  sourceSize: number
   extractedAt: string | null
   fileCount: number
   needsUpdate: boolean
   totalSize: number
+  extracting: boolean
+  extractProgress: ExtractionProgress | null
 }
 
 export interface AssetFileInfo {
@@ -55,10 +63,8 @@ export const assetsApi = {
     return response.data
   },
 
-  async extract(): Promise<{ success: boolean; message: string; fileCount?: number }> {
-    const response = await api.post('/assets/extract', {}, {
-      timeout: EXTRACT_TIMEOUT,
-    })
+  async extract(): Promise<{ success: boolean; message?: string; error?: string }> {
+    const response = await api.post('/assets/extract', {})
     return response.data
   },
 
