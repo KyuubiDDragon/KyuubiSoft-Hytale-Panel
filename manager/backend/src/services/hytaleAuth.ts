@@ -169,13 +169,20 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
     const cleanLogs = stripAnsiCodes(logs);
 
     // Parse logs to extract device code information
-    // Expected format (based on typical OAuth device flow):
-    // "To authenticate, visit: https://oauth.accounts.hytale.com/oauth2/device/verify"
-    // "And enter code: XXXX-XXXX"
-    // or similar patterns
+    // Hytale server output format:
+    // "Please visit the following URL to authenticate:"
+    // "https://oauth.accounts.hytale.com/oauth2/device/verify?user_code=XXXXXX"
+    // "Authorization code: XXXXXX"
 
-    const urlMatch = cleanLogs.match(/(?:visit|go to):\s*(https?:\/\/[^\s]+)/i);
-    const codeMatch = cleanLogs.match(/(?:code|enter):\s*([A-Z0-9-]+)/i);
+    // Match URL - can be on same line after colon, or on next line after "URL" keyword
+    const urlMatch = cleanLogs.match(/(?:visit|go to)[^:]*:\s*(https?:\/\/[^\s]+)/i)
+      || cleanLogs.match(/URL[^:]*:?\s*\n?\s*(https?:\/\/oauth[^\s]+)/i)
+      || cleanLogs.match(/(https?:\/\/oauth\.accounts\.hytale\.com[^\s]+)/i);
+
+    // Match authorization code - includes lowercase letters
+    const codeMatch = cleanLogs.match(/(?:authorization\s+)?code:\s*([a-zA-Z0-9-]+)/i)
+      || cleanLogs.match(/user_code=([a-zA-Z0-9-]+)/i);
+
     const deviceCodeMatch = cleanLogs.match(/device[_\s]?code:\s*([a-zA-Z0-9_-]+)/i);
 
     if (!urlMatch || !codeMatch) {
