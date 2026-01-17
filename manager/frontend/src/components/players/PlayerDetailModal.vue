@@ -283,6 +283,9 @@ const backpackGrid = computed(() => {
   if (!inventory.value || backpackCapacity.value === 0) return []
   return generateGrid(inventory.value.backpack, backpackCapacity.value)
 })
+
+// Tools grid (usually 2 slots)
+const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.tools, 2) : [])
 </script>
 
 <template>
@@ -526,8 +529,8 @@ const backpackGrid = computed(() => {
                   </div>
                 </div>
 
-                <!-- Armor + Utility Row -->
-                <div class="grid grid-cols-2 gap-4">
+                <!-- Armor + Utility + Tools Row -->
+                <div class="grid grid-cols-3 gap-4">
                   <!-- Armor -->
                   <div>
                     <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
@@ -599,10 +602,54 @@ const backpackGrid = computed(() => {
                           <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
                             U
                           </div>
-                          <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
+                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
                             {{ item.amount }}
                           </span>
                         </template>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Tools (only show if tools exist) -->
+                  <div v-if="toolsGrid.length > 0 && toolsGrid.some(t => t !== null)">
+                    <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                      <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {{ t('players.details.tools') }}
+                    </h4>
+                    <div class="grid grid-cols-2 gap-1">
+                      <div
+                        v-for="(item, index) in toolsGrid"
+                        :key="`tool-${index}`"
+                        :class="[
+                          'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
+                          item ? 'bg-dark-200 border-cyan-500/30 hover:border-cyan-500' : 'bg-dark-300/50 border-dark-100'
+                        ]"
+                        @mouseenter="item && showTooltip(item, $event)"
+                        @mouseleave="hideTooltip"
+                      >
+                        <template v-if="item">
+                          <img
+                            v-if="!iconFailed(item.itemId)"
+                            :src="getItemIconUrl(item.itemId)"
+                            :alt="item.displayName"
+                            class="w-7 h-7 object-contain"
+                            @error="onIconError(item.itemId)"
+                          />
+                          <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
+                            T
+                          </div>
+                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                            {{ item.amount }}
+                          </span>
+                          <!-- Durability bar -->
+                          <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-dark-300 rounded-b overflow-hidden">
+                            <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
+                          </div>
+                        </template>
+                        <span v-else class="text-[10px] text-gray-600">T</span>
                       </div>
                     </div>
                   </div>

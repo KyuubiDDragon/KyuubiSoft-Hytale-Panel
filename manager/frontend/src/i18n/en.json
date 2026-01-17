@@ -225,6 +225,7 @@
       "slots": "Slots",
       "armor": "Armor",
       "utility": "Utility",
+      "tools": "Tools",
       "emptyInventory": "Inventory is empty",
       "inventoryUnavailable": "Inventory unavailable",
       "inventoryHint": "Inventory data will be available once the Hytale API supports it.",
