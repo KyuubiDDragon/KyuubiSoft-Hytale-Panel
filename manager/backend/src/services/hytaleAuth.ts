@@ -172,37 +172,37 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
     // Hytale server output format:
     // "Please visit the following URL to authenticate:"
     // "https://oauth.accounts.hytale.com/oauth2/device/verify?user_code=XXXXXX"
+    // "Or visit the following URL and enter the code:"
+    // "https://oauth.accounts.hytale.com/oauth2/device/verify"
     // "Authorization code: XXXXXX"
 
-    // Match URL - can be on same line after colon, or on next line after "URL" keyword
-    const urlMatch = cleanLogs.match(/(?:visit|go to)[^:]*:\s*(https?:\/\/[^\s]+)/i)
-      || cleanLogs.match(/URL[^:]*:?\s*\n?\s*(https?:\/\/oauth[^\s]+)/i)
-      || cleanLogs.match(/(https?:\/\/oauth\.accounts\.hytale\.com[^\s]+)/i);
+    // First, try to get the complete URL with user_code parameter (preferred)
+    const completeUrlMatch = cleanLogs.match(/(https?:\/\/oauth\.accounts\.hytale\.com\/[^\s]*\?user_code=[a-zA-Z0-9]+)/i);
 
-    // Match authorization code - includes lowercase letters
-    const codeMatch = cleanLogs.match(/(?:authorization\s+)?code:\s*([a-zA-Z0-9-]+)/i)
-      || cleanLogs.match(/user_code=([a-zA-Z0-9-]+)/i);
+    // Fallback: get any oauth URL
+    const basicUrlMatch = cleanLogs.match(/(https?:\/\/oauth\.accounts\.hytale\.com\/[^\s?]+)/i);
 
-    const deviceCodeMatch = cleanLogs.match(/device[_\s]?code:\s*([a-zA-Z0-9_-]+)/i);
+    // Get the authorization code
+    const codeMatch = cleanLogs.match(/authorization\s+code:\s*([a-zA-Z0-9]+)/i);
 
-    if (!urlMatch || !codeMatch) {
+    // Use complete URL if available, otherwise use basic URL
+    let verificationUrl = completeUrlMatch ? completeUrlMatch[1].trim() : (basicUrlMatch ? basicUrlMatch[1].trim() : null);
+    const userCode = codeMatch ? codeMatch[1].trim() : null;
+
+    // If we only have basic URL, try to extract code from URL or use authorization code
+    if (verificationUrl && !verificationUrl.includes('user_code=') && userCode) {
+      verificationUrl += `?user_code=${userCode}`;
+    }
+
+    if (!verificationUrl || !userCode) {
+      console.error('[HytaleAuth] Could not parse auth response. Logs:', cleanLogs.substring(cleanLogs.length - 1000));
       return {
         success: false,
         error: 'Could not parse authentication response from server logs. Make sure the server is running.',
       };
     }
 
-    let verificationUrl = urlMatch[1].trim();
-    const userCode = codeMatch[1].trim();
-    const deviceCode = deviceCodeMatch ? deviceCodeMatch[1].trim() : userCode;
-
-    // Add user code to the verification URL if it's not already there
-    // This allows the user to just open the URL without manually entering the code
-    if (!verificationUrl.includes('?')) {
-      verificationUrl += `?user_code=${userCode}`;
-    } else if (!verificationUrl.includes('user_code=')) {
-      verificationUrl += `&user_code=${userCode}`;
-    }
+    const deviceCode = userCode; // Use userCode as deviceCode
 
     // Save status with expiry (typically 15 minutes for device codes)
     const expiresAt = Date.now() + (15 * 60 * 1000);
