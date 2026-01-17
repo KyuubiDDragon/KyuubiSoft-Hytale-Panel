@@ -25,6 +25,14 @@ All notable changes to the Hytale Server Manager will be documented in this file
   - Patchline settings and labels
   - Restart notifications
   - Mod store hints
+  - Console reconnect and load all buttons
+
+- **Console Reconnect Button**: Added manual reconnect button that appears when WebSocket connection is lost
+  - Allows users to manually reconnect without refreshing the page
+
+- **Console Load All Logs**: Added button to load all available logs from the server
+  - Backend limit increased from 1,000 to 10,000 logs
+  - `tail=0` parameter loads all available logs
 
 ### Fixed
 
@@ -34,3 +42,18 @@ All notable changes to the Hytale Server Manager will be documented in this file
   - Healthcheck now properly waits for application startup
 
 - **Update Check Patchline**: Fixed hardcoded 'release' patchline in update check endpoint to use configured patchline setting
+
+- **Console Log Stream**: Fixed log streaming issues where updates would stop arriving
+  - Backend now automatically restarts log stream after 3 seconds when it ends or errors
+  - Added Docker multiplexed stream demultiplexing to properly parse 8-byte header frames
+  - WebSocket reconnection now uses exponential backoff (3s, 6s, 12s, 24s, 48s)
+  - Added automatic retry after 30 seconds even when max reconnect attempts reached
+
+- **Console Auto-Scroll**: Fixed auto-scroll not always scrolling to bottom
+  - Added 100ms polling interval to continuously check if scroll is needed
+  - Scroll function now retries multiple times to ensure DOM is fully rendered
+  - Uses `flush: 'post'` and `requestAnimationFrame` for reliable timing
+
+- **Console Store Reactivity**: Fixed logs not always updating in the UI
+  - Changed from `slice()` to `splice()` for in-place array modification
+  - Added update counter (`logsUpdated`) for guaranteed reactivity
