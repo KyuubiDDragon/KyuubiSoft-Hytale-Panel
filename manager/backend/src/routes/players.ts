@@ -115,6 +115,19 @@ router.get('/offline', authMiddleware, async (_req: Request, res: Response) => {
   res.json({ players: offline, count: offline.length });
 });
 
+// GET /api/players/all - All players from JSON files with online status
+router.get('/all', authMiddleware, async (_req: Request, res: Response) => {
+  // Update online status based on server status
+  const status = await dockerService.getStatus();
+  if (!status.running) {
+    playersService.clearOnlinePlayers();
+  }
+
+  const players = await playersService.getAllPlayersUnified();
+  const onlineCount = players.filter(p => p.online).length;
+  res.json({ players, count: players.length, onlineCount });
+});
+
 // POST /api/players/:name/kick
 router.post('/:name/kick', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;

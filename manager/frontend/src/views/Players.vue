@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { playersApi, type PlayerInfo, type PlayerHistoryEntry } from '@/api/players'
+import { playersApi, type UnifiedPlayerEntry } from '@/api/players'
 import { serverApi, type PluginPlayer } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
@@ -14,23 +14,18 @@ const { t } = useI18n()
 // Tab state
 const activeTab = ref<'online' | 'offline'>('online')
 
-// Extended player info when plugin is available
-interface ExtendedPlayerInfo extends PlayerInfo {
-  uuid?: string
-  position?: { x: number; y: number; z: number }
-  world?: string
-  health?: number
-  gameMode?: string
-  ping?: number
-}
-
-const players = ref<ExtendedPlayerInfo[]>([])
-const offlinePlayers = ref<PlayerHistoryEntry[]>([])
+// All players from JSON files with online status
+const allPlayers = ref<UnifiedPlayerEntry[]>([])
 const loading = ref(true)
-const offlineLoading = ref(false)
 const error = ref('')
 const successMessage = ref('')
 const pluginAvailable = ref(false)
+
+// Computed: online players
+const onlinePlayers = computed(() => allPlayers.value.filter(p => p.online))
+
+// Computed: offline players
+const offlinePlayers = computed(() => allPlayers.value.filter(p => !p.online))
 
 // Selected player for actions
 const selectedPlayer = ref<string | null>(null)
@@ -68,62 +63,35 @@ let pollInterval: ReturnType<typeof setInterval> | null = null
 
 async function fetchPlayers() {
   try {
-    // Try plugin API first (more accurate and detailed)
+    // Get all players from JSON files with online status
+    const response = await playersApi.getAll()
+    allPlayers.value = response.players
+
+    // Check if plugin is available for enhanced online player data
     try {
       const pluginResponse = await serverApi.getPluginPlayers()
       if (pluginResponse.success && pluginResponse.data) {
         pluginAvailable.value = true
-        players.value = pluginResponse.data.players.map((p: PluginPlayer) => ({
-          name: p.name,
-          session_duration: p.joinedAt ? formatJoinedAt(p.joinedAt) : '-',
-          uuid: p.uuid,
-          position: p.position,
-          world: p.world,
-          health: p.health,
-          gameMode: p.gameMode,
-          ping: p.ping,
-        }))
-        error.value = ''
-        return
+        // Merge plugin data into our unified list for online players
+        for (const pluginPlayer of pluginResponse.data.players) {
+          const player = allPlayers.value.find(p => p.name.toLowerCase() === pluginPlayer.name.toLowerCase())
+          if (player) {
+            player.health = pluginPlayer.health
+            player.position = pluginPlayer.position
+            player.world = pluginPlayer.world
+            player.gameMode = pluginPlayer.gameMode
+          }
+        }
       }
     } catch {
-      // Plugin not available, fall back to standard API
+      pluginAvailable.value = false
     }
 
-    // Fall back to standard API
-    pluginAvailable.value = false
-    const response = await playersApi.getOnline()
-    players.value = response.players
     error.value = ''
   } catch (err) {
     error.value = t('errors.connectionFailed')
   } finally {
     loading.value = false
-  }
-}
-
-function formatJoinedAt(joinedAt: string): string {
-  const joined = new Date(joinedAt)
-  const now = new Date()
-  const diff = now.getTime() - joined.getTime()
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(minutes / 60)
-  if (hours > 0) {
-    return `${hours}h ${minutes % 60}m`
-  }
-  return `${minutes}m`
-}
-
-async function fetchOfflinePlayers() {
-  offlineLoading.value = true
-  try {
-    const response = await playersApi.getOffline()
-    offlinePlayers.value = response.players
-    error.value = ''
-  } catch (err) {
-    error.value = t('errors.connectionFailed')
-  } finally {
-    offlineLoading.value = false
   }
 }
 
@@ -383,7 +351,6 @@ async function confirmGive() {
 
 onMounted(() => {
   fetchPlayers()
-  fetchOfflinePlayers()
   pollInterval = setInterval(fetchPlayers, 10000)
 })
 
@@ -402,7 +369,8 @@ onUnmounted(() => {
         <h1 class="text-2xl font-bold text-white">{{ t('players.title') }}</h1>
         <div class="flex items-center gap-2 mt-1">
           <p class="text-gray-400">
-            {{ t('players.playerCount', { count: players.length }) }}
+            {{ t('players.playerCount', { count: onlinePlayers.length }) }}
+            <span class="text-gray-500 ml-2">({{ allPlayers.length }} {{ t('players.total') }})</span>
           </p>
           <span
             v-if="pluginAvailable"
@@ -440,10 +408,10 @@ onUnmounted(() => {
             : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
-        {{ t('players.online') }} ({{ players.length }})
+        {{ t('players.online') }} ({{ onlinePlayers.length }})
       </button>
       <button
-        @click="activeTab = 'offline'; fetchOfflinePlayers()"
+        @click="activeTab = 'offline'"
         :class="[
           'px-4 py-2 rounded-lg font-medium transition-colors',
           activeTab === 'offline'
@@ -461,7 +429,7 @@ onUnmounted(() => {
         {{ t('common.loading') }}
       </div>
 
-      <div v-else-if="players.length === 0" class="text-center text-gray-500 p-8">
+      <div v-else-if="onlinePlayers.length === 0" class="text-center text-gray-500 p-8">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
         </svg>
@@ -470,7 +438,7 @@ onUnmounted(() => {
 
       <div v-else class="divide-y divide-dark-50/30">
         <div
-          v-for="player in players"
+          v-for="player in onlinePlayers"
           :key="player.name"
           class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
@@ -494,24 +462,18 @@ onUnmounted(() => {
                 </span>
               </div>
               <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
-                <span>{{ t('players.sessionTime') }}: {{ player.session_duration }}</span>
-                <!-- Plugin-provided details -->
-                <span v-if="pluginAvailable && player.ping !== undefined">
-                  <span class="text-gray-600">Ping:</span>
-                  <span :class="player.ping < 100 ? 'text-green-400' : player.ping < 200 ? 'text-yellow-400' : 'text-red-400'">
-                    {{ player.ping }}ms
-                  </span>
-                </span>
-                <span v-if="pluginAvailable && player.health !== undefined">
+                <span v-if="player.playTime">{{ t('players.totalPlayTime') }}: {{ formatPlayTime(player.playTime) }}</span>
+                <!-- Plugin/File-provided details -->
+                <span v-if="player.health !== undefined">
                   <span class="text-gray-600">HP:</span>
                   <span :class="player.health > 15 ? 'text-green-400' : player.health > 8 ? 'text-yellow-400' : 'text-red-400'">
-                    {{ player.health.toFixed(0) }}
+                    {{ player.health.toFixed(0) }}<span v-if="player.maxHealth">/{{ player.maxHealth }}</span>
                   </span>
                 </span>
-                <span v-if="pluginAvailable && player.position" class="text-gray-600">
+                <span v-if="player.position" class="text-gray-600">
                   {{ Math.floor(player.position.x) }}, {{ Math.floor(player.position.y) }}, {{ Math.floor(player.position.z) }}
                 </span>
-                <span v-if="pluginAvailable && player.world" class="flex items-center gap-1">
+                <span v-if="player.world" class="flex items-center gap-1">
                   <svg class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -654,7 +616,7 @@ onUnmounted(() => {
 
     <!-- Offline Players -->
     <Card v-if="activeTab === 'offline'" :padding="false">
-      <div v-if="offlineLoading" class="text-center text-gray-500 p-8">
+      <div v-if="loading" class="text-center text-gray-500 p-8">
         {{ t('common.loading') }}
       </div>
 
@@ -671,18 +633,34 @@ onUnmounted(() => {
           :key="player.name"
           class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
-          <!-- Player Info -->
-          <div class="flex items-center gap-4">
-            <div class="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center">
+          <!-- Player Info (Clickable for details) -->
+          <div
+            class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer group"
+            @click.stop="openPlayerDetailModal(player.name, player.uuid)"
+          >
+            <div class="w-10 h-10 bg-gray-500/20 rounded-lg flex items-center justify-center group-hover:bg-gray-500/30 transition-colors">
               <span class="text-gray-400 font-bold">{{ player.name[0].toUpperCase() }}</span>
             </div>
-            <div>
-              <p class="font-medium text-white">{{ player.name }}</p>
-              <p v-if="player.uuid" class="text-xs text-gray-500 font-mono">{{ player.uuid }}</p>
-              <div class="flex gap-4 text-sm text-gray-500 mt-1">
-                <span>{{ t('players.lastSeen') }}: {{ formatDate(player.lastSeen) }}</span>
-                <span>{{ t('players.totalPlayTime') }}: {{ formatPlayTime(player.playTime) }}</span>
-                <span>{{ t('players.sessions') }}: {{ player.sessionCount }}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="font-medium text-white group-hover:text-hytale-orange transition-colors">{{ player.name }}</p>
+                <span
+                  v-if="player.gameMode"
+                  class="px-2 py-0.5 text-xs rounded-full bg-dark-50 text-gray-400"
+                >
+                  {{ player.gameMode }}
+                </span>
+              </div>
+              <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500 mt-1">
+                <span v-if="player.lastSeen">{{ t('players.lastSeen') }}: {{ formatDate(player.lastSeen) }}</span>
+                <span v-if="player.playTime">{{ t('players.totalPlayTime') }}: {{ formatPlayTime(player.playTime) }}</span>
+                <span v-if="player.sessionCount">{{ t('players.sessions') }}: {{ player.sessionCount }}</span>
+                <span v-if="player.world" class="flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span class="text-cyan-400">{{ player.world }}</span>
+                </span>
               </div>
             </div>
           </div>
