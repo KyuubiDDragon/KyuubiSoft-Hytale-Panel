@@ -3,7 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
-import { serverApi, type ServerMemoryStats, type UpdateCheckResponse } from '@/api/server'
+import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type PatchlineResponse } from '@/api/server'
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import { schedulerApi, type SchedulerStatus } from '@/api/scheduler'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
@@ -31,6 +31,9 @@ const enablingPersistence = ref(false)
 
 // Scheduler status
 const schedulerStatus = ref<SchedulerStatus | null>(null)
+
+// Panel patchline setting (fallback when plugin not available)
+const panelPatchline = ref<string | null>(null)
 
 async function fetchServerMemory() {
   try {
@@ -116,10 +119,23 @@ async function fetchSchedulerStatus() {
   }
 }
 
+async function fetchPanelPatchline() {
+  try {
+    const response = await serverApi.getPatchline()
+    panelPatchline.value = response.patchline
+  } catch {
+    // Silently fail
+  }
+}
+
+// Computed: Use plugin patchline if available, otherwise panel setting
+const displayPatchline = computed(() => patchline.value || panelPatchline.value)
+
 onMounted(() => {
   fetchServerMemory()
   checkHytaleAuth()
   fetchSchedulerStatus()
+  fetchPanelPatchline()
   memoryInterval = setInterval(() => {
     fetchServerMemory()
     checkHytaleAuth()
@@ -585,10 +601,6 @@ function refreshAll() {
                 <span class="text-white font-mono">{{ serverVersion || '-' }}</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-400">Patchline</span>
-                <span class="text-white font-mono">{{ patchline || '-' }}</span>
-              </div>
-              <div class="flex justify-between">
                 <span class="text-gray-400">Worlds</span>
                 <span class="text-white">{{ worldCount ?? '-' }}</span>
               </div>
@@ -607,6 +619,22 @@ function refreshAll() {
               <span :class="status?.running ? 'text-status-success' : 'text-status-error'">
                 {{ status?.status || '-' }}
               </span>
+            </div>
+            <!-- Patchline (always visible) -->
+            <div class="flex justify-between items-center">
+              <span class="text-gray-400">Patchline</span>
+              <span
+                v-if="displayPatchline"
+                :class="[
+                  'px-2 py-0.5 rounded text-xs font-medium',
+                  displayPatchline === 'release'
+                    ? 'bg-status-success/20 text-status-success'
+                    : 'bg-status-warning/20 text-status-warning'
+                ]"
+              >
+                {{ displayPatchline === 'release' ? 'Release' : 'Pre-Release' }}
+              </span>
+              <span v-else class="text-white font-mono">-</span>
             </div>
           </div>
         </div>
