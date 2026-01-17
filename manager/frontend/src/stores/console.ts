@@ -26,9 +26,17 @@ export const useConsoleStore = defineStore('console', () => {
   const connected = ref(false)
   const autoScroll = ref(true)
   const maxLogs = 1000
+  // Update counter to force reactivity on log changes
+  const updateCounter = ref(0)
 
   // Getters
   const logCount = computed(() => logs.value.length)
+  // Computed that depends on updateCounter to ensure reactivity
+  const logsUpdated = computed(() => {
+    // Touch updateCounter to create dependency
+    void updateCounter.value
+    return logs.value.length
+  })
 
   // Actions
   function addLog(entry: Omit<LogEntry, 'id'>) {
@@ -39,10 +47,14 @@ export const useConsoleStore = defineStore('console', () => {
 
     logs.value.push({ ...entry, message: cleanMessage, id })
 
-    // Limit log size
+    // Limit log size - use splice to maintain reactivity
     if (logs.value.length > maxLogs) {
-      logs.value = logs.value.slice(-maxLogs)
+      const excess = logs.value.length - maxLogs
+      logs.value.splice(0, excess)
     }
+
+    // Increment update counter to trigger watchers
+    updateCounter.value++
   }
 
   function addLogs(entries: Omit<LogEntry, 'id'>[]) {
@@ -68,6 +80,7 @@ export const useConsoleStore = defineStore('console', () => {
     autoScroll,
     // Getters
     logCount,
+    logsUpdated,
     // Actions
     addLog,
     addLogs,

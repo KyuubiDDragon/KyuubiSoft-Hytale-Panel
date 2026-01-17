@@ -285,8 +285,9 @@ function getLogClass(level: string): string {
 }
 
 // Auto-scroll to bottom when new logs arrive
+// Using logsUpdated computed which tracks both length and update counter
 watch(
-  () => consoleStore.logs.length,
+  () => consoleStore.logsUpdated,
   async () => {
     if (consoleStore.autoScroll && terminalRef.value) {
       await nextTick()
