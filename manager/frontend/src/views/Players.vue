@@ -63,37 +63,31 @@ let pollInterval: ReturnType<typeof setInterval> | null = null
 
 async function fetchPlayers() {
   try {
-    // Get all players from JSON files with online status
-    const response = await playersApi.getAll()
-    allPlayers.value = response.players
+    // Get all players from JSON files (for offline list)
+    const allResponse = await playersApi.getAll()
+    const allPlayersList = allResponse.players
 
-    // Check if plugin is available for accurate online player data
+    // Get online players (source of truth for who is online)
+    let onlinePlayerNames: string[] = []
+
+    // Try plugin API first (most accurate)
     try {
       const pluginResponse = await serverApi.getPluginPlayers()
       if (pluginResponse.success && pluginResponse.data) {
         pluginAvailable.value = true
+        onlinePlayerNames = pluginResponse.data.players.map((p: PluginPlayer) => p.name.toLowerCase())
 
-        // Build set of online player names from plugin (source of truth for online status)
-        const onlineNames = new Set(
-          pluginResponse.data.players.map(p => p.name.toLowerCase())
-        )
-
-        // Update online status and merge plugin data
-        for (const player of allPlayers.value) {
-          const isOnline = onlineNames.has(player.name.toLowerCase())
-          player.online = isOnline
-
-          // Merge additional data from plugin for online players
-          if (isOnline) {
-            const pluginPlayer = pluginResponse.data.players.find(
-              p => p.name.toLowerCase() === player.name.toLowerCase()
-            )
-            if (pluginPlayer) {
-              player.health = pluginPlayer.health
-              player.position = pluginPlayer.position
-              player.world = pluginPlayer.world
-              player.gameMode = pluginPlayer.gameMode
-            }
+        // Update all players with plugin data for online ones
+        for (const pluginPlayer of pluginResponse.data.players) {
+          const player = allPlayersList.find(
+            p => p.name.toLowerCase() === pluginPlayer.name.toLowerCase()
+          )
+          if (player) {
+            player.online = true
+            player.health = pluginPlayer.health
+            player.position = pluginPlayer.position
+            player.world = pluginPlayer.world
+            player.gameMode = pluginPlayer.gameMode
           }
         }
       }
@@ -101,6 +95,22 @@ async function fetchPlayers() {
       pluginAvailable.value = false
     }
 
+    // Fallback to standard API if plugin didn't return players
+    if (onlinePlayerNames.length === 0) {
+      try {
+        const onlineResponse = await playersApi.getOnline()
+        onlinePlayerNames = onlineResponse.players.map(p => p.name.toLowerCase())
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Mark online status for all players
+    for (const player of allPlayersList) {
+      player.online = onlinePlayerNames.includes(player.name.toLowerCase())
+    }
+
+    allPlayers.value = allPlayersList
     error.value = ''
   } catch (err) {
     error.value = t('errors.connectionFailed')
@@ -278,10 +288,6 @@ async function confirmBan() {
     showSuccess(t('players.ban') + ': ' + selectedPlayer.value)
     banReason.value = ''
     await fetchPlayers()
-    // Also refresh offline players if that tab is active
-    if (activeTab.value === 'offline') {
-      await fetchOfflinePlayers()
-    }
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -796,7 +802,7 @@ onUnmounted(() => {
             class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-hytale-orange"
           >
             <option value="">-- {{ t('players.name') }} --</option>
-            <option v-for="p in players.filter(x => x.name !== selectedPlayer)" :key="p.name" :value="p.name">
+            <option v-for="p in onlinePlayers.filter(x => x.name !== selectedPlayer)" :key="p.name" :value="p.name">
               {{ p.name }}
             </option>
           </select>
