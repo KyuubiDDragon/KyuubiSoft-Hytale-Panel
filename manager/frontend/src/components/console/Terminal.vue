@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, computed } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useConsoleStore } from '@/stores/console'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -284,48 +284,70 @@ function getLogClass(level: string): string {
   }
 }
 
-// Scroll to bottom helper
-function scrollToBottom() {
-  if (terminalRef.value) {
-    terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+// Scroll to bottom helper - scrolls multiple times to ensure it works
+function scrollToBottom(retries = 3) {
+  if (!terminalRef.value) return
+
+  const el = terminalRef.value
+  el.scrollTop = el.scrollHeight
+
+  // Retry a few times to handle delayed renders
+  if (retries > 0) {
+    requestAnimationFrame(() => {
+      if (el.scrollTop < el.scrollHeight - el.clientHeight - 10) {
+        el.scrollTop = el.scrollHeight
+        if (retries > 1) {
+          requestAnimationFrame(() => scrollToBottom(retries - 1))
+        }
+      }
+    })
   }
 }
 
-// Auto-scroll to bottom when new logs arrive
-// Using logsUpdated computed which tracks both length and update counter
-// flush: 'post' ensures the watcher runs after DOM updates
+// Check if user has scrolled up (not at bottom)
+function isScrolledToBottom(): boolean {
+  if (!terminalRef.value) return true
+  const el = terminalRef.value
+  // Allow 50px tolerance
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 50
+}
+
+// Auto-scroll interval - more reliable than watchers for continuous updates
+let autoScrollInterval: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  // Initial scroll
+  scrollToBottom()
+
+  // Poll-based auto-scroll - checks every 100ms if we should scroll
+  autoScrollInterval = setInterval(() => {
+    if (consoleStore.autoScroll && terminalRef.value) {
+      const el = terminalRef.value
+      // Only scroll if not already at bottom
+      if (el.scrollHeight - el.scrollTop - el.clientHeight > 5) {
+        el.scrollTop = el.scrollHeight
+      }
+    }
+  }, 100)
+})
+
+onUnmounted(() => {
+  if (autoScrollInterval) {
+    clearInterval(autoScrollInterval)
+    autoScrollInterval = null
+  }
+})
+
+// Also trigger scroll on log changes for immediate response
 watch(
   () => consoleStore.logsUpdated,
   () => {
     if (consoleStore.autoScroll) {
-      // Use requestAnimationFrame to ensure DOM is fully rendered
-      requestAnimationFrame(() => {
-        scrollToBottom()
-      })
+      scrollToBottom()
     }
   },
   { flush: 'post' }
 )
-
-// Also watch the logs array directly as a fallback
-watch(
-  () => consoleStore.logs,
-  () => {
-    if (consoleStore.autoScroll) {
-      requestAnimationFrame(() => {
-        scrollToBottom()
-      })
-    }
-  },
-  { deep: false, flush: 'post' }
-)
-
-// Initial scroll
-onMounted(() => {
-  requestAnimationFrame(() => {
-    scrollToBottom()
-  })
-})
 </script>
 
 <template>
