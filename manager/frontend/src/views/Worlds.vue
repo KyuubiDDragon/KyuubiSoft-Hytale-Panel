@@ -21,6 +21,10 @@ const expandedWorlds = ref<Set<string>>(new Set())
 // Editable form state (for config.json special handling)
 const form = ref<Partial<WorldConfig>>({})
 
+// Edit mode for config.json: 'form' or 'text'
+const configEditMode = ref<'form' | 'text'>('form')
+const configRawText = ref<string>('')
+
 // Computed: Is the selected file config.json?
 const isConfigJson = computed(() => selectedFile.value === 'config.json')
 
@@ -103,6 +107,8 @@ async function selectFile(worldName: string, filePath: string) {
         nighttimeDurationSecondsOverride: worldConfig.value.nighttimeDurationSecondsOverride,
         clientEffects: worldConfig.value.clientEffects ? { ...worldConfig.value.clientEffects } : {},
       }
+      // Store raw JSON for text editor mode
+      configRawText.value = JSON.stringify(worldConfig.value.raw, null, 2)
       fileContent.value = ''
     } else {
       // Use generic file endpoint for other files
@@ -128,8 +134,14 @@ async function saveFile() {
 
   try {
     if (selectedFile.value === 'config.json') {
-      // Use specialized config endpoint
-      await worldsApi.updateConfig(selectedWorld.value, form.value)
+      if (configEditMode.value === 'text') {
+        // Save raw JSON text directly as file content
+        const content = JSON.parse(configRawText.value)
+        await worldsApi.updateFile(selectedWorld.value, 'config.json', content)
+      } else {
+        // Use specialized config endpoint for form mode
+        await worldsApi.updateConfig(selectedWorld.value, form.value)
+      }
     } else {
       // Parse and save generic file
       const content = JSON.parse(fileContent.value)
@@ -200,7 +212,7 @@ onMounted(loadWorlds)
         <div class="card-header">
           <h3 class="text-lg font-semibold text-white">{{ t('worlds.files') || 'Files' }}</h3>
         </div>
-        <div class="card-body p-0 max-h-[600px] overflow-y-auto">
+        <div class="card-body p-0 overflow-y-auto" style="max-height: calc(100vh - 200px);">
           <div v-for="world in worlds" :key="world.name">
             <!-- World folder -->
             <button
@@ -295,6 +307,46 @@ onMounted(loadWorlds)
 
         <!-- Specialized config.json editor -->
         <template v-if="isConfigJson && worldConfig">
+          <!-- Edit mode toggle -->
+          <div class="flex items-center gap-4 mb-4">
+            <span class="text-gray-400 text-sm">Edit mode:</span>
+            <div class="flex bg-gray-800 rounded-lg p-1">
+              <button
+                @click="configEditMode = 'form'"
+                class="px-3 py-1 text-sm rounded-md transition-colors"
+                :class="configEditMode === 'form' ? 'bg-hytale-orange text-white' : 'text-gray-400 hover:text-white'"
+              >
+                Form
+              </button>
+              <button
+                @click="configEditMode = 'text'"
+                class="px-3 py-1 text-sm rounded-md transition-colors"
+                :class="configEditMode === 'text' ? 'bg-hytale-orange text-white' : 'text-gray-400 hover:text-white'"
+              >
+                JSON Text
+              </button>
+            </div>
+          </div>
+
+          <!-- Text editor mode for config.json -->
+          <template v-if="configEditMode === 'text'">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="text-lg font-semibold text-white">config.json (Raw Editor)</h3>
+              </div>
+              <div class="card-body">
+                <textarea
+                  v-model="configRawText"
+                  class="w-full h-[500px] px-4 py-3 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 font-mono text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange resize-none"
+                  spellcheck="false"
+                ></textarea>
+                <p class="text-xs text-gray-500 mt-2">Edit the raw JSON and click Save Changes to apply.</p>
+              </div>
+            </div>
+          </template>
+
+          <!-- Form editor mode for config.json -->
+          <template v-else>
           <!-- World Info -->
           <div class="card">
             <div class="card-header">
@@ -396,6 +448,7 @@ onMounted(loadWorlds)
               <pre class="bg-gray-900 p-4 rounded-lg text-sm text-gray-300 overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
             </div>
           </details>
+          </template>
         </template>
 
         <!-- Generic JSON editor for other files -->
