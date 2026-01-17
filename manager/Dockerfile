@@ -45,6 +45,9 @@ FROM node:20-alpine
 LABEL maintainer="Hytale Server Manager"
 LABEL description="Web-based management tool for Hytale servers"
 
+# Install wget for healthcheck
+RUN apk add --no-cache wget
+
 WORKDIR /app
 
 # Copy package files and install production dependencies only
