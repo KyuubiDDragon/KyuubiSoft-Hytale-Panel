@@ -162,7 +162,8 @@ router.get('/download/*', authMiddleware, (req: Request, res: Response) => {
 
 // GET /api/assets/item-icon/:itemId - Get item icon image
 // Searches common paths for item icons and returns the image
-router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) => {
+// NOTE: No authMiddleware - this endpoint is public so <img> tags can load icons
+router.get('/item-icon/:itemId', (req: Request, res: Response) => {
   let { itemId } = req.params;
 
   if (!itemId) {

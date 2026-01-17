@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
@@ -20,6 +20,23 @@ const { t } = useI18n()
 
 // Tab state
 const activeTab = ref<'info' | 'inventory' | 'stats'>('info')
+
+// Window dimensions for tooltip positioning (safely accessed)
+const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200)
+const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
+
+function updateWindowDimensions() {
+  windowWidth.value = window.innerWidth
+  windowHeight.value = window.innerHeight
+}
+
+onMounted(() => {
+  window.addEventListener('resize', updateWindowDimensions)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateWindowDimensions)
+})
 
 // Data states
 const loading = ref(false)
@@ -833,8 +850,8 @@ const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.
             v-if="hoveredItem"
             :class="['fixed z-[60] bg-dark-100 border-2 rounded-lg shadow-xl p-3 pointer-events-none min-w-[200px] max-w-xs', getItemRarityClass(hoveredItem.itemId)]"
             :style="{
-              left: `${Math.min(tooltipPosition.x + 10, window.innerWidth - 280)}px`,
-              top: `${Math.min(tooltipPosition.y + 10, window.innerHeight - 200)}px`
+              left: `${Math.min(tooltipPosition.x + 10, windowWidth - 280)}px`,
+              top: `${Math.min(tooltipPosition.y + 10, windowHeight - 200)}px`
             }"
           >
             <!-- Item Name with rarity color -->
