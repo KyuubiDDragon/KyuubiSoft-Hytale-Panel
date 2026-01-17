@@ -163,29 +163,52 @@ router.get('/download/*', authMiddleware, (req: Request, res: Response) => {
 // GET /api/assets/item-icon/:itemId - Get item icon image
 // Searches common paths for item icons and returns the image
 router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) => {
-  const { itemId } = req.params;
+  let { itemId } = req.params;
 
   if (!itemId) {
     res.status(400).json({ detail: 'Item ID required' });
     return;
   }
 
+  // Strip namespace prefix if present (e.g., "hytale:Cobalt_Sword" -> "Cobalt_Sword")
+  if (itemId.includes(':')) {
+    itemId = itemId.split(':')[1];
+  }
+
+  // Create variations of the item name for searching
+  const itemLower = itemId.toLowerCase();
+  const itemWithSlashes = itemId.replace(/_/g, '/');
+  const itemLowerWithSlashes = itemLower.replace(/_/g, '/');
+
   // Common paths where item icons might be found in Hytale assets
   const possiblePaths = [
-    // UI Icons
+    // UI Icons - most likely location
     `hytale/textures/ui/icons/items/${itemId}.png`,
-    `hytale/textures/ui/icons/items/${itemId.toLowerCase()}.png`,
+    `hytale/textures/ui/icons/items/${itemLower}.png`,
     `textures/ui/icons/items/${itemId}.png`,
-    `textures/ui/icons/items/${itemId.toLowerCase()}.png`,
+    `textures/ui/icons/items/${itemLower}.png`,
+    // With slashes instead of underscores
+    `hytale/textures/ui/icons/items/${itemWithSlashes}.png`,
+    `hytale/textures/ui/icons/items/${itemLowerWithSlashes}.png`,
     // Direct item textures
     `hytale/textures/items/${itemId}.png`,
-    `hytale/textures/items/${itemId.toLowerCase()}.png`,
+    `hytale/textures/items/${itemLower}.png`,
     `textures/items/${itemId}.png`,
+    `textures/items/${itemLower}.png`,
     // Block textures (for block items)
     `hytale/textures/blocks/${itemId}.png`,
+    `hytale/textures/blocks/${itemLower}.png`,
     `textures/blocks/${itemId}.png`,
-    // Try with underscores converted to paths
-    `hytale/textures/ui/icons/items/${itemId.replace(/_/g, '/')}.png`,
+    `textures/blocks/${itemLower}.png`,
+    // Entity/mob textures
+    `hytale/textures/entity/${itemId}.png`,
+    `hytale/textures/entity/${itemLower}.png`,
+    // UI general icons
+    `hytale/textures/ui/icons/${itemId}.png`,
+    `hytale/textures/ui/icons/${itemLower}.png`,
+    // Root level textures
+    `${itemId}.png`,
+    `${itemLower}.png`,
   ];
 
   // Try each possible path
@@ -199,8 +222,25 @@ router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) =
     }
   }
 
+  // If not found in standard paths, try a search
+  const searchResults = assetService.searchAssets(itemId, {
+    extensions: ['.png'],
+    maxResults: 1,
+    useGlob: false,
+  });
+
+  if (searchResults.length > 0) {
+    const result = assetService.readAssetFile(searchResults[0].path);
+    if (result.success && result.isBinary && result.mimeType?.startsWith('image/')) {
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.send(Buffer.from(result.content as string, 'base64'));
+      return;
+    }
+  }
+
   // If not found, return 404
-  res.status(404).json({ detail: 'Item icon not found', itemId });
+  res.status(404).json({ detail: 'Item icon not found', itemId, searchedPaths: possiblePaths.slice(0, 5) });
 });
 
 // GET /api/assets/item-icon-search/:itemId - Search for item icon path
@@ -224,6 +264,44 @@ router.get('/item-icon-search/:itemId', authMiddleware, (req: Request, res: Resp
     itemId,
     found: results.length > 0,
     paths: results.map(r => r.path),
+  });
+});
+
+// GET /api/assets/debug/structure - Get top-level structure of extracted assets
+// Useful for debugging and finding where icons are located
+router.get('/debug/structure', authMiddleware, (_req: Request, res: Response) => {
+  const tree = assetService.getAssetTree('', 2);
+
+  if (tree === null) {
+    res.status(404).json({ detail: 'Assets not extracted or directory not found' });
+    return;
+  }
+
+  res.json({
+    structure: tree,
+    hint: 'Use /api/assets/browse?path=<path> to explore further',
+  });
+});
+
+// GET /api/assets/debug/find-icons - Search for all icon/texture directories
+router.get('/debug/find-icons', authMiddleware, (_req: Request, res: Response) => {
+  const iconPaths = assetService.searchAssets('icon', {
+    extensions: [],
+    maxResults: 50,
+    useGlob: false,
+  });
+
+  const texturePaths = assetService.searchAssets('texture', {
+    extensions: [],
+    maxResults: 50,
+    useGlob: false,
+  });
+
+  res.json({
+    iconDirectories: iconPaths.filter(p => p.type === 'directory').map(p => p.path),
+    textureDirectories: texturePaths.filter(p => p.type === 'directory').map(p => p.path),
+    sampleIconFiles: iconPaths.filter(p => p.type === 'file').slice(0, 10).map(p => p.path),
+    sampleTextureFiles: texturePaths.filter(p => p.type === 'file').slice(0, 10).map(p => p.path),
   });
 });
 
