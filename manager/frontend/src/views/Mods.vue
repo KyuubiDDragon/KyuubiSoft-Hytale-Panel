@@ -31,20 +31,29 @@ import { getLocale } from '@/i18n'
 const { t } = useI18n()
 
 // Helper to get localized string based on current locale
-function getLocalizedText(text: string | LocalizedString | undefined): string {
+function getLocalizedText(text: string | LocalizedString | undefined | null): string {
   if (!text) return ''
   if (typeof text === 'string') return text
 
-  const locale = getLocale()
-  // Map locale to key (handle pt_br -> pt_br)
-  const localeKey = locale === 'pt_br' ? 'pt_br' : locale
+  // Handle object type (LocalizedString)
+  if (typeof text === 'object') {
+    const locale = getLocale()
+    // Map locale to key (handle pt_br -> pt_br)
+    const localeKey = locale === 'pt_br' ? 'pt_br' : locale
 
-  // Try current locale, then English, then first available
-  return text[localeKey as keyof LocalizedString]
-    || text.en
-    || text.de
-    || text.pt_br
-    || ''
+    // Try current locale, then English, then German, then Portuguese, then first available value
+    const result = text[localeKey as keyof LocalizedString]
+      || text.en
+      || text.de
+      || text.pt_br
+      || Object.values(text).find(v => typeof v === 'string' && v.length > 0)
+      || ''
+
+    return result
+  }
+
+  // Fallback: convert to string
+  return String(text)
 }
 
 type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart'
