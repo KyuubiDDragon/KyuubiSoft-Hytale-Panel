@@ -7,7 +7,9 @@ const router = Router();
 
 // GET /api/console/logs
 router.get('/logs', authMiddleware, async (req: Request, res: Response) => {
-  const tail = Math.min(Math.max(parseInt(req.query.tail as string) || 100, 1), 1000);
+  // Allow 0 for all logs, otherwise limit between 1 and 10000
+  const tailParam = parseInt(req.query.tail as string);
+  const tail = tailParam === 0 ? 0 : Math.min(Math.max(tailParam || 100, 1), 10000);
 
   const rawLogs = await dockerService.getLogs(tail);
   const logs = parseLogs(rawLogs);

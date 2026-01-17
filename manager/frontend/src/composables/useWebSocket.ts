@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConsoleStore } from '@/stores/console'
+import api from '@/services/api'
 
 export function useWebSocket() {
   const authStore = useAuthStore()
@@ -9,13 +10,29 @@ export function useWebSocket() {
   const ws = ref<WebSocket | null>(null)
   const reconnectAttempts = ref(0)
   const maxReconnectAttempts = 5
-  const reconnectDelay = 3000
+  const baseReconnectDelay = 3000
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+  let isManualDisconnect = false
 
   function connect() {
+    // Clear any pending reconnect
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
+    }
+
     if (!authStore.accessToken) {
       console.warn('No access token, cannot connect to WebSocket')
       return
     }
+
+    // Close existing connection if any
+    if (ws.value && ws.value.readyState !== WebSocket.CLOSED) {
+      isManualDisconnect = true
+      ws.value.close()
+    }
+
+    isManualDisconnect = false
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
@@ -84,11 +101,25 @@ export function useWebSocket() {
       console.log('WebSocket disconnected')
       consoleStore.setConnected(false)
 
-      // Try to reconnect
+      // Don't reconnect if manually disconnected
+      if (isManualDisconnect) {
+        return
+      }
+
+      // Try to reconnect with exponential backoff
       if (reconnectAttempts.value < maxReconnectAttempts) {
         reconnectAttempts.value++
-        console.log(`Reconnecting in ${reconnectDelay}ms... (attempt ${reconnectAttempts.value})`)
-        setTimeout(connect, reconnectDelay)
+        // Exponential backoff: 3s, 6s, 12s, 24s, 48s
+        const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts.value - 1)
+        console.log(`Reconnecting in ${delay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`)
+        reconnectTimeout = setTimeout(connect, delay)
+      } else {
+        // After max attempts, wait longer and reset counter for eventual retry
+        console.log('Max reconnection attempts reached, will retry in 30 seconds...')
+        reconnectTimeout = setTimeout(() => {
+          reconnectAttempts.value = 0
+          connect()
+        }, 30000)
       }
     }
 
@@ -98,6 +129,11 @@ export function useWebSocket() {
   }
 
   function disconnect() {
+    isManualDisconnect = true
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
+    }
     if (ws.value) {
       ws.value.close()
       ws.value = null
@@ -126,6 +162,44 @@ export function useWebSocket() {
     }
   }
 
+  function reconnect() {
+    console.log('Manual reconnect requested')
+    reconnectAttempts.value = 0
+    connect()
+  }
+
+  const isLoadingLogs = ref(false)
+
+  async function loadAllLogs(limit: number = 0) {
+    if (isLoadingLogs.value) return
+
+    isLoadingLogs.value = true
+    try {
+      const response = await api.get('/console/logs', {
+        params: { tail: limit }
+      })
+
+      if (response.data.logs && response.data.logs.length > 0) {
+        // Clear existing logs and add all fetched logs
+        consoleStore.clearLogs()
+        for (const log of response.data.logs) {
+          consoleStore.addLog({
+            timestamp: log.timestamp,
+            level: log.level,
+            message: log.message,
+          })
+        }
+      }
+
+      return response.data.count
+    } catch (error) {
+      console.error('Failed to load logs:', error)
+      throw error
+    } finally {
+      isLoadingLogs.value = false
+    }
+  }
+
   // Keep-alive ping
   let pingInterval: ReturnType<typeof setInterval> | null = null
 
@@ -137,14 +211,22 @@ export function useWebSocket() {
   onUnmounted(() => {
     if (pingInterval) {
       clearInterval(pingInterval)
+      pingInterval = null
+    }
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
     }
     disconnect()
   })
 
   return {
     connected: consoleStore.connected,
+    isLoadingLogs,
     connect,
     disconnect,
+    reconnect,
     sendCommand,
+    loadAllLogs,
   }
 }

@@ -8,6 +8,7 @@ import type { WsMessage } from './types/index.js';
 
 const clients = new Set<WebSocket>();
 let logStream: NodeJS.ReadableStream | null = null;
+let streamRestartTimeout: NodeJS.Timeout | null = null;
 
 async function sendExistingLogs(ws: WebSocket): Promise<void> {
   try {
@@ -113,7 +114,63 @@ function broadcast(message: object): void {
   }
 }
 
+/**
+ * Demultiplex Docker stream data
+ * Docker uses 8-byte headers for multiplexed streams:
+ * - Byte 0: stream type (0=stdin, 1=stdout, 2=stderr)
+ * - Bytes 1-3: reserved (0)
+ * - Bytes 4-7: size of payload (big-endian uint32)
+ */
+function demuxDockerStream(chunk: Buffer): string[] {
+  const results: string[] = [];
+  let offset = 0;
+
+  while (offset < chunk.length) {
+    // Check if we have enough bytes for header
+    if (offset + 8 > chunk.length) {
+      // Not enough data for header, treat as raw data
+      const remaining = chunk.slice(offset).toString('utf-8');
+      if (remaining.trim()) {
+        results.push(remaining);
+      }
+      break;
+    }
+
+    // Read header
+    const streamType = chunk.readUInt8(offset);
+    const size = chunk.readUInt32BE(offset + 4);
+
+    // Validate header - stream type should be 0, 1, or 2
+    if (streamType > 2 || size > chunk.length - offset - 8) {
+      // Invalid header, treat as raw string data
+      const rawData = chunk.slice(offset).toString('utf-8');
+      results.push(...rawData.split('\n'));
+      break;
+    }
+
+    // Extract payload
+    const payload = chunk.slice(offset + 8, offset + 8 + size).toString('utf-8');
+    results.push(...payload.split('\n'));
+
+    offset += 8 + size;
+  }
+
+  return results;
+}
+
 async function startLogStreaming(): Promise<void> {
+  // Clear any pending restart timeout
+  if (streamRestartTimeout) {
+    clearTimeout(streamRestartTimeout);
+    streamRestartTimeout = null;
+  }
+
+  // Clean up existing stream
+  if (logStream) {
+    logStream.removeAllListeners();
+    logStream = null;
+  }
+
   try {
     const docker = getDockerInstance();
     const container = docker.getContainer(getContainerName());
@@ -127,9 +184,17 @@ async function startLogStreaming(): Promise<void> {
     });
 
     logStream = stream;
+    console.log('Log streaming started');
 
     stream.on('data', (chunk: Buffer) => {
-      const lines = chunk.toString('utf-8').split('\n');
+      // Try to demux the Docker stream
+      let lines: string[];
+      try {
+        lines = demuxDockerStream(chunk);
+      } catch {
+        // Fallback to simple string split
+        lines = chunk.toString('utf-8').split('\n');
+      }
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -161,10 +226,20 @@ async function startLogStreaming(): Promise<void> {
         type: 'error',
         message: error.message,
       });
+      // Schedule restart if clients are still connected
+      scheduleStreamRestart();
     });
 
     stream.on('end', () => {
       console.log('Log stream ended');
+      // Schedule restart if clients are still connected
+      scheduleStreamRestart();
+    });
+
+    stream.on('close', () => {
+      console.log('Log stream closed');
+      // Schedule restart if clients are still connected
+      scheduleStreamRestart();
     });
 
   } catch (error) {
@@ -173,10 +248,30 @@ async function startLogStreaming(): Promise<void> {
       type: 'error',
       message: 'Failed to connect to container logs',
     });
+    // Schedule restart if clients are still connected
+    scheduleStreamRestart();
+  }
+}
+
+function scheduleStreamRestart(): void {
+  // Only restart if we have connected clients and no pending restart
+  if (clients.size > 0 && !streamRestartTimeout) {
+    console.log('Scheduling log stream restart in 3 seconds...');
+    streamRestartTimeout = setTimeout(() => {
+      streamRestartTimeout = null;
+      if (clients.size > 0) {
+        console.log('Restarting log stream...');
+        startLogStreaming();
+      }
+    }, 3000);
   }
 }
 
 function stopLogStreaming(): void {
+  if (streamRestartTimeout) {
+    clearTimeout(streamRestartTimeout);
+    streamRestartTimeout = null;
+  }
   if (logStream) {
     logStream.removeAllListeners();
     logStream = null;
