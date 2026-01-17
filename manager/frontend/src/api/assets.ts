@@ -118,4 +118,13 @@ export const assetsApi = {
   getDownloadUrl(path: string): string {
     return `/api/assets/download/${path}`
   },
+
+  getItemIconUrl(itemId: string): string {
+    return `/api/assets/item-icon/${encodeURIComponent(itemId)}`
+  },
+
+  async searchItemIcon(itemId: string): Promise<{ itemId: string; found: boolean; paths: string[] }> {
+    const response = await api.get(`/assets/item-icon-search/${encodeURIComponent(itemId)}`)
+    return response.data
+  },
 }

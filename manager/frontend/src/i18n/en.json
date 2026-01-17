@@ -238,7 +238,36 @@
       "bodyType": "Body Type",
       "noCustomization": "No customization data available",
       "appearanceUnavailable": "Appearance unavailable",
-      "appearanceHint": "Appearance data will be available once the Hytale API supports it."
+      "appearanceHint": "Appearance data will be available once the Hytale API supports it.",
+      "assetsHint": "Extract assets to show item icons",
+      "goToAssets": "Go to Assets"
+    },
+    "itemTypes": {
+      "sword": "Sword",
+      "axe": "Axe",
+      "battleaxe": "Battleaxe",
+      "mace": "Mace",
+      "pickaxe": "Pickaxe",
+      "bow": "Bow",
+      "arrow": "Arrow",
+      "shield": "Shield",
+      "helmet": "Helmet",
+      "chestplate": "Chestplate",
+      "leggings": "Leggings",
+      "gloves": "Gloves",
+      "potion": "Potion",
+      "food": "Food",
+      "torch": "Torch",
+      "teleporter": "Teleporter",
+      "material": "Material",
+      "tool": "Tool",
+      "block": "Block",
+      "plant": "Plant",
+      "item": "Item"
+    },
+    "tooltip": {
+      "amount": "Amount",
+      "durability": "Durability"
     }
   },
   "whitelist": {

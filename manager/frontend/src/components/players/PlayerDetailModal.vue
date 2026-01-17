@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
+import { assetsApi } from '@/api/assets'
 import Button from '@/components/ui/Button.vue'
 
 const props = defineProps<{
@@ -25,6 +27,16 @@ const error = ref('')
 const details = ref<FilePlayerDetails | null>(null)
 const inventory = ref<FilePlayerInventory | null>(null)
 
+// Tooltip state
+const hoveredItem = ref<FileInventoryItem | null>(null)
+const tooltipPosition = ref({ x: 0, y: 0 })
+
+// Track which icons failed to load
+const failedIcons = ref<Set<string>>(new Set())
+
+// Assets status
+const assetsExtracted = ref(true)
+
 // Fetch data when modal opens
 watch(() => props.open, async (isOpen) => {
   if (isOpen && props.playerName) {
@@ -35,7 +47,15 @@ watch(() => props.open, async (isOpen) => {
     details.value = null
     inventory.value = null
     error.value = ''
+    hoveredItem.value = null
+    failedIcons.value = new Set()
+    assetsExtracted.value = true
   }
+})
+
+// Show hint about assets when icons fail to load and assets are not extracted
+const showAssetsHint = computed(() => {
+  return !assetsExtracted.value && failedIcons.value.size > 0
 })
 
 async function fetchAllData() {
@@ -43,11 +63,15 @@ async function fetchAllData() {
   error.value = ''
 
   try {
-    // Fetch file-based data in parallel
-    const [detailsRes, inventoryRes] = await Promise.all([
+    // Fetch file-based data and asset status in parallel
+    const [detailsRes, inventoryRes, assetStatus] = await Promise.all([
       serverApi.getFilePlayerDetails(props.playerName).catch(() => null),
-      serverApi.getFilePlayerInventory(props.playerName).catch(() => null)
+      serverApi.getFilePlayerInventory(props.playerName).catch(() => null),
+      assetsApi.getStatus().catch(() => null)
     ])
+
+    // Check if assets are extracted
+    assetsExtracted.value = assetStatus?.extracted ?? false
 
     if (detailsRes?.success && detailsRes.data) {
       details.value = detailsRes.data
@@ -103,25 +127,122 @@ function getDurabilityColor(item: FileInventoryItem): string {
   return 'bg-red-500'
 }
 
-// Get icon for item type
-function getItemIcon(itemId: string): string {
+// Get item icon URL
+function getItemIconUrl(itemId: string): string {
+  return assetsApi.getItemIconUrl(itemId)
+}
+
+// Handle icon load error - mark as failed
+function onIconError(itemId: string) {
+  failedIcons.value.add(itemId)
+}
+
+// Check if icon failed
+function iconFailed(itemId: string): boolean {
+  return failedIcons.value.has(itemId)
+}
+
+// Get fallback icon letter based on item type
+function getFallbackLetter(itemId: string): string {
   const id = itemId.toLowerCase()
-  if (id.includes('sword') || id.includes('weapon')) return 'sword'
-  if (id.includes('axe') || id.includes('hatchet')) return 'axe'
-  if (id.includes('pickaxe')) return 'pickaxe'
-  if (id.includes('bow')) return 'bow'
-  if (id.includes('arrow')) return 'arrow'
-  if (id.includes('armor') || id.includes('chest') || id.includes('head') || id.includes('legs') || id.includes('hands')) return 'armor'
-  if (id.includes('shield')) return 'shield'
-  if (id.includes('food') || id.includes('meat') || id.includes('kebab')) return 'food'
-  if (id.includes('potion')) return 'potion'
-  if (id.includes('torch')) return 'torch'
-  if (id.includes('tool') || id.includes('repair')) return 'tool'
-  if (id.includes('teleporter')) return 'teleport'
-  if (id.includes('ingredient') || id.includes('hide') || id.includes('chitin')) return 'ingredient'
-  if (id.includes('plant') || id.includes('flower') || id.includes('cactus')) return 'plant'
-  if (id.includes('rock') || id.includes('soil') || id.includes('cobble')) return 'block'
-  return 'item'
+  if (id.includes('sword')) return 'S'
+  if (id.includes('axe') || id.includes('hatchet')) return 'A'
+  if (id.includes('pickaxe')) return 'P'
+  if (id.includes('bow')) return 'B'
+  if (id.includes('arrow')) return '>'
+  if (id.includes('armor') || id.includes('chest')) return 'C'
+  if (id.includes('head') || id.includes('helmet')) return 'H'
+  if (id.includes('legs')) return 'L'
+  if (id.includes('hands') || id.includes('gloves')) return 'G'
+  if (id.includes('shield')) return 'D'
+  if (id.includes('food') || id.includes('meat') || id.includes('kebab')) return 'F'
+  if (id.includes('potion')) return '!'
+  if (id.includes('torch')) return 'T'
+  if (id.includes('tool') || id.includes('repair')) return 'R'
+  if (id.includes('teleporter')) return '*'
+  if (id.includes('ingredient') || id.includes('hide') || id.includes('chitin')) return 'I'
+  if (id.includes('plant') || id.includes('flower') || id.includes('cactus')) return 'P'
+  if (id.includes('rock') || id.includes('soil') || id.includes('cobble')) return '#'
+  if (id.includes('mace')) return 'M'
+  if (id.includes('battleaxe')) return 'X'
+  return '?'
+}
+
+// Get item color class based on material/type
+function getItemColorClass(itemId: string): string {
+  const id = itemId.toLowerCase()
+  if (id.includes('adamantite')) return 'text-purple-400 bg-purple-500/20'
+  if (id.includes('thorium')) return 'text-green-400 bg-green-500/20'
+  if (id.includes('cobalt')) return 'text-blue-400 bg-blue-500/20'
+  if (id.includes('iron')) return 'text-gray-300 bg-gray-500/20'
+  if (id.includes('gold')) return 'text-yellow-400 bg-yellow-500/20'
+  if (id.includes('potion')) return 'text-pink-400 bg-pink-500/20'
+  if (id.includes('food') || id.includes('meat')) return 'text-orange-400 bg-orange-500/20'
+  return 'text-gray-300 bg-gray-600/30'
+}
+
+// Get item rarity color for tooltip border
+function getItemRarityClass(itemId: string): string {
+  const id = itemId.toLowerCase()
+  if (id.includes('adamantite')) return 'border-purple-500'
+  if (id.includes('thorium')) return 'border-green-500'
+  if (id.includes('cobalt')) return 'border-blue-500'
+  if (id.includes('iron')) return 'border-gray-400'
+  if (id.includes('gold')) return 'border-yellow-500'
+  return 'border-dark-50'
+}
+
+// Get item category/type description
+function getItemCategory(itemId: string): string {
+  const id = itemId.toLowerCase()
+  if (id.includes('sword')) return t('players.itemTypes.sword')
+  if (id.includes('axe') && !id.includes('battle')) return t('players.itemTypes.axe')
+  if (id.includes('battleaxe')) return t('players.itemTypes.battleaxe')
+  if (id.includes('mace')) return t('players.itemTypes.mace')
+  if (id.includes('pickaxe')) return t('players.itemTypes.pickaxe')
+  if (id.includes('bow')) return t('players.itemTypes.bow')
+  if (id.includes('arrow')) return t('players.itemTypes.arrow')
+  if (id.includes('shield')) return t('players.itemTypes.shield')
+  if (id.includes('helmet') || id.includes('_head')) return t('players.itemTypes.helmet')
+  if (id.includes('chestplate') || id.includes('_chest')) return t('players.itemTypes.chestplate')
+  if (id.includes('leggings') || id.includes('_legs')) return t('players.itemTypes.leggings')
+  if (id.includes('gloves') || id.includes('_hands')) return t('players.itemTypes.gloves')
+  if (id.includes('potion')) return t('players.itemTypes.potion')
+  if (id.includes('food') || id.includes('meat') || id.includes('kebab')) return t('players.itemTypes.food')
+  if (id.includes('torch')) return t('players.itemTypes.torch')
+  if (id.includes('teleporter')) return t('players.itemTypes.teleporter')
+  if (id.includes('ingredient') || id.includes('hide') || id.includes('chitin')) return t('players.itemTypes.material')
+  if (id.includes('repair')) return t('players.itemTypes.tool')
+  if (id.includes('rock') || id.includes('soil') || id.includes('cobble')) return t('players.itemTypes.block')
+  if (id.includes('plant') || id.includes('flower') || id.includes('cactus')) return t('players.itemTypes.plant')
+  return t('players.itemTypes.item')
+}
+
+// Get material name for item
+function getItemMaterial(itemId: string): string | null {
+  const id = itemId.toLowerCase()
+  if (id.includes('adamantite')) return 'Adamantite'
+  if (id.includes('thorium')) return 'Thorium'
+  if (id.includes('cobalt')) return 'Cobalt'
+  if (id.includes('iron')) return 'Iron'
+  if (id.includes('gold')) return 'Gold'
+  if (id.includes('wood') || id.includes('wooden')) return 'Wood'
+  if (id.includes('stone')) return 'Stone'
+  return null
+}
+
+// Show tooltip
+function showTooltip(item: FileInventoryItem, event: MouseEvent) {
+  hoveredItem.value = item
+  tooltipPosition.value = {
+    x: event.clientX,
+    y: event.clientY
+  }
+}
+
+// Hide tooltip
+function hideTooltip() {
+  hoveredItem.value = null
 }
 
 // Generate grid for a container with specified capacity
@@ -135,12 +256,33 @@ function generateGrid(items: FileInventoryItem[], capacity: number): (FileInvent
   return grid
 }
 
-// Computed inventory grids
+// Computed inventory grids - use actual capacity from inventory data
 const hotbarGrid = computed(() => inventory.value ? generateGrid(inventory.value.hotbar, 9) : [])
 const armorGrid = computed(() => inventory.value ? generateGrid(inventory.value.armor, 4) : [])
 const utilityGrid = computed(() => inventory.value ? generateGrid(inventory.value.utility, 4) : [])
 const storageGrid = computed(() => inventory.value ? generateGrid(inventory.value.storage, 36) : [])
-const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.value.backpack, 18) : [])
+
+// Backpack capacity from inventory - dynamically based on upgrades
+const backpackCapacity = computed(() => {
+  // Default backpack capacities: 0 -> 6 (upgrade 1) -> 12 (upgrade 2) -> 18 (upgrade 3)
+  // Check uniqueItemsUsed to determine upgrades
+  if (!inventory.value) return 0
+
+  // Return actual number of items or minimum based on upgrades found
+  const upgradesUsed = details.value?.uniqueItemsUsed || []
+  let capacity = 0
+  if (upgradesUsed.includes('Upgrade_Backpack_1')) capacity = 6
+  if (upgradesUsed.includes('Upgrade_Backpack_2')) capacity = 12
+  if (upgradesUsed.includes('Upgrade_Backpack_3')) capacity = 18
+
+  // Use the larger of calculated capacity or actual items
+  return Math.max(capacity, inventory.value.backpack.length)
+})
+
+const backpackGrid = computed(() => {
+  if (!inventory.value || backpackCapacity.value === 0) return []
+  return generateGrid(inventory.value.backpack, backpackCapacity.value)
+})
 </script>
 
 <template>
@@ -325,6 +467,19 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
             <!-- Inventory Tab -->
             <div v-else-if="activeTab === 'inventory'">
               <div v-if="inventory" class="space-y-6">
+                <!-- Assets hint when icons fail to load -->
+                <div v-if="showAssetsHint" class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <div class="flex items-center gap-2 text-amber-400 text-sm">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>{{ t('players.details.assetsHint') }}</span>
+                    <router-link to="/assets" class="ml-auto text-amber-300 hover:text-amber-200 underline">
+                      {{ t('players.details.goToAssets') }}
+                    </router-link>
+                  </div>
+                </div>
+
                 <!-- Hotbar -->
                 <div>
                   <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
@@ -339,17 +494,27 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
                       v-for="(item, index) in hotbarGrid"
                       :key="`hotbar-${index}`"
                       :class="[
-                        'aspect-square rounded border flex flex-col items-center justify-center relative group',
-                        item ? 'bg-dark-200 border-hytale-orange/30' : 'bg-dark-300/50 border-dark-100',
+                        'aspect-square rounded border flex flex-col items-center justify-center relative group cursor-pointer',
+                        item ? 'bg-dark-200 border-hytale-orange/30 hover:border-hytale-orange' : 'bg-dark-300/50 border-dark-100',
                         index === inventory.activeHotbarSlot ? 'ring-2 ring-hytale-orange' : ''
                       ]"
-                      :title="item ? `${item.displayName} x${item.amount}` : `Slot ${index + 1}`"
+                      @mouseenter="item && showTooltip(item, $event)"
+                      @mouseleave="hideTooltip"
                     >
                       <template v-if="item">
-                        <div class="w-7 h-7 bg-hytale-orange/20 rounded flex items-center justify-center">
-                          <span class="text-hytale-orange text-xs font-bold">{{ getItemIcon(item.itemId)[0].toUpperCase() }}</span>
+                        <!-- Try to load actual icon -->
+                        <img
+                          v-if="!iconFailed(item.itemId)"
+                          :src="getItemIconUrl(item.itemId)"
+                          :alt="item.displayName"
+                          class="w-8 h-8 object-contain"
+                          @error="onIconError(item.itemId)"
+                        />
+                        <!-- Fallback icon -->
+                        <div v-else :class="['w-8 h-8 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
+                          {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span v-if="item.amount > 1" class="absolute bottom-0.5 right-1 text-[10px] font-bold text-white drop-shadow">
+                        <span class="absolute bottom-0.5 right-1 text-[10px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                         <!-- Durability bar -->
@@ -376,14 +541,22 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
                         v-for="(item, index) in armorGrid"
                         :key="`armor-${index}`"
                         :class="[
-                          'aspect-square rounded border flex flex-col items-center justify-center relative',
-                          item ? 'bg-dark-200 border-blue-500/30' : 'bg-dark-300/50 border-dark-100'
+                          'aspect-square rounded border flex flex-col items-center justify-center relative cursor-pointer',
+                          item ? 'bg-dark-200 border-blue-500/30 hover:border-blue-500' : 'bg-dark-300/50 border-dark-100'
                         ]"
-                        :title="item ? `${item.displayName}` : ['Head', 'Chest', 'Hands', 'Legs'][index]"
+                        @mouseenter="item && showTooltip(item, $event)"
+                        @mouseleave="hideTooltip"
                       >
                         <template v-if="item">
-                          <div class="w-6 h-6 bg-blue-500/20 rounded flex items-center justify-center">
-                            <span class="text-blue-400 text-xs font-bold">{{ ['H', 'C', 'G', 'L'][index] }}</span>
+                          <img
+                            v-if="!iconFailed(item.itemId)"
+                            :src="getItemIconUrl(item.itemId)"
+                            :alt="item.displayName"
+                            class="w-7 h-7 object-contain"
+                            @error="onIconError(item.itemId)"
+                          />
+                          <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
+                            {{ ['H', 'C', 'G', 'L'][index] }}
                           </div>
                           <!-- Durability bar -->
                           <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-dark-300 rounded-b overflow-hidden">
@@ -409,16 +582,24 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
                         v-for="(item, index) in utilityGrid"
                         :key="`utility-${index}`"
                         :class="[
-                          'aspect-square rounded border flex items-center justify-center relative',
-                          item ? 'bg-dark-200 border-purple-500/30' : 'bg-dark-300/50 border-dark-100'
+                          'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
+                          item ? 'bg-dark-200 border-purple-500/30 hover:border-purple-500' : 'bg-dark-300/50 border-dark-100'
                         ]"
-                        :title="item ? `${item.displayName} x${item.amount}` : `Utility ${index + 1}`"
+                        @mouseenter="item && showTooltip(item, $event)"
+                        @mouseleave="hideTooltip"
                       >
                         <template v-if="item">
-                          <div class="w-6 h-6 bg-purple-500/20 rounded flex items-center justify-center">
-                            <span class="text-purple-400 text-xs font-bold">U</span>
+                          <img
+                            v-if="!iconFailed(item.itemId)"
+                            :src="getItemIconUrl(item.itemId)"
+                            :alt="item.displayName"
+                            class="w-7 h-7 object-contain"
+                            @error="onIconError(item.itemId)"
+                          />
+                          <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
+                            U
                           </div>
-                          <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white">
+                          <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
                             {{ item.amount }}
                           </span>
                         </template>
@@ -441,16 +622,24 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
                       v-for="(item, index) in storageGrid"
                       :key="`storage-${index}`"
                       :class="[
-                        'aspect-square rounded border flex items-center justify-center relative',
-                        item ? 'bg-dark-200 border-dark-50' : 'bg-dark-300/50 border-dark-100'
+                        'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
+                        item ? 'bg-dark-200 border-dark-50 hover:border-gray-500' : 'bg-dark-300/50 border-dark-100'
                       ]"
-                      :title="item ? `${item.displayName} x${item.amount}` : `Slot ${index + 1}`"
+                      @mouseenter="item && showTooltip(item, $event)"
+                      @mouseleave="hideTooltip"
                     >
                       <template v-if="item">
-                        <div class="w-6 h-6 bg-gray-600/30 rounded flex items-center justify-center">
-                          <span class="text-gray-300 text-[10px] font-bold">{{ getItemIcon(item.itemId)[0].toUpperCase() }}</span>
+                        <img
+                          v-if="!iconFailed(item.itemId)"
+                          :src="getItemIconUrl(item.itemId)"
+                          :alt="item.displayName"
+                          class="w-7 h-7 object-contain"
+                          @error="onIconError(item.itemId)"
+                        />
+                        <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold', getItemColorClass(item.itemId)]">
+                          {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow">
+                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                       </template>
@@ -458,30 +647,38 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
                   </div>
                 </div>
 
-                <!-- Backpack -->
-                <div v-if="inventory.backpack.length > 0">
+                <!-- Backpack (only show if player has upgrades) -->
+                <div v-if="backpackCapacity > 0">
                   <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                     </svg>
                     Backpack
-                    <span class="text-xs text-gray-500">({{ inventory.backpack.length }}/18)</span>
+                    <span class="text-xs text-gray-500">({{ inventory.backpack.length }}/{{ backpackCapacity }})</span>
                   </h4>
-                  <div class="grid grid-cols-9 gap-1">
+                  <div class="grid grid-cols-6 gap-1">
                     <div
                       v-for="(item, index) in backpackGrid"
                       :key="`backpack-${index}`"
                       :class="[
-                        'aspect-square rounded border flex items-center justify-center relative',
-                        item ? 'bg-dark-200 border-amber-500/30' : 'bg-dark-300/50 border-dark-100'
+                        'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
+                        item ? 'bg-dark-200 border-amber-500/30 hover:border-amber-500' : 'bg-dark-300/50 border-dark-100'
                       ]"
-                      :title="item ? `${item.displayName} x${item.amount}` : `Backpack ${index + 1}`"
+                      @mouseenter="item && showTooltip(item, $event)"
+                      @mouseleave="hideTooltip"
                     >
                       <template v-if="item">
-                        <div class="w-6 h-6 bg-amber-500/20 rounded flex items-center justify-center">
-                          <span class="text-amber-400 text-[10px] font-bold">{{ getItemIcon(item.itemId)[0].toUpperCase() }}</span>
+                        <img
+                          v-if="!iconFailed(item.itemId)"
+                          :src="getItemIconUrl(item.itemId)"
+                          :alt="item.displayName"
+                          class="w-7 h-7 object-contain"
+                          @error="onIconError(item.itemId)"
+                        />
+                        <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-[10px] font-bold', getItemColorClass(item.itemId)]">
+                          {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span v-if="item.amount > 1" class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow">
+                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                       </template>
@@ -582,6 +779,61 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
             <Button variant="secondary" @click="emit('close')">{{ t('common.close') }}</Button>
           </div>
         </div>
+
+        <!-- Item Tooltip -->
+        <Transition name="fade">
+          <div
+            v-if="hoveredItem"
+            :class="['fixed z-[60] bg-dark-100 border-2 rounded-lg shadow-xl p-3 pointer-events-none min-w-[200px] max-w-xs', getItemRarityClass(hoveredItem.itemId)]"
+            :style="{
+              left: `${Math.min(tooltipPosition.x + 10, window.innerWidth - 280)}px`,
+              top: `${Math.min(tooltipPosition.y + 10, window.innerHeight - 200)}px`
+            }"
+          >
+            <!-- Item Name with rarity color -->
+            <div :class="['font-bold text-base mb-0.5', getItemColorClass(hoveredItem.itemId).split(' ')[0]]">
+              {{ hoveredItem.displayName }}
+            </div>
+            <!-- Item Type / Category -->
+            <div class="text-xs text-gray-400 mb-2">
+              {{ getItemCategory(hoveredItem.itemId) }}
+              <span v-if="getItemMaterial(hoveredItem.itemId)" class="text-gray-500">
+                · {{ getItemMaterial(hoveredItem.itemId) }}
+              </span>
+            </div>
+
+            <!-- Item ID (smaller, for reference) -->
+            <div class="text-[10px] text-gray-500 font-mono mb-2 truncate">{{ hoveredItem.itemId }}</div>
+
+            <!-- Stats -->
+            <div class="space-y-1.5 text-sm border-t border-dark-50 pt-2">
+              <!-- Amount -->
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('players.tooltip.amount') }}:</span>
+                <span class="text-white font-medium">{{ hoveredItem.amount }}x</span>
+              </div>
+
+              <!-- Durability -->
+              <div v-if="hoveredItem.maxDurability > 0">
+                <div class="flex justify-between mb-1">
+                  <span class="text-gray-400">{{ t('players.tooltip.durability') }}:</span>
+                  <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-white' : 'text-red-400'" class="font-medium">
+                    {{ Math.round(hoveredItem.durability) }} / {{ Math.round(hoveredItem.maxDurability) }}
+                  </span>
+                </div>
+                <div class="h-2 bg-dark-300 rounded-full overflow-hidden">
+                  <div :class="['h-full transition-all', getDurabilityColor(hoveredItem)]" :style="{ width: `${getDurabilityPercent(hoveredItem)}%` }"></div>
+                </div>
+              </div>
+
+              <!-- Slot info -->
+              <div class="flex justify-between text-xs text-gray-500">
+                <span>Slot:</span>
+                <span>{{ hoveredItem.slot }}</span>
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
     </Transition>
   </Teleport>
@@ -606,5 +858,15 @@ const backpackGrid = computed(() => inventory.value ? generateGrid(inventory.val
 .modal-enter-from .relative,
 .modal-leave-to .relative {
   transform: scale(0.95);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

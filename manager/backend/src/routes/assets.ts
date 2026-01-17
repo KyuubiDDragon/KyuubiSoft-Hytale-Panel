@@ -160,4 +160,71 @@ router.get('/download/*', authMiddleware, (req: Request, res: Response) => {
   }
 });
 
+// GET /api/assets/item-icon/:itemId - Get item icon image
+// Searches common paths for item icons and returns the image
+router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) => {
+  const { itemId } = req.params;
+
+  if (!itemId) {
+    res.status(400).json({ detail: 'Item ID required' });
+    return;
+  }
+
+  // Common paths where item icons might be found in Hytale assets
+  const possiblePaths = [
+    // UI Icons
+    `hytale/textures/ui/icons/items/${itemId}.png`,
+    `hytale/textures/ui/icons/items/${itemId.toLowerCase()}.png`,
+    `textures/ui/icons/items/${itemId}.png`,
+    `textures/ui/icons/items/${itemId.toLowerCase()}.png`,
+    // Direct item textures
+    `hytale/textures/items/${itemId}.png`,
+    `hytale/textures/items/${itemId.toLowerCase()}.png`,
+    `textures/items/${itemId}.png`,
+    // Block textures (for block items)
+    `hytale/textures/blocks/${itemId}.png`,
+    `textures/blocks/${itemId}.png`,
+    // Try with underscores converted to paths
+    `hytale/textures/ui/icons/items/${itemId.replace(/_/g, '/')}.png`,
+  ];
+
+  // Try each possible path
+  for (const iconPath of possiblePaths) {
+    const result = assetService.readAssetFile(iconPath);
+    if (result.success && result.isBinary && result.mimeType?.startsWith('image/')) {
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+      res.send(Buffer.from(result.content as string, 'base64'));
+      return;
+    }
+  }
+
+  // If not found, return 404
+  res.status(404).json({ detail: 'Item icon not found', itemId });
+});
+
+// GET /api/assets/item-icon-search/:itemId - Search for item icon path
+// Returns the path if found, useful for debugging/checking if icon exists
+router.get('/item-icon-search/:itemId', authMiddleware, (req: Request, res: Response) => {
+  const { itemId } = req.params;
+
+  if (!itemId) {
+    res.status(400).json({ detail: 'Item ID required' });
+    return;
+  }
+
+  // Search for the item icon
+  const results = assetService.searchAssets(itemId, {
+    extensions: ['.png', '.jpg', '.jpeg'],
+    maxResults: 10,
+    useGlob: false,
+  });
+
+  res.json({
+    itemId,
+    found: results.length > 0,
+    paths: results.map(r => r.path),
+  });
+});
+
 export default router;

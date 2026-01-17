@@ -238,7 +238,36 @@
       "bodyType": "Körpertyp",
       "noCustomization": "Keine Anpassungsdaten verfügbar",
       "appearanceUnavailable": "Aussehen nicht verfügbar",
-      "appearanceHint": "Aussehen-Daten werden verfügbar sein, sobald die Hytale API dies unterstützt."
+      "appearanceHint": "Aussehen-Daten werden verfügbar sein, sobald die Hytale API dies unterstützt.",
+      "assetsHint": "Assets entpacken um Item-Icons anzuzeigen",
+      "goToAssets": "Zu Assets"
+    },
+    "itemTypes": {
+      "sword": "Schwert",
+      "axe": "Axt",
+      "battleaxe": "Streitaxt",
+      "mace": "Streitkolben",
+      "pickaxe": "Spitzhacke",
+      "bow": "Bogen",
+      "arrow": "Pfeil",
+      "shield": "Schild",
+      "helmet": "Helm",
+      "chestplate": "Brustplatte",
+      "leggings": "Beinschienen",
+      "gloves": "Handschuhe",
+      "potion": "Trank",
+      "food": "Nahrung",
+      "torch": "Fackel",
+      "teleporter": "Teleporter",
+      "material": "Material",
+      "tool": "Werkzeug",
+      "block": "Block",
+      "plant": "Pflanze",
+      "item": "Gegenstand"
+    },
+    "tooltip": {
+      "amount": "Anzahl",
+      "durability": "Haltbarkeit"
     }
   },
   "whitelist": {
