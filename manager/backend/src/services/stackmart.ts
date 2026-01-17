@@ -224,7 +224,8 @@ function getApiKey(): string | undefined {
 let apiKeyLogged = false;
 
 /**
- * Make a request to the StackMart API
+ * Make a request to the StackMart API using native fetch
+ * This works better with Cloudflare and other DDoS protection services
  */
 async function stackmartRequest<T>(
   endpoint: string,
@@ -243,12 +244,12 @@ async function stackmartRequest<T>(
     return null;
   }
 
-  return new Promise((resolve) => {
+  try {
     const baseUrl = isPublic ? STACKMART_PUBLIC_API : STACKMART_API_BASE + '/api';
     const url = new URL(endpoint, baseUrl);
 
     const headers: Record<string, string> = {
-      'User-Agent': 'KyuubiSoft-HytalePanel/1.0',
+      'User-Agent': 'Mozilla/5.0 (compatible; KyuubiSoft-HytalePanel/1.0)',
       'Accept': 'application/json',
     };
 
@@ -260,49 +261,27 @@ async function stackmartRequest<T>(
       headers['Content-Type'] = 'application/json';
     }
 
-    const requestOptions: https.RequestOptions = {
-      hostname: url.hostname,
-      path: url.pathname + url.search,
+    const response = await fetch(url.toString(), {
       method,
       headers,
-    };
-
-    const req = https.request(requestOptions, (res) => {
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        try {
-          if (res.statusCode === 200) {
-            resolve(JSON.parse(data));
-          } else if (res.statusCode === 429) {
-            console.error('StackMart API rate limit exceeded');
-            resolve(null);
-          } else {
-            console.error(`StackMart API error: ${res.statusCode} - ${data}`);
-            resolve(null);
-          }
-        } catch (e) {
-          console.error('Failed to parse StackMart response:', e);
-          resolve(null);
-        }
-      });
+      body: body ? JSON.stringify(body) : undefined,
     });
 
-    req.on('error', (e) => {
-      console.error('StackMart request error:', e);
-      resolve(null);
-    });
-
-    if (body) {
-      req.write(JSON.stringify(body));
+    if (response.status === 200) {
+      const data = await response.json();
+      return data as T;
+    } else if (response.status === 429) {
+      console.error('StackMart API rate limit exceeded');
+      return null;
+    } else {
+      const text = await response.text();
+      console.error(`StackMart API error: ${response.status} - ${text}`);
+      return null;
     }
-
-    req.end();
-  });
+  } catch (e) {
+    console.error('StackMart request error:', e);
+    return null;
+  }
 }
 
 /**

@@ -21,6 +21,7 @@ import schedulerRoutes from './routes/scheduler.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
+import { initializePlayerTracking } from './services/players.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,6 +101,11 @@ server.listen(config.port, '0.0.0.0', () => {
 
   // SECURITY: Check for insecure default credentials
   checkSecurityConfig();
+
+  // Initialize player tracking (load persisted data)
+  initializePlayerTracking().catch(err => {
+    console.error('Failed to initialize player tracking:', err);
+  });
 
   // Start schedulers
   startSchedulers();

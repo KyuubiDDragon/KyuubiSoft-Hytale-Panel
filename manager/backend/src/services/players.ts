@@ -4,129 +4,98 @@ import path from 'path';
 import { config } from '../config.js';
 import type { PlayerInfo } from '../types/index.js';
 
-// Player tracking state
-const onlinePlayers: Map<string, Date> = new Map();
-
-// Player history tracking
-export interface PlayerHistoryEntry {
+// Single unified player entry - all data in one place
+export interface PlayerEntry {
   name: string;
+  online: boolean;
   uuid?: string;
+  ip?: string;
+  world?: string;
   firstSeen: string;
   lastSeen: string;
+  currentSessionStart?: string; // When current session started (if online)
   playTime: number; // Total playtime in seconds
   sessionCount: number;
 }
 
-let playerHistory: Map<string, PlayerHistoryEntry> = new Map();
-let historyLoaded = false;
+// In-memory player list
+let players: Map<string, PlayerEntry> = new Map();
+let playersLoaded = false;
 
-async function getHistoryPath(): Promise<string> {
-  return path.join(config.serverPath, 'player-history.json');
+// Blacklist of names that should never be considered players
+const PLAYER_NAME_BLACKLIST = new Set([
+  'client',
+  'server',
+  'system',
+  'admin',
+  'console',
+  'websocket',
+  'socket',
+  'connection',
+  'user',
+  'player',
+]);
+
+const MIN_PLAYER_NAME_LENGTH = 3;
+
+function isValidPlayerName(name: string): boolean {
+  if (!name || name.length < MIN_PLAYER_NAME_LENGTH) return false;
+  if (PLAYER_NAME_BLACKLIST.has(name.toLowerCase())) return false;
+  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) return false;
+  return true;
 }
 
-async function loadPlayerHistory(): Promise<void> {
-  if (historyLoaded) return;
+// File path for the unified players.json
+async function getPlayersPath(): Promise<string> {
+  return path.join(config.serverPath, 'players.json');
+}
+
+// Load players from file
+async function loadPlayers(): Promise<void> {
+  if (playersLoaded) return;
   try {
-    const content = await readFile(await getHistoryPath(), 'utf-8');
-    const data = JSON.parse(content);
+    const content = await readFile(await getPlayersPath(), 'utf-8');
+    const data: PlayerEntry[] = JSON.parse(content);
     if (Array.isArray(data)) {
       for (const entry of data) {
-        playerHistory.set(entry.name, entry);
+        if (isValidPlayerName(entry.name)) {
+          players.set(entry.name, entry);
+        }
       }
+      console.log(`[Players] Loaded ${players.size} players from players.json`);
     }
   } catch {
-    // File doesn't exist yet, start with empty history
+    console.log('[Players] No players.json found, starting fresh');
   }
-  historyLoaded = true;
+  playersLoaded = true;
 }
 
-async function savePlayerHistory(): Promise<void> {
-  const data = Array.from(playerHistory.values());
-  await writeFile(await getHistoryPath(), JSON.stringify(data, null, 2), 'utf-8');
+// Save players to file
+async function savePlayers(): Promise<void> {
+  const data = Array.from(players.values());
+  await writeFile(await getPlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
 }
 
-function recordPlayerJoin(name: string, uuid?: string): void {
-  const now = new Date().toISOString();
-  const existing = playerHistory.get(name);
-
-  if (existing) {
-    existing.lastSeen = now;
-    existing.sessionCount++;
-    if (uuid && !existing.uuid) {
-      existing.uuid = uuid;
-    }
-  } else {
-    playerHistory.set(name, {
-      name,
-      uuid,
-      firstSeen: now,
-      lastSeen: now,
-      playTime: 0,
-      sessionCount: 1,
-    });
-  }
-
-  // Save async (don't await to not block)
-  savePlayerHistory().catch(err => console.error('Failed to save player history:', err));
-}
-
-function recordPlayerLeave(name: string): void {
-  const existing = playerHistory.get(name);
-  const joinTime = onlinePlayers.get(name);
-
-  if (existing && joinTime) {
-    const sessionDuration = Math.floor((Date.now() - joinTime.getTime()) / 1000);
-    existing.playTime += sessionDuration;
-    existing.lastSeen = new Date().toISOString();
-
-    // Save async
-    savePlayerHistory().catch(err => console.error('Failed to save player history:', err));
-  }
-}
-
-export async function getPlayerHistory(): Promise<PlayerHistoryEntry[]> {
-  await loadPlayerHistory();
-  return Array.from(playerHistory.values()).sort((a, b) =>
-    new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime()
-  );
-}
-
-export async function getOfflinePlayers(): Promise<PlayerHistoryEntry[]> {
-  await loadPlayerHistory();
-  // Scan logs to ensure onlinePlayers map is up-to-date before filtering
-  await scanLogs();
-  const onlineNames = new Set(onlinePlayers.keys());
-  return Array.from(playerHistory.values())
-    .filter(p => !onlineNames.has(p.name))
-    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
-}
-
-// Patterns for player events - Hytale Server specific patterns first
-// Player names can contain letters, numbers, underscores
+// Patterns for player events
 const JOIN_PATTERNS = [
-  // Hytale Server specific patterns (from actual logs)
   /\[Universe\|P\]\s+Adding player '(\w+)/i,
   /\[World\|.*?\]\s+Player '(\w+)' joined world/i,
   /\[World\|.*?\]\s+Adding player '(\w+)' to world/i,
   /Starting authenticated flow for (\w+)/i,
   /Connection complete for (\w+)/i,
   /Identity token validated for (\w+)/i,
-  // Generic fallback patterns
   /Player\s+(\w+)\s+joined/i,
-  /Player\s+(\w+)\s+connected/i,
+  /Player\s+(\w+)\s+connected to the server/i,
   /(\w+)\s+joined the game/i,
   /(\w+)\s+joined the server/i,
-  /(\w+)\s+has joined/i,
-  /(\w+)\s+connected/i,
-  /(\w+)\s+logged in/i,
+  /(\w+)\s+has joined the game/i,
+  /(\w+)\s+logged in with entity id/i,
 ];
 
 const LEAVE_PATTERNS = [
-  // Hytale Server specific patterns (from actual logs)
   /Disconnecting (\w+) at/i,
   /\[Universe\|P\]\s+Removing player '(\w+)/i,
   /\[PlayerSystems\]\s+Removing player '(\w+)/i,
-  // Generic fallback patterns
   /Player\s+(\w+)\s+left/i,
   /Player\s+(\w+)\s+disconnected/i,
   /(\w+)\s+left the game/i,
@@ -139,18 +108,123 @@ const LEAVE_PATTERNS = [
   /(\w+)\s+lost connection/i,
 ];
 
+// Patterns to extract additional info
+const UUID_PATTERNS = [
+  /UUID of player (\w+) is ([a-f0-9-]+)/i,
+  /(\w+)\[.*?([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i,
+  /Identity token validated for (\w+).*?([a-f0-9-]{36})/i,
+];
+
+const IP_PATTERNS = [
+  /(\w+)\[\/([0-9.]+):\d+\]/i,
+  /(\w+) logged in with.*from \/([0-9.]+)/i,
+  /Connection from \/([0-9.]+):\d+.*player[:\s]+(\w+)/i,
+  /(\w+).*connected from ([0-9.]+)/i,
+];
+
+const WORLD_PATTERNS = [
+  /\[World\|(\w+)\]\s+Player '(\w+)'/i,
+  /(\w+) joined world '?(\w+)'?/i,
+  /Adding player '(\w+)' to world '?(\w+)'?/i,
+];
+
+// Extract extra info from log line
+function extractPlayerInfo(line: string, playerName: string): { uuid?: string; ip?: string; world?: string } {
+  const info: { uuid?: string; ip?: string; world?: string } = {};
+
+  for (const pattern of UUID_PATTERNS) {
+    const match = pattern.exec(line);
+    if (match) {
+      if (match[1]?.toLowerCase() === playerName.toLowerCase()) info.uuid = match[2];
+      else if (match[2]?.toLowerCase() === playerName.toLowerCase()) info.uuid = match[1];
+      break;
+    }
+  }
+
+  for (const pattern of IP_PATTERNS) {
+    const match = pattern.exec(line);
+    if (match) {
+      if (match[1]?.toLowerCase() === playerName.toLowerCase()) info.ip = match[2];
+      else if (match[2]?.toLowerCase() === playerName.toLowerCase()) info.ip = match[1];
+      break;
+    }
+  }
+
+  for (const pattern of WORLD_PATTERNS) {
+    const match = pattern.exec(line);
+    if (match) {
+      if (match[1]?.toLowerCase() === playerName.toLowerCase()) info.world = match[2];
+      else if (match[2]?.toLowerCase() === playerName.toLowerCase()) info.world = match[1];
+      break;
+    }
+  }
+
+  return info;
+}
+
+// Set player online
+function setPlayerOnline(name: string, extraInfo: { uuid?: string; ip?: string; world?: string } = {}): void {
+  const now = new Date().toISOString();
+  const existing = players.get(name);
+
+  if (existing) {
+    existing.online = true;
+    existing.lastSeen = now;
+    existing.currentSessionStart = now;
+    existing.sessionCount++;
+    if (extraInfo.uuid && !existing.uuid) existing.uuid = extraInfo.uuid;
+    if (extraInfo.ip) existing.ip = extraInfo.ip;
+    if (extraInfo.world) existing.world = extraInfo.world;
+  } else {
+    players.set(name, {
+      name,
+      online: true,
+      uuid: extraInfo.uuid,
+      ip: extraInfo.ip,
+      world: extraInfo.world,
+      firstSeen: now,
+      lastSeen: now,
+      currentSessionStart: now,
+      playTime: 0,
+      sessionCount: 1,
+    });
+  }
+
+  savePlayers().catch(err => console.error('Failed to save players:', err));
+}
+
+// Set player offline
+function setPlayerOffline(name: string): void {
+  const player = players.get(name);
+  if (!player) return;
+
+  const now = new Date();
+  player.online = false;
+  player.lastSeen = now.toISOString();
+
+  // Calculate session duration if we have session start
+  if (player.currentSessionStart) {
+    const sessionStart = new Date(player.currentSessionStart);
+    const sessionDuration = Math.floor((now.getTime() - sessionStart.getTime()) / 1000);
+    player.playTime += sessionDuration;
+    player.currentSessionStart = undefined;
+  }
+
+  savePlayers().catch(err => console.error('Failed to save players:', err));
+}
+
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
+  if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
 
+// Scan logs to sync state
 export async function scanLogs(): Promise<void> {
+  await loadPlayers();
+
   const logs = await getLogs(500);
   if (!logs) return;
 
@@ -162,8 +236,12 @@ export async function scanLogs(): Promise<void> {
       const match = pattern.exec(line);
       if (match) {
         const player = match[1];
-        if (!onlinePlayers.has(player)) {
-          onlinePlayers.set(player, new Date());
+        if (isValidPlayerName(player)) {
+          const existing = players.get(player);
+          if (!existing || !existing.online) {
+            const extraInfo = extractPlayerInfo(line, player);
+            setPlayerOnline(player, extraInfo);
+          }
         }
         break;
       }
@@ -174,65 +252,106 @@ export async function scanLogs(): Promise<void> {
       const match = pattern.exec(line);
       if (match) {
         const player = match[1];
-        onlinePlayers.delete(player);
+        if (isValidPlayerName(player)) {
+          const existing = players.get(player);
+          if (existing && existing.online) {
+            setPlayerOffline(player);
+          }
+        }
         break;
       }
     }
   }
 }
 
+// Get online players
 export async function getOnlinePlayers(): Promise<PlayerInfo[]> {
-  await scanLogs();
+  await loadPlayers();
 
   const now = new Date();
-  const players: PlayerInfo[] = [];
+  const result: PlayerInfo[] = [];
 
-  for (const [name, joinedAt] of onlinePlayers) {
-    const durationMs = now.getTime() - joinedAt.getTime();
-    players.push({
-      name,
-      joined_at: joinedAt.toISOString(),
-      session_duration_seconds: Math.floor(durationMs / 1000),
-      session_duration: formatDuration(durationMs),
-    });
+  for (const player of players.values()) {
+    if (player.online && player.currentSessionStart) {
+      const sessionStart = new Date(player.currentSessionStart);
+      const durationMs = now.getTime() - sessionStart.getTime();
+      result.push({
+        name: player.name,
+        joined_at: player.currentSessionStart,
+        session_duration_seconds: Math.floor(durationMs / 1000),
+        session_duration: formatDuration(durationMs),
+      });
+    }
   }
 
-  return players;
+  return result;
 }
 
+// Get offline players
+export async function getOfflinePlayers(): Promise<PlayerEntry[]> {
+  await loadPlayers();
+  return Array.from(players.values())
+    .filter(p => !p.online)
+    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
+}
+
+// Get all players
+export async function getAllPlayers(): Promise<PlayerEntry[]> {
+  await loadPlayers();
+  return Array.from(players.values())
+    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
+}
+
+// Get player count
 export async function getPlayerCount(): Promise<number> {
-  await scanLogs();
-  return onlinePlayers.size;
+  await loadPlayers();
+  return Array.from(players.values()).filter(p => p.online).length;
 }
 
+// Get player history (for backwards compatibility)
+export async function getPlayerHistory(): Promise<PlayerEntry[]> {
+  return getAllPlayers();
+}
+
+// Remove player
 export function removePlayer(name: string): void {
-  onlinePlayers.delete(name);
-}
-
-/**
- * Clear all online players - called when server stops or restarts
- * This ensures no stale players remain in the online list after server restart
- */
-export function clearOnlinePlayers(): void {
-  // Record leave for all online players before clearing
-  for (const [name] of onlinePlayers) {
-    recordPlayerLeave(name);
+  if (players.has(name)) {
+    setPlayerOffline(name);
   }
-  onlinePlayers.clear();
-  console.log('[Players] Cleared online players list (server stop/restart)');
 }
 
+// Initialize player tracking
+export async function initializePlayerTracking(): Promise<void> {
+  console.log('[Players] Initializing player tracking...');
+  await loadPlayers();
+  await scanLogs();
+  const onlineCount = Array.from(players.values()).filter(p => p.online).length;
+  console.log(`[Players] Initialized with ${players.size} total players, ${onlineCount} online`);
+}
+
+// Clear all online players (server stop/restart)
+export function clearOnlinePlayers(): void {
+  for (const player of players.values()) {
+    if (player.online) {
+      setPlayerOffline(player.name);
+    }
+  }
+  console.log('[Players] Cleared all online players (server stop/restart)');
+}
+
+// Process log line in real-time
 export function processLogLine(line: string): { event: 'join' | 'leave'; player: string } | null {
-  // Initialize history loading
-  loadPlayerHistory().catch(() => {});
+  loadPlayers().catch(() => {});
 
   // Check for join
   for (const pattern of JOIN_PATTERNS) {
     const match = pattern.exec(line);
     if (match) {
       const player = match[1];
-      onlinePlayers.set(player, new Date());
-      recordPlayerJoin(player);
+      if (!isValidPlayerName(player)) continue;
+
+      const extraInfo = extractPlayerInfo(line, player);
+      setPlayerOnline(player, extraInfo);
       return { event: 'join', player };
     }
   }
@@ -242,8 +361,9 @@ export function processLogLine(line: string): { event: 'join' | 'leave'; player:
     const match = pattern.exec(line);
     if (match) {
       const player = match[1];
-      recordPlayerLeave(player);
-      onlinePlayers.delete(player);
+      if (!isValidPlayerName(player)) continue;
+
+      setPlayerOffline(player);
       return { event: 'leave', player };
     }
   }
@@ -254,7 +374,7 @@ export function processLogLine(line: string): { event: 'join' | 'leave'; player:
 // Player statistics
 export interface PlayerStatistics {
   totalPlayers: number;
-  totalPlaytime: number; // in seconds
+  totalPlaytime: number;
   averagePlaytime: number;
   averageSessionsPerPlayer: number;
   topPlayers: { name: string; playTime: number; sessions: number }[];
@@ -263,7 +383,6 @@ export interface PlayerStatistics {
   peakOnlineToday: number;
 }
 
-// Track peak players
 let peakOnlineToday = 0;
 let peakResetDate = new Date().toDateString();
 
@@ -273,42 +392,31 @@ function updatePeakOnline(): void {
     peakOnlineToday = 0;
     peakResetDate = today;
   }
-  if (onlinePlayers.size > peakOnlineToday) {
-    peakOnlineToday = onlinePlayers.size;
+  const onlineCount = Array.from(players.values()).filter(p => p.online).length;
+  if (onlineCount > peakOnlineToday) {
+    peakOnlineToday = onlineCount;
   }
 }
 
 export async function getPlayerStatistics(): Promise<PlayerStatistics> {
-  await loadPlayerHistory();
+  await loadPlayers();
   updatePeakOnline();
 
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const players = Array.from(playerHistory.values());
-  const totalPlayers = players.length;
-  const totalPlaytime = players.reduce((sum, p) => sum + p.playTime, 0);
-  const totalSessions = players.reduce((sum, p) => sum + p.sessionCount, 0);
+  const allPlayers = Array.from(players.values());
+  const totalPlayers = allPlayers.length;
+  const totalPlaytime = allPlayers.reduce((sum, p) => sum + p.playTime, 0);
+  const totalSessions = allPlayers.reduce((sum, p) => sum + p.sessionCount, 0);
 
-  // Top 10 players by playtime
-  const topPlayers = players
+  const topPlayers = allPlayers
     .sort((a, b) => b.playTime - a.playTime)
     .slice(0, 10)
-    .map(p => ({
-      name: p.name,
-      playTime: p.playTime,
-      sessions: p.sessionCount,
-    }));
+    .map(p => ({ name: p.name, playTime: p.playTime, sessions: p.sessionCount }));
 
-  // New players in last 7 days
-  const newPlayersLast7Days = players.filter(
-    p => new Date(p.firstSeen) >= sevenDaysAgo
-  ).length;
-
-  // Active players in last 7 days
-  const activePlayersLast7Days = players.filter(
-    p => new Date(p.lastSeen) >= sevenDaysAgo
-  ).length;
+  const newPlayersLast7Days = allPlayers.filter(p => new Date(p.firstSeen) >= sevenDaysAgo).length;
+  const activePlayersLast7Days = allPlayers.filter(p => new Date(p.lastSeen) >= sevenDaysAgo).length;
 
   return {
     totalPlayers,
@@ -322,7 +430,7 @@ export async function getPlayerStatistics(): Promise<PlayerStatistics> {
   };
 }
 
-// Daily activity for charts (last 7 days)
+// Daily activity
 export interface DailyActivity {
   date: string;
   uniquePlayers: number;
@@ -330,7 +438,7 @@ export interface DailyActivity {
 }
 
 export async function getDailyActivity(days: number = 7): Promise<DailyActivity[]> {
-  await loadPlayerHistory();
+  await loadPlayers();
 
   const result: DailyActivity[] = [];
   const now = new Date();
@@ -340,8 +448,7 @@ export async function getDailyActivity(days: number = 7): Promise<DailyActivity[
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
 
-    // Count players active on this day
-    const playersOnDay = Array.from(playerHistory.values()).filter(p => {
+    const playersOnDay = Array.from(players.values()).filter(p => {
       const lastSeen = new Date(p.lastSeen);
       return lastSeen.toISOString().split('T')[0] === dateStr;
     });
@@ -349,9 +456,12 @@ export async function getDailyActivity(days: number = 7): Promise<DailyActivity[
     result.push({
       date: dateStr,
       uniquePlayers: playersOnDay.length,
-      totalSessions: playersOnDay.reduce((sum, p) => sum + 1, 0), // Simplified: 1 session per active day
+      totalSessions: playersOnDay.length,
     });
   }
 
   return result;
 }
+
+// Export PlayerHistoryEntry as alias for backwards compatibility
+export type PlayerHistoryEntry = PlayerEntry;
