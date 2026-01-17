@@ -2,6 +2,10 @@
 # Hytale Dedicated Server - Docker Compose
 # ============================================================
 #
+# STACK_NAME: ${STACK_NAME} (Standard: hytale)
+#   -> Container: ${STACK_NAME}, ${STACK_NAME}-manager
+#   -> Netzwerk: ${STACK_NAME}-net
+#
 # HOST PFADE: ${HOST_DATA_PATH} (Standard: /opt/hytale)
 # CONTAINER PFADE: /opt/hytale/
 #
@@ -13,7 +17,7 @@
 #
 # LOKAL:
 # 1. cp .env.example .env
-# 2. .env anpassen (HOST_DATA_PATH, Ports, etc.)
+# 2. .env anpassen (STACK_NAME, HOST_DATA_PATH, Ports, etc.)
 # 3. docker-compose up -d
 #
 # WEB MANAGER:
@@ -25,8 +29,8 @@
 services:
   hytale:
     build: .
-    container_name: hytale
-    hostname: hytale
+    container_name: ${STACK_NAME:-hytale}
+    hostname: ${STACK_NAME:-hytale}
     restart: on-failure:3
     
     environment:
@@ -90,7 +94,7 @@ services:
 
     # Network for manager communication
     networks:
-      - hytale-net
+      - internal-net
 
     # SECURITY: Resource limits to prevent resource exhaustion
     # Note: DOCKER_MEMORY_LIMIT should be >= JAVA_MAX_RAM + 1G for overhead
@@ -108,8 +112,8 @@ services:
   # ============================================================
   hytale-manager:
     build: ./manager
-    container_name: hytale-manager
-    hostname: hytale-manager
+    container_name: ${STACK_NAME:-hytale}-manager
+    hostname: ${STACK_NAME:-hytale}-manager
     restart: unless-stopped
 
     environment:
@@ -119,7 +123,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-key}
 
       # Target container
-      - GAME_CONTAINER_NAME=hytale
+      - GAME_CONTAINER_NAME=${STACK_NAME:-hytale}
 
       # Paths (inside container)
       - SERVER_PATH=/opt/hytale/server
@@ -154,7 +158,7 @@ services:
       - manager-data:/app/data
 
     networks:
-      - hytale-net
+      - internal-net
 
     depends_on:
       - hytale
@@ -180,7 +184,8 @@ services:
 # Networks
 # ============================================================
 networks:
-  hytale-net:
+  internal-net:
+    name: ${STACK_NAME:-hytale}-net
     driver: bridge
 
 # ============================================================
@@ -188,3 +193,4 @@ networks:
 # ============================================================
 volumes:
   manager-data:
+    name: ${STACK_NAME:-hytale}-manager-data
