@@ -128,8 +128,9 @@ async function fetchPanelPatchline() {
   }
 }
 
-// Computed: Use plugin patchline if available, otherwise panel setting
-const displayPatchline = computed(() => patchline.value || panelPatchline.value)
+// Computed: Always use panel patchline setting (that's what the user configured)
+// The plugin patchline shows what's currently running, but panel setting is the source of truth
+const displayPatchline = computed(() => panelPatchline.value || patchline.value)
 
 onMounted(() => {
   fetchServerMemory()

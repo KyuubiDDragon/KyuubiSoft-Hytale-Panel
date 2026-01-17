@@ -15,7 +15,7 @@
 
 ---
 
-**[Deutsch](#deutsch)** | **[English](#english)** | **[Commands](docs/COMMANDS.md)**
+**[Deutsch](#deutsch)** | **[English](#english)** | **[Commands](docs/COMMANDS.md)** | **[Changelog](CHANGELOG.md)**
 
 </div>
 
@@ -391,6 +391,7 @@ docker start hytale
 
 ## Documentation
 
+- **[Changelog](CHANGELOG.md)** - Recent changes and updates
 - **[Server Commands](docs/COMMANDS.md)** - Complete list of all Hytale server commands
 - [Hytale Server Manual](https://support.hytale.com/hc/en-us/articles/45326769420827-Hytale-Server-Manual)
 - [Hytale Downloader](https://downloader.hytale.com/hytale-downloader.zip)
