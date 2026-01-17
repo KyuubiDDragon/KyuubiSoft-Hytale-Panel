@@ -323,10 +323,17 @@ export const activityApi = {
 
 // ============== MOD STORE ==============
 
+// Localized string type for multi-language support
+export interface LocalizedString {
+  de?: string
+  en?: string
+  pt_br?: string
+}
+
 export interface ModStoreEntry {
   id: string
   name: string
-  description: string
+  description: string | LocalizedString // Can be string (legacy) or localized
   author: string
   github: string
   category: 'map' | 'utility' | 'gameplay' | 'admin' | 'other'
@@ -337,6 +344,7 @@ export interface ModStoreEntry {
   hasUpdate?: boolean
   configPath?: string
   ports?: { name: string; default: number; env: string }[]
+  hints?: LocalizedString
 }
 
 export interface ModReleaseInfo {

@@ -14,11 +14,18 @@ import { config } from '../config.js';
 const EXTERNAL_REGISTRY_URL = 'https://kyuubisoft.com/hytale-mods.json';
 const REGISTRY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 
+// Localized string type for multi-language support
+export interface LocalizedString {
+  de?: string;
+  en?: string;
+  pt_br?: string;
+}
+
 // Registry of available mods
 export interface ModStoreEntry {
   id: string;
   name: string;
-  description: string;
+  description: string | LocalizedString; // Can be string (legacy) or localized
   author: string;
   github?: string; // owner/repo format (for GitHub releases)
   downloadUrl?: string; // Direct download URL (alternative to github)
@@ -28,6 +35,7 @@ export interface ModStoreEntry {
   ports?: { name: string; default: number; env: string }[];
   website?: string;
   version?: string; // For direct downloads
+  hints?: LocalizedString;
 }
 
 // Built-in fallback registry (used if external registry fails)

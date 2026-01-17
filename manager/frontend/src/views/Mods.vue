@@ -12,6 +12,7 @@ import {
   type ModInfo,
   type ConfigFile,
   type ModStoreEntry,
+  type LocalizedString,
   type ModtaleProject,
   type ModtaleProjectDetails,
   type ModtaleStatus,
@@ -25,8 +26,26 @@ import {
   type StackMartCategory,
   type StackMartInstalledInfo,
 } from '@/api/management'
+import { getLocale } from '@/i18n'
 
 const { t } = useI18n()
+
+// Helper to get localized string based on current locale
+function getLocalizedText(text: string | LocalizedString | undefined): string {
+  if (!text) return ''
+  if (typeof text === 'string') return text
+
+  const locale = getLocale()
+  // Map locale to key (handle pt_br -> pt_br)
+  const localeKey = locale === 'pt_br' ? 'pt_br' : locale
+
+  // Try current locale, then English, then first available
+  return text[localeKey as keyof LocalizedString]
+    || text.en
+    || text.de
+    || text.pt_br
+    || ''
+}
 
 type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart'
 
@@ -960,7 +979,14 @@ onMounted(loadData)
                   {{ t('mods.updateSuccess') }}
                 </span>
               </div>
-              <p class="text-sm text-gray-400 mt-1">{{ mod.description }}</p>
+              <p class="text-sm text-gray-400 mt-1">{{ getLocalizedText(mod.description) }}</p>
+              <!-- Hint (if available) -->
+              <div v-if="mod.hints && getLocalizedText(mod.hints)" class="mt-2 p-2 bg-status-warning/10 border border-status-warning/30 rounded text-xs text-status-warning flex items-start gap-2">
+                <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{{ getLocalizedText(mod.hints) }}</span>
+              </div>
               <div class="flex items-center gap-3 text-sm text-gray-500 mt-1">
                 <span>{{ t('mods.by') }} {{ mod.author }}</span>
                 <a :href="'https://github.com/' + mod.github" target="_blank" class="text-blue-400 hover:underline flex items-center gap-1">
