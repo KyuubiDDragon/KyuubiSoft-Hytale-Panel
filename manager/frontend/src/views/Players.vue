@@ -6,6 +6,7 @@ import { serverApi, type PluginPlayer } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
+import PlayerDetailModal from '@/components/players/PlayerDetailModal.vue'
 import { formatItemPath } from '@/utils/formatItemPath'
 
 const { t } = useI18n()
@@ -47,6 +48,7 @@ const showClearInventoryModal = ref(false)
 const showTeleportModal = ref(false)
 const showGamemodeModal = ref(false)
 const showGiveModal = ref(false)
+const showPlayerDetailModal = ref(false)
 
 // Teleport form
 const teleportMode = ref<'player' | 'coords'>('player')
@@ -201,6 +203,12 @@ function openGiveModal(name: string) {
   giveAmount.value = 1
   showGiveModal.value = true
   closeDropdown()
+}
+
+function openPlayerDetailModal(name: string, uuid?: string) {
+  selectedPlayer.value = name
+  selectedPlayerUuid.value = uuid || null
+  showPlayerDetailModal.value = true
 }
 
 async function handleWhitelist(name: string) {
@@ -466,14 +474,17 @@ onUnmounted(() => {
           :key="player.name"
           class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
-          <!-- Player Info -->
-          <div class="flex items-center gap-4 flex-1 min-w-0">
-            <div class="w-10 h-10 bg-hytale-orange/20 rounded-lg flex items-center justify-center flex-shrink-0">
+          <!-- Player Info (Clickable for details) -->
+          <div
+            class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer group"
+            @click.stop="openPlayerDetailModal(player.name, player.uuid)"
+          >
+            <div class="w-10 h-10 bg-hytale-orange/20 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-hytale-orange/30 transition-colors">
               <span class="text-hytale-orange font-bold">{{ player.name[0].toUpperCase() }}</span>
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <p class="font-medium text-white">{{ player.name }}</p>
+                <p class="font-medium text-white group-hover:text-hytale-orange transition-colors">{{ player.name }}</p>
                 <!-- Gamemode badge when plugin available -->
                 <span
                   v-if="pluginAvailable && player.gameMode"
@@ -891,5 +902,13 @@ onUnmounted(() => {
         <Button :loading="actionLoading" @click="confirmGive" :disabled="!giveItem">{{ t('players.give') }}</Button>
       </template>
     </Modal>
+
+    <!-- Player Detail Modal -->
+    <PlayerDetailModal
+      :open="showPlayerDetailModal"
+      :player-name="selectedPlayer || ''"
+      :player-uuid="selectedPlayerUuid || undefined"
+      @close="showPlayerDetailModal = false"
+    />
   </div>
 </template>

@@ -545,4 +545,58 @@ router.get('/plugin/memory', authMiddleware, async (_req: Request, res: Response
   }
 });
 
+// GET /api/server/plugin/players/:name/details - Get player details from plugin API
+router.get('/plugin/players/:name/details', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const result = await kyuubiApiService.getPlayerDetailsFromPlugin(name);
+    if (!result.success) {
+      res.status(503).json(result);
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get player details from plugin',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/plugin/players/:name/inventory - Get player inventory from plugin API
+router.get('/plugin/players/:name/inventory', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const result = await kyuubiApiService.getPlayerInventoryFromPlugin(name);
+    if (!result.success) {
+      res.status(503).json(result);
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get player inventory from plugin',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/plugin/players/:name/appearance - Get player appearance from plugin API
+router.get('/plugin/players/:name/appearance', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const result = await kyuubiApiService.getPlayerAppearanceFromPlugin(name);
+    if (!result.success) {
+      res.status(503).json(result);
+      return;
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get player appearance from plugin',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;

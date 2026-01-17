@@ -158,6 +158,59 @@ export interface PluginApiResponse<T> {
   error?: string
 }
 
+// Player detail interfaces
+export interface PluginPlayerDetails {
+  uuid: string
+  name: string
+  world?: string
+  position?: { x: number; y: number; z: number }
+  yaw?: number
+  pitch?: number
+  gamemode?: string
+  health?: number
+  maxHealth?: number
+}
+
+export interface PluginInventoryItem {
+  slot: number
+  itemId: string
+  displayName?: string
+  amount: number
+  durability?: number
+  maxDurability?: number
+  enchantments?: string[]
+  nbt?: Record<string, unknown>
+}
+
+export interface PluginPlayerInventory {
+  uuid: string
+  name: string
+  items: PluginInventoryItem[]
+  totalSlots: number
+  usedSlots: number
+}
+
+export interface PluginAppearanceCustomization {
+  hairStyle?: string
+  hairColor?: string
+  eyeColor?: string
+  skinTone?: string
+  bodyType?: string
+  accessories?: string[]
+  colors?: Record<string, string>
+}
+
+export interface PluginPlayerAppearance {
+  uuid: string
+  name: string
+  skinId?: string
+  skinUrl?: string
+  modelType?: string
+  capeId?: string
+  capeUrl?: string
+  customization?: PluginAppearanceCustomization
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -263,6 +316,22 @@ export const serverApi = {
 
   async getPluginMemory(): Promise<PluginApiResponse<PluginMemoryInfo>> {
     const response = await api.get<PluginApiResponse<PluginMemoryInfo>>('/server/plugin/memory')
+    return response.data
+  },
+
+  // Player detail methods
+  async getPluginPlayerDetails(playerName: string): Promise<PluginApiResponse<PluginPlayerDetails>> {
+    const response = await api.get<PluginApiResponse<PluginPlayerDetails>>(`/server/plugin/players/${encodeURIComponent(playerName)}/details`)
+    return response.data
+  },
+
+  async getPluginPlayerInventory(playerName: string): Promise<PluginApiResponse<PluginPlayerInventory>> {
+    const response = await api.get<PluginApiResponse<PluginPlayerInventory>>(`/server/plugin/players/${encodeURIComponent(playerName)}/inventory`)
+    return response.data
+  },
+
+  async getPluginPlayerAppearance(playerName: string): Promise<PluginApiResponse<PluginPlayerAppearance>> {
+    const response = await api.get<PluginApiResponse<PluginPlayerAppearance>>(`/server/plugin/players/${encodeURIComponent(playerName)}/appearance`)
     return response.data
   },
 }

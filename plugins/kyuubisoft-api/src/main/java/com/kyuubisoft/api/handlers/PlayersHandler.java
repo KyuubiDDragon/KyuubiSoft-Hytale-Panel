@@ -8,6 +8,8 @@ import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3f;
 
 import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Handler for player-related API endpoints
@@ -161,6 +163,83 @@ public class PlayersHandler {
         return details;
     }
 
+    /**
+     * GET /api/players/{name}/inventory
+     * Returns the player's inventory items
+     */
+    public PlayerInventory getPlayerInventory(String playerName) {
+        Universe universe = Universe.get();
+        List<PlayerRef> players = universe.getPlayers();
+
+        for (PlayerRef player : players) {
+            if (player.getUsername().equalsIgnoreCase(playerName)) {
+                return createPlayerInventory(player);
+            }
+        }
+
+        return null; // Player not found
+    }
+
+    private PlayerInventory createPlayerInventory(PlayerRef player) {
+        PlayerInventory inventory = new PlayerInventory();
+        inventory.uuid = player.getUuid().toString();
+        inventory.name = player.getUsername();
+        inventory.items = new ArrayList<>();
+        inventory.totalSlots = 36;
+        inventory.usedSlots = 0;
+
+        // TODO: When Hytale API exposes inventory access, implement real inventory reading
+        // For now, we return an empty inventory structure
+        // Future implementation would look like:
+        // PlayerInventoryAccess inv = player.getInventory();
+        // for (int i = 0; i < inv.getSize(); i++) {
+        //     ItemStack item = inv.getItem(i);
+        //     if (item != null) {
+        //         inventory.items.add(new InventoryItem(i, item.getId(), item.getAmount()));
+        //         inventory.usedSlots++;
+        //     }
+        // }
+
+        return inventory;
+    }
+
+    /**
+     * GET /api/players/{name}/appearance
+     * Returns the player's appearance/skin information
+     */
+    public PlayerAppearance getPlayerAppearance(String playerName) {
+        Universe universe = Universe.get();
+        List<PlayerRef> players = universe.getPlayers();
+
+        for (PlayerRef player : players) {
+            if (player.getUsername().equalsIgnoreCase(playerName)) {
+                return createPlayerAppearance(player);
+            }
+        }
+
+        return null; // Player not found
+    }
+
+    private PlayerAppearance createPlayerAppearance(PlayerRef player) {
+        PlayerAppearance appearance = new PlayerAppearance();
+        appearance.uuid = player.getUuid().toString();
+        appearance.name = player.getUsername();
+
+        // TODO: When Hytale API exposes appearance/customization data, implement real reading
+        // For now, we return basic structure with placeholder data
+        // Future implementation would look like:
+        // PlayerCustomization custom = player.getCustomization();
+        // appearance.skinId = custom.getSkinId();
+        // appearance.bodyType = custom.getBodyType();
+        // etc.
+
+        appearance.skinId = null;
+        appearance.modelType = "default";
+        appearance.customization = new AppearanceCustomization();
+
+        return appearance;
+    }
+
     // Response classes
 
     public static class PlayersResponse {
@@ -197,6 +276,67 @@ public class PlayersHandler {
             this.x = Math.round(x * 100.0) / 100.0;
             this.y = Math.round(y * 100.0) / 100.0;
             this.z = Math.round(z * 100.0) / 100.0;
+        }
+    }
+
+    // Inventory classes
+
+    public static class PlayerInventory {
+        public String uuid;
+        public String name;
+        public List<InventoryItem> items;
+        public int totalSlots;
+        public int usedSlots;
+    }
+
+    public static class InventoryItem {
+        public int slot;
+        public String itemId;
+        public String displayName;
+        public int amount;
+        public int durability;
+        public int maxDurability;
+        public List<String> enchantments;
+        public Map<String, Object> nbt;
+
+        public InventoryItem() {
+            this.enchantments = new ArrayList<>();
+            this.nbt = new HashMap<>();
+        }
+
+        public InventoryItem(int slot, String itemId, int amount) {
+            this();
+            this.slot = slot;
+            this.itemId = itemId;
+            this.amount = amount;
+        }
+    }
+
+    // Appearance classes
+
+    public static class PlayerAppearance {
+        public String uuid;
+        public String name;
+        public String skinId;
+        public String skinUrl;
+        public String modelType; // "default" or "slim"
+        public String capeId;
+        public String capeUrl;
+        public AppearanceCustomization customization;
+    }
+
+    public static class AppearanceCustomization {
+        public String hairStyle;
+        public String hairColor;
+        public String eyeColor;
+        public String skinTone;
+        public String bodyType;
+        public List<String> accessories;
+        public Map<String, String> colors;
+
+        public AppearanceCustomization() {
+            this.accessories = new ArrayList<>();
+            this.colors = new HashMap<>();
         }
     }
 }

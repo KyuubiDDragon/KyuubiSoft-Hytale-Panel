@@ -29,6 +29,8 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     // Route patterns
     private static final Pattern PLAYERS_PATTERN = Pattern.compile("^/api/players(?:/([\\w-]+))?$");
     private static final Pattern PLAYER_DETAILS_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/details$");
+    private static final Pattern PLAYER_INVENTORY_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/inventory$");
+    private static final Pattern PLAYER_APPEARANCE_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/appearance$");
     private static final Pattern WORLDS_PATTERN = Pattern.compile("^/api/worlds(?:/([\\w-]+))?$");
     private static final Pattern WORLD_STATS_PATTERN = Pattern.compile("^/api/worlds/([\\w-]+)/stats$");
     private static final Pattern SERVER_INFO_PATTERN = Pattern.compile("^/api/server/info$");
@@ -72,6 +74,24 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
             else if ((matcher = PLAYER_DETAILS_PATTERN.matcher(uri)).matches()) {
                 String playerName = matcher.group(1);
                 response = playersHandler.getPlayerDetails(playerName);
+                if (response == null) {
+                    sendError(ctx, HttpResponseStatus.NOT_FOUND, "Player not found");
+                    return;
+                }
+            }
+            // GET /api/players/{name}/inventory
+            else if ((matcher = PLAYER_INVENTORY_PATTERN.matcher(uri)).matches()) {
+                String playerName = matcher.group(1);
+                response = playersHandler.getPlayerInventory(playerName);
+                if (response == null) {
+                    sendError(ctx, HttpResponseStatus.NOT_FOUND, "Player not found");
+                    return;
+                }
+            }
+            // GET /api/players/{name}/appearance
+            else if ((matcher = PLAYER_APPEARANCE_PATTERN.matcher(uri)).matches()) {
+                String playerName = matcher.group(1);
+                response = playersHandler.getPlayerAppearance(playerName);
                 if (response == null) {
                     sendError(ctx, HttpResponseStatus.NOT_FOUND, "Player not found");
                     return;

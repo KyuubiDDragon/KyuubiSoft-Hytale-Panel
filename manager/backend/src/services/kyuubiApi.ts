@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version)
-export const PLUGIN_VERSION = '1.0.4';
+export const PLUGIN_VERSION = '1.0.5';
 export const PLUGIN_PORT = 18085;
 export const PLUGIN_JAR_NAME = `KyuubiSoftAPI-${PLUGIN_VERSION}.jar`;
 
@@ -180,6 +180,27 @@ export async function getServerInfoFromPlugin(): Promise<PluginApiResponse> {
  */
 export async function getMemoryFromPlugin(): Promise<PluginApiResponse> {
   return fetchFromPlugin('/api/server/memory');
+}
+
+/**
+ * Get player details from the plugin API
+ */
+export async function getPlayerDetailsFromPlugin(playerName: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/details`);
+}
+
+/**
+ * Get player inventory from the plugin API
+ */
+export async function getPlayerInventoryFromPlugin(playerName: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/inventory`);
+}
+
+/**
+ * Get player appearance from the plugin API
+ */
+export async function getPlayerAppearanceFromPlugin(playerName: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/appearance`);
 }
 
 /**
