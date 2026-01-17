@@ -266,6 +266,18 @@ router.put('/patchline', authMiddleware, async (req: Request, res: Response) => 
   }
 });
 
+// Helper to get latest version for a patchline
+async function getLatestVersion(patchline: string): Promise<string> {
+  const checkResult = await dockerService.execInContainer(
+    `cd /opt/hytale/downloader && ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1`
+  );
+
+  if (checkResult.success && checkResult.output) {
+    return checkResult.output.trim();
+  }
+  return 'unknown';
+}
+
 // GET /api/server/check-update - Check if a Hytale server update is available
 router.get('/check-update', authMiddleware, async (_req: Request, res: Response) => {
   try {
@@ -280,19 +292,16 @@ router.get('/check-update', authMiddleware, async (_req: Request, res: Response)
 
     // Get current patchline setting from panel config
     const panelConfig = await readPanelConfig();
-    const patchline = panelConfig.patchline;
+    const currentPatchline = panelConfig.patchline;
 
-    // Get latest version by running the downloader with -print-version inside container
-    // We need to exec into the container to run this
-    const checkResult = await dockerService.execInContainer(
-      `cd /opt/hytale/downloader && ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1`
-    );
+    // Check both patchlines in parallel
+    const [releaseVersion, preReleaseVersion] = await Promise.all([
+      getLatestVersion('release'),
+      getLatestVersion('pre-release')
+    ]);
 
-    let latestVersion = 'unknown';
-    if (checkResult.success && checkResult.output) {
-      latestVersion = checkResult.output.trim();
-    }
-
+    // Check if update is available for current patchline
+    const latestVersion = currentPatchline === 'release' ? releaseVersion : preReleaseVersion;
     const updateAvailable = installedVersion !== 'unknown' &&
                            latestVersion !== 'unknown' &&
                            installedVersion !== latestVersion;
@@ -301,7 +310,12 @@ router.get('/check-update', authMiddleware, async (_req: Request, res: Response)
       installedVersion,
       latestVersion,
       updateAvailable,
-      patchline,
+      patchline: currentPatchline,
+      // Include both patchline versions
+      versions: {
+        release: releaseVersion,
+        preRelease: preReleaseVersion
+      },
       message: updateAvailable
         ? `Update available: ${installedVersion} → ${latestVersion}`
         : installedVersion === latestVersion

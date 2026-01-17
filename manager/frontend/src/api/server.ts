@@ -75,6 +75,10 @@ export interface UpdateCheckResponse {
   latestVersion: string
   updateAvailable: boolean
   patchline?: string
+  versions?: {
+    release: string
+    preRelease: string
+  }
   message: string
 }
 

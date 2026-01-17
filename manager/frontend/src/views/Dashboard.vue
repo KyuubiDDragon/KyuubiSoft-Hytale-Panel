@@ -675,15 +675,41 @@ function refreshAll() {
         </div>
 
         <!-- Update info -->
-        <div v-else class="space-y-3">
+        <div v-else class="space-y-4">
+          <!-- Installed Version -->
           <div class="flex justify-between items-center">
             <span class="text-gray-400">Installed Version</span>
             <span class="text-white font-mono">{{ updateInfo.installedVersion }}</span>
           </div>
-          <div class="flex justify-between items-center">
-            <span class="text-gray-400">Latest Version</span>
-            <span class="text-white font-mono">{{ updateInfo.latestVersion }}</span>
+
+          <!-- Both Patchline Versions -->
+          <div v-if="updateInfo.versions" class="grid grid-cols-2 gap-3">
+            <!-- Release Version -->
+            <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'release' ? 'border-status-success bg-status-success/10' : 'border-dark-50 bg-dark-300'">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-success/20 text-status-success">Release</span>
+                <span v-if="updateInfo.patchline === 'release'" class="text-xs text-gray-400">(active)</span>
+              </div>
+              <span class="text-white font-mono text-lg">{{ updateInfo.versions.release || '-' }}</span>
+              <div v-if="updateInfo.patchline === 'release' && updateInfo.installedVersion !== updateInfo.versions.release && updateInfo.versions.release !== 'unknown'" class="mt-1 text-xs text-hytale-orange">
+                Update available!
+              </div>
+            </div>
+
+            <!-- Pre-Release Version -->
+            <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'pre-release' ? 'border-status-warning bg-status-warning/10' : 'border-dark-50 bg-dark-300'">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-warning/20 text-status-warning">Pre-Release</span>
+                <span v-if="updateInfo.patchline === 'pre-release'" class="text-xs text-gray-400">(active)</span>
+              </div>
+              <span class="text-white font-mono text-lg">{{ updateInfo.versions.preRelease || '-' }}</span>
+              <div v-if="updateInfo.patchline === 'pre-release' && updateInfo.installedVersion !== updateInfo.versions.preRelease && updateInfo.versions.preRelease !== 'unknown'" class="mt-1 text-xs text-hytale-orange">
+                Update available!
+              </div>
+            </div>
           </div>
+
+          <!-- Status Message -->
           <div
             class="p-3 rounded-lg text-sm font-medium"
             :class="updateInfo.updateAvailable
