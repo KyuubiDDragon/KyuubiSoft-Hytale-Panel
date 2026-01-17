@@ -98,6 +98,7 @@ router.get('/file', authMiddleware, (req: Request, res: Response) => {
 });
 
 // GET /api/assets/search - Search for files
+// Supports: plain text, glob patterns (*.json, sign*.json), regex (/pattern/flags)
 router.get('/search', authMiddleware, (req: Request, res: Response) => {
   const query = req.query.q as string;
 
@@ -109,17 +110,22 @@ router.get('/search', authMiddleware, (req: Request, res: Response) => {
   const searchContent = req.query.content === 'true';
   const extensions = req.query.ext ? (req.query.ext as string).split(',') : undefined;
   const maxResults = Math.min(parseInt(req.query.limit as string) || 100, 500);
+  const useRegex = req.query.regex === 'true';
+  const useGlob = req.query.glob === 'true';
 
   const results = assetService.searchAssets(query, {
     searchContent,
     extensions,
     maxResults,
+    useRegex,
+    useGlob,
   });
 
   res.json({
     query,
     count: results.length,
     results,
+    mode: useRegex ? 'regex' : useGlob ? 'glob' : 'auto',
   });
 });
 

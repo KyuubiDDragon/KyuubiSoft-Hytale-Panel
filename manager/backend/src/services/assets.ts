@@ -556,7 +556,7 @@ export function readAssetFile(relativePath: string): {
 
   // Determine file type
   const ext = path.extname(relativePath).toLowerCase();
-  const textExtensions = ['.json', '.txt', '.xml', '.yml', '.yaml', '.cfg', '.conf', '.properties', '.md', '.lua', '.js', '.ts', '.css', '.html', '.csv', '.ini', '.log'];
+  const textExtensions = ['.json', '.txt', '.xml', '.yml', '.yaml', '.cfg', '.conf', '.properties', '.md', '.lua', '.js', '.ts', '.css', '.html', '.csv', '.ini', '.log', '.ui', '.fbs', '.frag', '.vert', '.glsl', '.shader'];
   const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.svg'];
 
   const isText = textExtensions.includes(ext);
@@ -622,18 +622,114 @@ export function readAssetFile(relativePath: string): {
 }
 
 /**
+ * Convert glob pattern to regex
+ * Supports: * (any chars), ? (single char), ** (any path)
+ */
+function globToRegex(pattern: string): RegExp {
+  // Escape regex special chars except * and ?
+  let regexStr = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '{{GLOBSTAR}}')  // Temporarily replace **
+    .replace(/\*/g, '[^/]*')           // * matches anything except /
+    .replace(/\?/g, '.')               // ? matches single char
+    .replace(/\{\{GLOBSTAR\}\}/g, '.*'); // ** matches anything including /
+
+  return new RegExp(`^${regexStr}$`, 'i');
+}
+
+/**
+ * Check if pattern is a glob pattern
+ */
+function isGlobPattern(pattern: string): boolean {
+  return pattern.includes('*') || pattern.includes('?');
+}
+
+/**
+ * Check if pattern is a regex (starts and ends with /)
+ */
+function isRegexPattern(pattern: string): boolean {
+  return pattern.startsWith('/') && pattern.lastIndexOf('/') > 0;
+}
+
+/**
+ * Parse regex pattern string to RegExp
+ */
+function parseRegexPattern(pattern: string): RegExp | null {
+  try {
+    // Extract pattern and flags from /pattern/flags format
+    const lastSlash = pattern.lastIndexOf('/');
+    const regexBody = pattern.substring(1, lastSlash);
+    const flags = pattern.substring(lastSlash + 1) || 'i';
+    return new RegExp(regexBody, flags);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Search for files in assets
+ * Supports: plain text search, glob patterns (*.json, sign*.json), regex (/pattern/flags)
  */
 export function searchAssets(query: string, options?: {
   searchContent?: boolean;
   extensions?: string[];
   maxResults?: number;
+  useRegex?: boolean;
+  useGlob?: boolean;
 }): SearchResult[] {
   const results: SearchResult[] = [];
   const maxResults = options?.maxResults || 100;
   const searchContent = options?.searchContent || false;
   const extensions = options?.extensions;
-  const queryLower = query.toLowerCase();
+
+  // Determine search mode
+  let searchMode: 'text' | 'glob' | 'regex' = 'text';
+  let searchRegex: RegExp | null = null;
+  let queryLower = query.toLowerCase();
+
+  // Auto-detect or use explicit mode
+  if (options?.useRegex || isRegexPattern(query)) {
+    searchMode = 'regex';
+    searchRegex = isRegexPattern(query) ? parseRegexPattern(query) : null;
+    if (!searchRegex && options?.useRegex) {
+      // User wants regex but didn't use /.../ format, treat as regex directly
+      try {
+        searchRegex = new RegExp(query, 'i');
+      } catch {
+        // Invalid regex, fall back to text search
+        searchMode = 'text';
+      }
+    }
+  } else if (options?.useGlob || isGlobPattern(query)) {
+    searchMode = 'glob';
+    searchRegex = globToRegex(query);
+  }
+
+  function matchesSearch(name: string, fullPath: string): boolean {
+    if (searchMode === 'text') {
+      return name.toLowerCase().includes(queryLower);
+    } else if (searchRegex) {
+      // For glob/regex, match against just filename by default
+      // But if pattern contains /, match against full path
+      if (query.includes('/')) {
+        return searchRegex.test(fullPath);
+      }
+      return searchRegex.test(name);
+    }
+    return false;
+  }
+
+  function matchesContentSearch(content: string): { matched: boolean; index: number } {
+    if (searchMode === 'text') {
+      const lowerContent = content.toLowerCase();
+      const idx = lowerContent.indexOf(queryLower);
+      return { matched: idx !== -1, index: idx };
+    } else if (searchRegex) {
+      const match = searchRegex.exec(content);
+      return { matched: match !== null, index: match?.index ?? -1 };
+    }
+    return { matched: false, index: -1 };
+  }
 
   function searchDir(dirPath: string, relativePath: string): void {
     if (results.length >= maxResults) return;
@@ -658,7 +754,7 @@ export function searchAssets(query: string, options?: {
           }
 
           // Check filename match
-          if (entry.toLowerCase().includes(queryLower)) {
+          if (matchesSearch(entry, entryRelPath)) {
             results.push({
               path: entryRelPath,
               name: entry,
@@ -671,14 +767,13 @@ export function searchAssets(query: string, options?: {
 
           // Search content for text files
           if (searchContent && stat.isFile() && stat.size < 1024 * 1024) { // Max 1MB for content search
-            const textExtensions = ['.json', '.txt', '.xml', '.yml', '.yaml', '.cfg', '.lua', '.js'];
+            const textExtensions = ['.json', '.txt', '.xml', '.yml', '.yaml', '.cfg', '.lua', '.js', '.ui', '.fbs', '.frag', '.vert', '.glsl', '.shader'];
             if (textExtensions.includes(ext)) {
               try {
                 const content = fs.readFileSync(entryPath, 'utf-8');
-                const lowerContent = content.toLowerCase();
-                const matchIndex = lowerContent.indexOf(queryLower);
+                const { matched, index: matchIndex } = matchesContentSearch(content);
 
-                if (matchIndex !== -1) {
+                if (matched && matchIndex !== -1) {
                   // Get preview around match
                   const start = Math.max(0, matchIndex - 50);
                   const end = Math.min(content.length, matchIndex + query.length + 50);

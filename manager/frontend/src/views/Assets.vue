@@ -17,6 +17,21 @@ const searchContent = ref(false)
 const searchResults = ref<SearchResult[]>([])
 const isSearching = ref(false)
 const showSearch = ref(false)
+const searchMode = ref<'auto' | 'glob' | 'regex'>('auto')
+const searchExtFilter = ref<string>('')
+
+// Common file type filters
+const fileTypeFilters = [
+  { value: '', label: 'All Files' },
+  { value: '.json', label: 'JSON (.json)' },
+  { value: '.png,.jpg,.jpeg,.gif,.webp,.bmp', label: 'Images' },
+  { value: '.xml', label: 'XML (.xml)' },
+  { value: '.ui', label: 'UI Files (.ui)' },
+  { value: '.lua', label: 'Lua (.lua)' },
+  { value: '.txt,.md,.log', label: 'Text Files' },
+  { value: '.fbs', label: 'FlatBuffers (.fbs)' },
+  { value: '.frag,.vert,.glsl,.shader', label: 'Shaders' },
+]
 
 // Loading states
 const loading = ref(true)
@@ -49,7 +64,7 @@ const fileTypeIcon = computed(() => (file: AssetFileInfo) => {
   const ext = file.extension?.toLowerCase()
   if (['.json', '.yml', '.yaml', '.xml'].includes(ext || '')) return 'json'
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext || '')) return 'image'
-  if (['.txt', '.md', '.log', '.cfg', '.conf', '.ini', '.lua', '.js', '.ts', '.css', '.html'].includes(ext || '')) return 'text'
+  if (['.txt', '.md', '.log', '.cfg', '.conf', '.ini', '.lua', '.js', '.ts', '.css', '.html', '.ui', '.fbs', '.frag', '.vert', '.glsl', '.shader'].includes(ext || '')) return 'text'
   return 'file'
 })
 
@@ -193,6 +208,9 @@ async function performSearch() {
     const result = await assetsApi.search(searchQuery.value, {
       searchContent: searchContent.value,
       limit: 100,
+      extensions: searchExtFilter.value ? searchExtFilter.value.split(',') : undefined,
+      useRegex: searchMode.value === 'regex',
+      useGlob: searchMode.value === 'glob',
     })
     searchResults.value = result.results
   } catch (e) {
@@ -306,14 +324,69 @@ onUnmounted(stopProgressPolling)
         <h3 class="text-lg font-semibold text-white">{{ t('assets.search') }}</h3>
       </div>
       <div class="card-body space-y-4">
+        <!-- Search input row -->
         <div class="flex gap-4">
           <input
             v-model="searchQuery"
             type="text"
-            :placeholder="t('assets.searchPlaceholder')"
-            class="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+            :placeholder="searchMode === 'glob' ? t('assets.searchPlaceholderGlob') : searchMode === 'regex' ? t('assets.searchPlaceholderRegex') : t('assets.searchPlaceholder')"
+            class="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange font-mono"
           />
-          <label class="flex items-center gap-2 text-gray-400">
+        </div>
+
+        <!-- Options row -->
+        <div class="flex flex-wrap items-center gap-4">
+          <!-- Search mode -->
+          <div class="flex items-center gap-2">
+            <span class="text-gray-400 text-sm">{{ t('assets.searchMode') }}:</span>
+            <div class="flex bg-gray-800 rounded-lg p-0.5">
+              <button
+                @click="searchMode = 'auto'"
+                :class="[
+                  'px-3 py-1 text-sm rounded-md transition-colors',
+                  searchMode === 'auto' ? 'bg-hytale-orange text-white' : 'text-gray-400 hover:text-white'
+                ]"
+              >
+                Auto
+              </button>
+              <button
+                @click="searchMode = 'glob'"
+                :class="[
+                  'px-3 py-1 text-sm rounded-md transition-colors',
+                  searchMode === 'glob' ? 'bg-hytale-orange text-white' : 'text-gray-400 hover:text-white'
+                ]"
+                :title="t('assets.searchGlobHint')"
+              >
+                Glob
+              </button>
+              <button
+                @click="searchMode = 'regex'"
+                :class="[
+                  'px-3 py-1 text-sm rounded-md transition-colors',
+                  searchMode === 'regex' ? 'bg-hytale-orange text-white' : 'text-gray-400 hover:text-white'
+                ]"
+                :title="t('assets.searchRegexHint')"
+              >
+                Regex
+              </button>
+            </div>
+          </div>
+
+          <!-- File type filter -->
+          <div class="flex items-center gap-2">
+            <span class="text-gray-400 text-sm">{{ t('assets.fileType') }}:</span>
+            <select
+              v-model="searchExtFilter"
+              class="px-3 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+            >
+              <option v-for="filter in fileTypeFilters" :key="filter.value" :value="filter.value">
+                {{ filter.label }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Content search toggle -->
+          <label class="flex items-center gap-2 text-gray-400 text-sm">
             <input
               v-model="searchContent"
               type="checkbox"
@@ -321,6 +394,14 @@ onUnmounted(stopProgressPolling)
             />
             {{ t('assets.searchContent') }}
           </label>
+        </div>
+
+        <!-- Search hints -->
+        <div v-if="searchMode === 'glob'" class="text-xs text-gray-500 bg-gray-800/50 p-2 rounded">
+          <strong>Glob:</strong> {{ t('assets.globExamples') }}
+        </div>
+        <div v-else-if="searchMode === 'regex'" class="text-xs text-gray-500 bg-gray-800/50 p-2 rounded">
+          <strong>Regex:</strong> {{ t('assets.regexExamples') }}
         </div>
 
         <!-- Search Results -->

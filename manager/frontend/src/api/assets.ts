@@ -100,12 +100,16 @@ export const assetsApi = {
       searchContent?: boolean
       extensions?: string[]
       limit?: number
+      useRegex?: boolean
+      useGlob?: boolean
     }
-  ): Promise<{ query: string; count: number; results: SearchResult[] }> {
+  ): Promise<{ query: string; count: number; results: SearchResult[]; mode: string }> {
     const params: Record<string, string> = { q: query }
     if (options?.searchContent) params.content = 'true'
     if (options?.extensions) params.ext = options.extensions.join(',')
     if (options?.limit) params.limit = String(options.limit)
+    if (options?.useRegex) params.regex = 'true'
+    if (options?.useGlob) params.glob = 'true'
 
     const response = await api.get('/assets/search', { params })
     return response.data
