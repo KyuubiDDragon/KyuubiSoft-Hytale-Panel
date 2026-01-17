@@ -129,6 +129,7 @@ services:
       - SERVER_PATH=/opt/hytale/server
       - BACKUPS_PATH=/opt/hytale/backups
       - DATA_PATH=/opt/hytale/data
+      - ASSETS_PATH=/opt/hytale/assets
 
       # Settings
       - TZ=${TZ:-Europe/Berlin}
@@ -154,6 +155,9 @@ services:
       - ${HOST_DATA_PATH:-/opt/hytale}/mods:/opt/hytale/mods
       - ${HOST_DATA_PATH:-/opt/hytale}/plugins:/opt/hytale/plugins
       - ${HOST_DATA_PATH:-/opt/hytale}/auth:/opt/hytale/auth:ro
+
+      # Asset Explorer cache (extracted game assets)
+      - ${HOST_DATA_PATH:-/opt/hytale}/assets:/opt/hytale/assets
 
       # Manager persistent data
       - manager-data:/app/data
