@@ -86,6 +86,7 @@ export interface PatchlineResponse {
 export interface PatchlineUpdateResponse {
   success: boolean
   patchline: string
+  changed?: boolean
   message: string
 }
 

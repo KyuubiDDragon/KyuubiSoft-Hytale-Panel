@@ -413,7 +413,10 @@
     "currentPatchline": "Current Patchline",
     "patchlineReleaseDesc": "Stable & recommended",
     "patchlinePreReleaseDesc": "Early access, may be unstable",
-    "patchlineRestartNote": "After changing the patchline, the server must be restarted for the change to take effect."
+    "patchlineRestartNote": "After changing the patchline, the server must be restarted for the change to take effect.",
+    "patchlineRestartRequired": "Restart Required",
+    "patchlineRestartRequiredDesc": "The patchline has been changed. The server must now be restarted to download the new version.",
+    "patchlineRestarting": "Server is restarting and downloading the new version..."
   },
   "users": {
     "title": "User Management",

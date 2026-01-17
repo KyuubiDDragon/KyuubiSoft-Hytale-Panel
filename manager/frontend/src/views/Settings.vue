@@ -33,6 +33,7 @@ const patchlineData = ref<PatchlineResponse | null>(null)
 const patchlineLoading = ref(false)
 const patchlineError = ref<string | null>(null)
 const patchlineSuccess = ref<string | null>(null)
+const patchlineNeedsRestart = ref(false)
 
 function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
@@ -120,10 +121,27 @@ async function setPatchline(patchline: string) {
     if (response.success) {
       patchlineData.value = { ...patchlineData.value!, patchline: response.patchline }
       patchlineSuccess.value = response.message
-      setTimeout(() => { patchlineSuccess.value = null }, 5000)
+
+      // If patchline was changed, show restart button
+      if (response.changed) {
+        patchlineNeedsRestart.value = true
+      }
     }
   } catch (e) {
     patchlineError.value = 'Failed to update patchline setting'
+  } finally {
+    patchlineLoading.value = false
+  }
+}
+
+async function restartForPatchline() {
+  try {
+    patchlineLoading.value = true
+    await serverApi.restart()
+    patchlineNeedsRestart.value = false
+    patchlineSuccess.value = t('settings.patchlineRestarting')
+  } catch (e) {
+    patchlineError.value = 'Failed to restart server'
   } finally {
     patchlineLoading.value = false
   }
@@ -561,7 +579,24 @@ onUnmounted(() => {
           {{ t('common.loading') }}...
         </div>
 
-        <p class="text-xs text-gray-500">
+        <!-- Restart Required Banner -->
+        <div v-if="patchlineNeedsRestart" class="p-4 bg-status-warning/20 border border-status-warning/30 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-status-warning font-medium">{{ t('settings.patchlineRestartRequired') }}</p>
+              <p class="text-sm text-gray-400 mt-1">{{ t('settings.patchlineRestartRequiredDesc') }}</p>
+            </div>
+            <button
+              @click="restartForPatchline"
+              :disabled="patchlineLoading"
+              class="px-4 py-2 bg-status-warning text-dark-400 font-medium rounded-lg hover:bg-status-warning/90 transition-colors disabled:opacity-50"
+            >
+              {{ patchlineLoading ? t('common.loading') : t('dashboard.restart') }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="!patchlineNeedsRestart" class="text-xs text-gray-500">
           {{ t('settings.patchlineRestartNote') }}
         </p>
       </div>

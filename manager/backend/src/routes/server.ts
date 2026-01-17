@@ -226,14 +226,38 @@ router.put('/patchline', authMiddleware, async (req: Request, res: Response) => 
     }
 
     const panelConfig = await readPanelConfig();
+    const oldPatchline = panelConfig.patchline;
+    const patchlineChanged = oldPatchline !== patchline;
+
+    // Update config
     panelConfig.patchline = patchline;
     await writePanelConfig(panelConfig);
 
-    res.json({
-      success: true,
-      patchline,
-      message: 'Patchline updated. Restart the server to apply changes.'
-    });
+    // If patchline changed, delete server files to force redownload on restart
+    if (patchlineChanged) {
+      const serverJar = path.join(config.serverPath, 'HytaleServer.jar');
+      const assetsZip = path.join(config.serverPath, 'Assets.zip');
+      const versionFile = path.join(config.serverPath, '.hytale-version');
+
+      // Delete via container exec to ensure proper permissions
+      await dockerService.execInContainer(
+        `rm -f "${serverJar}" "${assetsZip}" "${versionFile}" 2>/dev/null || true`
+      );
+
+      res.json({
+        success: true,
+        patchline,
+        changed: true,
+        message: `Patchline changed from ${oldPatchline} to ${patchline}. Server files deleted. Restart to download the new version.`
+      });
+    } else {
+      res.json({
+        success: true,
+        patchline,
+        changed: false,
+        message: 'Patchline unchanged.'
+      });
+    }
   } catch (error) {
     res.status(500).json({
       error: 'Failed to set patchline',

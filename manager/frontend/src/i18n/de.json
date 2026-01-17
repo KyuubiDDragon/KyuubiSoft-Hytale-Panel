@@ -413,7 +413,10 @@
     "currentPatchline": "Aktuelle Patchline",
     "patchlineReleaseDesc": "Stabil & empfohlen",
     "patchlinePreReleaseDesc": "Früher Zugang, kann instabil sein",
-    "patchlineRestartNote": "Nach dem Ändern der Patchline muss der Server neugestartet werden, damit die Änderung wirksam wird."
+    "patchlineRestartNote": "Nach dem Ändern der Patchline muss der Server neugestartet werden, damit die Änderung wirksam wird.",
+    "patchlineRestartRequired": "Neustart erforderlich",
+    "patchlineRestartRequiredDesc": "Die Patchline wurde geändert. Der Server muss jetzt neugestartet werden, um die neue Version herunterzuladen.",
+    "patchlineRestarting": "Server wird neugestartet und lädt die neue Version herunter..."
   },
   "users": {
     "title": "Benutzerverwaltung",

@@ -413,7 +413,10 @@
     "currentPatchline": "Patchline Atual",
     "patchlineReleaseDesc": "Estável e recomendado",
     "patchlinePreReleaseDesc": "Acesso antecipado, pode ser instável",
-    "patchlineRestartNote": "Após alterar a patchline, o servidor deve ser reiniciado para que a alteração tenha efeito."
+    "patchlineRestartNote": "Após alterar a patchline, o servidor deve ser reiniciado para que a alteração tenha efeito.",
+    "patchlineRestartRequired": "Reinicialização Necessária",
+    "patchlineRestartRequiredDesc": "A patchline foi alterada. O servidor deve ser reiniciado agora para baixar a nova versão.",
+    "patchlineRestarting": "O servidor está reiniciando e baixando a nova versão..."
   },
   "users": {
     "title": "Gerenciamento de Usuários",
