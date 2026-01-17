@@ -171,6 +171,7 @@ router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) =
   }
 
   // Strip namespace prefix if present (e.g., "hytale:Cobalt_Sword" -> "Cobalt_Sword")
+  const originalId = itemId;
   if (itemId.includes(':')) {
     itemId = itemId.split(':')[1];
   }
@@ -179,17 +180,33 @@ router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) =
   const itemLower = itemId.toLowerCase();
   const itemWithSlashes = itemId.replace(/_/g, '/');
   const itemLowerWithSlashes = itemLower.replace(/_/g, '/');
+  // Also try with hyphens instead of underscores
+  const itemWithHyphens = itemId.replace(/_/g, '-');
+  const itemLowerWithHyphens = itemLower.replace(/_/g, '-');
 
   // Common paths where item icons might be found in Hytale assets
+  // Order matters - more specific paths first
   const possiblePaths = [
-    // UI Icons - most likely location
+    // UI Icons - most likely location for inventory icons
     `hytale/textures/ui/icons/items/${itemId}.png`,
     `hytale/textures/ui/icons/items/${itemLower}.png`,
     `textures/ui/icons/items/${itemId}.png`,
     `textures/ui/icons/items/${itemLower}.png`,
-    // With slashes instead of underscores
+    // Maybe in a subfolder based on type
+    `hytale/textures/ui/icons/items/weapons/${itemId}.png`,
+    `hytale/textures/ui/icons/items/weapons/${itemLower}.png`,
+    `hytale/textures/ui/icons/items/armor/${itemId}.png`,
+    `hytale/textures/ui/icons/items/armor/${itemLower}.png`,
+    `hytale/textures/ui/icons/items/tools/${itemId}.png`,
+    `hytale/textures/ui/icons/items/tools/${itemLower}.png`,
+    `hytale/textures/ui/icons/items/consumables/${itemId}.png`,
+    `hytale/textures/ui/icons/items/consumables/${itemLower}.png`,
+    // With slashes instead of underscores (subfolder structure)
     `hytale/textures/ui/icons/items/${itemWithSlashes}.png`,
     `hytale/textures/ui/icons/items/${itemLowerWithSlashes}.png`,
+    // With hyphens
+    `hytale/textures/ui/icons/items/${itemWithHyphens}.png`,
+    `hytale/textures/ui/icons/items/${itemLowerWithHyphens}.png`,
     // Direct item textures
     `hytale/textures/items/${itemId}.png`,
     `hytale/textures/items/${itemLower}.png`,
@@ -206,6 +223,11 @@ router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) =
     // UI general icons
     `hytale/textures/ui/icons/${itemId}.png`,
     `hytale/textures/ui/icons/${itemLower}.png`,
+    // Maybe just "icons" folder
+    `icons/${itemId}.png`,
+    `icons/${itemLower}.png`,
+    `icons/items/${itemId}.png`,
+    `icons/items/${itemLower}.png`,
     // Root level textures
     `${itemId}.png`,
     `${itemLower}.png`,
@@ -222,13 +244,40 @@ router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) =
     }
   }
 
-  // If not found in standard paths, try a search
+  // If not found in standard paths, try a search for the item name
   const searchResults = assetService.searchAssets(itemId, {
     extensions: ['.png'],
-    maxResults: 1,
+    maxResults: 5,
     useGlob: false,
   });
 
+  // Also try lowercase search
+  if (searchResults.length === 0) {
+    const lowerSearchResults = assetService.searchAssets(itemLower, {
+      extensions: ['.png'],
+      maxResults: 5,
+      useGlob: false,
+    });
+    searchResults.push(...lowerSearchResults);
+  }
+
+  // Try to find a matching result
+  for (const searchResult of searchResults) {
+    // Prefer files with "icon" in the path
+    if (searchResult.path.toLowerCase().includes('icon') ||
+        searchResult.path.toLowerCase().includes('item') ||
+        searchResult.path.toLowerCase().includes('ui')) {
+      const result = assetService.readAssetFile(searchResult.path);
+      if (result.success && result.isBinary && result.mimeType?.startsWith('image/')) {
+        res.setHeader('Content-Type', result.mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(Buffer.from(result.content as string, 'base64'));
+        return;
+      }
+    }
+  }
+
+  // If still not found, try any search result
   if (searchResults.length > 0) {
     const result = assetService.readAssetFile(searchResults[0].path);
     if (result.success && result.isBinary && result.mimeType?.startsWith('image/')) {
@@ -239,8 +288,14 @@ router.get('/item-icon/:itemId', authMiddleware, (req: Request, res: Response) =
     }
   }
 
-  // If not found, return 404
-  res.status(404).json({ detail: 'Item icon not found', itemId, searchedPaths: possiblePaths.slice(0, 5) });
+  // If not found, return 404 with debug info
+  res.status(404).json({
+    detail: 'Item icon not found',
+    originalId,
+    itemId,
+    searchedPaths: possiblePaths.slice(0, 8),
+    searchResults: searchResults.map(r => r.path).slice(0, 5),
+  });
 });
 
 // GET /api/assets/item-icon-search/:itemId - Search for item icon path
