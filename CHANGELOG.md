@@ -67,3 +67,7 @@ All notable changes to the Hytale Server Manager will be documented in this file
 - **Dashboard Patchline Display**: Fixed dashboard showing wrong patchline after switching
   - Now prioritizes panel setting (user's configuration) over plugin value
   - Plugin value is only used as fallback when panel setting unavailable
+
+- **Backup Download**: Fixed "Missing or invalid authorization header" error when downloading backups
+  - Changed from direct URL open to blob download via axios with auth header
+  - Creates temporary download link for the file blob
