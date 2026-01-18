@@ -2,7 +2,7 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
-## [1.6.0] - 2026-01-18
+## [1.7.0] - 2026-01-18
 
 ### Added
 
