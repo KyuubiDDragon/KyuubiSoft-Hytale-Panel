@@ -699,69 +699,105 @@
     "settings": "Configurações"
   },
   "permissionDescriptions": {
-    "dashboard.view": "Ver painel",
-    "dashboard.stats": "Ver estatísticas do painel",
-    "server.view_status": "Ver status do servidor",
-    "server.start": "Iniciar servidor",
-    "server.stop": "Parar servidor",
-    "server.restart": "Reiniciar servidor",
-    "server.quick_settings": "Editar configurações rápidas",
-    "console.view": "Ver console",
-    "console.execute": "Executar comandos do console",
-    "performance.view": "Ver métricas de desempenho",
-    "players.view": "Ver lista de jogadores",
-    "players.edit": "Editar dados de jogadores",
-    "players.kick": "Expulsar jogadores",
-    "players.ban": "Banir jogadores",
-    "players.unban": "Desbanir jogadores",
-    "players.whitelist": "Gerenciar lista de permissões",
-    "players.op": "Gerenciar status de operador",
-    "players.permissions": "Gerenciar permissões de jogadores",
-    "players.teleport": "Teleportar jogadores",
-    "players.kill": "Matar jogadores",
-    "players.respawn": "Reviver jogadores",
-    "players.gamemode": "Alterar modo de jogo",
-    "players.give": "Dar itens",
-    "players.heal": "Curar jogadores",
-    "players.effects": "Gerenciar efeitos",
-    "players.clear_inventory": "Limpar inventário",
-    "players.message": "Enviar mensagens",
-    "chat.view": "Ver chat",
-    "chat.send": "Enviar mensagens no chat",
-    "backups.view": "Ver backups",
-    "backups.create": "Criar backups",
-    "backups.restore": "Restaurar backups",
-    "backups.delete": "Excluir backups",
-    "backups.download": "Baixar backups",
-    "scheduler.view": "Ver agendador",
-    "scheduler.edit": "Editar agendador",
-    "worlds.view": "Ver mundos",
-    "worlds.manage": "Gerenciar mundos",
-    "mods.view": "Ver mods",
-    "mods.install": "Instalar mods",
-    "mods.delete": "Excluir mods",
-    "mods.config": "Editar configuração de mods",
-    "mods.toggle": "Ativar/desativar mods",
-    "plugins.view": "Ver plugins",
-    "plugins.install": "Instalar plugins",
-    "plugins.delete": "Excluir plugins",
-    "plugins.config": "Editar configuração de plugins",
-    "plugins.toggle": "Ativar/desativar plugins",
-    "config.view": "Ver configuração",
-    "config.edit": "Editar configuração",
-    "assets.view": "Ver assets",
-    "assets.manage": "Gerenciar assets",
-    "users.view": "Ver usuários",
-    "users.create": "Criar usuários",
-    "users.edit": "Editar usuários",
-    "users.delete": "Excluir usuários",
-    "roles.view": "Ver funções",
-    "roles.manage": "Gerenciar funções",
-    "activity.view": "Ver registro de atividades",
-    "activity.clear": "Limpar registro de atividades",
-    "hytale_auth.manage": "Gerenciar autenticação Hytale",
-    "settings.view": "Ver configurações",
-    "settings.edit": "Editar configurações"
+    "dashboard": {
+      "view": "Ver painel",
+      "stats": "Ver estatísticas do painel"
+    },
+    "server": {
+      "view_status": "Ver status do servidor",
+      "start": "Iniciar servidor",
+      "stop": "Parar servidor",
+      "restart": "Reiniciar servidor",
+      "quick_settings": "Editar configurações rápidas"
+    },
+    "console": {
+      "view": "Ver console",
+      "execute": "Executar comandos do console"
+    },
+    "performance": {
+      "view": "Ver métricas de desempenho"
+    },
+    "players": {
+      "view": "Ver lista de jogadores",
+      "edit": "Editar dados de jogadores",
+      "kick": "Expulsar jogadores",
+      "ban": "Banir jogadores",
+      "unban": "Desbanir jogadores",
+      "whitelist": "Gerenciar lista de permissões",
+      "op": "Gerenciar status de operador",
+      "permissions": "Gerenciar permissões de jogadores",
+      "teleport": "Teleportar jogadores",
+      "kill": "Matar jogadores",
+      "respawn": "Reviver jogadores",
+      "gamemode": "Alterar modo de jogo",
+      "give": "Dar itens",
+      "heal": "Curar jogadores",
+      "effects": "Gerenciar efeitos",
+      "clear_inventory": "Limpar inventário",
+      "message": "Enviar mensagens"
+    },
+    "chat": {
+      "view": "Ver chat",
+      "send": "Enviar mensagens no chat"
+    },
+    "backups": {
+      "view": "Ver backups",
+      "create": "Criar backups",
+      "restore": "Restaurar backups",
+      "delete": "Excluir backups",
+      "download": "Baixar backups"
+    },
+    "scheduler": {
+      "view": "Ver agendador",
+      "edit": "Editar agendador"
+    },
+    "worlds": {
+      "view": "Ver mundos",
+      "manage": "Gerenciar mundos"
+    },
+    "mods": {
+      "view": "Ver mods",
+      "install": "Instalar mods",
+      "delete": "Excluir mods",
+      "config": "Editar configuração de mods",
+      "toggle": "Ativar/desativar mods"
+    },
+    "plugins": {
+      "view": "Ver plugins",
+      "install": "Instalar plugins",
+      "delete": "Excluir plugins",
+      "config": "Editar configuração de plugins",
+      "toggle": "Ativar/desativar plugins"
+    },
+    "config": {
+      "view": "Ver configuração",
+      "edit": "Editar configuração"
+    },
+    "assets": {
+      "view": "Ver assets",
+      "manage": "Gerenciar assets"
+    },
+    "users": {
+      "view": "Ver usuários",
+      "create": "Criar usuários",
+      "edit": "Editar usuários",
+      "delete": "Excluir usuários"
+    },
+    "roles": {
+      "view": "Ver funções",
+      "manage": "Gerenciar funções"
+    },
+    "activity": {
+      "view": "Ver registro de atividades",
+      "clear": "Limpar registro de atividades"
+    },
+    "hytale_auth": {
+      "manage": "Gerenciar autenticação Hytale"
+    },
+    "settings": {
+      "view": "Ver configurações",
+      "edit": "Editar configurações"
+    }
   },
   "assets": {
     "title": "Explorador de Assets",

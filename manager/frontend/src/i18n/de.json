@@ -765,69 +765,105 @@
     "goToModStore": "Zum Mod Store"
   },
   "permissionDescriptions": {
-    "dashboard.view": "Dashboard anzeigen",
-    "dashboard.stats": "Dashboard-Statistiken anzeigen",
-    "server.view_status": "Serverstatus anzeigen",
-    "server.start": "Server starten",
-    "server.stop": "Server stoppen",
-    "server.restart": "Server neustarten",
-    "server.quick_settings": "Schnelleinstellungen bearbeiten",
-    "console.view": "Konsole anzeigen",
-    "console.execute": "Konsolenbefehle ausführen",
-    "performance.view": "Performance-Metriken anzeigen",
-    "players.view": "Spielerliste anzeigen",
-    "players.edit": "Spielerdaten bearbeiten",
-    "players.kick": "Spieler kicken",
-    "players.ban": "Spieler bannen",
-    "players.unban": "Spieler entbannen",
-    "players.whitelist": "Whitelist verwalten",
-    "players.op": "Operator-Status verwalten",
-    "players.permissions": "Spielerberechtigungen verwalten",
-    "players.teleport": "Spieler teleportieren",
-    "players.kill": "Spieler töten",
-    "players.respawn": "Spieler respawnen",
-    "players.gamemode": "Spielmodus ändern",
-    "players.give": "Items geben",
-    "players.heal": "Spieler heilen",
-    "players.effects": "Effekte verwalten",
-    "players.clear_inventory": "Inventar leeren",
-    "players.message": "Nachrichten senden",
-    "chat.view": "Chat anzeigen",
-    "chat.send": "Chatnachrichten senden",
-    "backups.view": "Backups anzeigen",
-    "backups.create": "Backups erstellen",
-    "backups.restore": "Backups wiederherstellen",
-    "backups.delete": "Backups löschen",
-    "backups.download": "Backups herunterladen",
-    "scheduler.view": "Zeitplaner anzeigen",
-    "scheduler.edit": "Zeitplaner bearbeiten",
-    "worlds.view": "Welten anzeigen",
-    "worlds.manage": "Welten verwalten",
-    "mods.view": "Mods anzeigen",
-    "mods.install": "Mods installieren",
-    "mods.delete": "Mods löschen",
-    "mods.config": "Mod-Konfiguration bearbeiten",
-    "mods.toggle": "Mods aktivieren/deaktivieren",
-    "plugins.view": "Plugins anzeigen",
-    "plugins.install": "Plugins installieren",
-    "plugins.delete": "Plugins löschen",
-    "plugins.config": "Plugin-Konfiguration bearbeiten",
-    "plugins.toggle": "Plugins aktivieren/deaktivieren",
-    "config.view": "Konfiguration anzeigen",
-    "config.edit": "Konfiguration bearbeiten",
-    "assets.view": "Assets anzeigen",
-    "assets.manage": "Assets verwalten",
-    "users.view": "Benutzer anzeigen",
-    "users.create": "Benutzer erstellen",
-    "users.edit": "Benutzer bearbeiten",
-    "users.delete": "Benutzer löschen",
-    "roles.view": "Rollen anzeigen",
-    "roles.manage": "Rollen verwalten",
-    "activity.view": "Aktivitätslog anzeigen",
-    "activity.clear": "Aktivitätslog löschen",
-    "hytale_auth.manage": "Hytale-Authentifizierung verwalten",
-    "settings.view": "Einstellungen anzeigen",
-    "settings.edit": "Einstellungen bearbeiten"
+    "dashboard": {
+      "view": "Dashboard anzeigen",
+      "stats": "Dashboard-Statistiken anzeigen"
+    },
+    "server": {
+      "view_status": "Serverstatus anzeigen",
+      "start": "Server starten",
+      "stop": "Server stoppen",
+      "restart": "Server neustarten",
+      "quick_settings": "Schnelleinstellungen bearbeiten"
+    },
+    "console": {
+      "view": "Konsole anzeigen",
+      "execute": "Konsolenbefehle ausführen"
+    },
+    "performance": {
+      "view": "Performance-Metriken anzeigen"
+    },
+    "players": {
+      "view": "Spielerliste anzeigen",
+      "edit": "Spielerdaten bearbeiten",
+      "kick": "Spieler kicken",
+      "ban": "Spieler bannen",
+      "unban": "Spieler entbannen",
+      "whitelist": "Whitelist verwalten",
+      "op": "Operator-Status verwalten",
+      "permissions": "Spielerberechtigungen verwalten",
+      "teleport": "Spieler teleportieren",
+      "kill": "Spieler töten",
+      "respawn": "Spieler respawnen",
+      "gamemode": "Spielmodus ändern",
+      "give": "Items geben",
+      "heal": "Spieler heilen",
+      "effects": "Effekte verwalten",
+      "clear_inventory": "Inventar leeren",
+      "message": "Nachrichten senden"
+    },
+    "chat": {
+      "view": "Chat anzeigen",
+      "send": "Chatnachrichten senden"
+    },
+    "backups": {
+      "view": "Backups anzeigen",
+      "create": "Backups erstellen",
+      "restore": "Backups wiederherstellen",
+      "delete": "Backups löschen",
+      "download": "Backups herunterladen"
+    },
+    "scheduler": {
+      "view": "Zeitplaner anzeigen",
+      "edit": "Zeitplaner bearbeiten"
+    },
+    "worlds": {
+      "view": "Welten anzeigen",
+      "manage": "Welten verwalten"
+    },
+    "mods": {
+      "view": "Mods anzeigen",
+      "install": "Mods installieren",
+      "delete": "Mods löschen",
+      "config": "Mod-Konfiguration bearbeiten",
+      "toggle": "Mods aktivieren/deaktivieren"
+    },
+    "plugins": {
+      "view": "Plugins anzeigen",
+      "install": "Plugins installieren",
+      "delete": "Plugins löschen",
+      "config": "Plugin-Konfiguration bearbeiten",
+      "toggle": "Plugins aktivieren/deaktivieren"
+    },
+    "config": {
+      "view": "Konfiguration anzeigen",
+      "edit": "Konfiguration bearbeiten"
+    },
+    "assets": {
+      "view": "Assets anzeigen",
+      "manage": "Assets verwalten"
+    },
+    "users": {
+      "view": "Benutzer anzeigen",
+      "create": "Benutzer erstellen",
+      "edit": "Benutzer bearbeiten",
+      "delete": "Benutzer löschen"
+    },
+    "roles": {
+      "view": "Rollen anzeigen",
+      "manage": "Rollen verwalten"
+    },
+    "activity": {
+      "view": "Aktivitätslog anzeigen",
+      "clear": "Aktivitätslog löschen"
+    },
+    "hytale_auth": {
+      "manage": "Hytale-Authentifizierung verwalten"
+    },
+    "settings": {
+      "view": "Einstellungen anzeigen",
+      "edit": "Einstellungen bearbeiten"
+    }
   },
   "assets": {
     "title": "Asset Explorer",
