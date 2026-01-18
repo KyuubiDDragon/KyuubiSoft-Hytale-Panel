@@ -140,6 +140,13 @@ services:
       # StackMart API (optional)
       - STACKMART_API_KEY=${STACKMART_API_KEY:-}
 
+      # Demo Mode
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - DEMO_RESET_INTERVAL=${DEMO_RESET_INTERVAL:-24}
+
+      # Reverse Proxy
+      - TRUST_PROXY=${TRUST_PROXY:-false}
+
     ports:
       - "${MANAGER_PORT:-18080}:18080"
 
