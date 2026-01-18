@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../services/auth.js';
 import { getTokenVersion, isUserInvalidated } from '../services/users.js';
+import { isDemoModeEnabled, isDemoUser } from '../services/demo.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 export async function authMiddleware(
@@ -20,6 +21,13 @@ export async function authMiddleware(
 
   if (!result) {
     res.status(401).json({ detail: 'Invalid or expired token' });
+    return;
+  }
+
+  // Skip user validation for demo users
+  if (isDemoModeEnabled() && isDemoUser(result.username)) {
+    req.user = result.username;
+    next();
     return;
   }
 

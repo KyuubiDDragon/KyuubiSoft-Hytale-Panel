@@ -2,6 +2,18 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
 import { getUserPermissions } from '../services/roles.js';
 import { Permission } from '../types/permissions.js';
+import { isDemoModeEnabled, isDemoUser, getDemoPermissions } from '../services/demo.js';
+
+/**
+ * Get permissions for a user, handling demo users specially
+ */
+async function getEffectivePermissions(username: string): Promise<string[]> {
+  // Check if this is a demo user
+  if (isDemoModeEnabled() && isDemoUser(username)) {
+    return getDemoPermissions();
+  }
+  return getUserPermissions(username);
+}
 
 /**
  * Middleware factory that requires ALL specified permissions (AND logic).
@@ -16,7 +28,7 @@ export function requirePermission(...permissions: Permission[]) {
       return;
     }
 
-    const userPermissions = await getUserPermissions(username);
+    const userPermissions = await getEffectivePermissions(username);
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {
@@ -54,7 +66,7 @@ export function requireAnyPermission(...permissions: Permission[]) {
       return;
     }
 
-    const userPermissions = await getUserPermissions(username);
+    const userPermissions = await getEffectivePermissions(username);
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {
