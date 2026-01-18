@@ -140,6 +140,12 @@ router.put('/users/:username', authMiddleware, requirePermission('users.edit'), 
       return;
     }
 
+    // Prevent users from changing their own role (security)
+    if (roleId && username === req.user) {
+      res.status(400).json({ error: 'Cannot change your own role' });
+      return;
+    }
+
     const user = await updateUser(username, { password, roleId });
     res.json({ success: true, user });
   } catch (error) {

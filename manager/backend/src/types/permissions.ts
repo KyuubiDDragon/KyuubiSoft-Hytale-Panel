@@ -31,6 +31,15 @@ export const PERMISSIONS = {
   'players.whitelist': 'Whitelist verwalten',
   'players.op': 'Operator-Status verwalten',
   'players.permissions': 'Spielerberechtigungen verwalten',
+  'players.teleport': 'Spieler teleportieren',
+  'players.kill': 'Spieler töten',
+  'players.respawn': 'Spieler respawnen',
+  'players.gamemode': 'Spielmodus ändern',
+  'players.give': 'Items geben',
+  'players.heal': 'Spieler heilen',
+  'players.effects': 'Effekte verwalten',
+  'players.clear_inventory': 'Inventar leeren',
+  'players.message': 'Nachrichten senden',
 
   // Chat
   'chat.view': 'Chat anzeigen',

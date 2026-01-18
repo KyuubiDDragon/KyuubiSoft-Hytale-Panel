@@ -381,7 +381,7 @@ router.delete('/:name/op', authMiddleware, requirePermission('players.op'), asyn
 });
 
 // POST /api/players/:name/message
-router.post('/:name/message', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/message', authMiddleware, requirePermission('players.message'), async (req: Request, res: Response) => {
   const playerName = req.params.name;
   const { message } = req.body;
 
@@ -415,7 +415,7 @@ router.post('/:name/message', authMiddleware, async (req: Request, res: Response
 });
 
 // POST /api/players/:name/teleport
-router.post('/:name/teleport', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:name/teleport', authMiddleware, requirePermission('players.teleport'), async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
   const { target, x, y, z } = req.body;
   const username = req.user || 'system';
@@ -469,7 +469,7 @@ router.post('/:name/teleport', authMiddleware, async (req: AuthenticatedRequest,
 });
 
 // POST /api/players/:name/kill
-router.post('/:name/kill', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:name/kill', authMiddleware, requirePermission('players.kill'), async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
   const username = req.user || 'system';
 
@@ -494,7 +494,7 @@ router.post('/:name/kill', authMiddleware, async (req: AuthenticatedRequest, res
 });
 
 // POST /api/players/:name/respawn
-router.post('/:name/respawn', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/respawn', authMiddleware, requirePermission('players.respawn'), async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
   // SECURITY: Validate player name
@@ -517,7 +517,7 @@ router.post('/:name/respawn', authMiddleware, async (req: Request, res: Response
 });
 
 // POST /api/players/:name/gamemode
-router.post('/:name/gamemode', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:name/gamemode', authMiddleware, requirePermission('players.gamemode'), async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
   const { gamemode } = req.body;
   const username = req.user || 'system';
@@ -560,7 +560,7 @@ router.post('/:name/gamemode', authMiddleware, async (req: AuthenticatedRequest,
 });
 
 // POST /api/players/:name/give
-router.post('/:name/give', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:name/give', authMiddleware, requirePermission('players.give'), async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
   const { item, amount } = req.body;
   const username = req.user || 'system';
@@ -621,7 +621,7 @@ router.post('/:name/give', authMiddleware, async (req: AuthenticatedRequest, res
 });
 
 // POST /api/players/:name/heal
-router.post('/:name/heal', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/heal', authMiddleware, requirePermission('players.heal'), async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
   // SECURITY: Validate player name
@@ -658,7 +658,7 @@ router.post('/:name/heal', authMiddleware, async (req: Request, res: Response) =
 });
 
 // POST /api/players/:name/effect
-router.post('/:name/effect', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:name/effect', authMiddleware, requirePermission('players.effects'), async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
   const { effect, action } = req.body;
   const username = req.user || 'system';
@@ -706,7 +706,7 @@ router.post('/:name/effect', authMiddleware, async (req: AuthenticatedRequest, r
 });
 
 // POST /api/players/:name/inventory/clear
-router.post('/:name/inventory/clear', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:name/inventory/clear', authMiddleware, requirePermission('players.clear_inventory'), async (req: AuthenticatedRequest, res: Response) => {
   const playerName = req.params.name;
   const username = req.user || 'system';
 
@@ -834,7 +834,7 @@ router.get('/:name/deaths/last', authMiddleware, requirePermission('players.view
 
 // POST /api/players/:name/teleport/death - Teleport player to a death position
 // Body: { index?: number } - index of death position (default: last/most recent)
-router.post('/:name/teleport/death', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/teleport/death', authMiddleware, requirePermission('players.teleport'), async (req: Request, res: Response) => {
   const playerName = req.params.name;
   const { index } = req.body;
 
@@ -875,7 +875,7 @@ router.post('/:name/teleport/death', authMiddleware, async (req: Request, res: R
 });
 
 // POST /api/players/:name/deaths - Manually record a death position (for testing/admin)
-router.post('/:name/deaths', authMiddleware, async (req: Request, res: Response) => {
+router.post('/:name/deaths', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
   // SECURITY: Validate player name
