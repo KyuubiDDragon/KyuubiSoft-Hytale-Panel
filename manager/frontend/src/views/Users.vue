@@ -339,6 +339,7 @@ onMounted(() => {
               {{ t('common.cancel') }}
             </button>
             <button
+              v-if="authStore.hasPermission('users.create')"
               type="submit"
               class="flex-1 px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors"
             >
@@ -391,6 +392,7 @@ onMounted(() => {
               {{ t('common.cancel') }}
             </button>
             <button
+              v-if="authStore.hasPermission('users.edit')"
               type="submit"
               class="flex-1 px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors"
             >
