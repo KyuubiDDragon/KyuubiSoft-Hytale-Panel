@@ -275,7 +275,7 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
   const roleName = roleNameMap[roleId] || roleId;
   role = roles.find(
     (r) => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId
-  );
+  ) ?? null;
 
   if (role) {
     return role.permissions;

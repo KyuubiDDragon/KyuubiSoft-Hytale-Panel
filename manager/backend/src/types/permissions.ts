@@ -25,6 +25,7 @@ export const PERMISSIONS = {
 
   // Players
   'players.view': 'Spielerliste anzeigen',
+  'players.edit': 'Spielerdaten bearbeiten',
   'players.kick': 'Spieler kicken',
   'players.ban': 'Spieler bannen',
   'players.unban': 'Spieler entbannen',
