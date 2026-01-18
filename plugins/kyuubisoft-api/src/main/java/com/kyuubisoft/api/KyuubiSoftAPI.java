@@ -135,6 +135,8 @@ public class KyuubiSoftAPI extends JavaPlugin {
                         } catch (Exception e2) {
                             LOGGER.warning("[Chat] No getMessage or getContent method found");
                         }
+                    } catch (Exception e2) {
+                        LOGGER.warning("[Chat] No getUsername or getSender method worked");
                     }
 
                 // Try to get username
@@ -164,6 +166,68 @@ public class KyuubiSoftAPI extends JavaPlugin {
             }
         });
         }
+    }
+
+    /**
+     * Extract string value from StringParamValue or similar wrapper objects.
+     * Tries multiple methods via reflection to get the actual string.
+     */
+    private String extractStringFromParamValue(Object obj) {
+        if (obj == null) return "";
+
+        // If it's already a string, return it
+        if (obj instanceof String) return (String) obj;
+
+        String strVal = obj.toString();
+
+        // If toString() returns a clean value (no @ sign), use it
+        if (!strVal.contains("@") && !strVal.contains("StringParamValue")) {
+            return strVal;
+        }
+
+        // Try various getter methods via reflection
+        String[] methodNames = {"getValue", "getString", "get", "value", "getStringValue", "getContent", "getText"};
+
+        for (String methodName : methodNames) {
+            try {
+                var method = obj.getClass().getMethod(methodName);
+                Object result = method.invoke(obj);
+                if (result != null) {
+                    if (result instanceof String) {
+                        return (String) result;
+                    }
+                    String resultStr = result.toString();
+                    if (!resultStr.contains("@")) {
+                        return resultStr;
+                    }
+                }
+            } catch (Exception ignored) {
+                // Method doesn't exist or failed, try next
+            }
+        }
+
+        // Try to access 'value' field directly
+        try {
+            var field = obj.getClass().getDeclaredField("value");
+            field.setAccessible(true);
+            Object value = field.get(obj);
+            if (value != null) {
+                return value.toString();
+            }
+        } catch (Exception ignored) {
+            // Field doesn't exist or not accessible
+        }
+
+        // Log available methods for debugging
+        LOGGER.info("[Debug] Available methods on " + obj.getClass().getName() + ":");
+        for (var m : obj.getClass().getMethods()) {
+            if (m.getParameterCount() == 0 && !m.getName().equals("getClass")) {
+                LOGGER.info("  - " + m.getName() + "() -> " + m.getReturnType().getSimpleName());
+            }
+        }
+
+        // Return raw toString as fallback (with cleanup)
+        return strVal.contains("@") ? "[raw:" + obj.getClass().getSimpleName() + "]" : strVal;
     }
 
     /**
