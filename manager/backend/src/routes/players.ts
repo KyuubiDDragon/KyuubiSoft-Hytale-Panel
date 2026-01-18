@@ -762,7 +762,7 @@ router.get('/activity', authMiddleware, requirePermission('players.view'), async
 // ============== CHAT LOG ENDPOINTS ==============
 
 // GET /api/players/chat - Get global chat log
-router.get('/chat', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
+router.get('/chat', authMiddleware, requirePermission('chat.view'), async (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 100;
   const offset = parseInt(req.query.offset as string) || 0;
   const days = parseInt(req.query.days as string) || 7; // Default 7 days, 0 = all
@@ -772,7 +772,7 @@ router.get('/chat', authMiddleware, requirePermission('players.view'), async (re
 });
 
 // GET /api/players/:name/chat - Get chat log for specific player
-router.get('/:name/chat', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
+router.get('/:name/chat', authMiddleware, requirePermission('chat.view'), async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
   // SECURITY: Validate player name

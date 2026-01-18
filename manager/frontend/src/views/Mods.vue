@@ -130,20 +130,34 @@ const stackmartInstalled = ref<Record<string, StackMartInstalledInfo>>({})
 async function loadData() {
   loading.value = true
   error.value = ''
-  try {
-    const [modsData, pluginsData] = await Promise.all([
-      modsApi.get(),
-      pluginsApi.get(),
-    ])
-    mods.value = modsData.mods
-    modsPath.value = modsData.path
-    plugins.value = pluginsData.plugins
-    pluginsPath.value = pluginsData.path
-  } catch (e) {
-    error.value = t('errors.connectionFailed')
-  } finally {
-    loading.value = false
+
+  // Load mods and plugins separately to handle permission errors gracefully
+  const results = await Promise.allSettled([
+    authStore.hasPermission('mods.view') ? modsApi.get() : Promise.reject('no-permission'),
+    authStore.hasPermission('plugins.view') ? pluginsApi.get() : Promise.reject('no-permission'),
+  ])
+
+  // Handle mods result
+  if (results[0].status === 'fulfilled') {
+    mods.value = results[0].value.mods
+    modsPath.value = results[0].value.path
   }
+
+  // Handle plugins result
+  if (results[1].status === 'fulfilled') {
+    plugins.value = results[1].value.plugins
+    pluginsPath.value = results[1].value.path
+  }
+
+  // Only show error if both failed (and not due to missing permissions)
+  const modsFailedWithError = results[0].status === 'rejected' && results[0].reason !== 'no-permission'
+  const pluginsFailedWithError = results[1].status === 'rejected' && results[1].reason !== 'no-permission'
+
+  if (modsFailedWithError && pluginsFailedWithError) {
+    error.value = t('errors.connectionFailed')
+  }
+
+  loading.value = false
 }
 
 async function loadStoreData() {
