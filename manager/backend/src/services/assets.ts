@@ -846,24 +846,60 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
   const items: ItemInfo[] = [];
   const seenIds = new Set<string>();
 
-  // Common directories where item icons are stored
-  const iconDirs = [
-    { path: 'hytale/textures/ui/icons/items', category: 'items' },
-    { path: 'hytale/textures/ui/icons/items/weapons', category: 'weapons' },
-    { path: 'hytale/textures/ui/icons/items/armor', category: 'armor' },
-    { path: 'hytale/textures/ui/icons/items/tools', category: 'tools' },
-    { path: 'hytale/textures/ui/icons/items/consumables', category: 'consumables' },
-    { path: 'hytale/textures/ui/icons/items/materials', category: 'materials' },
-    { path: 'hytale/textures/items', category: 'items' },
-    { path: 'hytale/textures/blocks', category: 'blocks' },
-    { path: 'textures/ui/icons/items', category: 'items' },
-    { path: 'textures/items', category: 'items' },
-    { path: 'textures/blocks', category: 'blocks' },
-    { path: 'icons/items', category: 'items' },
-  ];
+  // Check if assets are extracted
+  if (!fs.existsSync(config.assetsPath)) {
+    console.log('[Items] Assets path does not exist:', config.assetsPath);
+    return items;
+  }
 
-  for (const dir of iconDirs) {
-    const files = listAssetDirectory(dir.path);
+  // First, try to find actual item directories by scanning the assets
+  const possibleRoots = ['hytale', 'textures', 'icons', ''];
+  const foundDirs: string[] = [];
+
+  // Scan for directories containing item icons
+  function scanForItemDirs(basePath: string, currentPath: string = '', depth: number = 0): void {
+    if (depth > 5) return; // Limit depth
+
+    const fullPath = path.join(basePath, currentPath);
+    if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isDirectory()) return;
+
+    const entries = fs.readdirSync(fullPath);
+
+    // Check if this directory contains PNG files (potential item icons)
+    const hasPngs = entries.some(e => e.endsWith('.png'));
+    if (hasPngs && (currentPath.includes('item') || currentPath.includes('icon') || currentPath.includes('block'))) {
+      foundDirs.push(currentPath);
+    }
+
+    // Recurse into subdirectories
+    for (const entry of entries) {
+      const entryPath = path.join(fullPath, entry);
+      if (fs.statSync(entryPath).isDirectory()) {
+        scanForItemDirs(basePath, currentPath ? `${currentPath}/${entry}` : entry, depth + 1);
+      }
+    }
+  }
+
+  // Scan the assets directory
+  scanForItemDirs(config.assetsPath);
+
+  if (foundDirs.length === 0) {
+    console.log('[Items] No item directories found in assets. Scanned:', config.assetsPath);
+    // List top-level directories for debugging
+    try {
+      const topLevel = fs.readdirSync(config.assetsPath);
+      console.log('[Items] Top-level dirs:', topLevel.slice(0, 20));
+    } catch (e) {
+      console.log('[Items] Could not list top-level dirs');
+    }
+    return items;
+  }
+
+  console.log('[Items] Found item directories:', foundDirs.length);
+
+  // Collect items from found directories
+  for (const dir of foundDirs) {
+    const files = listAssetDirectory(dir);
     if (!files) continue;
 
     for (const file of files) {
@@ -884,14 +920,25 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
         .replace(/-/g, ' ')
         .replace(/\b\w/g, c => c.toUpperCase());
 
+      // Determine category from path
+      let category = 'items';
+      if (dir.includes('weapon')) category = 'weapons';
+      else if (dir.includes('armor')) category = 'armor';
+      else if (dir.includes('tool')) category = 'tools';
+      else if (dir.includes('block')) category = 'blocks';
+      else if (dir.includes('consumable')) category = 'consumables';
+      else if (dir.includes('material')) category = 'materials';
+
       items.push({
         id: itemId,
         name: displayName,
         path: file.path,
-        category: dir.category,
+        category,
       });
     }
   }
+
+  console.log('[Items] Total items found:', items.length);
 
   // Sort by name
   items.sort((a, b) => a.name.localeCompare(b.name));
