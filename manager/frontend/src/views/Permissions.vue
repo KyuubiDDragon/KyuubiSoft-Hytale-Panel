@@ -3,8 +3,10 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { permissionsApi, type PermissionUser, type PermissionGroup } from '@/api/management'
 import Card from '@/components/ui/Card.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 // State
 const users = ref<PermissionUser[]>([])
@@ -245,6 +247,7 @@ onMounted(loadData)
 
           <div class="flex gap-3">
             <button
+              v-if="authStore.hasPermission('players.permissions')"
               type="submit"
               :disabled="!newUserName.trim()"
               class="px-6 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -308,7 +311,7 @@ onMounted(loadData)
                 </div>
               </div>
             </div>
-            <div class="flex gap-2">
+            <div v-if="authStore.hasPermission('players.permissions')" class="flex gap-2">
               <button
                 @click="editUser(user)"
                 class="p-2 text-gray-400 hover:text-hytale-orange transition-colors"
@@ -382,6 +385,7 @@ onMounted(loadData)
 
           <div class="flex gap-3">
             <button
+              v-if="authStore.hasPermission('players.permissions')"
               type="submit"
               :disabled="!newGroupName.trim()"
               class="px-6 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -433,7 +437,7 @@ onMounted(loadData)
                 </div>
                 <span class="text-white font-medium">{{ group.name }}</span>
               </div>
-              <div class="flex gap-2">
+              <div v-if="authStore.hasPermission('players.permissions')" class="flex gap-2">
                 <button
                   @click="editGroup(group)"
                   class="p-2 text-gray-400 hover:text-hytale-orange transition-colors"
