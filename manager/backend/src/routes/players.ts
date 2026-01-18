@@ -875,7 +875,7 @@ router.post('/:name/teleport/death', authMiddleware, requirePermission('players.
 });
 
 // POST /api/players/:name/deaths - Manually record a death position (for testing/admin)
-router.post('/:name/deaths', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
+router.post('/:name/deaths', authMiddleware, requirePermission('players.edit'), async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
   // SECURITY: Validate player name
