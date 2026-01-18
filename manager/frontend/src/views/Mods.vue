@@ -1021,7 +1021,7 @@ onMounted(loadData)
           <div class="flex items-center gap-2">
             <!-- Update Button (only if installed and has update) -->
             <button
-              v-if="mod.installed && mod.hasUpdate"
+              v-if="mod.installed && mod.hasUpdate && authStore.hasPermission('mods.install')"
               @click="updateStoreMod(mod.id)"
               :disabled="updatingMod === mod.id"
               class="px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors flex items-center gap-2 disabled:opacity-50"
