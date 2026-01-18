@@ -4,8 +4,10 @@ import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
 import { activityApi, type ActivityLogEntry } from '@/api/management'
 import { formatLogMessage } from '@/utils/formatItemPath'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const entries = ref<ActivityLogEntry[]>([])
 const total = ref(0)
@@ -110,6 +112,7 @@ onMounted(loadData)
       </div>
       <div class="flex items-center gap-3">
         <button
+          v-if="authStore.hasPermission('activity.clear')"
           @click="clearLog"
           class="px-4 py-2 bg-status-error/20 text-status-error font-medium rounded-lg hover:bg-status-error/30 transition-colors flex items-center gap-2"
         >

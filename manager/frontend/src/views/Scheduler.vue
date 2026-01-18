@@ -384,6 +384,7 @@ onMounted(() => {
                   </svg>
                   <span class="text-white font-mono">{{ time }}</span>
                   <button
+                    v-if="authStore.hasPermission('scheduler.edit')"
                     @click="removeRestartTime(time)"
                     class="text-gray-400 hover:text-red-400 transition-colors"
                   >
@@ -396,7 +397,7 @@ onMounted(() => {
               <p v-else class="text-sm text-gray-500 mb-3">{{ t('scheduler.noRestartTimes') }}</p>
 
               <!-- Add Time -->
-              <div class="flex gap-3">
+              <div v-if="authStore.hasPermission('scheduler.edit')" class="flex gap-3">
                 <input
                   v-model="newRestartTime"
                   type="time"
@@ -566,6 +567,7 @@ onMounted(() => {
                 <p class="text-xs text-gray-500">{{ t('scheduler.every') }} {{ ann.intervalMinutes }} {{ t('scheduler.minutes') }}</p>
               </div>
               <button
+                v-if="authStore.hasPermission('scheduler.edit')"
                 @click="removeAnnouncement(ann.id)"
                 class="p-1 text-gray-400 hover:text-red-400 transition-colors"
               >
@@ -577,7 +579,7 @@ onMounted(() => {
           </div>
 
           <!-- Add Announcement -->
-          <div v-if="config.announcements.enabled" class="flex gap-3 pt-4 border-t border-dark-50">
+          <div v-if="config.announcements.enabled && authStore.hasPermission('scheduler.edit')" class="flex gap-3 pt-4 border-t border-dark-50">
             <input
               v-model="newAnnouncement.message"
               type="text"

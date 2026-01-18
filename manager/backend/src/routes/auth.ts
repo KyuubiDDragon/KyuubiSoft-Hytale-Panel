@@ -174,7 +174,7 @@ router.delete('/users/:username', authMiddleware, requirePermission('users.delet
 // ============== HYTALE SERVER AUTHENTICATION ==============
 
 // GET /api/auth/hytale/status - Get Hytale authentication status
-router.get('/hytale/status', authMiddleware, async (_req: Request, res: Response) => {
+router.get('/hytale/status', authMiddleware, requirePermission('hytale_auth.manage'), async (_req: Request, res: Response) => {
   try {
     // Always verify auth status by checking for token files
     const result = await checkAuthCompletion();
@@ -208,7 +208,7 @@ router.post('/hytale/initiate', authMiddleware, requirePermission('hytale_auth.m
 });
 
 // POST /api/auth/hytale/check - Check if authentication is complete
-router.post('/hytale/check', authMiddleware, async (_req: Request, res: Response) => {
+router.post('/hytale/check', authMiddleware, requirePermission('hytale_auth.manage'), async (_req: Request, res: Response) => {
   try {
     const result = await checkAuthCompletion();
     res.json(result);
@@ -256,7 +256,7 @@ router.post('/hytale/persistence', authMiddleware, requirePermission('hytale_aut
 });
 
 // GET /api/auth/hytale/files - List files in auth directory (debug)
-router.get('/hytale/files', authMiddleware, async (_req: Request, res: Response) => {
+router.get('/hytale/files', authMiddleware, requirePermission('hytale_auth.manage'), async (_req: Request, res: Response) => {
   try {
     const files = await listAuthFiles();
     res.json({ files });
@@ -266,7 +266,7 @@ router.get('/hytale/files', authMiddleware, async (_req: Request, res: Response)
 });
 
 // GET /api/auth/hytale/inspect-credentials - Inspect downloader credentials structure (debug)
-router.get('/hytale/inspect-credentials', authMiddleware, async (_req: Request, res: Response) => {
+router.get('/hytale/inspect-credentials', authMiddleware, requirePermission('hytale_auth.manage'), async (_req: Request, res: Response) => {
   try {
     const result = await inspectDownloaderCredentials();
     res.json(result);

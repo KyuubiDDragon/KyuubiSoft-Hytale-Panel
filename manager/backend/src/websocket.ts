@@ -36,7 +36,7 @@ async function sendExistingLogs(ws: WebSocket): Promise<void> {
 }
 
 export function setupWebSocket(wss: WebSocketServer): void {
-  wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+  wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
     // Extract token from query string
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const token = url.searchParams.get('token');
@@ -46,9 +46,18 @@ export function setupWebSocket(wss: WebSocketServer): void {
       return;
     }
 
-    const username = verifyToken(token, 'access');
-    if (!username) {
+    const tokenResult = verifyToken(token, 'access');
+    if (!tokenResult) {
       ws.close(4001, 'Invalid token');
+      return;
+    }
+
+    const username = tokenResult.username;
+
+    // Check if user has permission to view console logs
+    const canViewLogs = await hasPermission(username, 'console.view');
+    if (!canViewLogs) {
+      ws.close(4003, 'Permission denied: console.view required');
       return;
     }
 
@@ -56,7 +65,7 @@ export function setupWebSocket(wss: WebSocketServer): void {
     clients.add(ws);
     clientUsernames.set(ws, username);
 
-    // Send existing logs to new client
+    // Send existing logs to new client (user already verified to have console.view)
     sendExistingLogs(ws);
 
     // Start streaming if first client
