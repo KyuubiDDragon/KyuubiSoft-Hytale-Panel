@@ -3,6 +3,7 @@ import { readFile, writeFile, readdir } from 'fs/promises';
 import path from 'path';
 import { config } from '../config.js';
 import type { PlayerInfo } from '../types/index.js';
+import { recordDeathPosition, getLastDeathPosition } from './chatLog.js';
 
 // ============================================================
 // Player Data File Interfaces (from server/universe/players/)
@@ -72,6 +73,13 @@ export interface PlayerFileMemory {
   FoundLocationNameKey: string;
 }
 
+// Death position data from PlayerDeathPositionData component
+export interface PlayerFileDeathPosition {
+  MarkerId?: string;
+  Transform?: PlayerFileTransform;
+  Day?: number;
+}
+
 export interface PlayerFileComponents {
   Transform?: PlayerFileTransform;
   Player?: {
@@ -88,6 +96,9 @@ export interface PlayerFileComponents {
   PlayerMemories?: { Capacity: number; Memories: PlayerFileMemory[] };
   HeadRotation?: { Rotation: { Pitch: number; Yaw: number; Roll: number } };
   UniqueItemUsages?: { UniqueItemUsed: string[] };
+  // Death position data (if player has died)
+  PlayerDeathPositionData?: PlayerFileDeathPosition;
+  DeathPosition?: PlayerFileDeathPosition;
 }
 
 export interface PlayerFileData {
@@ -776,6 +787,15 @@ export async function getPlayerDetailsFromFile(playerName: string): Promise<Pars
         maxHealth += (mod as { Amount: number }).Amount;
       }
     }
+  }
+
+  // Check for death position data and store it if found
+  const deathData = components?.PlayerDeathPositionData || components?.DeathPosition;
+  if (deathData?.Transform?.Position) {
+    const deathPos = deathData.Transform.Position;
+    const world = player?.PlayerData?.World || 'unknown';
+    // Record this death position (asynchronously, don't wait)
+    recordDeathPosition(displayName, world, deathPos.X, deathPos.Y, deathPos.Z).catch(() => {});
   }
 
   return {

@@ -825,4 +825,43 @@ router.post('/:name/teleport/death', authMiddleware, async (req: Request, res: R
   }
 });
 
+// POST /api/players/:name/deaths - Manually record a death position (for testing/admin)
+router.post('/:name/deaths', authMiddleware, async (req: Request, res: Response) => {
+  const playerName = req.params.name;
+
+  // SECURITY: Validate player name
+  if (!validatePlayerName(res, playerName)) return;
+
+  const { world, x, y, z } = req.body;
+
+  if (!world || x === undefined || y === undefined || z === undefined) {
+    res.status(400).json({
+      success: false,
+      error: 'Missing required fields: world, x, y, z',
+    });
+    return;
+  }
+
+  try {
+    const position = await chatLog.recordDeathPosition(
+      playerName,
+      world,
+      parseFloat(x),
+      parseFloat(y),
+      parseFloat(z)
+    );
+
+    res.json({
+      success: true,
+      message: `Death position recorded for ${playerName}`,
+      position,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record death position',
+    });
+  }
+});
+
 export default router;
