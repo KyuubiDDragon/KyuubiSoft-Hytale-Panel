@@ -23,6 +23,7 @@ import assetsRoutes from './routes/assets.js';
 // Services
 import { startSchedulers } from './services/scheduler.js';
 import { initializePlayerTracking } from './services/players.js';
+import { initializePluginEvents, disconnectFromPluginWebSocket } from './services/pluginEvents.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,6 +110,9 @@ server.listen(config.port, '0.0.0.0', () => {
     console.error('Failed to initialize player tracking:', err);
   });
 
+  // Initialize plugin events connection (chat, deaths)
+  initializePluginEvents();
+
   // Start schedulers
   startSchedulers();
 });
@@ -116,6 +120,7 @@ server.listen(config.port, '0.0.0.0', () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down...');
+  disconnectFromPluginWebSocket();
   server.close(() => {
     process.exit(0);
   });
@@ -123,6 +128,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down...');
+  disconnectFromPluginWebSocket();
   server.close(() => {
     process.exit(0);
   });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { playersApi, type UnifiedPlayerEntry } from '@/api/players'
+import { playersApi, type UnifiedPlayerEntry, type DeathPosition } from '@/api/players'
 import { serverApi, type PluginPlayer } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
@@ -46,11 +46,14 @@ const showGiveModal = ref(false)
 const showPlayerDetailModal = ref(false)
 
 // Teleport form
-const teleportMode = ref<'player' | 'coords'>('player')
+const teleportMode = ref<'player' | 'coords' | 'death'>('player')
 const teleportTarget = ref('')
 const teleportX = ref(0)
 const teleportY = ref(64)
 const teleportZ = ref(0)
+const lastDeathPosition = ref<DeathPosition | null>(null)
+const deathPositionLoading = ref(false)
+const deathPositionError = ref('')
 
 // Give item form
 const giveItem = ref('')
@@ -179,8 +182,32 @@ function openTeleportModal(name: string) {
   teleportX.value = 0
   teleportY.value = 64
   teleportZ.value = 0
+  lastDeathPosition.value = null
+  deathPositionError.value = ''
   showTeleportModal.value = true
   closeDropdown()
+}
+
+async function selectDeathTeleportMode() {
+  teleportMode.value = 'death'
+  if (!selectedPlayer.value) return
+
+  deathPositionLoading.value = true
+  deathPositionError.value = ''
+  lastDeathPosition.value = null
+
+  try {
+    const response = await playersApi.getLastDeathPosition(selectedPlayer.value)
+    if (response.success && response.position) {
+      lastDeathPosition.value = response.position
+    } else {
+      deathPositionError.value = response.error || t('players.noDeathPosition')
+    }
+  } catch {
+    deathPositionError.value = t('players.noDeathPosition')
+  } finally {
+    deathPositionLoading.value = false
+  }
 }
 
 function openGamemodeModal(name: string) {
@@ -327,13 +354,20 @@ async function confirmTeleport() {
   if (!selectedPlayer.value) return
   actionLoading.value = true
   try {
-    if (teleportMode.value === 'player' && teleportTarget.value) {
+    if (teleportMode.value === 'death') {
+      // Teleport to death location
+      await playersApi.teleportToDeath(selectedPlayer.value)
+      showTeleportModal.value = false
+      showSuccess(t('players.teleportToDeath') + ': ' + selectedPlayer.value)
+    } else if (teleportMode.value === 'player' && teleportTarget.value) {
       await playersApi.teleport(selectedPlayer.value, { target: teleportTarget.value })
+      showTeleportModal.value = false
+      showSuccess(t('players.teleport') + ': ' + selectedPlayer.value)
     } else {
       await playersApi.teleport(selectedPlayer.value, { x: teleportX.value, y: teleportY.value, z: teleportZ.value })
+      showTeleportModal.value = false
+      showSuccess(t('players.teleport') + ': ' + selectedPlayer.value)
     }
-    showTeleportModal.value = false
-    showSuccess(t('players.teleport') + ': ' + selectedPlayer.value)
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -792,6 +826,12 @@ onUnmounted(() => {
           >
             {{ t('players.teleportCoords') }}
           </button>
+          <button
+            @click="selectDeathTeleportMode"
+            :class="['flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors', teleportMode === 'death' ? 'bg-red-500 text-white' : 'bg-dark-100 text-gray-400']"
+          >
+            {{ t('players.teleportDeath') }}
+          </button>
         </div>
 
         <!-- Player Target -->
@@ -809,7 +849,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Coordinates -->
-        <div v-else class="grid grid-cols-3 gap-3">
+        <div v-else-if="teleportMode === 'coords'" class="grid grid-cols-3 gap-3">
           <div>
             <label class="block text-sm font-medium text-gray-400 mb-2">X</label>
             <input
@@ -835,10 +875,54 @@ onUnmounted(() => {
             />
           </div>
         </div>
+
+        <!-- Death Location -->
+        <div v-else-if="teleportMode === 'death'" class="space-y-3">
+          <div v-if="deathPositionLoading" class="flex items-center justify-center py-4">
+            <svg class="w-5 h-5 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <div v-else-if="deathPositionError" class="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+            {{ deathPositionError }}
+          </div>
+          <div v-else-if="lastDeathPosition" class="p-4 bg-dark-100 rounded-lg space-y-2">
+            <div class="flex items-center gap-2 text-red-400 text-sm font-medium">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/>
+              </svg>
+              {{ t('players.lastDeathLocation') }}
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-sm">
+              <div class="text-center">
+                <span class="text-gray-500">X:</span>
+                <span class="text-white font-mono ml-1">{{ lastDeathPosition.x }}</span>
+              </div>
+              <div class="text-center">
+                <span class="text-gray-500">Y:</span>
+                <span class="text-white font-mono ml-1">{{ lastDeathPosition.y }}</span>
+              </div>
+              <div class="text-center">
+                <span class="text-gray-500">Z:</span>
+                <span class="text-white font-mono ml-1">{{ lastDeathPosition.z }}</span>
+              </div>
+            </div>
+            <div class="text-xs text-gray-500 text-center">
+              {{ lastDeathPosition.world }} - {{ new Date(lastDeathPosition.timestamp).toLocaleString() }}
+            </div>
+          </div>
+        </div>
       </div>
       <template #footer>
         <Button variant="secondary" @click="showTeleportModal = false">{{ t('common.cancel') }}</Button>
-        <Button :loading="actionLoading" @click="confirmTeleport">{{ t('players.teleport') }}</Button>
+        <Button
+          :loading="actionLoading"
+          :disabled="teleportMode === 'death' && (!lastDeathPosition || deathPositionLoading)"
+          @click="confirmTeleport"
+        >
+          {{ t('players.teleport') }}
+        </Button>
       </template>
     </Modal>
 

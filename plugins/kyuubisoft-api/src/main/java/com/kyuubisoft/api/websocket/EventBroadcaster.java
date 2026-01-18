@@ -63,13 +63,24 @@ public class EventBroadcaster {
     }
 
     /**
-     * Broadcast player death event
+     * Broadcast player death event (without position)
      */
     public void broadcastPlayerDeath(String playerName, String cause) {
+        broadcastPlayerDeath(playerName, cause, null, null, null, null);
+    }
+
+    /**
+     * Broadcast player death event with position
+     */
+    public void broadcastPlayerDeath(String playerName, String cause, String world, Double x, Double y, Double z) {
         PlayerDeathEvent event = new PlayerDeathEvent();
         event.type = "player_death";
         event.player = playerName;
         event.cause = cause;
+        event.world = world;
+        event.x = x;
+        event.y = y;
+        event.z = z;
         event.timestamp = Instant.now().toString();
 
         broadcast(event);
@@ -134,6 +145,10 @@ public class EventBroadcaster {
         public String type;
         public String player;
         public String cause;
+        public String world;
+        public Double x;
+        public Double y;
+        public Double z;
         public String timestamp;
     }
 

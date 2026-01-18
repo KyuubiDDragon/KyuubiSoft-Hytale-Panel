@@ -53,6 +53,23 @@ export interface ActionResponse {
   error?: string
 }
 
+export interface DeathPosition {
+  id: string
+  timestamp: string
+  player: string
+  world: string
+  x: number
+  y: number
+  z: number
+}
+
+export interface DeathPositionResponse {
+  success: boolean
+  player: string
+  position?: DeathPosition
+  error?: string
+}
+
 export const playersApi = {
   async getOnline(): Promise<PlayersResponse> {
     const response = await api.get<PlayersResponse>('/players')
@@ -156,6 +173,16 @@ export const playersApi = {
 
   async clearInventory(playerName: string): Promise<ActionResponse> {
     const response = await api.post<ActionResponse>(`/players/${playerName}/inventory/clear`)
+    return response.data
+  },
+
+  async getLastDeathPosition(playerName: string): Promise<DeathPositionResponse> {
+    const response = await api.get<DeathPositionResponse>(`/players/${playerName}/deaths/last`)
+    return response.data
+  },
+
+  async teleportToDeath(playerName: string): Promise<ActionResponse> {
+    const response = await api.post<ActionResponse>(`/players/${playerName}/teleport/death`)
     return response.data
   },
 }
