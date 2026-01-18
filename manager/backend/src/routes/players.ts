@@ -545,6 +545,9 @@ router.post('/:name/give', authMiddleware, async (req: Request, res: Response) =
   const playerName = req.params.name;
   const { item, amount } = req.body;
 
+  // DEBUG: Log received values
+  console.log('[Give Debug] Received:', { playerName, item, amount, body: req.body });
+
   // SECURITY: Validate player name
   if (!validatePlayerName(res, playerName)) return;
 
@@ -575,11 +578,14 @@ router.post('/:name/give', authMiddleware, async (req: Request, res: Response) =
   }
 
   // Use the item ID directly (with underscores, not display name with spaces)
-  // Command format: /give player item --quantity=X
+  // Command format: /give <player> <item> --quantity=<amount>
   const command = amount && amount > 1
     ? `/give ${playerName} ${item} --quantity=${amount}`
     : `/give ${playerName} ${item}`;
+
+  console.log('[Give Debug] Built command:', command);
   const result = await dockerService.execCommand(command);
+  console.log('[Give Debug] Command result:', result);
 
   if (result.success) {
     res.json({
