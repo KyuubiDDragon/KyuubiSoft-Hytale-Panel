@@ -395,27 +395,35 @@ function generateGrid(items: FileInventoryItem[], capacity: number): (FileInvent
   return grid
 }
 
-// Computed inventory grids - use actual capacity from inventory data
-const hotbarGrid = computed(() => inventory.value ? generateGrid(inventory.value.hotbar, 9) : [])
-const armorGrid = computed(() => inventory.value ? generateGrid(inventory.value.armor, 4) : [])
-const utilityGrid = computed(() => inventory.value ? generateGrid(inventory.value.utility, 4) : [])
-const storageGrid = computed(() => inventory.value ? generateGrid(inventory.value.storage, 36) : [])
+// Computed inventory grids - use actual capacity from API
+const hotbarGrid = computed(() => {
+  if (!inventory.value) return []
+  const capacity = inventory.value.capacities?.hotbar || 9
+  return generateGrid(inventory.value.hotbar, capacity)
+})
 
-// Backpack capacity from inventory - dynamically based on upgrades
+const armorGrid = computed(() => {
+  if (!inventory.value) return []
+  const capacity = inventory.value.capacities?.armor || 4
+  return generateGrid(inventory.value.armor, capacity)
+})
+
+const utilityGrid = computed(() => {
+  if (!inventory.value) return []
+  const capacity = inventory.value.capacities?.utility || 4
+  return generateGrid(inventory.value.utility, capacity)
+})
+
+const storageGrid = computed(() => {
+  if (!inventory.value) return []
+  const capacity = inventory.value.capacities?.storage || 36
+  return generateGrid(inventory.value.storage, capacity)
+})
+
+// Backpack capacity from actual API data
 const backpackCapacity = computed(() => {
-  // Default backpack capacities: 0 -> 6 (upgrade 1) -> 12 (upgrade 2) -> 18 (upgrade 3)
-  // Check uniqueItemsUsed to determine upgrades
   if (!inventory.value) return 0
-
-  // Return actual number of items or minimum based on upgrades found
-  const upgradesUsed = details.value?.uniqueItemsUsed || []
-  let capacity = 0
-  if (upgradesUsed.includes('Upgrade_Backpack_1')) capacity = 6
-  if (upgradesUsed.includes('Upgrade_Backpack_2')) capacity = 12
-  if (upgradesUsed.includes('Upgrade_Backpack_3')) capacity = 18
-
-  // Use the larger of calculated capacity or actual items
-  return Math.max(capacity, inventory.value.backpack.length)
+  return inventory.value.capacities?.backpack || 0
 })
 
 const backpackGrid = computed(() => {
@@ -423,8 +431,12 @@ const backpackGrid = computed(() => {
   return generateGrid(inventory.value.backpack, backpackCapacity.value)
 })
 
-// Tools grid (usually 2 slots)
-const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.tools, 2) : [])
+// Tools grid - use actual capacity from API
+const toolsGrid = computed(() => {
+  if (!inventory.value) return []
+  const capacity = inventory.value.capacities?.tools || 2
+  return generateGrid(inventory.value.tools, capacity)
+})
 </script>
 
 <template>
@@ -881,7 +893,7 @@ const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.
                     Backpack
                     <span class="text-xs text-gray-500">({{ inventory.backpack.length }}/{{ backpackCapacity }})</span>
                   </h4>
-                  <div class="grid grid-cols-6 gap-1">
+                  <div class="grid grid-cols-9 gap-1">
                     <div
                       v-for="(item, index) in backpackGrid"
                       :key="`backpack-${index}`"

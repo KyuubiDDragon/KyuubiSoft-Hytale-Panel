@@ -158,6 +158,15 @@ export interface ParsedPlayerInventory {
   activeHotbarSlot: number;
   totalSlots: number;
   usedSlots: number;
+  // Individual container capacities
+  capacities: {
+    storage: number;
+    armor: number;
+    hotbar: number;
+    utility: number;
+    backpack: number;
+    tools: number;
+  };
 }
 
 export interface ParsedPlayerStats {
@@ -784,6 +793,14 @@ export async function getPlayerInventoryFromFile(playerName: string): Promise<Pa
                 (inventory.Utility?.Capacity || 0) +
                 (inventory.Backpack?.Capacity || 0),
     usedSlots: allItems.length,
+    capacities: {
+      storage: inventory.Storage?.Capacity || 36,
+      armor: inventory.Armor?.Capacity || 4,
+      hotbar: inventory.HotBar?.Capacity || 9,
+      utility: inventory.Utility?.Capacity || 4,
+      backpack: inventory.Backpack?.Capacity || 0,
+      tools: inventory.Tool?.Capacity || 2,
+    },
   };
 }
 

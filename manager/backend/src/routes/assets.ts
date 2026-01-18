@@ -224,59 +224,17 @@ router.get('/item-icon/:itemId', (req: Request, res: Response) => {
 
   // Create variations of the item name for searching
   const itemLower = itemId.toLowerCase();
-  const itemWithSlashes = itemId.replace(/_/g, '/');
-  const itemLowerWithSlashes = itemLower.replace(/_/g, '/');
-  // Also try with hyphens instead of underscores
-  const itemWithHyphens = itemId.replace(/_/g, '-');
-  const itemLowerWithHyphens = itemLower.replace(/_/g, '-');
+  // Convert to title case (armor_adamantite_chest -> Armor_Adamantite_Chest)
+  const itemTitleCase = itemId.split('_').map((w: string) =>
+    w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+  ).join('_');
 
-  // Common paths where item icons might be found in Hytale assets
-  // Order matters - more specific paths first
+  // Primary path: Common/Icons/ItemsGenerated/ - this is where all items are!
+  // Order matters - most likely paths first for fast lookup
   const possiblePaths = [
-    // UI Icons - most likely location for inventory icons
-    `hytale/textures/ui/icons/items/${itemId}.png`,
-    `hytale/textures/ui/icons/items/${itemLower}.png`,
-    `textures/ui/icons/items/${itemId}.png`,
-    `textures/ui/icons/items/${itemLower}.png`,
-    // Maybe in a subfolder based on type
-    `hytale/textures/ui/icons/items/weapons/${itemId}.png`,
-    `hytale/textures/ui/icons/items/weapons/${itemLower}.png`,
-    `hytale/textures/ui/icons/items/armor/${itemId}.png`,
-    `hytale/textures/ui/icons/items/armor/${itemLower}.png`,
-    `hytale/textures/ui/icons/items/tools/${itemId}.png`,
-    `hytale/textures/ui/icons/items/tools/${itemLower}.png`,
-    `hytale/textures/ui/icons/items/consumables/${itemId}.png`,
-    `hytale/textures/ui/icons/items/consumables/${itemLower}.png`,
-    // With slashes instead of underscores (subfolder structure)
-    `hytale/textures/ui/icons/items/${itemWithSlashes}.png`,
-    `hytale/textures/ui/icons/items/${itemLowerWithSlashes}.png`,
-    // With hyphens
-    `hytale/textures/ui/icons/items/${itemWithHyphens}.png`,
-    `hytale/textures/ui/icons/items/${itemLowerWithHyphens}.png`,
-    // Direct item textures
-    `hytale/textures/items/${itemId}.png`,
-    `hytale/textures/items/${itemLower}.png`,
-    `textures/items/${itemId}.png`,
-    `textures/items/${itemLower}.png`,
-    // Block textures (for block items)
-    `hytale/textures/blocks/${itemId}.png`,
-    `hytale/textures/blocks/${itemLower}.png`,
-    `textures/blocks/${itemId}.png`,
-    `textures/blocks/${itemLower}.png`,
-    // Entity/mob textures
-    `hytale/textures/entity/${itemId}.png`,
-    `hytale/textures/entity/${itemLower}.png`,
-    // UI general icons
-    `hytale/textures/ui/icons/${itemId}.png`,
-    `hytale/textures/ui/icons/${itemLower}.png`,
-    // Maybe just "icons" folder
-    `icons/${itemId}.png`,
-    `icons/${itemLower}.png`,
-    `icons/items/${itemId}.png`,
-    `icons/items/${itemLower}.png`,
-    // Root level textures
-    `${itemId}.png`,
-    `${itemLower}.png`,
+    `Common/Icons/ItemsGenerated/${itemTitleCase}.png`,
+    `Common/Icons/ItemsGenerated/${itemId}.png`,
+    `Common/Icons/ItemsGenerated/${itemLower}.png`,
   ];
 
   // Try each possible path
