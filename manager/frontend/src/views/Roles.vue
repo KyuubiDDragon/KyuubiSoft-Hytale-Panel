@@ -40,20 +40,19 @@ const colorOptions = [
 
 // Group permissions by category
 const groupedPermissions = computed(() => {
-  const groups: Record<string, { key: string; description: string }[]> = {}
+  const groups: Record<string, { key: string }[]> = {}
 
-  for (const [key, description] of Object.entries(availablePermissions.value)) {
+  for (const key of Object.keys(availablePermissions.value)) {
     const category = key.split('.')[0] || 'other'
-    const categoryName = category.charAt(0).toUpperCase() + category.slice(1)
 
-    if (!groups[categoryName]) {
-      groups[categoryName] = []
+    if (!groups[category]) {
+      groups[category] = []
     }
-    groups[categoryName].push({ key, description })
+    groups[category].push({ key })
   }
 
   // Sort categories alphabetically
-  const sortedGroups: Record<string, { key: string; description: string }[]> = {}
+  const sortedGroups: Record<string, { key: string }[]> = {}
   Object.keys(groups).sort().forEach(key => {
     sortedGroups[key] = groups[key].sort((a, b) => a.key.localeCompare(b.key))
   })
@@ -441,7 +440,7 @@ onMounted(loadRoles)
 
               <div class="space-y-4 max-h-64 overflow-y-auto p-3 bg-dark-100 rounded-lg">
                 <div v-for="(permissions, category) in groupedPermissions" :key="category">
-                  <h4 class="text-sm font-medium text-white mb-2">{{ category }}</h4>
+                  <h4 class="text-sm font-medium text-white mb-2">{{ t('permissionCategories.' + category) }}</h4>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label
                       v-for="perm in permissions"
@@ -452,11 +451,16 @@ onMounted(loadRoles)
                         type="checkbox"
                         :checked="formPermissions.includes(perm.key)"
                         @change="togglePermission(perm.key)"
-                        class="mt-0.5 w-4 h-4 rounded border-dark-50 bg-dark-200 text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
+                        class="sr-only peer"
                       />
+                      <div class="w-5 h-5 bg-dark-50 rounded peer-checked:bg-hytale-orange flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <svg v-if="formPermissions.includes(perm.key)" class="w-3 h-3 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
                       <div class="flex-1 min-w-0">
                         <span class="text-sm text-white font-mono">{{ perm.key }}</span>
-                        <p v-if="perm.description" class="text-xs text-gray-500 truncate">{{ perm.description }}</p>
+                        <p class="text-xs text-gray-500 truncate">{{ t('permissionDescriptions.' + perm.key) }}</p>
                       </div>
                     </label>
                   </div>
