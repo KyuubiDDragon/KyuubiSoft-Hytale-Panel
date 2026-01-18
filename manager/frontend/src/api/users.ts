@@ -13,12 +13,12 @@ export const usersApi = {
     return response.data
   },
 
-  async create(username: string, password: string, role: User['role'] = 'viewer'): Promise<{ success: boolean; user: User }> {
-    const response = await api.post<{ success: boolean; user: User }>('/auth/users', { username, password, role })
+  async create(username: string, password: string, roleId: string = 'viewer'): Promise<{ success: boolean; user: User }> {
+    const response = await api.post<{ success: boolean; user: User }>('/auth/users', { username, password, roleId })
     return response.data
   },
 
-  async update(username: string, data: { password?: string; role?: User['role'] }): Promise<{ success: boolean; user: User }> {
+  async update(username: string, data: { password?: string; roleId?: string }): Promise<{ success: boolean; user: User }> {
     const response = await api.put<{ success: boolean; user: User }>(`/auth/users/${encodeURIComponent(username)}`, data)
     return response.data
   },
