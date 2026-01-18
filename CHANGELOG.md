@@ -2,6 +2,36 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [1.6.0] - 2026-01-18
+
+### Added
+
+- **Chat Log System**: Complete overhaul of chat message storage
+  - Daily file rotation: Messages stored in `data/chat/global/YYYY-MM-DD.json`
+  - Per-player chat logs: `data/chat/players/{name}/YYYY-MM-DD.json`
+  - Unlimited message history (no more 1000 message limit)
+  - UUID tracking for each chat message (tracks players across name changes)
+  - Time range filter in Chat view: 7 days, 14 days, 30 days, or all
+  - Shows available days count in the UI
+
+- **Player Chat Tab**: Enhanced chat functionality in player detail modal
+  - Shows player-specific chat history with time filter
+  - UUID linked to player for tracking
+
+### Fixed
+
+- **Chat Event Detection**: Fixed PlayerChatEvent not being captured
+  - Changed from `eventRegistry.register()` to `eventRegistry.registerGlobal()` based on Serilum's Chat-History plugin
+  - Chat messages now properly captured and broadcasted via WebSocket
+
+### Changed
+
+- **KyuubiSoft API Plugin v1.1.6**:
+  - Fixed chat event registration using `registerGlobal()` for global chat listener
+  - Added UUID to chat message broadcasts
+  - Removed debug logging for cleaner server logs
+  - Removed unused log interceptor code
+
 ## [1.5.0] - 2025-01-17
 
 ### Added
