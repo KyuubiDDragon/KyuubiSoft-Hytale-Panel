@@ -834,7 +834,7 @@ const ITEM_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 /**
  * Get list of all available items from the extracted assets
- * Scans common item icon directories and builds a list
+ * Uses searchAssets to find all PNG files in icon/item directories
  */
 export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
   // Return cached list if available and not expired
@@ -846,32 +846,46 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
   const items: ItemInfo[] = [];
   const seenIds = new Set<string>();
 
-  // Common directories where item icons are stored
-  const iconDirs = [
-    { path: 'hytale/textures/ui/icons/items', category: 'items' },
-    { path: 'hytale/textures/ui/icons/items/weapons', category: 'weapons' },
-    { path: 'hytale/textures/ui/icons/items/armor', category: 'armor' },
-    { path: 'hytale/textures/ui/icons/items/tools', category: 'tools' },
-    { path: 'hytale/textures/ui/icons/items/consumables', category: 'consumables' },
-    { path: 'hytale/textures/ui/icons/items/materials', category: 'materials' },
-    { path: 'hytale/textures/items', category: 'items' },
-    { path: 'hytale/textures/blocks', category: 'blocks' },
-    { path: 'textures/ui/icons/items', category: 'items' },
-    { path: 'textures/items', category: 'items' },
-    { path: 'textures/blocks', category: 'blocks' },
-    { path: 'icons/items', category: 'items' },
-  ];
+  // Check if assets are extracted
+  if (!fs.existsSync(config.assetsPath)) {
+    console.log('[Items] Assets path does not exist:', config.assetsPath);
+    return items;
+  }
 
-  for (const dir of iconDirs) {
-    const files = listAssetDirectory(dir.path);
-    if (!files) continue;
+  // Use searchAssets to find all PNG files that could be item icons
+  // Search for common patterns
+  const searchPatterns = ['icon', 'item', 'block'];
 
-    for (const file of files) {
-      if (file.type !== 'file') continue;
-      if (!file.name.endsWith('.png')) continue;
+  for (const pattern of searchPatterns) {
+    const results = searchAssets(pattern, {
+      extensions: ['.png'],
+      maxResults: 2000,
+      useGlob: false,
+    });
+
+    for (const result of results) {
+      // Only include files from directories that look like item/icon directories
+      const pathLower = result.path.toLowerCase();
+      if (!pathLower.includes('icon') && !pathLower.includes('item') && !pathLower.includes('block')) {
+        continue;
+      }
+
+      // Skip textures that are clearly not item icons (too deep in texture paths, animations, etc.)
+      if (pathLower.includes('animation') || pathLower.includes('particle') ||
+          pathLower.includes('effect') || pathLower.includes('background') ||
+          pathLower.includes('button') || pathLower.includes('frame') ||
+          pathLower.includes('slot') || pathLower.includes('cursor')) {
+        continue;
+      }
 
       // Extract item ID from filename
-      const itemName = file.name.replace('.png', '');
+      const itemName = result.name.replace('.png', '');
+
+      // Skip very short names or numeric-only names (likely not items)
+      if (itemName.length < 2 || /^\d+$/.test(itemName)) {
+        continue;
+      }
+
       const itemId = `hytale:${itemName}`;
 
       // Skip duplicates
@@ -884,14 +898,25 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
         .replace(/-/g, ' ')
         .replace(/\b\w/g, c => c.toUpperCase());
 
+      // Determine category from path
+      let category = 'items';
+      if (pathLower.includes('weapon')) category = 'weapons';
+      else if (pathLower.includes('armor')) category = 'armor';
+      else if (pathLower.includes('tool')) category = 'tools';
+      else if (pathLower.includes('block')) category = 'blocks';
+      else if (pathLower.includes('consumable')) category = 'consumables';
+      else if (pathLower.includes('material')) category = 'materials';
+
       items.push({
         id: itemId,
         name: displayName,
-        path: file.path,
-        category: dir.category,
+        path: result.path,
+        category,
       });
     }
   }
+
+  console.log('[Items] Total items found:', items.length);
 
   // Sort by name
   items.sort((a, b) => a.name.localeCompare(b.name));
