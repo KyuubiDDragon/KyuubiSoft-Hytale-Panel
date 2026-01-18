@@ -670,6 +670,7 @@ onUnmounted(() => {
               <span v-if="hasChanges()" class="text-status-warning text-xs">({{ t('settings.unsavedChanges') }})</span>
             </div>
             <button
+              v-if="authStore.hasPermission('settings.edit')"
               @click="saveFile"
               :disabled="saving || !hasChanges()"
               :class="[

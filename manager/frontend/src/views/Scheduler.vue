@@ -638,7 +638,7 @@ onMounted(() => {
                 :key="cmd.id"
                 class="group relative flex items-center gap-3 p-3 bg-dark-400 rounded-lg hover:bg-dark-50 transition-colors"
                 :class="{ 'cursor-pointer': authStore.hasPermission('scheduler.edit') }"
-                @click="authStore.hasPermission('scheduler.edit') && executeCommand(cmd.id)"
+                @click="authStore.hasPermission('scheduler.edit') ? executeCommand(cmd.id) : undefined"
               >
                 <div class="w-8 h-8 bg-dark-100 rounded-lg flex items-center justify-center">
                   <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">

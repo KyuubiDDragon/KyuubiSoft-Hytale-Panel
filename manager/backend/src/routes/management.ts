@@ -2025,7 +2025,7 @@ router.get('/modtale/game-versions', authMiddleware, requirePermission('mods.vie
 });
 
 // POST /api/management/modtale/refresh - Clear Modtale cache
-router.post('/modtale/refresh', authMiddleware, requirePermission('mods.view'), async (_req: Request, res: Response) => {
+router.post('/modtale/refresh', authMiddleware, requirePermission('mods.install'), async (_req: Request, res: Response) => {
   try {
     clearModtaleCache();
     res.json({ success: true, message: 'Modtale cache cleared' });
@@ -2203,7 +2203,7 @@ router.get('/stackmart/categories', authMiddleware, requirePermission('mods.view
 });
 
 // POST /api/management/stackmart/refresh - Clear StackMart cache
-router.post('/stackmart/refresh', authMiddleware, requirePermission('mods.view'), async (_req: Request, res: Response) => {
+router.post('/stackmart/refresh', authMiddleware, requirePermission('mods.install'), async (_req: Request, res: Response) => {
   try {
     clearStackMartCache();
     res.json({ success: true, message: 'StackMart cache cleared' });
