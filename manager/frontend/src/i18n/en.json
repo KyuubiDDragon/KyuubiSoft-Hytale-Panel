@@ -252,7 +252,12 @@
       "goToAssets": "Go to Assets",
       "chat": "Chat",
       "noChat": "No chat messages",
-      "chatCount": "{count} messages"
+      "chatCount": "{count} messages",
+      "deaths": "Deaths",
+      "noDeaths": "No death positions recorded",
+      "deathCount": "{count} death positions",
+      "deathDay": "Day {day}",
+      "latestDeath": "Latest"
     },
     "itemTypes": {
       "sword": "Sword",

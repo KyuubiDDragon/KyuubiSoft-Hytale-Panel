@@ -94,10 +94,67 @@ public class KyuubiSoftAPI extends JavaPlugin {
 
         // Player chat event (async event with String key - using empty string for global listener)
         eventRegistry.register(PlayerChatEvent.class, "", event -> {
-            String playerName = event.getSender().getUsername();
-            String message = event.getContent();
-            LOGGER.info("[Chat] " + playerName + ": " + message);
-            eventBroadcaster.broadcastChat(playerName, message);
+            try {
+                // Get sender info - may need to extract from StringParamValue
+                var sender = event.getSender();
+                String playerName;
+                if (sender != null) {
+                    var username = sender.getUsername();
+                    // Handle StringParamValue - try getValue() or toString()
+                    if (username != null) {
+                        playerName = username.toString();
+                        // Remove class name prefix if present (e.g., "StringParamValue@...")
+                        if (playerName.contains("@")) {
+                            try {
+                                // Try reflection to get actual value
+                                var method = username.getClass().getMethod("getValue");
+                                playerName = (String) method.invoke(username);
+                            } catch (Exception e) {
+                                // Try getString method
+                                try {
+                                    var method = username.getClass().getMethod("getString");
+                                    playerName = (String) method.invoke(username);
+                                } catch (Exception e2) {
+                                    playerName = "Unknown";
+                                }
+                            }
+                        }
+                    } else {
+                        playerName = "Unknown";
+                    }
+                } else {
+                    playerName = "Unknown";
+                }
+
+                // Get message content - may also be StringParamValue
+                var content = event.getContent();
+                String message;
+                if (content != null) {
+                    message = content.toString();
+                    // Handle StringParamValue
+                    if (message.contains("@")) {
+                        try {
+                            var method = content.getClass().getMethod("getValue");
+                            message = (String) method.invoke(content);
+                        } catch (Exception e) {
+                            try {
+                                var method = content.getClass().getMethod("getString");
+                                message = (String) method.invoke(content);
+                            } catch (Exception e2) {
+                                message = "[Unable to read message]";
+                            }
+                        }
+                    }
+                } else {
+                    message = "";
+                }
+
+                LOGGER.info("[Chat] " + playerName + ": " + message);
+                eventBroadcaster.broadcastChat(playerName, message);
+            } catch (Exception e) {
+                LOGGER.warning("[Chat] Error processing chat event: " + e.getMessage());
+                e.printStackTrace();
+            }
         });
     }
 

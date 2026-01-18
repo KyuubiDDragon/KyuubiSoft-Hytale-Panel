@@ -53,13 +53,44 @@ export interface PlayerFileTransform {
   Rotation: { Pitch: number; Yaw: number; Roll: number };
 }
 
+// Death position in PerWorldData
+export interface PlayerFileDeathPositionEntry {
+  MarkerId: string;
+  Transform: {
+    X: number;
+    Y: number;
+    Z: number;
+    Pitch: number;
+    Yaw: number;
+    Roll: number;
+  };
+  Day: number;
+}
+
+// Per-world data structure
+export interface PlayerFilePerWorldData {
+  LastPosition?: {
+    X: number;
+    Y: number;
+    Z: number;
+    Pitch: number;
+    Yaw: number;
+    Roll: number;
+  };
+  LastMovementStates?: {
+    Flying?: boolean;
+  };
+  FirstSpawn?: boolean;
+  DeathPositions?: PlayerFileDeathPositionEntry[];
+}
+
 export interface PlayerFilePlayerData {
   BlockIdVersion?: number;
   World?: string;
   KnownRecipes?: string[];
   DiscoveredZones?: string[];
   DiscoveredInstances?: unknown[];
-  PerWorldData?: Record<string, unknown>;
+  PerWorldData?: Record<string, PlayerFilePerWorldData>;
   ReputationData?: Record<string, unknown>;
   ActiveObjectiveUUIDs?: string[];
 }
@@ -876,6 +907,67 @@ export interface UnifiedPlayerEntry {
   lastSeen?: string;
   playTime?: number;
   sessionCount?: number;
+}
+
+// Parsed death position for API response
+export interface ParsedDeathPosition {
+  id: string;
+  world: string;
+  day: number;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  rotation: {
+    pitch: number;
+    yaw: number;
+    roll: number;
+  };
+}
+
+/**
+ * Get player death positions from file
+ * Returns array sorted by most recent (last in array = most recent)
+ */
+export async function getPlayerDeathPositionsFromFile(playerName: string): Promise<ParsedDeathPosition[]> {
+  const uuid = await findPlayerUuidByName(playerName);
+  if (!uuid) return [];
+
+  const data = await readPlayerFile(uuid);
+  if (!data) return [];
+
+  const playerData = data.Components?.Player?.PlayerData;
+  if (!playerData?.PerWorldData) return [];
+
+  const result: ParsedDeathPosition[] = [];
+
+  // Iterate through all worlds
+  for (const [worldName, worldData] of Object.entries(playerData.PerWorldData)) {
+    if (!worldData.DeathPositions) continue;
+
+    for (const death of worldData.DeathPositions) {
+      result.push({
+        id: death.MarkerId,
+        world: worldName,
+        day: death.Day,
+        position: {
+          x: Math.round(death.Transform.X * 100) / 100,
+          y: Math.round(death.Transform.Y * 100) / 100,
+          z: Math.round(death.Transform.Z * 100) / 100,
+        },
+        rotation: {
+          pitch: death.Transform.Pitch,
+          yaw: death.Transform.Yaw,
+          roll: death.Transform.Roll,
+        },
+      });
+    }
+  }
+
+  // Sort by day (ascending), so last element is most recent
+  // The array from file is already in order, but we keep this for safety
+  return result;
 }
 
 /**

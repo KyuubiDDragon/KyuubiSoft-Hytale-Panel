@@ -3,7 +3,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
-import { playersApi, type ChatMessage } from '@/api/players'
+import { playersApi, type ChatMessage, type DeathPosition } from '@/api/players'
 import { assetsApi } from '@/api/assets'
 import Button from '@/components/ui/Button.vue'
 
@@ -20,7 +20,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 // Tab state
-const activeTab = ref<'info' | 'inventory' | 'stats' | 'chat'>('info')
+const activeTab = ref<'info' | 'inventory' | 'stats' | 'chat' | 'deaths'>('info')
 
 // Window dimensions for tooltip positioning (safely accessed)
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200)
@@ -50,6 +50,12 @@ const chatMessages = ref<ChatMessage[]>([])
 const chatLoading = ref(false)
 const chatTotal = ref(0)
 
+// Death positions state
+const deathPositions = ref<DeathPosition[]>([])
+const deathsLoading = ref(false)
+const selectedDeathIndex = ref<number | null>(null)
+const teleportingDeath = ref(false)
+
 // Tooltip state
 const hoveredItem = ref<FileInventoryItem | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
@@ -71,6 +77,8 @@ watch(() => props.open, async (isOpen) => {
     inventory.value = null
     chatMessages.value = []
     chatTotal.value = 0
+    deathPositions.value = []
+    selectedDeathIndex.value = null
     error.value = ''
     hoveredItem.value = null
     failedIcons.value = new Set()
@@ -131,10 +139,46 @@ async function loadPlayerChat() {
   }
 }
 
-// Watch for chat tab selection
+// Load player death positions
+async function loadDeathPositions() {
+  if (!props.playerName || deathPositions.value.length > 0) return
+
+  deathsLoading.value = true
+  try {
+    const result = await playersApi.getDeathPositions(props.playerName)
+    deathPositions.value = result.positions
+    // Auto-select the last (most recent) death position
+    if (result.positions.length > 0) {
+      selectedDeathIndex.value = result.positions.length - 1
+    }
+  } catch {
+    // Silently fail - deaths are optional
+  } finally {
+    deathsLoading.value = false
+  }
+}
+
+// Teleport to selected death position
+async function teleportToDeathPosition(index: number) {
+  if (!props.playerName) return
+
+  teleportingDeath.value = true
+  try {
+    await playersApi.teleportToDeath(props.playerName, index)
+    selectedDeathIndex.value = index
+  } catch (err) {
+    console.error('Failed to teleport:', err)
+  } finally {
+    teleportingDeath.value = false
+  }
+}
+
+// Watch for tab selection
 watch(activeTab, (tab) => {
   if (tab === 'chat') {
     loadPlayerChat()
+  } else if (tab === 'deaths') {
+    loadDeathPositions()
   }
 })
 
@@ -481,6 +525,17 @@ const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.
               ]"
             >
               {{ t('players.details.chat') }}
+            </button>
+            <button
+              @click="activeTab = 'deaths'"
+              :class="[
+                'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
+                activeTab === 'deaths'
+                  ? 'bg-dark-100 text-white'
+                  : 'text-gray-400 hover:text-white'
+              ]"
+            >
+              {{ t('players.details.deaths') }}
             </button>
           </div>
 
@@ -982,6 +1037,95 @@ const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.
                       <span class="text-xs text-gray-500">{{ formatChatTime(msg.timestamp) }}</span>
                     </div>
                     <p class="text-gray-300 text-sm break-words">{{ msg.message }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Deaths Tab -->
+            <div v-else-if="activeTab === 'deaths'">
+              <!-- Loading -->
+              <div v-if="deathsLoading" class="flex items-center justify-center h-48">
+                <div class="flex items-center gap-3 text-gray-400">
+                  <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  {{ t('common.loading') }}
+                </div>
+              </div>
+
+              <!-- No death positions -->
+              <div v-else-if="deathPositions.length === 0" class="flex flex-col items-center justify-center h-48 text-center">
+                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                <p class="text-gray-400">{{ t('players.details.noDeaths') }}</p>
+              </div>
+
+              <!-- Death positions list -->
+              <div v-else class="space-y-3">
+                <div class="text-xs text-gray-500 mb-3">
+                  {{ t('players.details.deathCount', { count: deathPositions.length }) }}
+                </div>
+
+                <!-- Death positions sorted by most recent first (reversed) -->
+                <div
+                  v-for="(death, index) in [...deathPositions].reverse()"
+                  :key="death.id"
+                  :class="[
+                    'p-4 rounded-lg border-2 transition-all cursor-pointer',
+                    selectedDeathIndex === (deathPositions.length - 1 - index)
+                      ? 'bg-red-500/10 border-red-500/50'
+                      : 'bg-dark-200 border-dark-50 hover:border-red-500/30'
+                  ]"
+                  @click="selectedDeathIndex = deathPositions.length - 1 - index"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                      <!-- Skull icon -->
+                      <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2C6.48 2 2 6.48 2 12c0 3.69 2.47 6.86 6 8.1V22h8v-1.9c3.53-1.24 6-4.41 6-8.1 0-5.52-4.48-10-10-10zm-2 15h-1v-1h1v1zm0-3h-1v-1h1v1zm0-3h-1V9h1v2zm4 6h-1v-1h1v1zm0-3h-1v-1h1v1zm0-3h-1V9h1v2zm3 0h-1V9h1v2z"/>
+                        </svg>
+                      </div>
+
+                      <div>
+                        <!-- Day indicator -->
+                        <div class="flex items-center gap-2">
+                          <span class="text-white font-semibold">
+                            {{ t('players.details.deathDay', { day: death.day }) }}
+                          </span>
+                          <span v-if="index === 0" class="text-xs px-2 py-0.5 bg-red-500/30 text-red-300 rounded-full">
+                            {{ t('players.details.latestDeath') }}
+                          </span>
+                        </div>
+
+                        <!-- Position -->
+                        <div class="text-sm text-gray-400 font-mono mt-1">
+                          {{ death.world }}: {{ death.position.x.toFixed(1) }}, {{ death.position.y.toFixed(1) }}, {{ death.position.z.toFixed(1) }}
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Teleport button -->
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      :disabled="teleportingDeath"
+                      @click.stop="teleportToDeathPosition(deathPositions.length - 1 - index)"
+                      class="flex items-center gap-2"
+                    >
+                      <svg v-if="teleportingDeath && selectedDeathIndex === (deathPositions.length - 1 - index)" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {{ t('players.actions.teleport') }}
+                    </Button>
                   </div>
                 </div>
               </div>

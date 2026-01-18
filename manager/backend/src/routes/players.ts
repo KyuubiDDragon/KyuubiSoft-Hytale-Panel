@@ -748,18 +748,18 @@ router.get('/:name/chat', authMiddleware, async (req: Request, res: Response) =>
 
 // ============== DEATH POSITION ENDPOINTS ==============
 
-// GET /api/players/:name/deaths - Get death positions for a player
+// GET /api/players/:name/deaths - Get death positions from player file
 router.get('/:name/deaths', authMiddleware, async (req: Request, res: Response) => {
   const playerName = req.params.name;
 
   // SECURITY: Validate player name
   if (!validatePlayerName(res, playerName)) return;
 
-  const limit = parseInt(req.query.limit as string) || 10;
-  const positions = await chatLog.getPlayerDeathPositions(playerName, { limit });
+  // Get death positions directly from player JSON file
+  const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
 
   res.json({
-    success: true,
+    success: positions.length > 0,
     player: playerName,
     positions,
     count: positions.length,
@@ -773,13 +773,15 @@ router.get('/:name/deaths/last', authMiddleware, async (req: Request, res: Respo
   // SECURITY: Validate player name
   if (!validatePlayerName(res, playerName)) return;
 
-  const position = await chatLog.getLastDeathPosition(playerName);
+  // Get death positions from file and return the last one (most recent)
+  const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
 
-  if (position) {
+  if (positions.length > 0) {
+    const lastPosition = positions[positions.length - 1];
     res.json({
       success: true,
       player: playerName,
-      position,
+      position: lastPosition,
     });
   } else {
     res.json({
@@ -790,16 +792,19 @@ router.get('/:name/deaths/last', authMiddleware, async (req: Request, res: Respo
   }
 });
 
-// POST /api/players/:name/teleport/death - Teleport player to their last death position
+// POST /api/players/:name/teleport/death - Teleport player to a death position
+// Body: { index?: number } - index of death position (default: last/most recent)
 router.post('/:name/teleport/death', authMiddleware, async (req: Request, res: Response) => {
   const playerName = req.params.name;
+  const { index } = req.body;
 
   // SECURITY: Validate player name
   if (!validatePlayerName(res, playerName)) return;
 
-  const position = await chatLog.getLastDeathPosition(playerName);
+  // Get death positions from player file
+  const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
 
-  if (!position) {
+  if (positions.length === 0) {
     res.status(404).json({
       success: false,
       error: 'No death position recorded for this player',
@@ -807,14 +812,18 @@ router.post('/:name/teleport/death', authMiddleware, async (req: Request, res: R
     return;
   }
 
+  // Get the requested position (default: last/most recent)
+  const posIndex = index !== undefined ? Math.min(Math.max(0, index), positions.length - 1) : positions.length - 1;
+  const position = positions[posIndex];
+
   // Teleport to death position
-  const command = `/tp ${playerName} ${position.x} ${position.y} ${position.z}`;
+  const command = `/tp ${playerName} ${position.position.x} ${position.position.y} ${position.position.z}`;
   const result = await dockerService.execCommand(command);
 
   if (result.success) {
     res.json({
       success: true,
-      message: `Teleported ${playerName} to death location (${position.x}, ${position.y}, ${position.z})`,
+      message: `Teleported ${playerName} to death location (Day ${position.day}: ${position.position.x}, ${position.position.y}, ${position.position.z})`,
       position,
     });
   } else {

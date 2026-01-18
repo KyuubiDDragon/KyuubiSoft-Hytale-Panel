@@ -252,7 +252,12 @@
       "goToAssets": "Zu Assets",
       "chat": "Chat",
       "noChat": "Keine Chat-Nachrichten",
-      "chatCount": "{count} Nachrichten"
+      "chatCount": "{count} Nachrichten",
+      "deaths": "Tode",
+      "noDeaths": "Keine Todespositionen gespeichert",
+      "deathCount": "{count} Todespositionen",
+      "deathDay": "Tag {day}",
+      "latestDeath": "Neuester"
     },
     "itemTypes": {
       "sword": "Schwert",
