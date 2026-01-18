@@ -92,31 +92,52 @@ public class KyuubiSoftAPI extends JavaPlugin {
             eventBroadcaster.broadcastPlayerLeave(playerName, uuid);
         });
 
-        // Player chat event (async event with String key - using empty string for global listener)
-        eventRegistry.register(PlayerChatEvent.class, "", event -> {
-            try {
-                LOGGER.info("[KyuubiSoft Chat Handler] Processing chat event...");
-
-                String playerName = "Unknown";
-                String message = "";
-
-                // Try to extract using reflection on the event object itself
-                // The log shows message= and username= as parameters
+        // Player chat event - keyed event, requires a channel key
+        // Try different channel keys: empty string, "global", "server", "default"
+        String[] chatChannels = {"", "global", "server", "default", "chat"};
+        for (String channel : chatChannels) {
+            final String channelKey = channel;
+            LOGGER.info("[KyuubiSoft] Registering chat event handler for channel: '" + channelKey + "'");
+            eventRegistry.register(PlayerChatEvent.class, channel, event -> {
                 try {
-                    // Try getMessage() method
-                    var msgMethod = event.getClass().getMethod("getMessage");
-                    Object msgObj = msgMethod.invoke(event);
-                    message = extractStringFromParamValue(msgObj);
-                } catch (NoSuchMethodException e1) {
-                    // Try getContent() fallback
-                    try {
-                        var contentMethod = event.getClass().getMethod("getContent");
-                        Object contentObj = contentMethod.invoke(event);
-                        message = extractStringFromParamValue(contentObj);
-                    } catch (Exception e2) {
-                        LOGGER.warning("[Chat] No getMessage or getContent method found");
+                    LOGGER.info("[KyuubiSoft Chat Handler] Chat event received on channel: '" + channelKey + "'");
+                    LOGGER.info("[KyuubiSoft Chat Handler] Event class: " + event.getClass().getName());
+
+                    String playerName = "Unknown";
+                    String message = "";
+
+                    // Log all available methods for debugging (only on first event)
+                    LOGGER.info("[Debug] PlayerChatEvent methods:");
+                    for (var m : event.getClass().getMethods()) {
+                        if (m.getParameterCount() == 0 && !m.getName().startsWith("wait") && !m.getName().equals("getClass") && !m.getName().equals("hashCode") && !m.getName().equals("toString") && !m.getName().equals("notify") && !m.getName().equals("notifyAll")) {
+                            try {
+                                Object result = m.invoke(event);
+                                LOGGER.info("  - " + m.getName() + "() = " + (result != null ? result.getClass().getSimpleName() + ": " + result : "null"));
+                            } catch (Exception e) {
+                                LOGGER.info("  - " + m.getName() + "() [error: " + e.getMessage() + "]");
+                            }
+                        }
                     }
-                }
+
+                    // Try to extract using reflection on the event object itself
+                    // The log shows message= and username= as parameters
+                    try {
+                        // Try getMessage() method
+                        var msgMethod = event.getClass().getMethod("getMessage");
+                        Object msgObj = msgMethod.invoke(event);
+                        message = extractStringFromParamValue(msgObj);
+                    } catch (NoSuchMethodException e1) {
+                        // Try getContent() fallback
+                        try {
+                            var contentMethod = event.getClass().getMethod("getContent");
+                            Object contentObj = contentMethod.invoke(event);
+                            message = extractStringFromParamValue(contentObj);
+                        } catch (Exception e2) {
+                            LOGGER.warning("[Chat] No getMessage or getContent method found");
+                        }
+                    } catch (Exception e2) {
+                        LOGGER.warning("[Chat] No getUsername or getSender method worked");
+                    }
 
                 // Try to get username
                 try {
@@ -144,6 +165,69 @@ public class KyuubiSoftAPI extends JavaPlugin {
                 e.printStackTrace();
             }
         });
+        }
+    }
+
+    /**
+     * Extract string value from StringParamValue or similar wrapper objects.
+     * Tries multiple methods via reflection to get the actual string.
+     */
+    private String extractStringFromParamValue(Object obj) {
+        if (obj == null) return "";
+
+        // If it's already a string, return it
+        if (obj instanceof String) return (String) obj;
+
+        String strVal = obj.toString();
+
+        // If toString() returns a clean value (no @ sign), use it
+        if (!strVal.contains("@") && !strVal.contains("StringParamValue")) {
+            return strVal;
+        }
+
+        // Try various getter methods via reflection
+        String[] methodNames = {"getValue", "getString", "get", "value", "getStringValue", "getContent", "getText"};
+
+        for (String methodName : methodNames) {
+            try {
+                var method = obj.getClass().getMethod(methodName);
+                Object result = method.invoke(obj);
+                if (result != null) {
+                    if (result instanceof String) {
+                        return (String) result;
+                    }
+                    String resultStr = result.toString();
+                    if (!resultStr.contains("@")) {
+                        return resultStr;
+                    }
+                }
+            } catch (Exception ignored) {
+                // Method doesn't exist or failed, try next
+            }
+        }
+
+        // Try to access 'value' field directly
+        try {
+            var field = obj.getClass().getDeclaredField("value");
+            field.setAccessible(true);
+            Object value = field.get(obj);
+            if (value != null) {
+                return value.toString();
+            }
+        } catch (Exception ignored) {
+            // Field doesn't exist or not accessible
+        }
+
+        // Log available methods for debugging
+        LOGGER.info("[Debug] Available methods on " + obj.getClass().getName() + ":");
+        for (var m : obj.getClass().getMethods()) {
+            if (m.getParameterCount() == 0 && !m.getName().equals("getClass")) {
+                LOGGER.info("  - " + m.getName() + "() -> " + m.getReturnType().getSimpleName());
+            }
+        }
+
+        // Return raw toString as fallback (with cleanup)
+        return strVal.contains("@") ? "[raw:" + obj.getClass().getSimpleName() + "]" : strVal;
     }
 
     /**
