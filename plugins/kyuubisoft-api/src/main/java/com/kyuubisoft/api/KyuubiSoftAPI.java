@@ -11,8 +11,6 @@ import com.kyuubisoft.api.websocket.EventBroadcaster;
 import com.kyuubisoft.api.config.ApiConfig;
 
 import java.util.logging.Logger;
-import java.util.logging.Handler;
-import java.util.logging.LogRecord;
 
 /**
  * KyuubiSoft API Plugin
@@ -43,7 +41,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
     @Override
     protected void setup() {
         LOGGER.info("╔════════════════════════════════════════╗");
-        LOGGER.info("║       KyuubiSoft API v1.0.0            ║");
+        LOGGER.info("║       KyuubiSoft API v1.1.6            ║");
         LOGGER.info("║       by KyuubiDDragon                 ║");
         LOGGER.info("╚════════════════════════════════════════╝");
 
@@ -73,77 +71,6 @@ public class KyuubiSoftAPI extends JavaPlugin {
 
         // Register event listeners
         registerEvents();
-
-        // Set up chat log interceptor as fallback
-        setupChatLogInterceptor();
-    }
-
-    /**
-     * Sets up a log handler to intercept chat messages from Hytale's internal logging.
-     * This is a fallback since PlayerChatEvent doesn't seem to be fired.
-     */
-    private void setupChatLogInterceptor() {
-        LOGGER.info("[KyuubiSoft] Setting up chat log interceptor...");
-
-        // Get the root logger to intercept all logs
-        Logger rootLogger = Logger.getLogger("");
-
-        // Add our custom handler
-        Handler chatHandler = new Handler() {
-            // Keep track of last message to avoid duplicates
-            private String lastMessage = "";
-            private long lastTime = 0;
-
-            @Override
-            public void publish(LogRecord record) {
-                if (record == null || record.getMessage() == null) return;
-
-                String msg = record.getMessage();
-
-                // Check if this is a chat message
-                if (msg.contains("server.chat.playerMessage{")) {
-                    // Avoid duplicates within 100ms
-                    long now = System.currentTimeMillis();
-                    if (msg.equals(lastMessage) && (now - lastTime) < 100) {
-                        return;
-                    }
-                    lastMessage = msg;
-                    lastTime = now;
-
-                    LOGGER.info("[KyuubiSoft] Intercepted chat log: " + msg);
-
-                    // Try to get the actual parameters from the LogRecord
-                    Object[] params = record.getParameters();
-                    if (params != null && params.length > 0) {
-                        LOGGER.info("[KyuubiSoft] Log has " + params.length + " parameters");
-                        for (int i = 0; i < params.length; i++) {
-                            Object param = params[i];
-                            if (param != null) {
-                                LOGGER.info("[KyuubiSoft] Param " + i + ": " + param.getClass().getName() + " = " + param);
-                                // Try to extract string from param
-                                String extracted = extractStringFromParamValue(param);
-                                LOGGER.info("[KyuubiSoft] Param " + i + " extracted: " + extracted);
-                            }
-                        }
-                    }
-
-                    // Try to extract from the Throwable if present (some logging frameworks use this)
-                    Throwable thrown = record.getThrown();
-                    if (thrown != null) {
-                        LOGGER.info("[KyuubiSoft] Log has thrown: " + thrown.getClass().getName());
-                    }
-                }
-            }
-
-            @Override
-            public void flush() {}
-
-            @Override
-            public void close() throws SecurityException {}
-        };
-
-        rootLogger.addHandler(chatHandler);
-        LOGGER.info("[KyuubiSoft] Chat log interceptor installed");
     }
 
     private void registerEvents() {
@@ -170,68 +97,30 @@ public class KyuubiSoftAPI extends JavaPlugin {
         try {
             eventRegistry.registerGlobal(PlayerChatEvent.class, event -> {
                 try {
-                    LOGGER.info("[KyuubiSoft] PlayerChatEvent fired (global)!");
                     String playerName = "Unknown";
+                    String uuid = "";
                     String message = "";
 
-                    // Get sender username
-                    try {
-                        var sender = event.getSender();
-                        if (sender != null) {
-                            playerName = sender.getUsername();
-                            LOGGER.info("[KyuubiSoft] Sender: " + playerName);
-                        }
-                    } catch (Exception e) {
-                        LOGGER.warning("[Chat] Could not get sender: " + e.getMessage());
+                    // Get sender info
+                    var sender = event.getSender();
+                    if (sender != null) {
+                        playerName = sender.getUsername();
+                        uuid = sender.getUuid().toString();
                     }
 
-                    // Get message content using getContent() (not getMessage())
-                    try {
-                        Object content = event.getContent();
-                        LOGGER.info("[KyuubiSoft] Content class: " + (content != null ? content.getClass().getName() : "null"));
+                    // Get message content
+                    Object content = event.getContent();
+                    if (content != null) {
                         message = extractStringFromParamValue(content);
-                        LOGGER.info("[KyuubiSoft] Extracted message: " + message);
-                    } catch (Exception e) {
-                        LOGGER.warning("[Chat] Could not get content: " + e.getMessage());
                     }
 
-                    // Try to get formatted message using the formatter
-                    try {
-                        var formatter = event.getFormatter();
-                        if (formatter != null) {
-                            var formattedMsg = formatter.format(event.getSender(), event.getContent());
-                            if (formattedMsg != null) {
-                                // Try various methods to get the string representation
-                                LOGGER.info("[KyuubiSoft] FormattedMsg class: " + formattedMsg.getClass().getName());
-
-                                // List all available methods on the Message object
-                                for (var m : formattedMsg.getClass().getMethods()) {
-                                    if (m.getParameterCount() == 0 && m.getReturnType() == String.class) {
-                                        try {
-                                            String result = (String) m.invoke(formattedMsg);
-                                            if (result != null && !result.isEmpty()) {
-                                                LOGGER.info("[KyuubiSoft] " + m.getName() + "(): " + result);
-                                            }
-                                        } catch (Exception ignored) {}
-                                    }
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        LOGGER.info("[Chat] Formatter not available: " + e.getMessage());
-                    }
-
-                    LOGGER.info("[KyuubiSoft Chat] " + playerName + ": " + message);
-                    eventBroadcaster.broadcastChat(playerName, message);
+                    eventBroadcaster.broadcastChat(playerName, uuid, message);
                 } catch (Exception e) {
-                    LOGGER.warning("[Chat] Error: " + e.getMessage());
-                    e.printStackTrace();
+                    LOGGER.warning("[Chat] Error processing chat event: " + e.getMessage());
                 }
             });
-            LOGGER.info("[KyuubiSoft] Registered global PlayerChatEvent handler");
         } catch (Exception e) {
-            LOGGER.warning("[KyuubiSoft] Could not register PlayerChatEvent: " + e.getMessage());
-            e.printStackTrace();
+            LOGGER.warning("Could not register PlayerChatEvent: " + e.getMessage());
         }
     }
 
@@ -285,16 +174,8 @@ public class KyuubiSoftAPI extends JavaPlugin {
             // Field doesn't exist or not accessible
         }
 
-        // Log available methods for debugging
-        LOGGER.info("[Debug] Available methods on " + obj.getClass().getName() + ":");
-        for (var m : obj.getClass().getMethods()) {
-            if (m.getParameterCount() == 0 && !m.getName().equals("getClass")) {
-                LOGGER.info("  - " + m.getName() + "() -> " + m.getReturnType().getSimpleName());
-            }
-        }
-
-        // Return raw toString as fallback (with cleanup)
-        return strVal.contains("@") ? "[raw:" + obj.getClass().getSimpleName() + "]" : strVal;
+        // Return raw toString as fallback
+        return strVal.contains("@") ? "" : strVal;
     }
 
     @Override

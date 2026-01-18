@@ -89,10 +89,11 @@ public class EventBroadcaster {
     /**
      * Broadcast chat message
      */
-    public void broadcastChat(String playerName, String message) {
+    public void broadcastChat(String playerName, String uuid, String message) {
         ChatEvent event = new ChatEvent();
         event.type = "player_chat";
         event.player = playerName;
+        event.uuid = uuid;
         event.message = message;
         event.timestamp = Instant.now().toString();
 
@@ -155,6 +156,7 @@ public class EventBroadcaster {
     public static class ChatEvent {
         public String type;
         public String player;
+        public String uuid;
         public String message;
         public String timestamp;
     }
