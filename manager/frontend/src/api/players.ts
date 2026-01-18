@@ -70,6 +70,18 @@ export interface DeathPositionResponse {
   error?: string
 }
 
+export interface ChatMessage {
+  id: string
+  timestamp: string
+  player: string
+  message: string
+}
+
+export interface ChatLogResponse {
+  messages: ChatMessage[]
+  total: number
+}
+
 export const playersApi = {
   async getOnline(): Promise<PlayersResponse> {
     const response = await api.get<PlayersResponse>('/players')
@@ -183,6 +195,22 @@ export const playersApi = {
 
   async teleportToDeath(playerName: string): Promise<ActionResponse> {
     const response = await api.post<ActionResponse>(`/players/${playerName}/teleport/death`)
+    return response.data
+  },
+
+  async getGlobalChatLog(options?: { limit?: number; offset?: number }): Promise<ChatLogResponse> {
+    const params = new URLSearchParams()
+    if (options?.limit) params.set('limit', options.limit.toString())
+    if (options?.offset) params.set('offset', options.offset.toString())
+    const response = await api.get<ChatLogResponse>(`/players/chat?${params.toString()}`)
+    return response.data
+  },
+
+  async getPlayerChatLog(playerName: string, options?: { limit?: number; offset?: number }): Promise<ChatLogResponse> {
+    const params = new URLSearchParams()
+    if (options?.limit) params.set('limit', options.limit.toString())
+    if (options?.offset) params.set('offset', options.offset.toString())
+    const response = await api.get<ChatLogResponse>(`/players/${playerName}/chat?${params.toString()}`)
     return response.data
   },
 }

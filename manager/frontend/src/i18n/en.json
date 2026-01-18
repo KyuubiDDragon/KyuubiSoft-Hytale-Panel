@@ -19,7 +19,9 @@
     "add": "Add",
     "edit": "Edit",
     "remove": "Remove",
-    "clear": "Clear"
+    "clear": "Clear",
+    "previous": "Previous",
+    "next": "Next"
   },
   "auth": {
     "login": "Login",
@@ -50,7 +52,8 @@
     "data": "Data",
     "scheduler": "Scheduler",
     "statistics": "Statistics",
-    "assets": "Asset Explorer"
+    "assets": "Asset Explorer",
+    "chat": "Chat Log"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -246,7 +249,10 @@
       "appearanceUnavailable": "Appearance unavailable",
       "appearanceHint": "Appearance data will be available once the Hytale API supports it.",
       "assetsHint": "Extract assets to show item icons",
-      "goToAssets": "Go to Assets"
+      "goToAssets": "Go to Assets",
+      "chat": "Chat",
+      "noChat": "No chat messages",
+      "chatCount": "{count} messages"
     },
     "itemTypes": {
       "sword": "Sword",
@@ -553,6 +559,13 @@
     "clearLog": "Clear Log",
     "confirmClear": "Really clear the entire activity log?",
     "entries": "{count} entries"
+  },
+  "chat": {
+    "title": "Chat Log",
+    "description": "View all player chat messages",
+    "noMessages": "No chat messages yet",
+    "searchPlaceholder": "Search messages or player names...",
+    "messageCount": "{count} messages total"
   },
   "commands": {
     "title": "Command Reference",

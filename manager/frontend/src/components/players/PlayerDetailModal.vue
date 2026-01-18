@@ -3,6 +3,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
+import { playersApi, type ChatMessage } from '@/api/players'
 import { assetsApi } from '@/api/assets'
 import Button from '@/components/ui/Button.vue'
 
@@ -19,7 +20,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 // Tab state
-const activeTab = ref<'info' | 'inventory' | 'stats'>('info')
+const activeTab = ref<'info' | 'inventory' | 'stats' | 'chat'>('info')
 
 // Window dimensions for tooltip positioning (safely accessed)
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200)
@@ -44,6 +45,11 @@ const error = ref('')
 const details = ref<FilePlayerDetails | null>(null)
 const inventory = ref<FilePlayerInventory | null>(null)
 
+// Chat state
+const chatMessages = ref<ChatMessage[]>([])
+const chatLoading = ref(false)
+const chatTotal = ref(0)
+
 // Tooltip state
 const hoveredItem = ref<FileInventoryItem | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
@@ -63,6 +69,8 @@ watch(() => props.open, async (isOpen) => {
     activeTab.value = 'info'
     details.value = null
     inventory.value = null
+    chatMessages.value = []
+    chatTotal.value = 0
     error.value = ''
     hoveredItem.value = null
     failedIcons.value = new Set()
@@ -105,6 +113,47 @@ async function fetchAllData() {
   } finally {
     loading.value = false
   }
+}
+
+// Load player chat messages
+async function loadPlayerChat() {
+  if (!props.playerName || chatMessages.value.length > 0) return
+
+  chatLoading.value = true
+  try {
+    const result = await playersApi.getPlayerChatLog(props.playerName, { limit: 100 })
+    chatMessages.value = result.messages
+    chatTotal.value = result.total
+  } catch {
+    // Silently fail - chat is optional
+  } finally {
+    chatLoading.value = false
+  }
+}
+
+// Watch for chat tab selection
+watch(activeTab, (tab) => {
+  if (tab === 'chat') {
+    loadPlayerChat()
+  }
+})
+
+// Format chat timestamp
+function formatChatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString()
+}
+
+// Get unique color for player name
+function getPlayerColor(name: string): string {
+  const colors = [
+    'text-blue-400', 'text-green-400', 'text-yellow-400', 'text-purple-400',
+    'text-pink-400', 'text-cyan-400', 'text-orange-400', 'text-red-400',
+  ]
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return colors[Math.abs(hash) % colors.length]
 }
 
 // Get player initial for avatar
@@ -421,6 +470,17 @@ const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.
               ]"
             >
               {{ t('players.details.stats') }}
+            </button>
+            <button
+              @click="activeTab = 'chat'"
+              :class="[
+                'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
+                activeTab === 'chat'
+                  ? 'bg-dark-100 text-white'
+                  : 'text-gray-400 hover:text-white'
+              ]"
+            >
+              {{ t('players.details.chat') }}
             </button>
           </div>
 
@@ -880,6 +940,50 @@ const toolsGrid = computed(() => inventory.value ? generateGrid(inventory.value.
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
                 <p class="text-gray-400">{{ t('players.details.noStats') }}</p>
+              </div>
+            </div>
+
+            <!-- Chat Tab -->
+            <div v-else-if="activeTab === 'chat'">
+              <!-- Loading -->
+              <div v-if="chatLoading" class="flex items-center justify-center h-48">
+                <div class="flex items-center gap-3 text-gray-400">
+                  <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  {{ t('common.loading') }}
+                </div>
+              </div>
+
+              <!-- No messages -->
+              <div v-else-if="chatMessages.length === 0" class="flex flex-col items-center justify-center h-48 text-center">
+                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <p class="text-gray-400">{{ t('players.details.noChat') }}</p>
+              </div>
+
+              <!-- Chat messages list -->
+              <div v-else class="space-y-2">
+                <div class="text-xs text-gray-500 mb-3">
+                  {{ t('players.details.chatCount', { count: chatTotal }) }}
+                </div>
+                <div class="space-y-2 max-h-[400px] overflow-y-auto">
+                  <div
+                    v-for="msg in chatMessages"
+                    :key="msg.id"
+                    class="p-3 bg-dark-200 rounded-lg"
+                  >
+                    <div class="flex items-center gap-2 mb-1">
+                      <span :class="['font-semibold text-sm', getPlayerColor(msg.player)]">
+                        {{ msg.player }}
+                      </span>
+                      <span class="text-xs text-gray-500">{{ formatChatTime(msg.timestamp) }}</span>
+                    </div>
+                    <p class="text-gray-300 text-sm break-words">{{ msg.message }}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -25,6 +25,7 @@ import Scheduler from './views/Scheduler.vue'
 import Statistics from './views/Statistics.vue'
 import WebMap from './views/WebMap.vue'
 import Assets from './views/Assets.vue'
+import Chat from './views/Chat.vue'
 
 // Import auth store
 import { useAuthStore } from './stores/auth'
@@ -139,6 +140,12 @@ const router = createRouter({
       path: '/webmap',
       name: 'webmap',
       component: WebMap,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/chat',
+      name: 'chat',
+      component: Chat,
       meta: { requiresAuth: true },
     },
     {

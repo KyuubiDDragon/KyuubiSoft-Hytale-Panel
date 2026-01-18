@@ -19,7 +19,9 @@
     "add": "Hinzufügen",
     "edit": "Bearbeiten",
     "remove": "Entfernen",
-    "clear": "Leeren"
+    "clear": "Leeren",
+    "previous": "Zurück",
+    "next": "Weiter"
   },
   "auth": {
     "login": "Anmelden",
@@ -50,7 +52,8 @@
     "data": "Daten",
     "scheduler": "Planer",
     "statistics": "Statistiken",
-    "assets": "Asset Explorer"
+    "assets": "Asset Explorer",
+    "chat": "Chat-Protokoll"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -246,7 +249,10 @@
       "appearanceUnavailable": "Aussehen nicht verfügbar",
       "appearanceHint": "Aussehen-Daten werden verfügbar sein, sobald die Hytale API dies unterstützt.",
       "assetsHint": "Assets entpacken um Item-Icons anzuzeigen",
-      "goToAssets": "Zu Assets"
+      "goToAssets": "Zu Assets",
+      "chat": "Chat",
+      "noChat": "Keine Chat-Nachrichten",
+      "chatCount": "{count} Nachrichten"
     },
     "itemTypes": {
       "sword": "Schwert",
@@ -553,6 +559,13 @@
     "clearLog": "Log leeren",
     "confirmClear": "Aktivitätslog wirklich komplett leeren?",
     "entries": "{count} Einträge"
+  },
+  "chat": {
+    "title": "Chat-Protokoll",
+    "description": "Alle Chat-Nachrichten der Spieler anzeigen",
+    "noMessages": "Noch keine Chat-Nachrichten",
+    "searchPlaceholder": "Nachrichten oder Spielernamen suchen...",
+    "messageCount": "{count} Nachrichten insgesamt"
   },
   "commands": {
     "title": "Befehlsreferenz",

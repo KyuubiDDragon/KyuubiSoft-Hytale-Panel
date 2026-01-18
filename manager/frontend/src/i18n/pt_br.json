@@ -19,7 +19,9 @@
     "add": "Adicionar",
     "edit": "Editar",
     "remove": "Remover",
-    "clear": "Limpar"
+    "clear": "Limpar",
+    "previous": "Anterior",
+    "next": "Próximo"
   },
   "auth": {
     "login": "Entrar",
@@ -50,7 +52,8 @@
     "data": "Dados",
     "scheduler": "Agendador",
     "statistics": "Estatísticas",
-    "assets": "Explorador de Assets"
+    "assets": "Explorador de Assets",
+    "chat": "Log de Chat"
   },
   "dashboard": {
     "title": "Painel",
@@ -482,6 +485,13 @@
     "clearLog": "Limpar Registro",
     "confirmClear": "Realmente deseja limpar todo o registro de atividades?",
     "entries": "{count} entradas"
+  },
+  "chat": {
+    "title": "Log de Chat",
+    "description": "Ver todas as mensagens de chat dos jogadores",
+    "noMessages": "Nenhuma mensagem de chat ainda",
+    "searchPlaceholder": "Buscar mensagens ou nomes de jogadores...",
+    "messageCount": "{count} mensagens no total"
   },
   "commands": {
     "title": "Referência de Comandos",
