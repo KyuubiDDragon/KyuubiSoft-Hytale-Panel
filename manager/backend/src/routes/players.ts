@@ -545,6 +545,9 @@ router.post('/:name/give', authMiddleware, async (req: Request, res: Response) =
   const playerName = req.params.name;
   const { item, amount } = req.body;
 
+  // DEBUG: Log received values
+  console.log('[Give Debug] Received:', { playerName, item, amount, body: req.body });
+
   // SECURITY: Validate player name
   if (!validatePlayerName(res, playerName)) return;
 
@@ -580,6 +583,7 @@ router.post('/:name/give', authMiddleware, async (req: Request, res: Response) =
     : `/give ${playerName} ${item}`;
 
   const result = await dockerService.execCommand(command);
+  console.log('[Give Debug] Command result:', result);
 
   if (result.success) {
     res.json({
