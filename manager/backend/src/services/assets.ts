@@ -834,7 +834,7 @@ const ITEM_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 /**
  * Get list of all available items from the extracted assets
- * Uses searchAssets to find all PNG files in icon/item directories
+ * Items are located in assets/Common/Icons/ItemsGenerated/
  */
 export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
   // Return cached list if available and not expired
@@ -852,68 +852,61 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
     return items;
   }
 
-  // Use searchAssets to find all PNG files that could be item icons
-  // Search for common patterns
-  const searchPatterns = ['icon', 'item', 'block'];
+  // Possible paths for item icons
+  const itemIconPaths = [
+    'assets/Common/Icons/ItemsGenerated',
+    'Common/Icons/ItemsGenerated',
+    'Icons/ItemsGenerated',
+    'ItemsGenerated',
+  ];
 
-  for (const pattern of searchPatterns) {
-    const results = searchAssets(pattern, {
-      extensions: ['.png'],
-      maxResults: 2000,
-      useGlob: false,
-    });
+  let foundPath: string | null = null;
+  let files: AssetFileInfo[] | null = null;
 
-    for (const result of results) {
-      // Only include files from directories that look like item/icon directories
-      const pathLower = result.path.toLowerCase();
-      if (!pathLower.includes('icon') && !pathLower.includes('item') && !pathLower.includes('block')) {
-        continue;
-      }
-
-      // Skip textures that are clearly not item icons (too deep in texture paths, animations, etc.)
-      if (pathLower.includes('animation') || pathLower.includes('particle') ||
-          pathLower.includes('effect') || pathLower.includes('background') ||
-          pathLower.includes('button') || pathLower.includes('frame') ||
-          pathLower.includes('slot') || pathLower.includes('cursor')) {
-        continue;
-      }
-
-      // Extract item ID from filename
-      const itemName = result.name.replace('.png', '');
-
-      // Skip very short names or numeric-only names (likely not items)
-      if (itemName.length < 2 || /^\d+$/.test(itemName)) {
-        continue;
-      }
-
-      const itemId = `hytale:${itemName}`;
-
-      // Skip duplicates
-      if (seenIds.has(itemId.toLowerCase())) continue;
-      seenIds.add(itemId.toLowerCase());
-
-      // Create display name from item ID
-      const displayName = itemName
-        .replace(/_/g, ' ')
-        .replace(/-/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase());
-
-      // Determine category from path
-      let category = 'items';
-      if (pathLower.includes('weapon')) category = 'weapons';
-      else if (pathLower.includes('armor')) category = 'armor';
-      else if (pathLower.includes('tool')) category = 'tools';
-      else if (pathLower.includes('block')) category = 'blocks';
-      else if (pathLower.includes('consumable')) category = 'consumables';
-      else if (pathLower.includes('material')) category = 'materials';
-
-      items.push({
-        id: itemId,
-        name: displayName,
-        path: result.path,
-        category,
-      });
+  // Find the correct path
+  for (const iconPath of itemIconPaths) {
+    files = listAssetDirectory(iconPath);
+    if (files && files.length > 0) {
+      foundPath = iconPath;
+      console.log('[Items] Found items in:', iconPath, '- Count:', files.length);
+      break;
     }
+  }
+
+  if (!files || files.length === 0) {
+    console.log('[Items] No items found in any known path');
+    return items;
+  }
+
+  // Process all PNG files in the directory
+  for (const file of files) {
+    if (file.type !== 'file') continue;
+    if (!file.name.endsWith('.png')) continue;
+
+    // Extract item ID from filename
+    const itemName = file.name.replace('.png', '');
+
+    // Skip very short names
+    if (itemName.length < 2) continue;
+
+    const itemId = `hytale:${itemName}`;
+
+    // Skip duplicates
+    if (seenIds.has(itemId.toLowerCase())) continue;
+    seenIds.add(itemId.toLowerCase());
+
+    // Create display name from item ID
+    const displayName = itemName
+      .replace(/_/g, ' ')
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+
+    items.push({
+      id: itemId,
+      name: displayName,
+      path: file.path,
+      category: 'items',
+    });
   }
 
   console.log('[Items] Total items found:', items.length);
