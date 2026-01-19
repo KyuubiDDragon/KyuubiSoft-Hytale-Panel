@@ -105,6 +105,10 @@ async function selectFile(worldName: string, filePath: string) {
         isSavingChunks: worldConfig.value.isSavingChunks,
         saveNewChunks: worldConfig.value.saveNewChunks,
         isUnloadingChunks: worldConfig.value.isUnloadingChunks,
+        isCompassUpdating: worldConfig.value.isCompassUpdating,
+        gameplayConfig: worldConfig.value.gameplayConfig,
+        deleteOnUniverseStart: worldConfig.value.deleteOnUniverseStart,
+        deleteOnRemove: worldConfig.value.deleteOnRemove,
         daytimeDurationSecondsOverride: worldConfig.value.daytimeDurationSecondsOverride,
         nighttimeDurationSecondsOverride: worldConfig.value.nighttimeDurationSecondsOverride,
         clientEffects: worldConfig.value.clientEffects ? { ...worldConfig.value.clientEffects } : {},
@@ -392,6 +396,19 @@ onMounted(loadWorlds)
                   <input type="checkbox" v-model="form.isAllNPCFrozen" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-white">Freeze All NPCs</span>
                 </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isCompassUpdating" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-white">Compass Updating</span>
+                </label>
+              </div>
+              <div class="mt-4">
+                <label class="block text-sm text-gray-400 mb-2">Gameplay Config</label>
+                <input
+                  type="text"
+                  v-model="form.gameplayConfig"
+                  class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+                  placeholder="Default"
+                />
               </div>
             </div>
           </div>
@@ -437,6 +454,32 @@ onMounted(loadWorlds)
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isUnloadingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-white">Unload Chunks</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Danger Zone -->
+          <div class="card border-status-error/30">
+            <div class="card-header bg-status-error/10">
+              <h3 class="text-lg font-semibold text-status-error">Danger Zone</h3>
+            </div>
+            <div class="card-body">
+              <p class="text-gray-400 text-sm mb-4">These settings can cause data loss. Use with caution.</p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.deleteOnUniverseStart" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-status-error focus:ring-status-error">
+                  <div>
+                    <span class="text-white">Delete on Universe Start</span>
+                    <p class="text-xs text-gray-500">World will be deleted when the universe starts</p>
+                  </div>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.deleteOnRemove" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-status-error focus:ring-status-error">
+                  <div>
+                    <span class="text-white">Delete on Remove</span>
+                    <p class="text-xs text-gray-500">World will be permanently deleted when removed</p>
+                  </div>
                 </label>
               </div>
             </div>

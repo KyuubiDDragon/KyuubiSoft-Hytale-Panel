@@ -189,6 +189,8 @@ const PANEL_CONFIG_PATH = '/opt/hytale/data/panel-config.json';
 interface PanelConfig {
   patchline: string;
   acceptEarlyPlugins: boolean;
+  disableSentry: boolean;
+  allowOp: boolean;
 }
 
 // Helper to read panel config
@@ -200,12 +202,16 @@ async function readPanelConfig(): Promise<PanelConfig> {
     return {
       patchline: config.patchline || process.env.HYTALE_PATCHLINE || 'release',
       acceptEarlyPlugins: config.acceptEarlyPlugins ?? false,
+      disableSentry: config.disableSentry ?? false,
+      allowOp: config.allowOp ?? false,
     };
   } catch {
     // Return defaults if file doesn't exist
     return {
       patchline: process.env.HYTALE_PATCHLINE || 'release',
       acceptEarlyPlugins: false,
+      disableSentry: false,
+      allowOp: false,
     };
   }
 }
@@ -326,6 +332,104 @@ router.put('/accept-early-plugins', authMiddleware, requirePermission('config.ed
   } catch (error) {
     res.status(500).json({
       error: 'Failed to set accept early plugins',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/disable-sentry - Get current disableSentry setting
+router.get('/disable-sentry', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  try {
+    const panelConfig = await readPanelConfig();
+    res.json({
+      disableSentry: panelConfig.disableSentry,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get disable sentry setting',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// PUT /api/server/disable-sentry - Set disableSentry setting
+router.put('/disable-sentry', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  try {
+    const { disableSentry } = req.body;
+
+    if (typeof disableSentry !== 'boolean') {
+      res.status(400).json({ error: 'Invalid value. Must be a boolean.' });
+      return;
+    }
+
+    const panelConfig = await readPanelConfig();
+    const oldValue = panelConfig.disableSentry;
+    const valueChanged = oldValue !== disableSentry;
+
+    // Update config
+    panelConfig.disableSentry = disableSentry;
+    await writePanelConfig(panelConfig);
+
+    res.json({
+      success: true,
+      disableSentry,
+      changed: valueChanged,
+      message: valueChanged
+        ? `Sentry crash reporting ${disableSentry ? 'disabled' : 'enabled'}. Restart the server to apply changes.`
+        : 'Setting unchanged.'
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to set disable sentry',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/allow-op - Get current allowOp setting
+router.get('/allow-op', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  try {
+    const panelConfig = await readPanelConfig();
+    res.json({
+      allowOp: panelConfig.allowOp,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get allow op setting',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// PUT /api/server/allow-op - Set allowOp setting
+router.put('/allow-op', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  try {
+    const { allowOp } = req.body;
+
+    if (typeof allowOp !== 'boolean') {
+      res.status(400).json({ error: 'Invalid value. Must be a boolean.' });
+      return;
+    }
+
+    const panelConfig = await readPanelConfig();
+    const oldValue = panelConfig.allowOp;
+    const valueChanged = oldValue !== allowOp;
+
+    // Update config
+    panelConfig.allowOp = allowOp;
+    await writePanelConfig(panelConfig);
+
+    res.json({
+      success: true,
+      allowOp,
+      changed: valueChanged,
+      message: valueChanged
+        ? `OP commands ${allowOp ? 'enabled' : 'disabled'}. Restart the server to apply changes.`
+        : 'Setting unchanged.'
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to set allow op',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

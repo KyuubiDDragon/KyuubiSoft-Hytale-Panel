@@ -146,6 +146,10 @@ export interface WorldConfig {
   isSavingChunks: boolean
   saveNewChunks: boolean
   isUnloadingChunks: boolean
+  isCompassUpdating: boolean
+  gameplayConfig?: string
+  deleteOnUniverseStart: boolean
+  deleteOnRemove: boolean
   daytimeDurationSecondsOverride?: number | null
   nighttimeDurationSecondsOverride?: number | null
   clientEffects?: WorldClientEffects
