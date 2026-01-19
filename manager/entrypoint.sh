@@ -17,8 +17,24 @@ if [ "$(id -u)" = "0" ]; then
     # Set umask to ensure new files are group-writable
     umask 002
 
-    echo "[Manager] Switching to manager user (UID: $MANAGER_UID, GID: $SHARED_GID)..."
-    exec su-exec $MANAGER_UID:$SHARED_GID "$@"
+    # Add docker socket group to manager user for container management
+    if [ -S /var/run/docker.sock ]; then
+        DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+        echo "[Manager] Docker socket GID: $DOCKER_GID"
+
+        # Create docker group with the socket's GID if it doesn't exist
+        if ! getent group "$DOCKER_GID" >/dev/null 2>&1; then
+            groupadd -g "$DOCKER_GID" docker 2>/dev/null || true
+        fi
+
+        # Add manager user to docker group (using usermod from shadow package)
+        usermod -aG docker manager 2>/dev/null || true
+        echo "[Manager] Added manager to docker group (GID: $DOCKER_GID)"
+    fi
+
+    echo "[Manager] Switching to manager user (UID: $MANAGER_UID)..."
+    # gosu properly handles supplementary groups
+    exec gosu manager "$@"
 else
     # Already running as non-root, set umask and run
     umask 002
