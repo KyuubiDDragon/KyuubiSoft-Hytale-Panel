@@ -87,8 +87,8 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
 // SECURITY: Invalidate tokens on logout to prevent token reuse
 router.post('/logout', authMiddleware, async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
-  if (authReq.user?.username) {
-    await invalidateUserTokens(authReq.user.username);
+  if (authReq.user) {
+    await invalidateUserTokens(authReq.user);
   }
   res.json({ message: 'Logged out successfully' });
 });

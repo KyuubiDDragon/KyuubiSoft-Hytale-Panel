@@ -151,7 +151,7 @@ export async function createUser(
   data.users.push(newUser);
   await writeUsers(data);
 
-  const { passwordHash, ...userWithoutPassword } = newUser;
+  const { passwordHash: _, ...userWithoutPassword } = newUser;
   return userWithoutPassword;
 }
 
