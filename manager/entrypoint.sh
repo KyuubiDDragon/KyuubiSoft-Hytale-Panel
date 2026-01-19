@@ -28,10 +28,18 @@ if [ "$(id -u)" = "0" ]; then
                 echo "       sudo chown -R $MANAGER_UID:$MANAGER_GID ${HOST_DATA_PATH:-/opt/hytale}"
             fi
             echo "[Manager] After chown: $(ls -la $dir 2>&1 | head -5)"
+            # Specific check for users.json
+            if [ -f "$dir/users.json" ]; then
+                echo "[Manager] users.json: $(ls -la $dir/users.json 2>&1)"
+            fi
         fi
     done
 
-    echo "[Manager] Switching to manager user..."
+    # Final check - list all files in data dir
+    echo "[Manager] All files in /opt/hytale/data:"
+    ls -la /opt/hytale/data/ 2>&1
+
+    echo "[Manager] Switching to manager user (UID: $MANAGER_UID, GID: $MANAGER_GID)..."
     exec su-exec $MANAGER_UID:$MANAGER_GID "$@"
 else
     # Already running as non-root, just exec the command
