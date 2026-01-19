@@ -215,18 +215,18 @@ function getCategoryLabel(id: string): string {
 </script>
 
 <template>
-  <div class="h-full flex flex-col">
+  <div class="h-[calc(100vh-8rem)] flex flex-col">
     <!-- Page Title -->
-    <div class="mb-6">
+    <div class="mb-6 flex-shrink-0">
       <h1 class="text-2xl font-bold text-white">{{ t('help.title') }}</h1>
       <p class="text-gray-400 mt-1">{{ t('help.subtitle', { count: commandCount }) }}</p>
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 flex gap-6 min-h-0">
+    <div class="flex-1 flex gap-6 min-h-0 overflow-hidden">
       <!-- Sidebar Categories -->
-      <Card class="w-64 flex-shrink-0 overflow-hidden flex flex-col" :padding="false">
-        <div class="p-4 border-b border-dark-50/50">
+      <Card class="w-64 flex-shrink-0 flex flex-col" :padding="false">
+        <div class="p-4 border-b border-dark-50/50 flex-shrink-0">
           <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">{{ t('help.categoriesTitle') }}</h3>
         </div>
         <div class="flex-1 overflow-y-auto p-2">
@@ -285,9 +285,9 @@ function getCategoryLabel(id: string): string {
       </Card>
 
       <!-- Commands List -->
-      <Card class="flex-1 overflow-hidden flex flex-col" :padding="false">
+      <Card class="flex-1 flex flex-col min-h-0" :padding="false">
         <!-- Search Bar -->
-        <div class="p-4 border-b border-dark-50/50">
+        <div class="p-4 border-b border-dark-50/50 flex-shrink-0">
           <div class="relative">
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -360,7 +360,7 @@ function getCategoryLabel(id: string): string {
         </div>
 
         <!-- Footer Info -->
-        <div class="p-4 border-t border-dark-50/50 bg-dark-100/50">
+        <div class="p-4 border-t border-dark-50/50 bg-dark-100/50 flex-shrink-0">
           <div class="flex items-center justify-between text-sm text-gray-500">
             <span>{{ t('help.commandsShown', { shown: filteredCommands.length, total: commandCount }) }}</span>
             <div class="flex items-center gap-4">
