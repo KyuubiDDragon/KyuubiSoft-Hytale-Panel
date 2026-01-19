@@ -3,106 +3,106 @@
  * Defines all available permissions, roles, and related interfaces
  */
 
-// All available permissions with German descriptions
+// All available permissions - values used for fallback display
 export const PERMISSIONS = {
   // Dashboard
-  'dashboard.view': 'Dashboard anzeigen',
-  'dashboard.stats': 'Dashboard-Statistiken anzeigen',
+  'dashboard.view': 'View dashboard',
+  'dashboard.stats': 'View dashboard statistics',
 
   // Server
-  'server.view_status': 'Serverstatus anzeigen',
-  'server.start': 'Server starten',
-  'server.stop': 'Server stoppen',
-  'server.restart': 'Server neustarten',
-  'server.quick_settings': 'Schnelleinstellungen bearbeiten',
+  'server.view_status': 'View server status',
+  'server.start': 'Start server',
+  'server.stop': 'Stop server',
+  'server.restart': 'Restart server',
+  'server.quick_settings': 'Edit quick settings',
 
   // Console
-  'console.view': 'Konsole anzeigen',
-  'console.execute': 'Konsolenbefehle ausführen',
+  'console.view': 'View console',
+  'console.execute': 'Execute console commands',
 
   // Performance
-  'performance.view': 'Performance-Metriken anzeigen',
+  'performance.view': 'View performance metrics',
 
   // Players
-  'players.view': 'Spielerliste anzeigen',
-  'players.edit': 'Spielerdaten bearbeiten',
-  'players.kick': 'Spieler kicken',
-  'players.ban': 'Spieler bannen',
-  'players.unban': 'Spieler entbannen',
-  'players.whitelist': 'Whitelist verwalten',
-  'players.op': 'Operator-Status verwalten',
-  'players.permissions': 'Spielerberechtigungen verwalten',
-  'players.teleport': 'Spieler teleportieren',
-  'players.kill': 'Spieler töten',
-  'players.respawn': 'Spieler respawnen',
-  'players.gamemode': 'Spielmodus ändern',
-  'players.give': 'Items geben',
-  'players.heal': 'Spieler heilen',
-  'players.effects': 'Effekte verwalten',
-  'players.clear_inventory': 'Inventar leeren',
-  'players.message': 'Nachrichten senden',
+  'players.view': 'View player list',
+  'players.edit': 'Edit player data',
+  'players.kick': 'Kick players',
+  'players.ban': 'Ban players',
+  'players.unban': 'Unban players',
+  'players.whitelist': 'Manage whitelist',
+  'players.op': 'Manage operator status',
+  'players.permissions': 'Manage player permissions',
+  'players.teleport': 'Teleport players',
+  'players.kill': 'Kill players',
+  'players.respawn': 'Respawn players',
+  'players.gamemode': 'Change game mode',
+  'players.give': 'Give items',
+  'players.heal': 'Heal players',
+  'players.effects': 'Manage effects',
+  'players.clear_inventory': 'Clear inventory',
+  'players.message': 'Send messages',
 
   // Chat
-  'chat.view': 'Chat anzeigen',
-  'chat.send': 'Chatnachrichten senden',
+  'chat.view': 'View chat',
+  'chat.send': 'Send chat messages',
 
   // Backups
-  'backups.view': 'Backups anzeigen',
-  'backups.create': 'Backups erstellen',
-  'backups.restore': 'Backups wiederherstellen',
-  'backups.delete': 'Backups löschen',
-  'backups.download': 'Backups herunterladen',
+  'backups.view': 'View backups',
+  'backups.create': 'Create backups',
+  'backups.restore': 'Restore backups',
+  'backups.delete': 'Delete backups',
+  'backups.download': 'Download backups',
 
   // Scheduler
-  'scheduler.view': 'Zeitplaner anzeigen',
-  'scheduler.edit': 'Zeitplaner bearbeiten',
+  'scheduler.view': 'View scheduler',
+  'scheduler.edit': 'Edit scheduler',
 
   // Worlds
-  'worlds.view': 'Welten anzeigen',
-  'worlds.manage': 'Welten verwalten',
+  'worlds.view': 'View worlds',
+  'worlds.manage': 'Manage worlds',
 
   // Mods
-  'mods.view': 'Mods anzeigen',
-  'mods.install': 'Mods installieren',
-  'mods.delete': 'Mods löschen',
-  'mods.config': 'Mod-Konfiguration bearbeiten',
-  'mods.toggle': 'Mods aktivieren/deaktivieren',
+  'mods.view': 'View mods',
+  'mods.install': 'Install mods',
+  'mods.delete': 'Delete mods',
+  'mods.config': 'Edit mod configuration',
+  'mods.toggle': 'Enable/disable mods',
 
   // Plugins
-  'plugins.view': 'Plugins anzeigen',
-  'plugins.install': 'Plugins installieren',
-  'plugins.delete': 'Plugins löschen',
-  'plugins.config': 'Plugin-Konfiguration bearbeiten',
-  'plugins.toggle': 'Plugins aktivieren/deaktivieren',
+  'plugins.view': 'View plugins',
+  'plugins.install': 'Install plugins',
+  'plugins.delete': 'Delete plugins',
+  'plugins.config': 'Edit plugin configuration',
+  'plugins.toggle': 'Enable/disable plugins',
 
   // Config
-  'config.view': 'Konfiguration anzeigen',
-  'config.edit': 'Konfiguration bearbeiten',
+  'config.view': 'View configuration',
+  'config.edit': 'Edit configuration',
 
   // Assets
-  'assets.view': 'Assets anzeigen',
-  'assets.manage': 'Assets verwalten',
+  'assets.view': 'View assets',
+  'assets.manage': 'Manage assets',
 
   // Users
-  'users.view': 'Benutzer anzeigen',
-  'users.create': 'Benutzer erstellen',
-  'users.edit': 'Benutzer bearbeiten',
-  'users.delete': 'Benutzer löschen',
+  'users.view': 'View users',
+  'users.create': 'Create users',
+  'users.edit': 'Edit users',
+  'users.delete': 'Delete users',
 
   // Roles
-  'roles.view': 'Rollen anzeigen',
-  'roles.manage': 'Rollen verwalten',
+  'roles.view': 'View roles',
+  'roles.manage': 'Manage roles',
 
   // Activity
-  'activity.view': 'Aktivitätslog anzeigen',
-  'activity.clear': 'Aktivitätslog löschen',
+  'activity.view': 'View activity log',
+  'activity.clear': 'Clear activity log',
 
   // Hytale Auth
-  'hytale_auth.manage': 'Hytale-Authentifizierung verwalten',
+  'hytale_auth.manage': 'Manage Hytale authentication',
 
   // Settings
-  'settings.view': 'Einstellungen anzeigen',
-  'settings.edit': 'Einstellungen bearbeiten',
+  'settings.view': 'View settings',
+  'settings.edit': 'Edit settings',
 } as const;
 
 // Permission type derived from the keys
@@ -171,14 +171,14 @@ export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number];
 export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
     name: 'Administrator',
-    description: 'Vollzugriff auf alle Funktionen',
+    description: 'Full access to all features',
     permissions: ['*'],
     isSystem: true,
     color: '#ef4444',
   },
   {
     name: 'Moderator',
-    description: 'Spielerverwaltung und Chat-Moderation',
+    description: 'Player management and chat moderation',
     permissions: [
       'dashboard.view',
       'dashboard.stats',
@@ -199,7 +199,7 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
   },
   {
     name: 'Operator',
-    description: 'Serververwaltung und technische Aufgaben',
+    description: 'Server management and technical tasks',
     permissions: [
       'dashboard.view',
       'dashboard.stats',
@@ -240,7 +240,7 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
   },
   {
     name: 'Viewer',
-    description: 'Nur-Lese-Zugriff auf grundlegende Informationen',
+    description: 'Read-only access to basic information',
     permissions: [
       'dashboard.view',
       'dashboard.stats',

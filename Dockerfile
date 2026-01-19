@@ -16,7 +16,7 @@ ENV JAVA_MIN_RAM="3G" \
     JAVA_MAX_RAM="4G" \
     SERVER_PORT="5520" \
     SERVER_BIND="0.0.0.0" \
-    ENABLE_BACKUP="true" \
+    ENABLE_BACKUP="false" \
     BACKUP_FREQUENCY="30" \
     TZ="Europe/Berlin" \
     # Option 1: Direct URLs to server files

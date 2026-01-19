@@ -43,8 +43,9 @@ services:
       - SERVER_BIND=${SERVER_BIND:-0.0.0.0}
       - TZ=${TZ:-Europe/Berlin}
       
-      # Backups
-      - ENABLE_BACKUP=${ENABLE_BACKUP:-true}
+      # Backups (built-in backup disabled by default - creates empty files)
+      # Use manager scheduler backups instead
+      - ENABLE_BACKUP=${ENABLE_BACKUP:-false}
       - BACKUP_FREQUENCY=${BACKUP_FREQUENCY:-30}
       
       # Auth
