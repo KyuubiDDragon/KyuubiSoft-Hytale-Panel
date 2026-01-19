@@ -217,7 +217,7 @@ app.get('/api/health/permissions', async (_req, res) => {
   };
 
   if (hasIssues) {
-    response.message = 'Some directories have permission issues. This may happen after upgrading to v2.0.0 which runs as non-root. Run: sudo chown -R 1001:1001 /opt/hytale';
+    response.message = `Some directories have permission issues. This may happen after upgrading to v2.0.0 which runs as non-root. Run: sudo chown -R 1001:1001 ${config.hostDataPath}`;
   }
 
   res.json(response);
