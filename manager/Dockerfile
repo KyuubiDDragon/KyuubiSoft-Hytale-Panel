@@ -45,8 +45,8 @@ FROM node:20-alpine
 LABEL maintainer="Hytale Server Manager"
 LABEL description="Web-based management tool for Hytale servers"
 
-# Install wget for healthcheck and dumb-init for proper signal handling
-RUN apk add --no-cache wget dumb-init
+# Install wget for healthcheck, dumb-init for signal handling, su-exec for user switching
+RUN apk add --no-cache wget dumb-init su-exec
 
 # Create non-root user for security
 # Using UID/GID 1001 to avoid conflicts with host user mappings
@@ -72,22 +72,25 @@ COPY --from=frontend-builder /app/static ./static
 RUN mkdir -p /app/data && \
     chown -R manager:manager /app
 
+# Copy entrypoint script
+COPY --chmod=755 entrypoint.sh /app/entrypoint.sh
+
 # Environment variables
 ENV NODE_ENV=production
 ENV MANAGER_PORT=18080
 
-# Switch to non-root user
-USER manager
+# NOTE: We start as root to fix permissions on mounted volumes,
+# then the entrypoint script drops to the manager user (1001)
 
-# Expose port (unprivileged port, no root needed)
+# Expose port
 EXPOSE 18080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --quiet --tries=1 -O /dev/null http://localhost:18080/api/health || exit 1
 
-# Use dumb-init as entrypoint for proper signal handling
-ENTRYPOINT ["dumb-init", "--"]
+# Use dumb-init + our entrypoint for proper signal handling and permission fixing
+ENTRYPOINT ["dumb-init", "--", "/app/entrypoint.sh"]
 
 # Run the application
 CMD ["node", "dist/index.js"]

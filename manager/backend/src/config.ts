@@ -47,6 +47,9 @@ export const config = {
   // Modtale Integration
   modtaleApiKey: process.env.MODTALE_API_KEY || '',
 
+  // Host data path (for error messages - shows the actual host path)
+  hostDataPath: process.env.HOST_DATA_PATH || '/opt/hytale',
+
   // Security mode: 'strict' (default) or 'warn'
   securityMode,
 };

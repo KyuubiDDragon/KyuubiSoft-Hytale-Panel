@@ -161,6 +161,9 @@ services:
       # StackMart API (optional)
       - STACKMART_API_KEY=${STACKMART_API_KEY:-}
 
+      # Host data path (for error messages)
+      - HOST_DATA_PATH=${HOST_DATA_PATH:-/opt/hytale}
+
     ports:
       - "${MANAGER_PORT:-18080}:18080"
 
@@ -214,6 +217,10 @@ services:
     # The manager only needs network access and Docker socket
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN            # Required for fixing permissions on mounted volumes
+      - SETUID           # Required for switching to manager user
+      - SETGID           # Required for switching to manager group
 
 # ============================================================
 # Networks
