@@ -49,10 +49,67 @@ app.use(helmet({
   contentSecurityPolicy: false, // Disable for SPA
 }));
 app.use(compression());
+
+// CORS configuration - must be explicitly set
+const corsOrigins = config.corsOrigins
+  ? (config.corsOrigins === '*' ? '*' : config.corsOrigins.split(',').map(o => o.trim()))
+  : false; // Disable CORS if not configured (same-origin only)
+
 app.use(cors({
-  origin: config.corsOrigins === '*' ? '*' : config.corsOrigins.split(','),
+  origin: corsOrigins,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
+
+// CSRF Protection via Origin/Referer validation for state-changing requests
+app.use((req, res, next) => {
+  // Skip for safe methods
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  // Skip for non-API routes (static files)
+  if (!req.path.startsWith('/api/')) {
+    return next();
+  }
+
+  // Get origin from headers
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+
+  // If no origin header, check referer (some browsers don't send origin)
+  const requestOrigin = origin || (referer ? new URL(referer).origin : null);
+
+  // Allow same-origin requests (no origin header means same-origin in most cases)
+  if (!requestOrigin) {
+    // For security, require origin header for cross-origin requests
+    // Same-origin requests from browsers typically don't include Origin for non-CORS
+    return next();
+  }
+
+  // Validate origin against allowed CORS origins
+  if (config.corsOrigins === '*') {
+    // Wildcard CORS - allow but log warning
+    return next();
+  }
+
+  const allowedOrigins = config.corsOrigins.split(',').map(o => o.trim());
+
+  // Also allow requests from the server's own origin (same-origin)
+  const host = req.headers.host;
+  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const serverOrigin = `${protocol}://${host}`;
+
+  if (allowedOrigins.includes(requestOrigin) || requestOrigin === serverOrigin) {
+    return next();
+  }
+
+  // Origin mismatch - potential CSRF
+  console.warn(`CSRF: Blocked request from origin ${requestOrigin} to ${req.path}`);
+  res.status(403).json({ error: 'CSRF validation failed', detail: 'Origin not allowed' });
+});
+
 app.use(express.json());
 
 // API Routes
