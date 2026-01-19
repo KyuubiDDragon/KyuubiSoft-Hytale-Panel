@@ -130,9 +130,9 @@ services:
       # Authentication (REQUIRED - no defaults for security)
       # SECURITY: These MUST be set in your .env file or Portainer environment
       # The manager will fail to start in strict mode without proper credentials
-      - MANAGER_USERNAME=${MANAGER_USERNAME:?MANAGER_USERNAME is required}
-      - MANAGER_PASSWORD=${MANAGER_PASSWORD:?MANAGER_PASSWORD is required}
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required - use: openssl rand -base64 48}
+      - MANAGER_USERNAME=${MANAGER_USERNAME:-}
+      - MANAGER_PASSWORD=${MANAGER_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:-}
       # CORS Origins (REQUIRED for security)
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       # Security mode: 'strict' (default) or 'warn'
