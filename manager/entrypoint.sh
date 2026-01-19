@@ -22,10 +22,10 @@ if [ "$(id -u)" = "0" ]; then
     for dir in $DATA_DIRS; do
         if [ -d "$dir" ]; then
             echo "[Manager] Fixing permissions for $dir..."
-            chown -R $MANAGER_UID:$MANAGER_GID "$dir" 2>/dev/null || {
+            if ! chown -R $MANAGER_UID:$MANAGER_GID "$dir"; then
                 echo "[WARN] Could not fix permissions for $dir - you may need to run:"
                 echo "       sudo chown -R $MANAGER_UID:$MANAGER_GID ${HOST_DATA_PATH:-/opt/hytale}"
-            }
+            fi
         fi
     done
 
