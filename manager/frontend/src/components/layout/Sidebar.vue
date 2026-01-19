@@ -30,6 +30,7 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'console', path: '/console', icon: 'console', label: t('nav.console'), group: 'main', permission: 'console.view' },
   { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), group: 'main', permission: 'performance.view' },
   { name: 'statistics', path: '/statistics', icon: 'statistics', label: t('nav.statistics'), group: 'main', permission: 'dashboard.stats' },
+  { name: 'help', path: '/help', icon: 'help', label: t('nav.help'), group: 'main', permission: 'all' },
   { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management', permission: 'players.view' },
   { name: 'chat', path: '/chat', icon: 'chat', label: t('nav.chat'), group: 'management', permission: 'chat.view' },
   { name: 'whitelist', path: '/whitelist', icon: 'whitelist', label: t('nav.whitelist'), group: 'management', permission: 'players.whitelist' },
@@ -104,6 +105,11 @@ function isActive(path: string): boolean {
             <!-- Statistics Icon -->
             <svg v-else-if="item.icon === 'statistics'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+
+            <!-- Help Icon -->
+            <svg v-else-if="item.icon === 'help'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
 
             <span>{{ item.label }}</span>
