@@ -54,7 +54,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-eval'"], // Vue.js needs unsafe-eval for template compilation
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Vue/CSS-in-JS + Google Fonts
-      imgSrc: ["'self'", "data:", "blob:"], // Allow data URIs for inline images
+      imgSrc: ["'self'", "data:", "blob:", "https://cdn.modtale.net"], // Allow data URIs and Modtale CDN
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"], // Google Fonts
       connectSrc: ["'self'", "ws:", "wss:"], // Allow WebSocket connections
       objectSrc: ["'none'"],
