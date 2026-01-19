@@ -83,6 +83,30 @@ async function rolesFileExists(): Promise<boolean> {
   }
 }
 
+// Migrate system role descriptions from German to English
+async function migrateSystemRoleDescriptions(data: RolesData): Promise<boolean> {
+  // Map of old German descriptions to new English descriptions
+  const descriptionMigrations: Record<string, string> = {
+    'Vollzugriff auf alle Funktionen': 'Full access to all features',
+    'Spielerverwaltung und Chat-Moderation': 'Player management and chat moderation',
+    'Serververwaltung und technische Aufgaben': 'Server management and technical tasks',
+    'Nur-Lese-Zugriff auf grundlegende Informationen': 'Read-only access to basic information',
+  };
+
+  let migrated = false;
+
+  for (const role of data.roles) {
+    if (role.isSystem && descriptionMigrations[role.description]) {
+      console.log(`[Roles] Migrating description for role "${role.name}" from German to English`);
+      role.description = descriptionMigrations[role.description];
+      role.updatedAt = new Date().toISOString();
+      migrated = true;
+    }
+  }
+
+  return migrated;
+}
+
 // Initialize roles on startup - creates file with DEFAULT_ROLES if it doesn't exist
 export async function initializeRoles(): Promise<void> {
   await ensureDataDir();
@@ -90,6 +114,15 @@ export async function initializeRoles(): Promise<void> {
   if (!(await rolesFileExists())) {
     const data = createDefaultRolesData();
     await writeRoles(data);
+  } else {
+    // Check for migrations on existing data
+    const data = await readRoles();
+    const migrated = await migrateSystemRoleDescriptions(data);
+    if (migrated) {
+      data.version += 1;
+      await writeRoles(data);
+      console.log('[Roles] Migration completed - system role descriptions updated to English');
+    }
   }
 }
 
