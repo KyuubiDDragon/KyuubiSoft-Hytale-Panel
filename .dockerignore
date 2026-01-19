@@ -1,0 +1,72 @@
+# ============================================================
+# Docker Build Ignore File
+# SECURITY: Prevents sensitive files from being included in image
+# ============================================================
+
+# Git repository data
+.git
+.gitignore
+.gitattributes
+
+# Environment files (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+*.md
+!manager/README.md
+docs/
+
+# Node modules (will be installed during build)
+**/node_modules
+
+# Build artifacts
+**/dist
+**/build
+**/.cache
+**/.parcel-cache
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+**/coverage
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local development files
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Backup files
+*.bak
+*.backup
+backups/
+
+# Server data (mounted as volumes)
+server/
+data/
+plugins/
+mods/
+auth/
+assets/
+
+# Session/cache data
+*.session
+*.cache

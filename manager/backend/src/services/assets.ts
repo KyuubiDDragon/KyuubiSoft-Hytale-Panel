@@ -652,7 +652,54 @@ function isRegexPattern(pattern: string): boolean {
 }
 
 /**
- * Parse regex pattern string to RegExp
+ * SECURITY: Check if a regex pattern is safe (not vulnerable to ReDoS)
+ * Rejects patterns with:
+ * - Nested quantifiers like (a+)+, (a*)*
+ * - Alternation with overlapping patterns
+ * - Excessive length or complexity
+ */
+function isSafeRegex(pattern: string): boolean {
+  // Limit pattern length to prevent complexity attacks
+  if (pattern.length > 100) {
+    return false;
+  }
+
+  // Detect nested quantifiers - common ReDoS patterns
+  // Matches things like (a+)+, (a*)+, (a+)*, ([a-z]+)*, etc.
+  const nestedQuantifiers = /\([^)]*[+*][^)]*\)[+*?]|\([^)]*[+*?]\{|\{[^}]*\}[+*?]/;
+  if (nestedQuantifiers.test(pattern)) {
+    return false;
+  }
+
+  // Detect overlapping alternation with quantifiers
+  // e.g., (a|a)+, (ab|abc)+
+  const overlappingAlt = /\([^)]*\|[^)]*\)[+*]/;
+  if (overlappingAlt.test(pattern)) {
+    return false;
+  }
+
+  // Limit number of quantifiers
+  const quantifierCount = (pattern.match(/[+*?]|\{[\d,]+\}/g) || []).length;
+  if (quantifierCount > 10) {
+    return false;
+  }
+
+  // Limit number of groups
+  const groupCount = (pattern.match(/\(/g) || []).length;
+  if (groupCount > 5) {
+    return false;
+  }
+
+  // Limit backreference usage
+  if (/\\[1-9]/.test(pattern)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Parse regex pattern string to RegExp (with safety checks)
  */
 function parseRegexPattern(pattern: string): RegExp | null {
   try {
@@ -660,7 +707,17 @@ function parseRegexPattern(pattern: string): RegExp | null {
     const lastSlash = pattern.lastIndexOf('/');
     const regexBody = pattern.substring(1, lastSlash);
     const flags = pattern.substring(lastSlash + 1) || 'i';
-    return new RegExp(regexBody, flags);
+
+    // Only allow safe flags
+    const safeFlags = flags.replace(/[^gimu]/g, '');
+
+    // SECURITY: Check for ReDoS patterns
+    if (!isSafeRegex(regexBody)) {
+      console.warn('[SECURITY] Rejected unsafe regex pattern:', regexBody.substring(0, 50));
+      return null;
+    }
+
+    return new RegExp(regexBody, safeFlags);
   } catch {
     return null;
   }
@@ -693,12 +750,22 @@ export function searchAssets(query: string, options?: {
     searchRegex = isRegexPattern(query) ? parseRegexPattern(query) : null;
     if (!searchRegex && options?.useRegex) {
       // User wants regex but didn't use /.../ format, treat as regex directly
-      try {
-        searchRegex = new RegExp(query, 'i');
-      } catch {
-        // Invalid regex, fall back to text search
+      // SECURITY: Check for ReDoS patterns before creating regex
+      if (!isSafeRegex(query)) {
+        console.warn('[SECURITY] Rejected unsafe regex query:', query.substring(0, 50));
         searchMode = 'text';
+      } else {
+        try {
+          searchRegex = new RegExp(query, 'i');
+        } catch {
+          // Invalid regex, fall back to text search
+          searchMode = 'text';
+        }
       }
+    }
+    // If regex parsing failed, fall back to text search
+    if (searchMode === 'regex' && !searchRegex) {
+      searchMode = 'text';
     }
   } else if (options?.useGlob || isGlobPattern(query)) {
     searchMode = 'glob';

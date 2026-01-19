@@ -22,7 +22,13 @@
     "clear": "Leeren",
     "previous": "Zurück",
     "next": "Weiter",
-    "noPermission": "Du hast keine Berechtigung für diese Aktion"
+    "noPermission": "Du hast keine Berechtigung für diese Aktion",
+    "dismiss": "Schließen"
+  },
+  "health": {
+    "permissionIssue": "Dateiberechtigungs-Problem erkannt",
+    "permissionIssueDesc": "Der Manager kann nicht in einige Datenverzeichnisse schreiben. Das passiert typischerweise nach dem Upgrade auf v2.0.0, welches aus Sicherheitsgründen als Nicht-Root-Benutzer (UID 1001) läuft.",
+    "fixCommand": "Führe diesen Befehl auf dem Host aus, um die Berechtigungen zu reparieren"
   },
   "auth": {
     "login": "Anmelden",
@@ -197,10 +203,10 @@
     "heal": "Heilen",
     "gamemode": "Spielmodus",
     "gamemodes": {
-      "survival": "Überleben",
       "creative": "Kreativ",
+      "creativeDesc": "Frei bauen, fliegen, unbegrenzte Ressourcen",
       "adventure": "Abenteuer",
-      "spectator": "Zuschauer"
+      "adventureDesc": "Erkunden und interagieren, keine Blöcke abbauen"
     },
     "give": "Item geben",
     "itemId": "Item ID",

@@ -968,28 +968,18 @@ onUnmounted(() => {
     <Modal :open="showGamemodeModal" :title="t('players.gamemode') + ': ' + selectedPlayer" @close="showGamemodeModal = false">
       <div class="grid grid-cols-2 gap-3">
         <button
-          @click="setGamemode('survival')"
-          class="p-4 bg-dark-100 hover:bg-dark-50 rounded-lg text-left transition-colors"
-        >
-          <div class="font-medium text-white">{{ t('players.gamemodes.survival') }}</div>
-        </button>
-        <button
           @click="setGamemode('creative')"
           class="p-4 bg-dark-100 hover:bg-dark-50 rounded-lg text-left transition-colors"
         >
           <div class="font-medium text-white">{{ t('players.gamemodes.creative') }}</div>
+          <div class="text-xs text-gray-500">{{ t('players.gamemodes.creativeDesc') }}</div>
         </button>
         <button
           @click="setGamemode('adventure')"
           class="p-4 bg-dark-100 hover:bg-dark-50 rounded-lg text-left transition-colors"
         >
           <div class="font-medium text-white">{{ t('players.gamemodes.adventure') }}</div>
-        </button>
-        <button
-          @click="setGamemode('spectator')"
-          class="p-4 bg-dark-100 hover:bg-dark-50 rounded-lg text-left transition-colors"
-        >
-          <div class="font-medium text-white">{{ t('players.gamemodes.spectator') }}</div>
+          <div class="text-xs text-gray-500">{{ t('players.gamemodes.adventureDesc') }}</div>
         </button>
       </div>
     </Modal>

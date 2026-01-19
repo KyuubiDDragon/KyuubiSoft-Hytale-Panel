@@ -1,7 +1,7 @@
 import Docker from 'dockerode';
 import { config } from '../config.js';
 import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.js';
-import { isCommandSafe, escapeShellArg } from '../utils/sanitize.js';
+import { validateCommand, escapeShellArg } from '../utils/sanitize.js';
 import { clearOnlinePlayers } from './players.js';
 
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -198,15 +198,11 @@ async function ensureStdinAttached(): Promise<boolean> {
 
 export async function execCommand(command: string): Promise<ActionResponse> {
   try {
-    // SECURITY: Validate command before execution
-    if (!command || typeof command !== 'string') {
-      return { success: false, error: 'Invalid command' };
-    }
-
-    // Check for command injection attempts
-    if (!isCommandSafe(command)) {
-      console.warn(`[SECURITY] Blocked potentially dangerous command: ${command.substring(0, 50)}...`);
-      return { success: false, error: 'Command contains invalid characters' };
+    // SECURITY: Validate command against whitelist and injection patterns
+    const validation = validateCommand(command);
+    if (!validation.valid) {
+      console.warn(`[SECURITY] Blocked command: ${command.substring(0, 50)}... Reason: ${validation.error}`);
+      return { success: false, error: validation.error || 'Invalid command' };
     }
 
     const container = await getContainer();

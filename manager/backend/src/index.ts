@@ -6,6 +6,8 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { access, constants, writeFile as fsWriteFile, unlink } from 'fs/promises';
+import { randomBytes } from 'crypto';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
@@ -45,15 +47,92 @@ const wss = new WebSocketServer({ server, path: '/api/console/ws' });
 setupWebSocket(wss);
 
 // Middleware
+// SECURITY: Configure Content-Security-Policy for SPA
 app.use(helmet({
-  contentSecurityPolicy: false, // Disable for SPA
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-eval'"], // Vue.js needs unsafe-eval for template compilation
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Vue/CSS-in-JS + Google Fonts
+      imgSrc: ["'self'", "data:", "blob:", "https://cdn.modtale.net"], // Allow data URIs and Modtale CDN
+      fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"], // Google Fonts
+      connectSrc: ["'self'", "ws:", "wss:"], // Allow WebSocket connections
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"], // Prevent clickjacking
+      // Note: upgradeInsecureRequests removed - only use if running behind HTTPS proxy
+    },
+  },
+  // Additional security headers
+  crossOriginEmbedderPolicy: false, // Disable for compatibility with external resources
+  crossOriginOpenerPolicy: false, // Disable for HTTP compatibility
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow loading cross-origin resources
 }));
 app.use(compression());
+
+// CORS configuration - must be explicitly set
+const corsOrigins = config.corsOrigins
+  ? (config.corsOrigins === '*' ? '*' : config.corsOrigins.split(',').map(o => o.trim()))
+  : false; // Disable CORS if not configured (same-origin only)
+
 app.use(cors({
-  origin: config.corsOrigins === '*' ? '*' : config.corsOrigins.split(','),
+  origin: corsOrigins,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
-app.use(express.json());
+
+// CSRF Protection via Origin/Referer validation for state-changing requests
+app.use((req, res, next) => {
+  // Skip for safe methods
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+
+  // Skip for non-API routes (static files)
+  if (!req.path.startsWith('/api/')) {
+    return next();
+  }
+
+  // Get origin from headers
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+
+  // If no origin header, check referer (some browsers don't send origin)
+  const requestOrigin = origin || (referer ? new URL(referer).origin : null);
+
+  // Allow same-origin requests (no origin header means same-origin in most cases)
+  if (!requestOrigin) {
+    // For security, require origin header for cross-origin requests
+    // Same-origin requests from browsers typically don't include Origin for non-CORS
+    return next();
+  }
+
+  // Validate origin against allowed CORS origins
+  if (config.corsOrigins === '*') {
+    // Wildcard CORS - allow but log warning
+    return next();
+  }
+
+  const allowedOrigins = config.corsOrigins.split(',').map(o => o.trim());
+
+  // Also allow requests from the server's own origin (same-origin)
+  const host = req.headers.host;
+  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const serverOrigin = `${protocol}://${host}`;
+
+  if (allowedOrigins.includes(requestOrigin) || requestOrigin === serverOrigin) {
+    return next();
+  }
+
+  // Origin mismatch - potential CSRF
+  console.warn(`CSRF: Blocked request from origin ${requestOrigin} to ${req.path}`);
+  res.status(403).json({ error: 'CSRF validation failed', detail: 'Origin not allowed' });
+});
+
+// SECURITY: Limit JSON body size to prevent memory exhaustion attacks
+app.use(express.json({ limit: '100kb' }));
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -69,6 +148,79 @@ app.use('/api/roles', rolesRouter);
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'hytale-manager' });
+});
+
+// Permission health check - checks if data directories are writable
+// Used to warn users about permission issues after upgrading to non-root container
+interface PermissionCheckResult {
+  path: string;
+  name: string;
+  readable: boolean;
+  writable: boolean;
+  error?: string;
+}
+
+interface PermissionHealthResponse {
+  ok: boolean;
+  issues: PermissionCheckResult[];
+  message?: string;
+}
+
+app.get('/api/health/permissions', async (_req, res) => {
+  const pathsToCheck = [
+    { path: config.serverPath, name: 'Server' },
+    { path: config.backupsPath, name: 'Backups' },
+    { path: config.dataPath, name: 'Data' },
+    { path: config.modsPath, name: 'Mods' },
+    { path: config.pluginsPath, name: 'Plugins' },
+  ];
+
+  const results: PermissionCheckResult[] = [];
+  let hasIssues = false;
+
+  for (const { path: dirPath, name } of pathsToCheck) {
+    const result: PermissionCheckResult = {
+      path: dirPath,
+      name,
+      readable: false,
+      writable: false,
+    };
+
+    try {
+      // Check if directory is readable
+      await access(dirPath, constants.R_OK);
+      result.readable = true;
+
+      // Check if directory is writable by actually trying to write a temp file
+      const testFile = path.join(dirPath, `.perm-test-${randomBytes(4).toString('hex')}`);
+      try {
+        await fsWriteFile(testFile, 'test', 'utf-8');
+        await unlink(testFile);
+        result.writable = true;
+      } catch (writeErr) {
+        result.writable = false;
+        result.error = `Cannot write: ${writeErr instanceof Error ? writeErr.message : 'Unknown error'}`;
+        hasIssues = true;
+      }
+    } catch (readErr) {
+      result.readable = false;
+      result.error = `Cannot access: ${readErr instanceof Error ? readErr.message : 'Unknown error'}`;
+      hasIssues = true;
+    }
+
+    results.push(result);
+  }
+
+  const response: PermissionHealthResponse = {
+    ok: !hasIssues,
+    issues: results.filter(r => !r.readable || !r.writable),
+  };
+
+  if (hasIssues) {
+    response.message = `Some directories have permission issues. This may happen after upgrading to v2.0.0 which runs as non-root. Run: sudo chown -R 1001:1001 ${config.hostDataPath}`;
+  }
+
+  res.json(response);
 });
 
 // Serve static frontend files
@@ -93,11 +245,56 @@ app.get('*', (req, res) => {
   });
 });
 
+// SECURITY: Global error handler - catches all unhandled errors in routes
+// Prevents stack traces from leaking to clients in production
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Log the full error for debugging
+  console.error('[ERROR]', err.stack || err.message || err);
+
+  // Check if headers already sent
+  if (res.headersSent) {
+    return;
+  }
+
+  // Determine if we should expose error details
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  // Handle known error types
+  if (err.name === 'UnauthorizedError') {
+    res.status(401).json({ error: 'Unauthorized', detail: 'Invalid or expired token' });
+    return;
+  }
+
+  if (err.name === 'ValidationError') {
+    res.status(400).json({ error: 'Validation failed', detail: isDev ? err.message : 'Invalid input' });
+    return;
+  }
+
+  // Generic server error - don't expose internal details in production
+  res.status(500).json({
+    error: 'Internal server error',
+    detail: isDev ? err.message : 'An unexpected error occurred',
+  });
+});
+
+// SECURITY: Handle uncaught exceptions at process level
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err);
+  // Give time for logging then exit
+  setTimeout(() => process.exit(1), 1000);
+});
+
+// SECURITY: Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[ERROR] Unhandled Promise Rejection at:', promise, 'reason:', reason);
+  // Don't exit, just log - but this shouldn't happen in production
+});
+
 // Start server
 server.listen(config.port, '0.0.0.0', async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════╗
-║         KyuubiSoft Panel v1.0.0                   ║
+║         KyuubiSoft Panel v2.0.0                   ║
 ║         Hytale Server Management                  ║
 ╠═══════════════════════════════════════════════════╣
 ║  Panel running on http://0.0.0.0:${config.port}          ║

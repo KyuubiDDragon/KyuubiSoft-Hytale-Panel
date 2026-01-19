@@ -1,0 +1,41 @@
+# ============================================================
+# Docker Build Ignore File for Manager
+# SECURITY: Prevents sensitive files from being included in image
+# ============================================================
+
+# Git files
+.git
+.gitignore
+
+# Environment files
+.env
+.env.*
+
+# IDE files
+.vscode
+.idea
+*.swp
+*~
+
+# Node modules (installed during build)
+**/node_modules
+
+# Build artifacts
+**/dist
+**/.cache
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+**/coverage
+
+# Documentation
+*.md
+
+# Log files
+*.log
+
+# Temporary files
+tmp/
+*.tmp

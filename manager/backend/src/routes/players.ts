@@ -586,7 +586,7 @@ router.post('/:name/gamemode', authMiddleware, requirePermission('players.gamemo
   if (!isValidGamemode(gamemode)) {
     res.status(400).json({
       success: false,
-      error: 'Invalid gamemode. Use: survival, creative, adventure, spectator',
+      error: 'Invalid gamemode. Use: creative, adventure (or c, a)',
     });
     return;
   }

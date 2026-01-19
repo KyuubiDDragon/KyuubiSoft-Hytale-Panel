@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { readFile, writeFile, readdir, stat, unlink, realpath } from 'fs/promises';
+import * as fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -8,6 +10,65 @@ import { config } from '../config.js';
 import { logActivity, getActivityLog, clearActivityLog, type ActivityLogEntry } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { getRealPathIfSafe, isPathSafe, sanitizeFileName } from '../utils/pathSecurity.js';
+
+// SECURITY: Magic bytes for file type verification
+const FILE_SIGNATURES = {
+  // ZIP/JAR files (PK\x03\x04 or PK\x05\x06 for empty)
+  zip: [
+    [0x50, 0x4B, 0x03, 0x04],
+    [0x50, 0x4B, 0x05, 0x06],
+    [0x50, 0x4B, 0x07, 0x08],
+  ],
+  // Lua script files start with -- or specific patterns
+  lua: null, // Text file, check extension only
+  // JavaScript files are text
+  js: null, // Text file, check extension only
+};
+
+// SECURITY: Verify file magic bytes match expected type
+function verifyFileMagic(filePath: string, expectedType: 'zip' | 'lua' | 'js'): boolean {
+  try {
+    const signatures = FILE_SIGNATURES[expectedType];
+    if (!signatures) {
+      // Text files - verify they don't contain binary data
+      const buffer = Buffer.alloc(512);
+      const fd = fs.openSync(filePath, 'r');
+      fs.readSync(fd, buffer, 0, 512, 0);
+      fs.closeSync(fd);
+      // Check for null bytes (binary indicator)
+      for (let i = 0; i < Math.min(buffer.length, 512); i++) {
+        if (buffer[i] === 0) return false;
+      }
+      return true;
+    }
+
+    const buffer = Buffer.alloc(8);
+    const fd = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buffer, 0, 8, 0);
+    fs.closeSync(fd);
+
+    return signatures.some(sig =>
+      sig.every((byte, i) => buffer[i] === byte)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// SECURITY: Generate safe filename with unique prefix
+function generateSafeFilename(originalName: string): string {
+  const ext = path.extname(originalName).toLowerCase();
+  const baseName = path.basename(originalName, ext);
+  // Sanitize the base name
+  const safeName = baseName
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/\.+/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+    .substring(0, 100);
+  // Add unique prefix to prevent overwrites
+  const uniqueId = crypto.randomBytes(4).toString('hex');
+  return `${safeName}_${uniqueId}${ext}`;
+}
 import { getAvailableMods, installMod, uninstallMod, updateMod, getLatestRelease, refreshRegistry, getRegistryInfo } from '../services/modStore.js';
 import {
   searchMods as modtaleSearch,
@@ -43,13 +104,19 @@ import {
   type StackMartCategory,
 } from '../services/stackmart.js';
 
-// Configure multer for file uploads
+// SECURITY: Allowed file extensions for uploads
+// Removed .dll and .so as they are native executables
+const ALLOWED_MOD_EXTENSIONS = ['.jar', '.zip', '.js', '.lua'];
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB limit (reduced from 100MB)
+
+// Configure multer for file uploads with security improvements
 const modsStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, config.modsPath);
   },
   filename: (_req, file, cb) => {
-    cb(null, file.originalname);
+    // SECURITY: Generate safe filename to prevent path traversal and overwrites
+    cb(null, generateSafeFilename(file.originalname));
   },
 });
 
@@ -58,32 +125,35 @@ const pluginsStorage = multer.diskStorage({
     cb(null, config.pluginsPath);
   },
   filename: (_req, file, cb) => {
-    cb(null, file.originalname);
+    // SECURITY: Generate safe filename to prevent path traversal and overwrites
+    cb(null, generateSafeFilename(file.originalname));
   },
 });
 
 const uploadMod = multer({
   storage: modsStorage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+  limits: { fileSize: MAX_UPLOAD_SIZE },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (['.jar', '.zip', '.js', '.lua', '.dll', '.so'].includes(ext)) {
+    // SECURITY: Only allow safe extensions
+    if (ALLOWED_MOD_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Allowed: .jar, .zip, .js, .lua, .dll, .so'));
+      cb(new Error(`Invalid file type. Allowed: ${ALLOWED_MOD_EXTENSIONS.join(', ')}`));
     }
   },
 });
 
 const uploadPlugin = multer({
   storage: pluginsStorage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+  limits: { fileSize: MAX_UPLOAD_SIZE },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (['.jar', '.zip', '.js', '.lua', '.dll', '.so'].includes(ext)) {
+    // SECURITY: Only allow safe extensions
+    if (ALLOWED_MOD_EXTENSIONS.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Allowed: .jar, .zip, .js, .lua, .dll, .so'));
+      cb(new Error(`Invalid file type. Allowed: ${ALLOWED_MOD_EXTENSIONS.join(', ')}`));
     }
   },
 });
@@ -882,9 +952,24 @@ router.get('/plugins', authMiddleware, requirePermission('plugins.view'), async 
 router.put('/mods/:filename/toggle', authMiddleware, requirePermission('mods.install'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { filename } = req.params;
+
+    // SECURITY: Validate filename to prevent path traversal
+    const safeFilename = sanitizeFileName(filename);
+    if (!safeFilename) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+
     const username = req.user || 'system';
-    const filePath = path.join(config.modsPath, filename);
-    const isCurrentlyDisabled = filename.endsWith('.disabled');
+    const filePath = path.join(config.modsPath, safeFilename);
+
+    // SECURITY: Verify path is within mods directory
+    if (!isPathSafe(filePath, [config.modsPath])) {
+      res.status(400).json({ error: 'Invalid path' });
+      return;
+    }
+
+    const isCurrentlyDisabled = safeFilename.endsWith('.disabled');
     const disabledPath = isCurrentlyDisabled
       ? filePath.slice(0, -9)
       : filePath + '.disabled';
@@ -893,10 +978,10 @@ router.put('/mods/:filename/toggle', authMiddleware, requirePermission('mods.ins
 
     if (isCurrentlyDisabled) {
       await rename(filePath, disabledPath);
-      await logActivity(username, 'enable_mod', 'mod', true, filename.replace('.disabled', ''));
+      await logActivity(username, 'enable_mod', 'mod', true, safeFilename.replace('.disabled', ''));
     } else {
       await rename(filePath, disabledPath);
-      await logActivity(username, 'disable_mod', 'mod', true, filename);
+      await logActivity(username, 'disable_mod', 'mod', true, safeFilename);
     }
 
     res.json({ success: true });
@@ -909,9 +994,24 @@ router.put('/mods/:filename/toggle', authMiddleware, requirePermission('mods.ins
 router.put('/plugins/:filename/toggle', authMiddleware, requirePermission('plugins.install'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { filename } = req.params;
+
+    // SECURITY: Validate filename to prevent path traversal
+    const safeFilename = sanitizeFileName(filename);
+    if (!safeFilename) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+
     const username = req.user || 'system';
-    const filePath = path.join(config.pluginsPath, filename);
-    const isCurrentlyDisabled = filename.endsWith('.disabled');
+    const filePath = path.join(config.pluginsPath, safeFilename);
+
+    // SECURITY: Verify path is within plugins directory
+    if (!isPathSafe(filePath, [config.pluginsPath])) {
+      res.status(400).json({ error: 'Invalid path' });
+      return;
+    }
+
+    const isCurrentlyDisabled = safeFilename.endsWith('.disabled');
     const disabledPath = isCurrentlyDisabled
       ? filePath.slice(0, -9)
       : filePath + '.disabled';
@@ -920,10 +1020,10 @@ router.put('/plugins/:filename/toggle', authMiddleware, requirePermission('plugi
 
     if (isCurrentlyDisabled) {
       await rename(filePath, disabledPath);
-      await logActivity(username, 'enable_plugin', 'mod', true, filename.replace('.disabled', ''));
+      await logActivity(username, 'enable_plugin', 'mod', true, safeFilename.replace('.disabled', ''));
     } else {
       await rename(filePath, disabledPath);
-      await logActivity(username, 'disable_plugin', 'mod', true, filename);
+      await logActivity(username, 'disable_plugin', 'mod', true, safeFilename);
     }
 
     res.json({ success: true });
@@ -971,21 +1071,38 @@ router.post('/mods/upload', authMiddleware, requirePermission('mods.install'), u
       return;
     }
 
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const expectedType: 'zip' | 'lua' | 'js' = (ext === '.jar' || ext === '.zip') ? 'zip' : (ext === '.lua' ? 'lua' : 'js');
+
+    // SECURITY: Verify file magic bytes match expected type
+    if (!verifyFileMagic(req.file.path, expectedType)) {
+      // Delete the uploaded file
+      await unlink(req.file.path).catch(() => {});
+      console.warn(`[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`);
+      res.status(400).json({ error: 'Invalid file content. File does not match expected format.' });
+      return;
+    }
+
     await logActivity(
       req.user || 'unknown',
       'upload_mod',
       'mod',
       true,
       req.file.originalname,
-      `Uploaded mod: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`
+      `Uploaded mod: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)`
     );
 
     res.json({
       success: true,
-      filename: req.file.originalname,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
       size: req.file.size,
     });
   } catch (error) {
+    // Try to clean up uploaded file on error
+    if (req.file?.path) {
+      await unlink(req.file.path).catch(() => {});
+    }
     res.status(500).json({ error: 'Failed to upload mod' });
   }
 });
@@ -998,21 +1115,38 @@ router.post('/plugins/upload', authMiddleware, requirePermission('plugins.instal
       return;
     }
 
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const expectedType: 'zip' | 'lua' | 'js' = (ext === '.jar' || ext === '.zip') ? 'zip' : (ext === '.lua' ? 'lua' : 'js');
+
+    // SECURITY: Verify file magic bytes match expected type
+    if (!verifyFileMagic(req.file.path, expectedType)) {
+      // Delete the uploaded file
+      await unlink(req.file.path).catch(() => {});
+      console.warn(`[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`);
+      res.status(400).json({ error: 'Invalid file content. File does not match expected format.' });
+      return;
+    }
+
     await logActivity(
       req.user || 'unknown',
       'upload_plugin',
       'mod',
       true,
       req.file.originalname,
-      `Uploaded plugin: ${req.file.originalname} (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`
+      `Uploaded plugin: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)`
     );
 
     res.json({
       success: true,
-      filename: req.file.originalname,
+      filename: req.file.filename,
+      originalName: req.file.originalname,
       size: req.file.size,
     });
   } catch (error) {
+    // Try to clean up uploaded file on error
+    if (req.file?.path) {
+      await unlink(req.file.path).catch(() => {});
+    }
     res.status(500).json({ error: 'Failed to upload plugin' });
   }
 });
@@ -1021,7 +1155,22 @@ router.post('/plugins/upload', authMiddleware, requirePermission('plugins.instal
 router.delete('/mods/:filename', authMiddleware, requirePermission('mods.delete'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { filename } = req.params;
-    const filePath = path.join(config.modsPath, filename);
+
+    // SECURITY: Validate filename to prevent path traversal
+    const safeFilename = sanitizeFileName(filename);
+    if (!safeFilename) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+
+    const filePath = path.join(config.modsPath, safeFilename);
+
+    // SECURITY: Verify path is within mods directory
+    if (!isPathSafe(filePath, [config.modsPath])) {
+      res.status(400).json({ error: 'Invalid path' });
+      return;
+    }
+
     await unlink(filePath);
 
     await logActivity(
@@ -1029,8 +1178,8 @@ router.delete('/mods/:filename', authMiddleware, requirePermission('mods.delete'
       'delete_mod',
       'mod',
       true,
-      filename,
-      `Deleted mod: ${filename}`
+      safeFilename,
+      `Deleted mod: ${safeFilename}`
     );
 
     res.json({ success: true });
@@ -1043,7 +1192,22 @@ router.delete('/mods/:filename', authMiddleware, requirePermission('mods.delete'
 router.delete('/plugins/:filename', authMiddleware, requirePermission('plugins.delete'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { filename } = req.params;
-    const filePath = path.join(config.pluginsPath, filename);
+
+    // SECURITY: Validate filename to prevent path traversal
+    const safeFilename = sanitizeFileName(filename);
+    if (!safeFilename) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+
+    const filePath = path.join(config.pluginsPath, safeFilename);
+
+    // SECURITY: Verify path is within plugins directory
+    if (!isPathSafe(filePath, [config.pluginsPath])) {
+      res.status(400).json({ error: 'Invalid path' });
+      return;
+    }
+
     await unlink(filePath);
 
     await logActivity(
@@ -1051,8 +1215,8 @@ router.delete('/plugins/:filename', authMiddleware, requirePermission('plugins.d
       'delete_plugin',
       'mod',
       true,
-      filename,
-      `Deleted plugin: ${filename}`
+      safeFilename,
+      `Deleted plugin: ${safeFilename}`
     );
 
     res.json({ success: true });

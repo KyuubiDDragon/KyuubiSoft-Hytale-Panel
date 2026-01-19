@@ -1,9 +1,30 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import * as assetService from '../services/assets.js';
 
 const router = Router();
+
+// SECURITY: Rate limiting for public asset endpoints (item icons, avatars)
+// These endpoints don't require auth so they can be used in <img> tags
+const publicAssetLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute per IP
+  message: { detail: 'Too many asset requests, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// SECURITY: Validate item ID format to prevent path traversal
+function isValidItemId(itemId: string): boolean {
+  // Allow alphanumeric, underscores, hyphens, and colons (for namespace:item format)
+  // Max 100 characters, no path traversal
+  if (!itemId || typeof itemId !== 'string') return false;
+  if (itemId.length > 100) return false;
+  if (itemId.includes('..') || itemId.includes('/') || itemId.includes('\\')) return false;
+  return /^[a-zA-Z0-9_:-]+$/.test(itemId);
+}
 
 // Cache for found icon paths - speeds up repeated lookups significantly
 const iconPathCache = new Map<string, string | null>();
@@ -187,12 +208,13 @@ router.get('/download/*', authMiddleware, requirePermission('assets.view'), (req
 
 // GET /api/assets/item-icon/:itemId - Get item icon image
 // Searches common paths for item icons and returns the image
-// NOTE: No authMiddleware - this endpoint is public so <img> tags can load icons
-router.get('/item-icon/:itemId', (req: Request, res: Response) => {
+// NOTE: Public endpoint with rate limiting - required for <img> tags to load icons
+router.get('/item-icon/:itemId', publicAssetLimiter, (req: Request, res: Response) => {
   let { itemId } = req.params;
 
-  if (!itemId) {
-    res.status(400).json({ detail: 'Item ID required' });
+  // SECURITY: Validate item ID format
+  if (!itemId || !isValidItemId(itemId)) {
+    res.status(400).json({ detail: 'Invalid item ID' });
     return;
   }
 
@@ -301,19 +323,14 @@ router.get('/item-icon/:itemId', (req: Request, res: Response) => {
   // Cache as not found to avoid repeated searches
   setCachedIconPath(itemId, null);
 
-  // If not found, return 404 with debug info
-  res.status(404).json({
-    detail: 'Item icon not found',
-    originalId,
-    itemId,
-    searchedPaths: possiblePaths.slice(0, 8),
-    searchResults: searchResults.map(r => r.path).slice(0, 5),
-  });
+  // SECURITY: Don't expose debug information in production
+  res.status(404).json({ detail: 'Item icon not found' });
 });
 
 // GET /api/assets/player-avatar - Get a player avatar/face texture
 // Searches for player character textures in the assets
-router.get('/player-avatar', (req: Request, res: Response) => {
+// NOTE: Public endpoint with rate limiting - required for <img> tags
+router.get('/player-avatar', publicAssetLimiter, (req: Request, res: Response) => {
   // Try specific paths first (common Hytale asset locations)
   const specificPaths = [
     // UI portraits/avatars

@@ -45,10 +45,8 @@ const categories: Category[] = [
       { command: '/give', description: 'help.commands.give', usage: '/give <player> <item> [amount]', permission: 'hytale.command.give' },
       { command: '/inventory clear', description: 'help.commands.inventoryClear', usage: '/inventory clear <player>', permission: 'hytale.command.inventory' },
       { command: '/inventory open', description: 'help.commands.inventoryOpen', usage: '/inventory open <player>', permission: 'hytale.command.inventory' },
-      { command: '/gamemode survival', description: 'help.commands.gamemodeSurvival', usage: '/gamemode survival [player]', permission: 'hytale.command.gamemode' },
       { command: '/gamemode creative', description: 'help.commands.gamemodeCreative', usage: '/gamemode creative [player]', permission: 'hytale.command.gamemode' },
       { command: '/gamemode adventure', description: 'help.commands.gamemodeAdventure', usage: '/gamemode adventure [player]', permission: 'hytale.command.gamemode' },
-      { command: '/gamemode spectator', description: 'help.commands.gamemodeSpectator', usage: '/gamemode spectator [player]', permission: 'hytale.command.gamemode' },
     ]
   },
   {

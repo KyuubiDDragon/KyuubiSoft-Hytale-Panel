@@ -283,8 +283,8 @@ function isActive(path: string): boolean {
       </div>
       <!-- Credits -->
       <div class="text-center">
-        <p class="text-xs text-gray-500">by <a href="https://github.com/KyuubiDDragon" target="_blank" class="text-hytale-orange hover:underline font-medium">KyuubiSoft</a></p>
-        <p class="text-xs text-gray-600 mt-1">v1.7.0</p>
+        <p class="text-xs text-gray-500">by <a href="https://github.com/KyuubiDDragon" target="_blank" rel="noopener noreferrer" class="text-hytale-orange hover:underline font-medium">KyuubiSoft</a></p>
+        <p class="text-xs text-gray-600 mt-1">v2.0.0</p>
       </div>
     </div>
   </aside>

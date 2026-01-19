@@ -67,9 +67,11 @@ async function readUsers(): Promise<UsersData> {
     return data;
   } catch {
     // If file doesn't exist, create default admin user from env
+    // SECURITY: Use async bcrypt to prevent blocking the event loop
+    const passwordHash = await bcrypt.hash(config.managerPassword, 12);
     const defaultAdmin: User = {
       username: config.managerUsername,
-      passwordHash: bcrypt.hashSync(config.managerPassword, 12),
+      passwordHash,
       roleId: 'admin',
       createdAt: new Date().toISOString(),
       tokenVersion: 1,
@@ -99,12 +101,14 @@ export async function getUser(username: string): Promise<User | null> {
 }
 
 // Verify user credentials
+// SECURITY: Use async bcrypt to prevent blocking the event loop
 export async function verifyUserCredentials(username: string, password: string): Promise<User | null> {
   const user = await getUser(username);
   if (!user) {
     return null;
   }
-  if (!bcrypt.compareSync(password, user.passwordHash)) {
+  const isValid = await bcrypt.compare(password, user.passwordHash);
+  if (!isValid) {
     return null;
   }
   return user;
@@ -129,13 +133,16 @@ export async function createUser(
   }
 
   // Validate password length
-  if (password.length < 6) {
-    throw new Error('Password must be at least 6 characters');
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters');
   }
+
+  // SECURITY: Use async bcrypt to prevent blocking the event loop
+  const passwordHash = await bcrypt.hash(password, 12);
 
   const newUser: User = {
     username,
-    passwordHash: bcrypt.hashSync(password, 12),
+    passwordHash,
     roleId,
     createdAt: new Date().toISOString(),
     tokenVersion: 1,
@@ -144,7 +151,7 @@ export async function createUser(
   data.users.push(newUser);
   await writeUsers(data);
 
-  const { passwordHash, ...userWithoutPassword } = newUser;
+  const { passwordHash: _, ...userWithoutPassword } = newUser;
   return userWithoutPassword;
 }
 
@@ -163,10 +170,11 @@ export async function updateUser(
   let shouldInvalidateTokens = false;
 
   if (updates.password) {
-    if (updates.password.length < 6) {
-      throw new Error('Password must be at least 6 characters');
+    if (updates.password.length < 8) {
+      throw new Error('Password must be at least 8 characters');
     }
-    data.users[userIndex].passwordHash = bcrypt.hashSync(updates.password, 12);
+    // SECURITY: Use async bcrypt to prevent blocking the event loop
+    data.users[userIndex].passwordHash = await bcrypt.hash(updates.password, 12);
     shouldInvalidateTokens = true;
   }
 

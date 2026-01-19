@@ -34,7 +34,7 @@ const originalQuickSettings = ref<QuickSettings | null>(null)
 const quickSettingsLoading = ref(false)
 const quickSettingsSaving = ref(false)
 
-const gameModes = ['Adventure', 'Survival', 'Creative', 'Spectator']
+const gameModes = ['Adventure', 'Creative']
 
 async function loadQuickSettings() {
   try {

@@ -19,8 +19,8 @@ const PATTERNS = {
   coordinate: /^~?-?\d*\.?\d*$/,
   // Effect names
   effectName: /^[a-z][a-z0-9_]*:?[a-z0-9_]*$/,
-  // Gamemode
-  gamemode: /^(survival|creative|adventure|spectator|0|1|2|3)$/i,
+  // Gamemode (Hytale only supports creative and adventure)
+  gamemode: /^(creative|adventure|c|a)$/i,
   // Backup names: alphanumeric, underscore, hyphen
   backupName: /^[a-zA-Z0-9_-]{1,64}$/,
   // File names (safe)
@@ -172,6 +172,82 @@ export function isCommandSafe(command: string): boolean {
 }
 
 /**
+ * SECURITY: Whitelist of allowed game server commands
+ * Only these commands can be executed via the console
+ */
+const ALLOWED_COMMAND_PREFIXES = [
+  // Player management
+  '/kick', '/ban', '/unban', '/pardon', '/mute', '/unmute',
+  // Communication
+  '/say', '/tell', '/msg', '/whisper', '/me', '/broadcast',
+  // Game management
+  '/stop', '/save', '/save-all', '/save-on', '/save-off',
+  '/time', '/weather', '/difficulty', '/gamemode', '/gamerule',
+  // Player interaction
+  '/tp', '/teleport', '/give', '/clear', '/effect', '/heal',
+  '/kill', '/spawn', '/setspawn', '/home', '/warp',
+  // World management
+  '/seed', '/worldborder',
+  // Server info
+  '/list', '/players', '/help', '/version', '/tps', '/status',
+  // Whitelist
+  '/whitelist',
+  // Op management (admin only)
+  '/op', '/deop',
+];
+
+/**
+ * SECURITY: Validate command against whitelist
+ * Returns true only if the command starts with an allowed prefix
+ */
+export function isCommandAllowed(command: string): boolean {
+  if (typeof command !== 'string') return false;
+
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+
+  // Command must start with /
+  if (!trimmed.startsWith('/')) return false;
+
+  // Extract command name (first word)
+  const cmdName = trimmed.split(/\s+/)[0].toLowerCase();
+
+  // Check against whitelist
+  return ALLOWED_COMMAND_PREFIXES.some(prefix =>
+    cmdName === prefix.toLowerCase() || cmdName.startsWith(prefix.toLowerCase() + ':')
+  );
+}
+
+/**
+ * SECURITY: Full command validation
+ * Combines whitelist check with injection pattern check
+ */
+export function validateCommand(command: string): { valid: boolean; error?: string } {
+  if (typeof command !== 'string' || !command.trim()) {
+    return { valid: false, error: 'Command is required' };
+  }
+
+  const trimmed = command.trim();
+
+  // Must start with /
+  if (!trimmed.startsWith('/')) {
+    return { valid: false, error: 'Command must start with /' };
+  }
+
+  // Check against command whitelist
+  if (!isCommandAllowed(trimmed)) {
+    return { valid: false, error: 'Command not allowed. Use /help for available commands.' };
+  }
+
+  // Check for injection patterns
+  if (!isCommandSafe(trimmed)) {
+    return { valid: false, error: 'Command contains invalid characters' };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Build a safe command string from validated parts
  */
 export function buildSafeCommand(command: string, args: Record<string, string | number>): string | null {
@@ -213,5 +289,7 @@ export default {
   isValidUUID,
   sanitizeMessage,
   isCommandSafe,
+  isCommandAllowed,
+  validateCommand,
   buildSafeCommand,
 };

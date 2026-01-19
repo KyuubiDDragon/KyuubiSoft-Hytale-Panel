@@ -22,7 +22,13 @@
     "clear": "Clear",
     "previous": "Previous",
     "next": "Next",
-    "noPermission": "You don't have permission to perform this action"
+    "noPermission": "You don't have permission to perform this action",
+    "dismiss": "Dismiss"
+  },
+  "health": {
+    "permissionIssue": "File Permission Issue Detected",
+    "permissionIssueDesc": "The manager cannot write to some data directories. This typically happens after upgrading to v2.0.0, which runs as a non-root user (UID 1001) for security.",
+    "fixCommand": "Run this command on your host to fix permissions"
   },
   "auth": {
     "login": "Login",
@@ -197,10 +203,10 @@
     "heal": "Heal",
     "gamemode": "Gamemode",
     "gamemodes": {
-      "survival": "Survival",
       "creative": "Creative",
+      "creativeDesc": "Build freely, fly, unlimited resources",
       "adventure": "Adventure",
-      "spectator": "Spectator"
+      "adventureDesc": "Explore and interact, can't break blocks"
     },
     "give": "Give Item",
     "itemId": "Item ID",

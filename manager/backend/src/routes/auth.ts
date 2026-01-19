@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
-import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken } from '../services/auth.js';
+import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken, createWsTicket } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
-import { getAllUsers, createUser, updateUser, deleteUser, getUser } from '../services/users.js';
-import { getUserPermissions } from '../services/roles.js';
+import { getAllUsers, createUser, updateUser, deleteUser, getUser, invalidateUserTokens } from '../services/users.js';
+import { getUserPermissions, hasPermission } from '../services/roles.js';
 import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 
@@ -84,8 +84,38 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/logout
-router.post('/logout', authMiddleware, (_req: Request, res: Response) => {
+// SECURITY: Invalidate tokens on logout to prevent token reuse
+router.post('/logout', authMiddleware, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.user) {
+    await invalidateUserTokens(authReq.user);
+  }
   res.json({ message: 'Logged out successfully' });
+});
+
+// POST /api/auth/ws-ticket - Get a single-use WebSocket connection ticket
+// This creates a short-lived (30s) token that can only be used once
+// This is more secure than putting the JWT in the WebSocket URL
+const wsTicketLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 tickets per minute
+  message: { detail: 'Too many WebSocket ticket requests' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post('/ws-ticket', authMiddleware, wsTicketLimiter, async (req: AuthenticatedRequest, res: Response) => {
+  const username = req.user!;
+
+  // Verify user has console.view permission before issuing ticket
+  const canViewConsole = await hasPermission(username, 'console.view');
+  if (!canViewConsole) {
+    res.status(403).json({ error: 'Permission denied: console.view required' });
+    return;
+  }
+
+  const ticket = createWsTicket(username);
+  res.json({ ticket, expiresIn: 30 }); // 30 seconds TTL
 });
 
 // GET /api/auth/me

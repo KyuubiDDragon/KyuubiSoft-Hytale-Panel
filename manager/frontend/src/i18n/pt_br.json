@@ -22,7 +22,13 @@
     "clear": "Limpar",
     "previous": "Anterior",
     "next": "Próximo",
-    "noPermission": "Você não tem permissão para realizar esta ação"
+    "noPermission": "Você não tem permissão para realizar esta ação",
+    "dismiss": "Dispensar"
+  },
+  "health": {
+    "permissionIssue": "Problema de Permissão de Arquivo Detectado",
+    "permissionIssueDesc": "O gerenciador não consegue escrever em alguns diretórios de dados. Isso geralmente acontece após atualizar para v2.0.0, que roda como usuário não-root (UID 1001) por segurança.",
+    "fixCommand": "Execute este comando no host para corrigir as permissões"
   },
   "auth": {
     "login": "Entrar",
@@ -210,10 +216,10 @@
     "heal": "Curar",
     "gamemode": "Modo de Jogo",
     "gamemodes": {
-      "survival": "Sobrevivência",
       "creative": "Criativo",
+      "creativeDesc": "Construa livremente, voe, recursos ilimitados",
       "adventure": "Aventura",
-      "spectator": "Espectador"
+      "adventureDesc": "Explore e interaja, não pode quebrar blocos"
     },
     "give": "Dar Item",
     "itemId": "ID do Item",
@@ -944,10 +950,8 @@
       "give": "Dar itens a um jogador",
       "inventoryClear": "Limpar inventário de um jogador",
       "inventoryOpen": "Abrir gerenciamento de inventário para um jogador",
-      "gamemodeSurvival": "Definir modo sobrevivência",
       "gamemodeCreative": "Definir modo criativo",
       "gamemodeAdventure": "Definir modo aventura",
-      "gamemodeSpectator": "Definir modo espectador",
       "stop": "Parar o servidor",
       "restart": "Reiniciar o servidor",
       "save": "Forçar salvamento de todos os mundos",

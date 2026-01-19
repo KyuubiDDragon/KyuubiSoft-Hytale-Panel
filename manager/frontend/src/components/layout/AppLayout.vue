@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
+import PermissionBanner from './PermissionBanner.vue'
 </script>
 
 <template>
@@ -10,6 +11,9 @@ import Header from './Header.vue'
 
     <!-- Main Content -->
     <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Permission Warning Banner (only shows if there are issues) -->
+      <PermissionBanner />
+
       <!-- Header -->
       <Header />
 

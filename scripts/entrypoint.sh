@@ -29,7 +29,11 @@ echo ""
 # Fix permissions
 # ============================================================
 echo "[INFO] Setting up directories..."
+# Set umask 002 so all new files are group-writable (for manager container access)
+umask 002
 chown -R hytale:hytale /opt/hytale
+# Make existing files group-writable for manager container
+chmod -R g+rw /opt/hytale 2>/dev/null || true
 
 # ============================================================
 # Setup persistent machine-id for encrypted auth
@@ -387,6 +391,7 @@ else
 fi
 
 chown -R hytale:hytale /opt/hytale
+chmod -R g+rw /opt/hytale 2>/dev/null || true
 
 # ============================================================
 # Start server

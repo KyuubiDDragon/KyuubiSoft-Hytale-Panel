@@ -43,8 +43,9 @@ services:
       - SERVER_BIND=${SERVER_BIND:-0.0.0.0}
       - TZ=${TZ:-Europe/Berlin}
       
-      # Backups
-      - ENABLE_BACKUP=${ENABLE_BACKUP:-true}
+      # Backups (built-in backup disabled by default - creates empty files)
+      # Use manager scheduler backups instead
+      - ENABLE_BACKUP=${ENABLE_BACKUP:-false}
       - BACKUP_FREQUENCY=${BACKUP_FREQUENCY:-30}
       
       # Auth
@@ -107,6 +108,20 @@ services:
           cpus: '1'
           memory: ${JAVA_MAX_RAM:-4G}
 
+    # SECURITY: Prevent privilege escalation
+    security_opt:
+      - no-new-privileges:true
+
+    # SECURITY: Drop unnecessary capabilities
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN            # Required for changing file ownership
+      - SETUID           # Required for switching to hytale user
+      - SETGID           # Required for switching to hytale group
+      - DAC_OVERRIDE     # Required for chmod on bind-mounted volumes
+      - NET_BIND_SERVICE # Allow binding to privileged ports if needed
+
   # ============================================================
   # Hytale Server Manager - Web UI
   # ============================================================
@@ -117,10 +132,18 @@ services:
     restart: unless-stopped
 
     environment:
-      # Authentication
-      - MANAGER_USERNAME=${MANAGER_USERNAME:-admin}
-      - MANAGER_PASSWORD=${MANAGER_PASSWORD:-changeme}
-      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-key}
+      # Authentication (REQUIRED - no defaults for security)
+      # SECURITY: These MUST be set in your .env file or Portainer environment
+      # The manager will fail to start in strict mode without proper credentials
+      - MANAGER_USERNAME=${MANAGER_USERNAME:-}
+      - MANAGER_PASSWORD=${MANAGER_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:-}
+      # CORS Origins (REQUIRED for security)
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      # Security mode: 'strict' (default) or 'warn'
+      - SECURITY_MODE=${SECURITY_MODE:-strict}
+      # Trust proxy for X-Forwarded-* headers (set to true if behind reverse proxy)
+      - TRUST_PROXY=${TRUST_PROXY:-false}
 
       # Target container
       - GAME_CONTAINER_NAME=${STACK_NAME:-hytale}
@@ -139,6 +162,9 @@ services:
 
       # StackMart API (optional)
       - STACKMART_API_KEY=${STACKMART_API_KEY:-}
+
+      # Host data path (for error messages)
+      - HOST_DATA_PATH=${HOST_DATA_PATH:-/opt/hytale}
 
     ports:
       - "${MANAGER_PORT:-18080}:18080"
@@ -184,6 +210,20 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+
+    # SECURITY: Prevent privilege escalation
+    security_opt:
+      - no-new-privileges:true
+
+    # SECURITY: Drop all capabilities, add only what's needed
+    # The manager only needs network access and Docker socket
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN            # Required for fixing permissions on mounted volumes
+      - SETUID           # Required for switching to manager user
+      - SETGID           # Required for switching to manager group
+      - DAC_OVERRIDE     # Required for chmod on bind-mounted volumes (files owned by other UIDs)
 
 # ============================================================
 # Networks

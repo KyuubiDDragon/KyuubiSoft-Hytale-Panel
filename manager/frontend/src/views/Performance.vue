@@ -114,30 +114,30 @@ const hasValidJvmHeap = computed(() =>
   heapMax.value > 0
 )
 
-// Generate SVG path for a graph
-function generatePath(data: number[], maxValue: number, width: number, height: number): string {
+// Generate SVG path for a graph using percentage-based coordinates (0-100)
+function generatePath(data: number[], maxValue: number): string {
   if (data.length < 2) return ''
 
   const points = data.map((value, index) => {
-    const x = (index / (data.length - 1)) * width
-    const y = height - (value / Math.max(maxValue, 1)) * height
+    const x = (index / (data.length - 1)) * 100
+    const y = 100 - (value / Math.max(maxValue, 1)) * 100
     return `${x},${y}`
   })
 
   return `M ${points.join(' L ')}`
 }
 
-// Generate area path for filled graph
-function generateAreaPath(data: number[], maxValue: number, width: number, height: number): string {
+// Generate area path for filled graph using percentage-based coordinates (0-100)
+function generateAreaPath(data: number[], maxValue: number): string {
   if (data.length < 2) return ''
 
   const points = data.map((value, index) => {
-    const x = (index / (data.length - 1)) * width
-    const y = height - (value / Math.max(maxValue, 1)) * height
+    const x = (index / (data.length - 1)) * 100
+    const y = 100 - (value / Math.max(maxValue, 1)) * 100
     return `${x},${y}`
   })
 
-  return `M 0,${height} L ${points.join(' L ')} L ${width},${height} Z`
+  return `M 0,100 L ${points.join(' L ')} L 100,100 Z`
 }
 
 onMounted(async () => {
@@ -202,8 +202,8 @@ onUnmounted(() => {
               {{ hasValidJvmHeap ? 'JVM Heap' : t('performance.memory') }}
             </p>
             <template v-if="hasValidJvmHeap">
-              <p class="text-2xl font-bold text-white">{{ (heapUsed / 1024 / 1024).toFixed(0) }} MB</p>
-              <p class="text-xs text-gray-500">/ {{ (heapMax / 1024 / 1024).toFixed(0) }} MB ({{ heapPercent?.toFixed(0) }}%)</p>
+              <p class="text-2xl font-bold text-white">{{ heapUsed?.toFixed(0) }} MB</p>
+              <p class="text-xs text-gray-500">/ {{ heapMax?.toFixed(0) }} MB ({{ heapPercent?.toFixed(0) }}%)</p>
             </template>
             <template v-else>
               <p class="text-2xl font-bold text-white">{{ (stats?.memory_mb || 0).toFixed(0) }} MB</p>
@@ -295,25 +295,25 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="relative h-64 bg-dark-100 rounded-lg overflow-hidden">
-          <svg class="w-full h-full" preserveAspectRatio="none">
+          <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             <!-- Grid lines -->
-            <line x1="0" y1="25%" x2="100%" y2="25%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
-            <line x1="0" y1="75%" x2="100%" y2="75%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
+            <line x1="0" y1="25" x2="100" y2="25" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
+            <line x1="0" y1="50" x2="100" y2="50" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
+            <line x1="0" y1="75" x2="100" y2="75" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
 
             <!-- Area -->
             <path
-              :d="generateAreaPath(cpuData, 100, 400, 256)"
+              :d="generateAreaPath(cpuData, 100)"
               fill="url(#cpuGradient)"
               class="transition-all duration-300"
             />
 
             <!-- Line -->
             <path
-              :d="generatePath(cpuData, 100, 400, 256)"
+              :d="generatePath(cpuData, 100)"
               fill="none"
               stroke="#3b82f6"
-              stroke-width="2"
+              stroke-width="0.5"
               class="transition-all duration-300"
             />
 
@@ -347,25 +347,25 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="relative h-64 bg-dark-100 rounded-lg overflow-hidden">
-          <svg class="w-full h-full" preserveAspectRatio="none">
+          <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             <!-- Grid lines -->
-            <line x1="0" y1="25%" x2="100%" y2="25%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
-            <line x1="0" y1="75%" x2="100%" y2="75%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
+            <line x1="0" y1="25" x2="100" y2="25" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
+            <line x1="0" y1="50" x2="100" y2="50" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
+            <line x1="0" y1="75" x2="100" y2="75" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
 
             <!-- Area -->
             <path
-              :d="generateAreaPath(memoryData, 100, 400, 256)"
+              :d="generateAreaPath(memoryData, 100)"
               fill="url(#memoryGradient)"
               class="transition-all duration-300"
             />
 
             <!-- Line -->
             <path
-              :d="generatePath(memoryData, 100, 400, 256)"
+              :d="generatePath(memoryData, 100)"
               fill="none"
               stroke="#a855f7"
-              stroke-width="2"
+              stroke-width="0.5"
               class="transition-all duration-300"
             />
 
@@ -399,23 +399,23 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="relative h-48 bg-dark-100 rounded-lg overflow-hidden">
-          <svg class="w-full h-full" preserveAspectRatio="none">
+          <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             <!-- Grid lines -->
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
+            <line x1="0" y1="50" x2="100" y2="50" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
 
             <!-- Area -->
             <path
-              :d="generateAreaPath(playersData, maxPlayers + 1, 800, 192)"
+              :d="generateAreaPath(playersData, maxPlayers + 1)"
               fill="url(#playersGradient)"
               class="transition-all duration-300"
             />
 
             <!-- Line -->
             <path
-              :d="generatePath(playersData, maxPlayers + 1, 800, 192)"
+              :d="generatePath(playersData, maxPlayers + 1)"
               fill="none"
               stroke="#f97316"
-              stroke-width="2"
+              stroke-width="0.5"
               class="transition-all duration-300"
             />
 
@@ -446,25 +446,25 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="relative h-48 bg-dark-100 rounded-lg overflow-hidden">
-          <svg class="w-full h-full" preserveAspectRatio="none">
+          <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             <!-- Grid lines for TPS (20 = max, 15 = warning threshold) -->
-            <line x1="0" y1="25%" x2="100%" y2="25%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
-            <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#374151" stroke-width="1" stroke-dasharray="4" />
-            <line x1="0" y1="75%" x2="100%" y2="75%" stroke="#ef4444" stroke-width="1" stroke-dasharray="4" opacity="0.3" />
+            <line x1="0" y1="25" x2="100" y2="25" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
+            <line x1="0" y1="50" x2="100" y2="50" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
+            <line x1="0" y1="75" x2="100" y2="75" stroke="#ef4444" stroke-width="0.5" stroke-dasharray="2" opacity="0.3" />
 
             <!-- Area -->
             <path
-              :d="generateAreaPath(tpsData, 20, 800, 192)"
+              :d="generateAreaPath(tpsData, 20)"
               fill="url(#tpsGradient)"
               class="transition-all duration-300"
             />
 
             <!-- Line -->
             <path
-              :d="generatePath(tpsData, 20, 800, 192)"
+              :d="generatePath(tpsData, 20)"
               fill="none"
               stroke="#22c55e"
-              stroke-width="2"
+              stroke-width="0.5"
               class="transition-all duration-300"
             />
 

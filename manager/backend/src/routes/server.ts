@@ -436,7 +436,15 @@ router.put('/allow-op', authMiddleware, requirePermission('config.edit'), async 
 });
 
 // Helper to get latest version for a patchline
+// SECURITY: Defense-in-depth validation - even though callers use hardcoded values
+const VALID_PATCHLINES = ['release', 'pre-release'] as const;
 async function getLatestVersion(patchline: string): Promise<string> {
+  // SECURITY: Validate patchline to prevent command injection
+  if (!VALID_PATCHLINES.includes(patchline as typeof VALID_PATCHLINES[number])) {
+    console.error(`Invalid patchline attempted: ${patchline}`);
+    return 'unknown';
+  }
+
   const checkResult = await dockerService.execInContainer(
     `cd /opt/hytale/downloader && ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1`
   );

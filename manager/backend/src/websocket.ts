@@ -1,6 +1,6 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
-import { verifyToken } from './services/auth.js';
+import { verifyToken, verifyWsTicket } from './services/auth.js';
 import { getDockerInstance, getContainerName, execCommand, getLogs } from './services/docker.js';
 import { parseLogLine } from './services/logs.js';
 import { processLogLine } from './services/players.js';
@@ -37,22 +37,35 @@ async function sendExistingLogs(ws: WebSocket): Promise<void> {
 
 export function setupWebSocket(wss: WebSocketServer): void {
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
-    // Extract token from query string
+    // Extract ticket from query string (preferred) or fall back to token (deprecated)
     const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const ticket = url.searchParams.get('ticket');
     const token = url.searchParams.get('token');
 
-    if (!token) {
-      ws.close(4001, 'Token required');
+    let username: string;
+
+    if (ticket) {
+      // Preferred: Use single-use ticket (more secure)
+      const ticketResult = verifyWsTicket(ticket);
+      if (!ticketResult.valid || !ticketResult.username) {
+        ws.close(4001, 'Invalid or expired ticket');
+        return;
+      }
+      username = ticketResult.username;
+    } else if (token) {
+      // Deprecated: Fall back to JWT token for backwards compatibility
+      // Log deprecation warning
+      console.warn('WebSocket: Client using deprecated token auth. Should use /api/auth/ws-ticket instead.');
+      const tokenResult = verifyToken(token, 'access');
+      if (!tokenResult) {
+        ws.close(4001, 'Invalid token');
+        return;
+      }
+      username = tokenResult.username;
+    } else {
+      ws.close(4001, 'Authentication required (ticket or token)');
       return;
     }
-
-    const tokenResult = verifyToken(token, 'access');
-    if (!tokenResult) {
-      ws.close(4001, 'Invalid token');
-      return;
-    }
-
-    const username = tokenResult.username;
 
     // Check if user has permission to view console logs
     const canViewLogs = await hasPermission(username, 'console.view');

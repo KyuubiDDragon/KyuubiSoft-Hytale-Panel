@@ -209,6 +209,12 @@ export interface PlayerEntry {
 // In-memory player list
 let players: Map<string, PlayerEntry> = new Map();
 let playersLoaded = false;
+let playersLoadPromise: Promise<void> | null = null; // SECURITY: Prevent race condition during load
+
+// SECURITY: Debounced save to prevent race conditions and excessive disk I/O
+let saveTimeout: NodeJS.Timeout | null = null;
+let savePromise: Promise<void> | null = null;
+const SAVE_DEBOUNCE_MS = 1000; // Wait 1 second before saving to batch changes
 
 // Blacklist of names that should never be considered players
 const PLAYER_NAME_BLACKLIST = new Set([
@@ -238,28 +244,75 @@ async function getPlayersPath(): Promise<string> {
   return path.join(config.serverPath, 'players.json');
 }
 
-// Load players from file
+// Load players from file (with race condition protection)
 async function loadPlayers(): Promise<void> {
+  // SECURITY: If already loaded, return immediately
   if (playersLoaded) return;
-  try {
-    const content = await readFile(await getPlayersPath(), 'utf-8');
-    const data: PlayerEntry[] = JSON.parse(content);
-    if (Array.isArray(data)) {
-      for (const entry of data) {
-        if (isValidPlayerName(entry.name)) {
-          players.set(entry.name, entry);
-        }
-      }
-      console.log(`[Players] Loaded ${players.size} players from players.json`);
-    }
-  } catch {
-    console.log('[Players] No players.json found, starting fresh');
+
+  // SECURITY: If currently loading, wait for existing load to complete
+  // This prevents multiple concurrent loads from corrupting state
+  if (playersLoadPromise) {
+    return playersLoadPromise;
   }
-  playersLoaded = true;
+
+  // Start the load and store the promise so concurrent calls can wait
+  playersLoadPromise = (async () => {
+    try {
+      const content = await readFile(await getPlayersPath(), 'utf-8');
+      const data: PlayerEntry[] = JSON.parse(content);
+      if (Array.isArray(data)) {
+        for (const entry of data) {
+          if (isValidPlayerName(entry.name)) {
+            players.set(entry.name, entry);
+          }
+        }
+        console.log(`[Players] Loaded ${players.size} players from players.json`);
+      }
+    } catch {
+      console.log('[Players] No players.json found, starting fresh');
+    }
+    playersLoaded = true;
+  })();
+
+  return playersLoadPromise;
 }
 
-// Save players to file
+// SECURITY: Debounced save - prevents race conditions and excessive disk I/O
+// Multiple rapid changes will be batched into a single write
+function debouncedSavePlayers(): void {
+  // Clear existing timeout to reset the debounce
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+
+  saveTimeout = setTimeout(() => {
+    saveTimeout = null;
+    // Perform the actual save
+    savePromise = (async () => {
+      try {
+        const data = Array.from(players.values());
+        await writeFile(await getPlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
+      } catch (err) {
+        console.error('[Players] Failed to save players:', err);
+      } finally {
+        savePromise = null;
+      }
+    })();
+  }, SAVE_DEBOUNCE_MS);
+}
+
+// Save players to file (deprecated - use debouncedSavePlayers for normal operations)
+// This is kept for explicit immediate saves (e.g., on shutdown)
 async function savePlayers(): Promise<void> {
+  // If there's a pending debounced save, cancel it and save immediately
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+    saveTimeout = null;
+  }
+  // Wait for any in-progress save to complete
+  if (savePromise) {
+    await savePromise;
+  }
   const data = Array.from(players.values());
   await writeFile(await getPlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
 }
@@ -378,7 +431,8 @@ function setPlayerOnline(name: string, extraInfo: { uuid?: string; ip?: string; 
     });
   }
 
-  savePlayers().catch(err => console.error('Failed to save players:', err));
+  // SECURITY: Use debounced save to prevent race conditions
+  debouncedSavePlayers();
 }
 
 // Set player offline
@@ -398,7 +452,8 @@ function setPlayerOffline(name: string): void {
     player.currentSessionStart = undefined;
   }
 
-  savePlayers().catch(err => console.error('Failed to save players:', err));
+  // SECURITY: Use debounced save to prevent race conditions
+  debouncedSavePlayers();
 }
 
 function formatDuration(ms: number): string {
@@ -528,8 +583,17 @@ export function clearOnlinePlayers(): void {
 }
 
 // Process log line in real-time
+// SECURITY: This function is synchronous for WebSocket performance
+// It relies on loadPlayers() being called during initialization
 export function processLogLine(line: string): { event: 'join' | 'leave'; player: string } | null {
-  loadPlayers().catch(() => {});
+  // SECURITY: Ensure players are loaded before processing
+  // This is a synchronous check - if not loaded yet, skip processing
+  // The initialization should have loaded players already
+  if (!playersLoaded) {
+    // Trigger async load but don't block - the next log line will be processed correctly
+    loadPlayers().catch(() => {});
+    return null;
+  }
 
   // Check for join
   for (const pattern of JOIN_PATTERNS) {

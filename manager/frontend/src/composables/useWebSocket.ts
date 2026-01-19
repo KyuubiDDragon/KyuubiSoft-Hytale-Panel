@@ -2,6 +2,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConsoleStore } from '@/stores/console'
 import { consoleApi } from '@/api/console'
+import { authApi } from '@/api/auth'
 
 export function useWebSocket() {
   const authStore = useAuthStore()
@@ -14,7 +15,7 @@ export function useWebSocket() {
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   let isManualDisconnect = false
 
-  function connect() {
+  async function connect() {
     // Clear any pending reconnect
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout)
@@ -34,9 +35,27 @@ export function useWebSocket() {
 
     isManualDisconnect = false
 
+    // Get a single-use ticket for WebSocket authentication
+    // This is more secure than putting the JWT in the URL
+    let ticket: string
+    try {
+      const ticketResponse = await authApi.getWsTicket()
+      ticket = ticketResponse.ticket
+    } catch (error) {
+      console.error('Failed to get WebSocket ticket:', error)
+      // Schedule reconnect attempt
+      if (reconnectAttempts.value < maxReconnectAttempts) {
+        reconnectAttempts.value++
+        const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts.value - 1)
+        console.log(`Will retry in ${delay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`)
+        reconnectTimeout = setTimeout(connect, delay)
+      }
+      return
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
-    const url = `${protocol}//${host}/api/console/ws?token=${authStore.accessToken}`
+    const url = `${protocol}//${host}/api/console/ws?ticket=${ticket}`
 
     ws.value = new WebSocket(url)
 
@@ -162,10 +181,10 @@ export function useWebSocket() {
     }
   }
 
-  function reconnect() {
+  async function reconnect() {
     console.log('Manual reconnect requested')
     reconnectAttempts.value = 0
-    connect()
+    await connect()
   }
 
   const isLoadingLogs = ref(false)
