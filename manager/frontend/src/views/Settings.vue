@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { setLocale, getLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
-import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse } from '@/api/server'
+import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse } from '@/api/server'
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
 
 const { t } = useI18n()
@@ -41,6 +41,20 @@ const acceptEarlyPluginsLoading = ref(false)
 const acceptEarlyPluginsError = ref<string | null>(null)
 const acceptEarlyPluginsSuccess = ref<string | null>(null)
 const acceptEarlyPluginsNeedsRestart = ref(false)
+
+// Disable Sentry Settings
+const disableSentryData = ref<DisableSentryResponse | null>(null)
+const disableSentryLoading = ref(false)
+const disableSentryError = ref<string | null>(null)
+const disableSentrySuccess = ref<string | null>(null)
+const disableSentryNeedsRestart = ref(false)
+
+// Allow OP Settings
+const allowOpData = ref<AllowOpResponse | null>(null)
+const allowOpLoading = ref(false)
+const allowOpError = ref<string | null>(null)
+const allowOpSuccess = ref<string | null>(null)
+const allowOpNeedsRestart = ref(false)
 
 function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
@@ -205,6 +219,106 @@ async function restartForAcceptEarlyPlugins() {
   }
 }
 
+// Disable Sentry Functions
+async function loadDisableSentry() {
+  try {
+    disableSentryLoading.value = true
+    disableSentryError.value = null
+    const response = await serverApi.getDisableSentry()
+    disableSentryData.value = response
+  } catch (e) {
+    disableSentryError.value = 'Failed to load disable sentry setting'
+  } finally {
+    disableSentryLoading.value = false
+  }
+}
+
+async function setDisableSentry(enabled: boolean) {
+  try {
+    disableSentryLoading.value = true
+    disableSentryError.value = null
+    disableSentrySuccess.value = null
+
+    const response = await serverApi.setDisableSentry(enabled)
+
+    if (response.success) {
+      disableSentryData.value = { disableSentry: response.disableSentry }
+      disableSentrySuccess.value = response.message
+
+      if (response.changed) {
+        disableSentryNeedsRestart.value = true
+      }
+    }
+  } catch (e) {
+    disableSentryError.value = 'Failed to update disable sentry setting'
+  } finally {
+    disableSentryLoading.value = false
+  }
+}
+
+async function restartForDisableSentry() {
+  try {
+    disableSentryLoading.value = true
+    await serverApi.restart()
+    disableSentryNeedsRestart.value = false
+    disableSentrySuccess.value = t('settings.disableSentryRestarting')
+  } catch (e) {
+    disableSentryError.value = 'Failed to restart server'
+  } finally {
+    disableSentryLoading.value = false
+  }
+}
+
+// Allow OP Functions
+async function loadAllowOp() {
+  try {
+    allowOpLoading.value = true
+    allowOpError.value = null
+    const response = await serverApi.getAllowOp()
+    allowOpData.value = response
+  } catch (e) {
+    allowOpError.value = 'Failed to load allow op setting'
+  } finally {
+    allowOpLoading.value = false
+  }
+}
+
+async function setAllowOp(enabled: boolean) {
+  try {
+    allowOpLoading.value = true
+    allowOpError.value = null
+    allowOpSuccess.value = null
+
+    const response = await serverApi.setAllowOp(enabled)
+
+    if (response.success) {
+      allowOpData.value = { allowOp: response.allowOp }
+      allowOpSuccess.value = response.message
+
+      if (response.changed) {
+        allowOpNeedsRestart.value = true
+      }
+    }
+  } catch (e) {
+    allowOpError.value = 'Failed to update allow op setting'
+  } finally {
+    allowOpLoading.value = false
+  }
+}
+
+async function restartForAllowOp() {
+  try {
+    allowOpLoading.value = true
+    await serverApi.restart()
+    allowOpNeedsRestart.value = false
+    allowOpSuccess.value = t('settings.allowOpRestarting')
+  } catch (e) {
+    allowOpError.value = 'Failed to restart server'
+  } finally {
+    allowOpLoading.value = false
+  }
+}
+
 // Hytale Auth Functions
 async function loadHytaleAuthStatus() {
   try {
@@ -334,6 +448,8 @@ onMounted(() => {
     loadHytaleAuthStatus()
     loadPatchline()
     loadAcceptEarlyPlugins()
+    loadDisableSentry()
+    loadAllowOp()
   }
 })
 
@@ -723,6 +839,181 @@ onUnmounted(() => {
           {{ t('settings.acceptEarlyPluginsRestartNote') }}
         </p>
       </div>
+    </Card>
+
+    <!-- Disable Sentry Settings (admins and moderators only) -->
+    <Card v-if="authStore.canManageServer" :title="t('settings.disableSentryTitle')">
+      <p class="text-gray-400 text-sm mb-4">{{ t('settings.disableSentryDesc') }}</p>
+
+      <!-- Error/Success Messages -->
+      <div v-if="disableSentryError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
+        {{ disableSentryError }}
+      </div>
+      <div v-if="disableSentrySuccess" class="mb-4 p-3 bg-status-success/20 border border-status-success/30 rounded-lg text-status-success text-sm">
+        {{ disableSentrySuccess }}
+      </div>
+
+      <div class="space-y-4">
+        <!-- Current Setting -->
+        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+          <div class="flex items-center gap-3">
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                :checked="disableSentryData?.disableSentry ?? false"
+                :disabled="disableSentryLoading || !authStore.hasPermission('settings.edit')"
+                @change="setDisableSentry(($event.target as HTMLInputElement).checked)"
+                class="sr-only peer"
+              />
+              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
+            </label>
+            <div>
+              <p class="text-white font-medium">{{ t('settings.disableSentryLabel') }}</p>
+              <p class="text-sm text-gray-400">{{ t('settings.disableSentryHint') }}</p>
+            </div>
+          </div>
+          <div class="text-sm text-gray-400">
+            <span v-if="disableSentryLoading">{{ t('common.loading') }}...</span>
+            <span v-else-if="disableSentryData?.disableSentry" class="text-status-warning">{{ t('settings.disabled') }}</span>
+            <span v-else class="text-status-success">{{ t('settings.enabled') }}</span>
+          </div>
+        </div>
+
+        <!-- Restart Required Banner -->
+        <div v-if="disableSentryNeedsRestart" class="p-4 bg-status-warning/20 border border-status-warning/30 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-status-warning font-medium">{{ t('settings.disableSentryRestartRequired') }}</p>
+              <p class="text-sm text-gray-400 mt-1">{{ t('settings.disableSentryRestartRequiredDesc') }}</p>
+            </div>
+            <button
+              v-if="authStore.hasPermission('server.restart')"
+              @click="restartForDisableSentry"
+              :disabled="disableSentryLoading"
+              class="px-4 py-2 bg-status-warning text-dark-400 font-medium rounded-lg hover:bg-status-warning/90 transition-colors disabled:opacity-50"
+            >
+              {{ disableSentryLoading ? t('common.loading') : t('dashboard.restart') }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="!disableSentryNeedsRestart" class="text-xs text-gray-500">
+          {{ t('settings.disableSentryRestartNote') }}
+        </p>
+      </div>
+    </Card>
+
+    <!-- Allow OP Settings (admins and moderators only) -->
+    <Card v-if="authStore.canManageServer" :title="t('settings.allowOpTitle')">
+      <p class="text-gray-400 text-sm mb-4">{{ t('settings.allowOpDesc') }}</p>
+
+      <!-- Error/Success Messages -->
+      <div v-if="allowOpError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
+        {{ allowOpError }}
+      </div>
+      <div v-if="allowOpSuccess" class="mb-4 p-3 bg-status-success/20 border border-status-success/30 rounded-lg text-status-success text-sm">
+        {{ allowOpSuccess }}
+      </div>
+
+      <div class="space-y-4">
+        <!-- Current Setting -->
+        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+          <div class="flex items-center gap-3">
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                :checked="allowOpData?.allowOp ?? false"
+                :disabled="allowOpLoading || !authStore.hasPermission('settings.edit')"
+                @change="setAllowOp(($event.target as HTMLInputElement).checked)"
+                class="sr-only peer"
+              />
+              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
+            </label>
+            <div>
+              <p class="text-white font-medium">{{ t('settings.allowOpLabel') }}</p>
+              <p class="text-sm text-gray-400">{{ t('settings.allowOpHint') }}</p>
+            </div>
+          </div>
+          <div class="text-sm text-gray-400">
+            <span v-if="allowOpLoading">{{ t('common.loading') }}...</span>
+            <span v-else-if="allowOpData?.allowOp" class="text-status-success">{{ t('settings.enabled') }}</span>
+            <span v-else class="text-gray-500">{{ t('settings.disabled') }}</span>
+          </div>
+        </div>
+
+        <!-- Restart Required Banner -->
+        <div v-if="allowOpNeedsRestart" class="p-4 bg-status-warning/20 border border-status-warning/30 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-status-warning font-medium">{{ t('settings.allowOpRestartRequired') }}</p>
+              <p class="text-sm text-gray-400 mt-1">{{ t('settings.allowOpRestartRequiredDesc') }}</p>
+            </div>
+            <button
+              v-if="authStore.hasPermission('server.restart')"
+              @click="restartForAllowOp"
+              :disabled="allowOpLoading"
+              class="px-4 py-2 bg-status-warning text-dark-400 font-medium rounded-lg hover:bg-status-warning/90 transition-colors disabled:opacity-50"
+            >
+              {{ allowOpLoading ? t('common.loading') : t('dashboard.restart') }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="!allowOpNeedsRestart" class="text-xs text-gray-500">
+          {{ t('settings.allowOpRestartNote') }}
+        </p>
+      </div>
+    </Card>
+
+    <!-- Recommended Plugins Info -->
+    <Card v-if="authStore.canManageServer" :title="t('settings.recommendedPluginsTitle')">
+      <p class="text-gray-400 text-sm mb-4">{{ t('settings.recommendedPluginsDesc') }}</p>
+
+      <div class="space-y-3">
+        <div class="p-3 bg-dark-300 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-white font-medium">Nitrado:WebServer</p>
+              <p class="text-sm text-gray-400">{{ t('settings.pluginWebServerDesc') }}</p>
+            </div>
+            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+          </div>
+        </div>
+
+        <div class="p-3 bg-dark-300 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-white font-medium">Nitrado:Query</p>
+              <p class="text-sm text-gray-400">{{ t('settings.pluginQueryDesc') }}</p>
+            </div>
+            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+          </div>
+        </div>
+
+        <div class="p-3 bg-dark-300 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-white font-medium">Nitrado:PerformanceSaver</p>
+              <p class="text-sm text-gray-400">{{ t('settings.pluginPerformanceSaverDesc') }}</p>
+            </div>
+            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+          </div>
+        </div>
+
+        <div class="p-3 bg-dark-300 rounded-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-white font-medium">ApexHosting:PrometheusExporter</p>
+              <p class="text-sm text-gray-400">{{ t('settings.pluginPrometheusDesc') }}</p>
+            </div>
+            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Apex Hosting</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-xs text-gray-500 mt-4">
+        {{ t('settings.recommendedPluginsNote') }}
+      </p>
     </Card>
 
     <!-- Server Configuration (only for users with permission) -->

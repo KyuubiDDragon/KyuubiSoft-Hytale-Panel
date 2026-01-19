@@ -105,6 +105,28 @@ export interface AcceptEarlyPluginsUpdateResponse {
   message: string
 }
 
+export interface DisableSentryResponse {
+  disableSentry: boolean
+}
+
+export interface DisableSentryUpdateResponse {
+  success: boolean
+  disableSentry: boolean
+  changed?: boolean
+  message: string
+}
+
+export interface AllowOpResponse {
+  allowOp: boolean
+}
+
+export interface AllowOpUpdateResponse {
+  success: boolean
+  allowOp: boolean
+  changed?: boolean
+  message: string
+}
+
 // KyuubiSoft API Plugin interfaces
 export interface PluginStatus {
   installed: boolean
@@ -347,6 +369,26 @@ export const serverApi = {
 
   async setAcceptEarlyPlugins(acceptEarlyPlugins: boolean): Promise<AcceptEarlyPluginsUpdateResponse> {
     const response = await api.put<AcceptEarlyPluginsUpdateResponse>('/server/accept-early-plugins', { acceptEarlyPlugins })
+    return response.data
+  },
+
+  async getDisableSentry(): Promise<DisableSentryResponse> {
+    const response = await api.get<DisableSentryResponse>('/server/disable-sentry')
+    return response.data
+  },
+
+  async setDisableSentry(disableSentry: boolean): Promise<DisableSentryUpdateResponse> {
+    const response = await api.put<DisableSentryUpdateResponse>('/server/disable-sentry', { disableSentry })
+    return response.data
+  },
+
+  async getAllowOp(): Promise<AllowOpResponse> {
+    const response = await api.get<AllowOpResponse>('/server/allow-op')
+    return response.data
+  },
+
+  async setAllowOp(allowOp: boolean): Promise<AllowOpUpdateResponse> {
+    const response = await api.put<AllowOpUpdateResponse>('/server/allow-op', { allowOp })
     return response.data
   },
 

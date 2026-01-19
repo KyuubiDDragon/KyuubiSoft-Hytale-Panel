@@ -57,6 +57,47 @@ if [ -n "${AUTH_MODE}" ]; then
     SERVER_ARGS+=("--auth-mode" "${AUTH_MODE}")
 fi
 
+# Read panel config for additional settings
+PANEL_CONFIG="/opt/hytale/data/panel-config.json"
+
+# Function to read boolean value from panel config
+get_panel_config_bool() {
+    local key="$1"
+    local default="$2"
+    if [ -f "$PANEL_CONFIG" ]; then
+        value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[a-z]*" "$PANEL_CONFIG" 2>/dev/null | sed 's/.*:[[:space:]]*//')
+        if [ "$value" = "true" ]; then
+            echo "true"
+            return
+        elif [ "$value" = "false" ]; then
+            echo "false"
+            return
+        fi
+    fi
+    echo "$default"
+}
+
+# Add --accept-early-plugins if enabled in panel config
+ACCEPT_EARLY_PLUGINS=$(get_panel_config_bool "acceptEarlyPlugins" "false")
+if [ "$ACCEPT_EARLY_PLUGINS" = "true" ]; then
+    echo "[INFO] Accept Early Plugins enabled"
+    SERVER_ARGS+=("--accept-early-plugins")
+fi
+
+# Add --disable-sentry if enabled in panel config (useful for plugin development)
+DISABLE_SENTRY=$(get_panel_config_bool "disableSentry" "false")
+if [ "$DISABLE_SENTRY" = "true" ]; then
+    echo "[INFO] Sentry crash reporting disabled"
+    SERVER_ARGS+=("--disable-sentry")
+fi
+
+# Add --allow-op if enabled in panel config
+ALLOW_OP=$(get_panel_config_bool "allowOp" "false")
+if [ "$ALLOW_OP" = "true" ]; then
+    echo "[INFO] OP commands allowed"
+    SERVER_ARGS+=("--allow-op")
+fi
+
 echo "============================================================"
 echo "Starting with: java ${JAVA_ARGS[*]} -jar HytaleServer.jar ${SERVER_ARGS[*]}"
 echo "============================================================"

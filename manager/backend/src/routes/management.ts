@@ -1512,6 +1512,10 @@ interface WorldConfig {
   isSavingChunks?: boolean;
   saveNewChunks?: boolean;
   isUnloadingChunks?: boolean;
+  isCompassUpdating?: boolean;
+  gameplayConfig?: string;
+  deleteOnUniverseStart?: boolean;
+  deleteOnRemove?: boolean;
   daytimeDurationSecondsOverride?: number;
   nighttimeDurationSecondsOverride?: number;
   clientEffects?: {
@@ -1580,6 +1584,10 @@ router.get('/worlds/:worldName/config', authMiddleware, requirePermission('world
       isSavingChunks: worldConfig.IsSavingChunks ?? true,
       saveNewChunks: worldConfig.SaveNewChunks ?? true,
       isUnloadingChunks: worldConfig.IsUnloadingChunks ?? true,
+      isCompassUpdating: worldConfig.IsCompassUpdating ?? true,
+      gameplayConfig: worldConfig.GameplayConfig ?? 'Default',
+      deleteOnUniverseStart: worldConfig.DeleteOnUniverseStart ?? false,
+      deleteOnRemove: worldConfig.DeleteOnRemove ?? false,
       daytimeDurationSecondsOverride: worldConfig.DaytimeDurationSecondsOverride,
       nighttimeDurationSecondsOverride: worldConfig.NighttimeDurationSecondsOverride,
       clientEffects: worldConfig.ClientEffects ? {
@@ -1651,6 +1659,10 @@ router.put('/worlds/:worldName/config', authMiddleware, requirePermission('world
     if (updates.isSavingChunks !== undefined) worldConfig.IsSavingChunks = updates.isSavingChunks;
     if (updates.saveNewChunks !== undefined) worldConfig.SaveNewChunks = updates.saveNewChunks;
     if (updates.isUnloadingChunks !== undefined) worldConfig.IsUnloadingChunks = updates.isUnloadingChunks;
+    if (updates.isCompassUpdating !== undefined) worldConfig.IsCompassUpdating = updates.isCompassUpdating;
+    if (updates.gameplayConfig !== undefined) worldConfig.GameplayConfig = updates.gameplayConfig;
+    if (updates.deleteOnUniverseStart !== undefined) worldConfig.DeleteOnUniverseStart = updates.deleteOnUniverseStart;
+    if (updates.deleteOnRemove !== undefined) worldConfig.DeleteOnRemove = updates.deleteOnRemove;
 
     // Day/Night duration overrides
     if (updates.daytimeDurationSecondsOverride !== undefined) {
