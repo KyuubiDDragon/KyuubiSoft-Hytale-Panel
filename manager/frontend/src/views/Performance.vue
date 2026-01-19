@@ -202,8 +202,8 @@ onUnmounted(() => {
               {{ hasValidJvmHeap ? 'JVM Heap' : t('performance.memory') }}
             </p>
             <template v-if="hasValidJvmHeap">
-              <p class="text-2xl font-bold text-white">{{ (heapUsed / 1024 / 1024).toFixed(0) }} MB</p>
-              <p class="text-xs text-gray-500">/ {{ (heapMax / 1024 / 1024).toFixed(0) }} MB ({{ heapPercent?.toFixed(0) }}%)</p>
+              <p class="text-2xl font-bold text-white">{{ heapUsed?.toFixed(0) }} MB</p>
+              <p class="text-xs text-gray-500">/ {{ heapMax?.toFixed(0) }} MB ({{ heapPercent?.toFixed(0) }}%)</p>
             </template>
             <template v-else>
               <p class="text-2xl font-bold text-white">{{ (stats?.memory_mb || 0).toFixed(0) }} MB</p>
