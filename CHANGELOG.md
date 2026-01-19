@@ -2,6 +2,49 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [1.7.1] - 2026-01-19
+
+### Added
+
+- **Command Help Page**: Complete in-game /help GUI recreation for the panel
+  - 70+ commands organized in 8 categories (Player, Admin, World, Teleport, Entities, Blocks, XP, Debug)
+  - Live search functionality to filter commands by name, description, or usage
+  - Copy-to-clipboard for quick command usage
+  - Permission display for each command
+  - Tips for relative coordinates (~) and target selectors (@a, @p, @r, @s)
+  - Full localization in English, German, and Portuguese
+
+- **Accept Early Plugins Option**: New toggle in Settings page
+  - Enable/disable the `--accept-early-plugins` server flag
+  - Allows loading of early-stage plugins before server fully starts
+  - Warning about potential instability with early plugins
+
+### Fixed
+
+- **Online Players Display**: Players now show correctly after deleting player/world folders
+  - Fixed edge case where deleted player data caused display issues
+
+- **Player Commands via Plugin API**: Commands now work correctly through the API
+  - Gamemode changes work properly
+  - Kill command functions correctly
+  - Respawn command fixed
+  - Teleport commands work as expected
+
+- **JVM Memory Display**: No longer shows 0/0 MB
+  - Fixed memory stats retrieval from server
+  - Proper display of used/total heap memory
+
+- **Performance Monitor Graphs**: Charts now fill available space correctly
+  - Fixed layout issues causing graphs to be too small
+  - Responsive sizing for different screen sizes
+
+- **Modtale Plugins Installation**: Plugins now install to correct `/mods` directory
+  - Fixed path resolution for Modtale downloads
+
+- **Chat Log Localization**: Fully localized in English and German
+  - All UI elements properly translated
+  - Date/time formatting respects locale
+
 ## [1.7.0] - 2026-01-18
 
 ### Added
