@@ -25,12 +25,17 @@ if [ "$(id -u)" = "0" ]; then
         if [ -d "$dir" ]; then
             echo "[Manager] Fixing group ownership for $dir..."
             # Change group to hytale (9999) and add group write permissions
-            chgrp -R $SHARED_GID "$dir" 2>/dev/null || true
-            chmod -R g+rw "$dir" 2>/dev/null || true
+            chgrp -R $SHARED_GID "$dir" 2>&1 || echo "[WARN] chgrp failed for $dir"
+            chmod -R g+rw "$dir" 2>&1 || echo "[WARN] chmod failed for $dir"
             # Also make directories have setgid so new files inherit group
             find "$dir" -type d -exec chmod g+s {} \; 2>/dev/null || true
         fi
     done
+
+    # Debug: Show users.json permissions
+    if [ -f "/opt/hytale/data/users.json" ]; then
+        echo "[Manager] users.json permissions: $(ls -la /opt/hytale/data/users.json)"
+    fi
 
     # Set umask to ensure new files are group-writable
     umask 002
