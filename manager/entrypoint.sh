@@ -18,16 +18,14 @@ echo "[Manager] Checking permissions..."
 # Check if we're running as root (needed for permission fixing)
 if [ "$(id -u)" = "0" ]; then
     # Fix permissions on all mounted directories
+    # Always run chown to ensure both directories AND files inside are owned correctly
     for dir in $DATA_DIRS; do
         if [ -d "$dir" ]; then
-            # Check if the directory is writable by manager user
-            if ! su-exec $MANAGER_UID:$MANAGER_GID test -w "$dir" 2>/dev/null; then
-                echo "[Manager] Fixing permissions for $dir..."
-                chown -R $MANAGER_UID:$MANAGER_GID "$dir" 2>/dev/null || {
-                    echo "[WARN] Could not fix permissions for $dir - you may need to run:"
-                    echo "       sudo chown -R $MANAGER_UID:$MANAGER_GID ${HOST_DATA_PATH:-/opt/hytale}"
-                }
-            fi
+            echo "[Manager] Fixing permissions for $dir..."
+            chown -R $MANAGER_UID:$MANAGER_GID "$dir" 2>/dev/null || {
+                echo "[WARN] Could not fix permissions for $dir - you may need to run:"
+                echo "       sudo chown -R $MANAGER_UID:$MANAGER_GID ${HOST_DATA_PATH:-/opt/hytale}"
+            }
         fi
     done
 
