@@ -96,13 +96,20 @@ app.use('/api/tiles', createProxyMiddleware({
 }));
 
 // WebMap WebSocket proxy at /ws (WebMap uses this for live updates)
-// Use ws:// protocol for WebSocket and restore /ws path like other proxies
+// Use ws:// protocol for WebSocket
 const webMapWsTarget = webMapTarget.replace('http://', 'ws://');
 const webMapWsProxy = createProxyMiddleware({
   target: webMapWsTarget,
   changeOrigin: true,
   ws: true,
-  pathRewrite: (path) => path === '/' || path === '' ? '/ws' : `/ws${path}`,
+  // pathRewrite handles two cases:
+  // 1. Express middleware: path is stripped ('/ws' -> '/'), needs to restore '/ws'
+  // 2. WebSocket upgrade: path is full ('/ws'), should keep as-is
+  pathRewrite: (path) => {
+    if (path === '/' || path === '') return '/ws';
+    if (path === '/ws' || path.startsWith('/ws/') || path.startsWith('/ws?')) return path;
+    return `/ws${path}`;
+  },
   on: createWebMapProxyErrorHandler(),
 });
 app.use('/ws', webMapWsProxy);
