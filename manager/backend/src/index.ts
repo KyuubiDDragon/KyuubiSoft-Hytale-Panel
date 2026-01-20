@@ -84,6 +84,7 @@ app.use('/api/webmap', webMapProxy);
 app.all('/api/worlds*', createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
+  pathFilter: ['/api/worlds', '/api/worlds/**', '/api/tiles', '/api/tiles/**'],
   on: createWebMapProxyErrorHandler(),
 }));
 app.all('/api/tiles*', createProxyMiddleware({
@@ -97,6 +98,7 @@ const webMapWsProxy = createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
   ws: true,
+  pathFilter: ['/ws'],
   on: createWebMapProxyErrorHandler(),
 });
 app.all('/ws', webMapWsProxy);
