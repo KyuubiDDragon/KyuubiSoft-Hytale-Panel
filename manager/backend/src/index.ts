@@ -81,16 +81,17 @@ app.use('/api/webmap', webMapProxy);
 // WebMap API proxies - The WebMap JavaScript uses absolute paths for its API calls
 // These routes don't conflict with our panel routes (auth, server, console, etc.)
 // When using app.use() with a path, Express strips it from req.url, so we need pathRewrite to restore it
+// Handle root path without trailing slash: '/' -> '/api/worlds', '/batch' -> '/api/worlds/batch'
 app.use('/api/worlds', createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
-  pathRewrite: (path) => `/api/worlds${path}`, // Restore the /api/worlds prefix
+  pathRewrite: (path) => path === '/' || path === '' ? '/api/worlds' : `/api/worlds${path}`,
   on: createWebMapProxyErrorHandler(),
 }));
 app.use('/api/tiles', createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
-  pathRewrite: (path) => `/api/tiles${path}`, // Restore the /api/tiles prefix
+  pathRewrite: (path) => path === '/' || path === '' ? '/api/tiles' : `/api/tiles${path}`,
   on: createWebMapProxyErrorHandler(),
 }));
 
