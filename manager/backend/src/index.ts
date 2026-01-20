@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { access, constants, writeFile as fsWriteFile, unlink } from 'fs/promises';
 import { randomBytes } from 'crypto';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
@@ -223,6 +224,29 @@ app.get('/api/health/permissions', async (_req, res) => {
 
   res.json(response);
 });
+
+// WebMap Proxy - proxies requests to the EasyWebMap plugin running in the hytale container
+// This allows the WebMap to be accessed via HTTPS through the panel without extra configuration
+const webMapProxy = createProxyMiddleware({
+  target: `http://${config.gameContainerName}:18081`,
+  changeOrigin: true,
+  pathRewrite: {
+    '^/api/webmap': '', // Remove /api/webmap prefix when forwarding
+  },
+  // Handle errors gracefully
+  on: {
+    error: (err, _req, res) => {
+      console.error('[WebMap Proxy] Error:', err.message);
+      if (res && 'writeHead' in res && typeof res.writeHead === 'function') {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
+      }
+    },
+  },
+});
+
+// Mount the WebMap proxy (no auth required - WebMap has its own access control)
+app.use('/api/webmap', webMapProxy);
 
 // Serve static frontend files
 const staticPath = path.join(__dirname, '..', 'static');

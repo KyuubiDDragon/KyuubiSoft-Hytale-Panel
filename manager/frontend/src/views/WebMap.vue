@@ -7,12 +7,14 @@ const { t } = useI18n()
 
 const loading = ref(true)
 const error = ref('')
-const webMapPort = ref(18081)
 const webMapInstalled = ref(false)
+const webMapHttpPort = ref(18081)
 
 const mapUrl = computed(() => {
-  const host = window.location.hostname
-  return `http://${host}:${webMapPort.value}`
+  // Use the panel's built-in proxy for WebMap access
+  // This avoids HTTPS/mixed-content issues by routing through /api/webmap/
+  // The backend proxies to http://hytale:18081 internally
+  return '/api/webmap/'
 })
 
 async function checkWebMapStatus() {
@@ -22,7 +24,7 @@ async function checkWebMapStatus() {
     if (webMap && webMap.installed) {
       webMapInstalled.value = true
       if (webMap.ports && webMap.ports.length > 0) {
-        webMapPort.value = webMap.ports[0].default
+        webMapHttpPort.value = webMap.ports[0].default
       }
     }
   } catch (e) {
@@ -33,7 +35,8 @@ async function checkWebMapStatus() {
 }
 
 function openInNewTab() {
-  window.open(mapUrl.value, '_blank')
+  // Open WebMap via proxy in new tab (works with HTTPS)
+  window.open('/api/webmap/', '_blank')
 }
 
 function refreshMap() {
