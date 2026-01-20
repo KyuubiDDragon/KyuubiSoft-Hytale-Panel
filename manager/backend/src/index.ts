@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import { createServer } from 'http';
+import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -68,14 +68,80 @@ const createWebMapProxyErrorHandler = () => ({
   },
 });
 
+// Script to inject into WebMap HTML to rewrite WebSocket URLs from /ws to /api/webmap-ws
+const webMapWsRewriteScript = `
+<script>
+(function() {
+  var OriginalWebSocket = window.WebSocket;
+  window.WebSocket = function(url, protocols) {
+    // Rewrite /ws to /api/webmap-ws for WebMap's live updates
+    if (url && (url.endsWith('/ws') || url.includes('/ws?'))) {
+      url = url.replace(/\\/ws(\\?|$)/, '/api/webmap-ws$1');
+    }
+    return protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
+  };
+  window.WebSocket.prototype = OriginalWebSocket.prototype;
+  window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+  window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+  window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+  window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+})();
+</script>
+`;
+
 // Main WebMap proxy (for iframe content - strips /api/webmap prefix)
+// Injects script to rewrite WebSocket URLs from /ws to /api/webmap-ws
 const webMapProxy = createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
+  selfHandleResponse: true, // We'll handle the response to inject script
   pathRewrite: {
     '^/api/webmap': '', // Remove /api/webmap prefix when forwarding
   },
-  on: createWebMapProxyErrorHandler(),
+  on: {
+    error: (err: Error, _req: unknown, res: unknown) => {
+      console.error('[WebMap Proxy] Error:', err.message);
+      if (res && typeof res === 'object' && 'writeHead' in res && typeof (res as { writeHead: unknown }).writeHead === 'function') {
+        const httpRes = res as { writeHead: (code: number, headers: Record<string, string>) => void; end: (data: string) => void };
+        httpRes.writeHead(502, { 'Content-Type': 'application/json' });
+        httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
+      }
+    },
+    proxyRes: (proxyResRaw, _req, resRaw) => {
+      const proxyRes = proxyResRaw as IncomingMessage;
+      const res = resRaw as ServerResponse;
+
+      // Remove restrictive headers
+      delete proxyRes.headers['content-security-policy'];
+      delete proxyRes.headers['x-frame-options'];
+
+      const contentType = (proxyRes.headers['content-type'] as string) || '';
+      const isHtml = contentType.includes('text/html');
+
+      if (isHtml) {
+        // Collect response body and inject script
+        const chunks: Buffer[] = [];
+        proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+        proxyRes.on('end', () => {
+          let body = Buffer.concat(chunks).toString('utf-8');
+          // Inject our WebSocket rewrite script after <head>
+          body = body.replace(/<head>/i, '<head>' + webMapWsRewriteScript);
+
+          // Update content-length header
+          const newHeaders = { ...proxyRes.headers };
+          delete newHeaders['content-length'];
+          delete newHeaders['content-encoding']; // Remove encoding since we modified content
+
+          res.writeHead(proxyRes.statusCode || 200, newHeaders);
+          res.end(body);
+        });
+      } else {
+        // For non-HTML, just pipe through
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        proxyRes.pipe(res);
+      }
+    },
+  },
 });
 app.use('/api/webmap', webMapProxy);
 
@@ -96,10 +162,10 @@ app.use('/api/tiles', createProxyMiddleware({
   on: createWebMapProxyErrorHandler(),
 }));
 
-// WebMap WebSocket proxy at /ws (WebMap uses this for live updates)
-// Use http-proxy directly for more reliable WebSocket proxying
+// WebMap WebSocket proxy at /api/webmap-ws (under /api/ so reverse proxies forward it)
+// Use http-proxy directly for reliable WebSocket proxying
 const webMapWsProxy = httpProxy.createProxyServer({
-  target: webMapTarget, // http-proxy handles ws:// upgrade automatically
+  target: webMapTarget,
   ws: true,
   changeOrigin: true,
 });
@@ -112,13 +178,16 @@ webMapWsProxy.on('error', (err, _req, res) => {
   }
 });
 
-// Handle WebSocket upgrade for /ws path
+// Handle WebSocket upgrade for /api/webmap-ws path
 server.on('upgrade', (request, socket, head) => {
   const pathname = request.url || '';
-  // Only handle /ws path - /api/console/ws is handled by our own WebSocketServer
-  if (pathname === '/ws' || pathname.startsWith('/ws?')) {
+  // Handle /api/webmap-ws - proxy to WebMap's /ws endpoint
+  if (pathname === '/api/webmap-ws' || pathname.startsWith('/api/webmap-ws?')) {
+    // Rewrite the URL to /ws for the WebMap server
+    request.url = pathname.replace('/api/webmap-ws', '/ws');
     webMapWsProxy.ws(request, socket, head);
   }
+  // Note: /api/console/ws is handled by our own WebSocketServer
 });
 
 // Middleware
