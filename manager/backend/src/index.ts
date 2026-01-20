@@ -49,46 +49,58 @@ setupWebSocket(wss);
 
 // WebMap Proxy - MUST be mounted BEFORE helmet so our CSP doesn't affect WebMap content
 // The WebMap loads Leaflet from unpkg.com CDN which would be blocked by our CSP
-const webMapProxyOptions = {
-  target: `http://${config.gameContainerName}:18081`,
-  changeOrigin: true,
-  ws: true, // Enable WebSocket proxying
-  on: {
-    error: (err: Error, _req: unknown, res: unknown) => {
-      console.error('[WebMap Proxy] Error:', err.message);
-      if (res && typeof res === 'object' && 'writeHead' in res && typeof (res as { writeHead: unknown }).writeHead === 'function') {
-        const httpRes = res as { writeHead: (code: number, headers: Record<string, string>) => void; end: (data: string) => void };
-        httpRes.writeHead(502, { 'Content-Type': 'application/json' });
-        httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
-      }
-    },
-    // Remove restrictive headers from WebMap response
-    proxyRes: (proxyRes: { headers: Record<string, unknown> }) => {
-      delete proxyRes.headers['content-security-policy'];
-      delete proxyRes.headers['x-frame-options'];
-    },
-  },
-};
+const webMapTarget = `http://${config.gameContainerName}:18081`;
 
-// Main WebMap proxy (for iframe content)
+const createWebMapProxyErrorHandler = () => ({
+  error: (err: Error, _req: unknown, res: unknown) => {
+    console.error('[WebMap Proxy] Error:', err.message);
+    if (res && typeof res === 'object' && 'writeHead' in res && typeof (res as { writeHead: unknown }).writeHead === 'function') {
+      const httpRes = res as { writeHead: (code: number, headers: Record<string, string>) => void; end: (data: string) => void };
+      httpRes.writeHead(502, { 'Content-Type': 'application/json' });
+      httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
+    }
+  },
+  // Remove restrictive headers from WebMap response
+  proxyRes: (proxyRes: { headers: Record<string, unknown> }) => {
+    delete proxyRes.headers['content-security-policy'];
+    delete proxyRes.headers['x-frame-options'];
+  },
+});
+
+// Main WebMap proxy (for iframe content - strips /api/webmap prefix)
 const webMapProxy = createProxyMiddleware({
-  ...webMapProxyOptions,
+  target: webMapTarget,
+  changeOrigin: true,
   pathRewrite: {
     '^/api/webmap': '', // Remove /api/webmap prefix when forwarding
   },
+  on: createWebMapProxyErrorHandler(),
 });
 app.use('/api/webmap', webMapProxy);
 
 // WebMap API proxies - The WebMap JavaScript uses absolute paths for its API calls
 // These routes don't conflict with our panel routes (auth, server, console, etc.)
-const webMapApiProxy = createProxyMiddleware(webMapProxyOptions);
-app.use('/api/worlds', webMapApiProxy);  // WebMap world list API
-app.use('/api/tiles', webMapApiProxy);   // WebMap tile batch API
+// Note: These need separate proxy instances and NO path rewriting (paths are used as-is)
+const webMapWorldsProxy = createProxyMiddleware({
+  target: webMapTarget,
+  changeOrigin: true,
+  on: createWebMapProxyErrorHandler(),
+});
+app.use('/api/worlds', webMapWorldsProxy);
+
+const webMapTilesProxy = createProxyMiddleware({
+  target: webMapTarget,
+  changeOrigin: true,
+  on: createWebMapProxyErrorHandler(),
+});
+app.use('/api/tiles', webMapTilesProxy);
 
 // WebMap WebSocket proxy at /ws (WebMap uses this for live updates)
 const webMapWsProxy = createProxyMiddleware({
-  ...webMapProxyOptions,
+  target: webMapTarget,
+  changeOrigin: true,
   ws: true,
+  on: createWebMapProxyErrorHandler(),
 });
 app.use('/ws', webMapWsProxy);
 
@@ -149,6 +161,11 @@ app.use((req, res, next) => {
 
   // Skip for non-API routes (static files)
   if (!req.path.startsWith('/api/')) {
+    return next();
+  }
+
+  // Skip for WebMap proxy routes (these are proxied to the game server, not our API)
+  if (req.path.startsWith('/api/webmap') || req.path.startsWith('/api/worlds') || req.path.startsWith('/api/tiles')) {
     return next();
   }
 
