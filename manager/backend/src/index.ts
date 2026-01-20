@@ -49,28 +49,58 @@ setupWebSocket(wss);
 
 // WebMap Proxy - MUST be mounted BEFORE helmet so our CSP doesn't affect WebMap content
 // The WebMap loads Leaflet from unpkg.com CDN which would be blocked by our CSP
-const webMapProxy = createProxyMiddleware({
+const webMapProxyOptions = {
   target: `http://${config.gameContainerName}:18081`,
   changeOrigin: true,
-  pathRewrite: {
-    '^/api/webmap': '', // Remove /api/webmap prefix when forwarding
-  },
+  ws: true, // Enable WebSocket proxying
   on: {
-    error: (err, _req, res) => {
+    error: (err: Error, _req: unknown, res: unknown) => {
       console.error('[WebMap Proxy] Error:', err.message);
-      if (res && 'writeHead' in res && typeof res.writeHead === 'function') {
-        res.writeHead(502, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
+      if (res && typeof res === 'object' && 'writeHead' in res && typeof (res as { writeHead: unknown }).writeHead === 'function') {
+        const httpRes = res as { writeHead: (code: number, headers: Record<string, string>) => void; end: (data: string) => void };
+        httpRes.writeHead(502, { 'Content-Type': 'application/json' });
+        httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
       }
     },
     // Remove restrictive headers from WebMap response
-    proxyRes: (proxyRes) => {
+    proxyRes: (proxyRes: { headers: Record<string, unknown> }) => {
       delete proxyRes.headers['content-security-policy'];
       delete proxyRes.headers['x-frame-options'];
     },
   },
+};
+
+// Main WebMap proxy (for iframe content)
+const webMapProxy = createProxyMiddleware({
+  ...webMapProxyOptions,
+  pathRewrite: {
+    '^/api/webmap': '', // Remove /api/webmap prefix when forwarding
+  },
 });
 app.use('/api/webmap', webMapProxy);
+
+// WebMap API proxies - The WebMap JavaScript uses absolute paths for its API calls
+// These routes don't conflict with our panel routes (auth, server, console, etc.)
+const webMapApiProxy = createProxyMiddleware(webMapProxyOptions);
+app.use('/api/worlds', webMapApiProxy);  // WebMap world list API
+app.use('/api/tiles', webMapApiProxy);   // WebMap tile batch API
+
+// WebMap WebSocket proxy at /ws (WebMap uses this for live updates)
+const webMapWsProxy = createProxyMiddleware({
+  ...webMapProxyOptions,
+  ws: true,
+});
+app.use('/ws', webMapWsProxy);
+
+// Handle WebSocket upgrade for /ws path
+server.on('upgrade', (request, socket, head) => {
+  const pathname = request.url || '';
+  if (pathname === '/ws' || pathname.startsWith('/ws?')) {
+    // Cast Duplex to Socket for http-proxy-middleware compatibility
+    webMapWsProxy.upgrade?.(request, socket as import('net').Socket, head);
+  }
+  // Note: /api/console/ws is handled by our own WebSocketServer
+});
 
 // Middleware
 // SECURITY: Configure Content-Security-Policy for SPA
