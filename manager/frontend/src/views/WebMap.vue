@@ -11,8 +11,12 @@ const webMapPort = ref(18081)
 const webMapInstalled = ref(false)
 
 const mapUrl = computed(() => {
+  // Use same protocol as current page to avoid mixed content blocking
+  // Note: If using HTTPS, the webmap port must also support HTTPS
+  // (either directly or via reverse proxy)
+  const protocol = window.location.protocol
   const host = window.location.hostname
-  return `http://${host}:${webMapPort.value}`
+  return `${protocol}//${host}:${webMapPort.value}`
 })
 
 async function checkWebMapStatus() {
