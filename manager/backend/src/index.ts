@@ -45,8 +45,8 @@ if (config.trustProxy) {
   console.log('Reverse proxy mode enabled (TRUST_PROXY=true)');
 }
 
-// WebSocket server
-const wss = new WebSocketServer({ server, path: '/api/console/ws' });
+// WebSocket server - use noServer mode so we can handle multiple WebSocket paths
+const wss = new WebSocketServer({ noServer: true });
 setupWebSocket(wss);
 
 // WebMap Proxy - MUST be mounted BEFORE helmet so our CSP doesn't affect WebMap content
@@ -222,16 +222,32 @@ webMapWsProxy.on('error', (err, _req, res) => {
   }
 });
 
-// Handle WebSocket upgrade for /api/webmap-ws path
+// Handle ALL WebSocket upgrades manually (noServer mode)
 server.on('upgrade', (request, socket, head) => {
   const pathname = request.url || '';
+  console.log(`[WebSocket Upgrade] Path: ${pathname}`);
+
+  // Handle /api/console/ws - our panel's console WebSocket
+  if (pathname.startsWith('/api/console/ws')) {
+    console.log(`[Console WS] Handling console WebSocket upgrade`);
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+    return;
+  }
+
   // Handle /api/webmap-ws - proxy to WebMap's /ws endpoint
   if (pathname === '/api/webmap-ws' || pathname.startsWith('/api/webmap-ws?')) {
+    console.log(`[WebMap WS] Proxying WebSocket upgrade to /ws`);
     // Rewrite the URL to /ws for the WebMap server
     request.url = pathname.replace('/api/webmap-ws', '/ws');
     webMapWsProxy.ws(request, socket, head);
+    return;
   }
-  // Note: /api/console/ws is handled by our own WebSocketServer
+
+  // Unknown WebSocket path - destroy connection
+  console.log(`[WebSocket Upgrade] Unknown path: ${pathname}, destroying socket`);
+  socket.destroy();
 });
 
 // Middleware
