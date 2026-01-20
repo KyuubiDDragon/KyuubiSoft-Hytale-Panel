@@ -80,16 +80,17 @@ app.use('/api/webmap', webMapProxy);
 
 // WebMap API proxies - The WebMap JavaScript uses absolute paths for its API calls
 // These routes don't conflict with our panel routes (auth, server, console, etc.)
-// Use app.all() to handle all HTTP methods and preserve the full path
-app.all('/api/worlds*', createProxyMiddleware({
+// When using app.use() with a path, Express strips it from req.url, so we need pathRewrite to restore it
+app.use('/api/worlds', createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
-  pathFilter: ['/api/worlds', '/api/worlds/**', '/api/tiles', '/api/tiles/**'],
+  pathRewrite: (path) => `/api/worlds${path}`, // Restore the /api/worlds prefix
   on: createWebMapProxyErrorHandler(),
 }));
-app.all('/api/tiles*', createProxyMiddleware({
+app.use('/api/tiles', createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
+  pathRewrite: (path) => `/api/tiles${path}`, // Restore the /api/tiles prefix
   on: createWebMapProxyErrorHandler(),
 }));
 
@@ -98,10 +99,9 @@ const webMapWsProxy = createProxyMiddleware({
   target: webMapTarget,
   changeOrigin: true,
   ws: true,
-  pathFilter: ['/ws'],
   on: createWebMapProxyErrorHandler(),
 });
-app.all('/ws', webMapWsProxy);
+app.use('/ws', webMapWsProxy);
 
 // Handle WebSocket upgrade for /ws path
 server.on('upgrade', (request, socket, head) => {
