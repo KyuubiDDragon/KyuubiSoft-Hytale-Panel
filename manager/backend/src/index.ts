@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { access, constants, writeFile as fsWriteFile, unlink } from 'fs/promises';
 import { randomBytes } from 'crypto';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import httpProxy from 'http-proxy';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
@@ -96,30 +97,27 @@ app.use('/api/tiles', createProxyMiddleware({
 }));
 
 // WebMap WebSocket proxy at /ws (WebMap uses this for live updates)
-// Use ws:// protocol for WebSocket
-const webMapWsTarget = webMapTarget.replace('http://', 'ws://');
-const webMapWsProxy = createProxyMiddleware({
-  target: webMapWsTarget,
-  changeOrigin: true,
+// Use http-proxy directly for more reliable WebSocket proxying
+const webMapWsProxy = httpProxy.createProxyServer({
+  target: webMapTarget, // http-proxy handles ws:// upgrade automatically
   ws: true,
-  // pathRewrite handles two cases:
-  // 1. Express middleware: path is stripped ('/ws' -> '/'), needs to restore '/ws'
-  // 2. WebSocket upgrade: path is full ('/ws'), should keep as-is
-  pathRewrite: (path) => {
-    if (path === '/' || path === '') return '/ws';
-    if (path === '/ws' || path.startsWith('/ws/') || path.startsWith('/ws?')) return path;
-    return `/ws${path}`;
-  },
-  on: createWebMapProxyErrorHandler(),
+  changeOrigin: true,
 });
-app.use('/ws', webMapWsProxy);
+
+webMapWsProxy.on('error', (err, _req, res) => {
+  console.error('[WebMap WS Proxy] Error:', err.message);
+  if (res && 'writeHead' in res && typeof res.writeHead === 'function') {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'WebMap WebSocket unavailable', detail: err.message }));
+  }
+});
 
 // Handle WebSocket upgrade for /ws path
 server.on('upgrade', (request, socket, head) => {
   const pathname = request.url || '';
   // Only handle /ws path - /api/console/ws is handled by our own WebSocketServer
   if (pathname === '/ws' || pathname.startsWith('/ws?')) {
-    webMapWsProxy.upgrade?.(request, socket as import('net').Socket, head);
+    webMapWsProxy.ws(request, socket, head);
   }
 });
 
