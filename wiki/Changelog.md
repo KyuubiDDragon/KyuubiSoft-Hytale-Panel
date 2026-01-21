@@ -1,216 +1,216 @@
 # Changelog
 
-Versionshistorie des KyuubiSoft Hytale Panels.
+Version history of the KyuubiSoft Hytale Panel.
 
 ---
 
 ## Version 2.0.0 - Production Ready Security Release
-**Veröffentlicht:** 2026-01-19
+**Released:** 2026-01-19
 
-### Sicherheitsbewertung: 9/10
+### Security Rating: 9/10
 
-Diese Version markiert den Übergang zu einem produktionsreifen, sicherheitsgehärteten System nach umfassender externer Sicherheitsprüfung.
+This version marks the transition to a production-ready, security-hardened system following comprehensive external security review.
 
 ---
 
-### Kritische Sicherheitsfixes
+### Critical Security Fixes
 
 #### Command Injection Prevention
-- Whitelist von 35 erlaubten Spielbefehlen implementiert
-- Befehle müssen mit `/` beginnen
-- Blockiert Shell-Metazeichen: `;`, `|`, `&`, `$`, `` ` ``
-- Blockiert Command Substitution: `$(...)`, `${...}`
-- Blockiert Umleitungen: `>`, `<`
-- **Datei:** `manager/backend/src/utils/sanitize.ts`
+- Whitelist of 35 allowed game commands implemented
+- Commands must start with `/`
+- Blocks shell metacharacters: `;`, `|`, `&`, `$`, `` ` ``
+- Blocks command substitution: `$(...)`, `${...}`
+- Blocks redirections: `>`, `<`
+- **File:** `manager/backend/src/utils/sanitize.ts`
 
 #### Path Traversal Protection
-- Mehrschichtige Validierung für alle Dateioperationen
-- `sanitizeFileName()`: Extrahiert Basename, blockiert `..` und versteckte Dateien
-- `isPathSafe()`: Validiert Pfade innerhalb erlaubter Verzeichnisse
-- Angewendet auf: Mod/Plugin-Operationen, Config-Dateien
-- **Datei:** `manager/backend/src/utils/pathSecurity.ts`
+- Multi-layer validation for all file operations
+- `sanitizeFileName()`: Extracts basename, blocks `..` and hidden files
+- `isPathSafe()`: Validates paths within allowed directories
+- Applied to: Mod/Plugin operations, config files
+- **File:** `manager/backend/src/utils/pathSecurity.ts`
 
 #### ReDoS Prevention (Regular Expression Denial of Service)
-- Pattern-Längenlimit: 100 Zeichen
-- Blockiert verschachtelte Quantifizierer: `(a+)+`, `(a*)*`
-- Quantifizierer-Limit: 10
-- Gruppen-Limit: 5
-- Backreferences abgelehnt
-- **Datei:** `manager/backend/src/services/assets.ts`
+- Pattern length limit: 100 characters
+- Blocks nested quantifiers: `(a+)+`, `(a*)*`
+- Quantifier limit: 10
+- Group limit: 5
+- Backreferences rejected
+- **File:** `manager/backend/src/services/assets.ts`
 
 ---
 
-### Hohe Priorität Fixes
+### High Priority Fixes
 
 #### Magic Byte File Verification
-- Validiert hochgeladene Dateien gegen erwartetes Format
-- ZIP/JAR Signatur-Prüfung: `PK\x03\x04`
-- Binary-Content-Erkennung für Textdateien
-- Gefährliche Erweiterungen blockiert: `.dll`, `.so`
+- Validates uploaded files against expected format
+- ZIP/JAR signature check: `PK\x03\x04`
+- Binary content detection for text files
+- Dangerous extensions blocked: `.dll`, `.so`
 
 #### Safe Filename Generation
-- Verhindert Filename-Collision-Angriffe
-- Zufälliges 8-Zeichen Hex-Präfix via `crypto.randomBytes(4)`
-- Zeichen-Whitelist: `[a-zA-Z0-9._-]`
-- Maximale Länge: 100 Zeichen
+- Prevents filename collision attacks
+- Random 8-character hex prefix via `crypto.randomBytes(4)`
+- Character whitelist: `[a-zA-Z0-9._-]`
+- Maximum length: 100 characters
 
 #### Non-root Docker Container
-- Manager läuft als unprivilegierter User `manager` (UID/GID 9999)
-- `dumb-init` für korrektes Signal-Handling
-- **Datei:** `manager/Dockerfile`
+- Manager runs as unprivileged user `manager` (UID/GID 9999)
+- `dumb-init` for proper signal handling
+- **File:** `manager/Dockerfile`
 
 #### Required Environment Variables
-- Keine unsicheren Defaults mehr
-- `MANAGER_USERNAME`, `MANAGER_PASSWORD`, `JWT_SECRET` erforderlich
-- Docker Compose erzwingt via Validierung
-- Strict Security Mode blockiert Startup mit schwachen Credentials
+- No insecure defaults anymore
+- `MANAGER_USERNAME`, `MANAGER_PASSWORD`, `JWT_SECRET` required
+- Docker Compose enforces via validation
+- Strict Security Mode blocks startup with weak credentials
 
 #### Async bcrypt Operations
-- Alle `bcrypt.hash()` und `bcrypt.compare()` jetzt async
-- Verhindert Event-Loop-Blocking
+- All `bcrypt.hash()` and `bcrypt.compare()` now async
+- Prevents event loop blocking
 
 ---
 
-### Mittlere Priorität Fixes
+### Medium Priority Fixes
 
-- **Global Exception Handler** - Express Error Middleware, Production Stack Traces versteckt
-- **Content-Security-Policy Header** - Strikte CSP via Helmet
-- **CSRF Protection** - Origin/Referer Validierung
-- **Race Condition Fix** - Debounced Player Data Saves
-- **Infrastructure Hardening** - JSON Body Limit 100kb, Docker no-new-privileges
+- **Global Exception Handler** - Express error middleware, production stack traces hidden
+- **Content-Security-Policy Header** - Strict CSP via Helmet
+- **CSRF Protection** - Origin/Referer validation
+- **Race Condition Fix** - Debounced player data saves
+- **Infrastructure Hardening** - JSON body limit 100kb, Docker no-new-privileges
 
 ---
 
-### Neue Features
+### New Features
 
 #### Permission Health Check
-- Automatische Erkennung von Dateiberechtigungsproblemen
-- Neuer `/api/health/permissions` Endpoint
-- Warnt Benutzer beim Upgrade von v1.x
-- Zeigt betroffene Verzeichnisse und Fix-Befehl
-- Vollständige Lokalisierung (EN, DE, PT-BR)
+- Automatic detection of file permission issues
+- New `/api/health/permissions` endpoint
+- Warns users when upgrading from v1.x
+- Shows affected directories and fix command
+- Full localization (EN, DE, PT-BR)
 
 ---
 
 ### Breaking Changes
 
-#### Umgebungsvariablen - JETZT ERFORDERLICH
+#### Environment Variables - NOW REQUIRED
 ```env
-MANAGER_USERNAME=<eindeutiger-admin-username>
-MANAGER_PASSWORD=<starkes-passwort-12+-zeichen>
-JWT_SECRET=<starkes-secret-32+-zeichen>
-CORS_ORIGINS=<spezifische-origins-nicht-wildcard>
+MANAGER_USERNAME=<unique-admin-username>
+MANAGER_PASSWORD=<strong-password-12+-characters>
+JWT_SECRET=<strong-secret-32+-characters>
+CORS_ORIGINS=<specific-origins-not-wildcard>
 ```
 
 #### Non-Root Container
-- Manager Container läuft jetzt als unprivilegierter User (UID 9999)
-- Bestehende Deployments brauchen Permission-Fix:
+- Manager container now runs as unprivileged user (UID 9999)
+- Existing deployments need permission fix:
   ```bash
   sudo chown -R 9999:9999 /opt/hytale
   ```
 
 #### WebSocket Authentication
-- JWT Tokens nicht mehr in URL
-- Single-Use Tickets (30 Sekunden Ablauf)
+- JWT tokens no longer in URL
+- Single-use tickets (30 second expiry)
 
 ---
 
 ## Version 1.7.1
-**Veröffentlicht:** 2026-01-19
+**Released:** 2026-01-19
 
-### Neue Features
+### New Features
 
 #### Command Help Page
-- Komplette In-Game `/help` GUI nachgebaut
-- 70+ Befehle in 8 Kategorien organisiert
-- Live-Suchfunktion
-- Copy-to-Clipboard für Befehlsverwendung
-- Berechtigungsanzeige für jeden Befehl
+- Complete in-game `/help` GUI rebuilt
+- 70+ commands organized in 8 categories
+- Live search functionality
+- Copy-to-clipboard for command usage
+- Permission display for each command
 
 #### Accept Early Plugins Option
-- Neuer Toggle in Settings
-- Aktiviert/Deaktiviert `--accept-early-plugins` Server-Flag
-- Warnung über potenzielle Instabilität
+- New toggle in Settings
+- Enables/Disables `--accept-early-plugins` server flag
+- Warning about potential instability
 
 ---
 
 ## Version 1.7.0
-**Veröffentlicht:** 2026-01-18
+**Released:** 2026-01-18
 
-### Neue Features
+### New Features
 
-#### Granulares Permission System
-- Rollenbasierte Zugriffskontrolle
-- 53 individuelle Berechtigungen in 18 Kategorien
-- Benutzerdefinierte Rollenerstellung mit Farb-Badges
-- System-Rollen: Administrator, Moderator, Operator, Viewer
-- Wildcard `*` Berechtigung für vollen Admin-Zugriff
+#### Granular Permission System
+- Role-based access control
+- 53 individual permissions in 18 categories
+- Custom role creation with color badges
+- System roles: Administrator, Moderator, Operator, Viewer
+- Wildcard `*` permission for full admin access
 
 #### Enhanced Player Management
-- Klick auf Spieler (online/offline) für Detail-Modal
-- Tabbed Interface: Übersicht, Inventar, Aussehen, Chat, Tode
-- Spieler-Inventar-Anzeige mit Item-Icons
-- Todespositions-Tracking mit Teleport-Optionen
-- Spieleraktionen: heilen, Inventar leeren, Items geben, teleportieren
+- Click on player (online/offline) for detail modal
+- Tabbed interface: Overview, Inventory, Appearance, Chat, Deaths
+- Player inventory display with item icons
+- Death position tracking with teleport options
+- Player actions: heal, clear inventory, give items, teleport
 
 #### Chat Log System
-- Tägliche Datei-Rotation: `data/chat/global/YYYY-MM-DD.json`
-- Per-Player Chat Logs: `data/chat/players/{name}/YYYY-MM-DD.json`
-- Unbegrenzte Nachrichtenhistorie (1000 Nachrichten Limit entfernt)
-- UUID-Tracking für Spieler über Namensänderungen
-- Zeitbereich-Filter (7/14/30 Tage, alle)
+- Daily file rotation: `data/chat/global/YYYY-MM-DD.json`
+- Per-player chat logs: `data/chat/players/{name}/YYYY-MM-DD.json`
+- Unlimited message history (1000 message limit removed)
+- UUID tracking for players across name changes
+- Time range filters (7/14/30 days, all)
 
-#### i18n für Permission-Beschreibungen
-- Übersetzt in DE, EN, PT-BR
+#### i18n for Permission Descriptions
+- Translated to DE, EN, PT-BR
 
 ---
 
 ## Version 1.5.0
-**Veröffentlicht:** 2025-01-17
+**Released:** 2025-01-17
 
-### Neue Features
+### New Features
 
 #### Asset Explorer
-- Durchsuchen und Analysieren von Hytale-Assets
-- Extrahieren und Browsen von Assets.zip Inhalten
-- Datei-Viewer: JSON, Bilder, Text, Hex
-- Erweiterte Suche: Plaintext, Glob, Regex
-- Async Extraktion für große Archive (3GB+)
-- Persistenter Cache via Docker Volume
+- Browse and analyze Hytale assets
+- Extract and browse Assets.zip contents
+- File viewer: JSON, images, text, hex
+- Advanced search: Plaintext, Glob, Regex
+- Async extraction for large archives (3GB+)
+- Persistent cache via Docker volume
 
 #### Reverse Proxy Support
-- `TRUST_PROXY` Umgebungsvariable
-- Korrekte Verarbeitung von `X-Forwarded-*` Headers
-- Support für nginx, traefik, caddy, etc.
+- `TRUST_PROXY` environment variable
+- Correct processing of `X-Forwarded-*` headers
+- Support for nginx, traefik, caddy, etc.
 
 #### Patchline Toggle
-- UI-Switch zwischen Release/Pre-Release
-- Gespeichert in `data/panel-config.json`
-- Auto-Delete von Server-Dateien bei Patchline-Wechsel
+- UI switch between Release/Pre-Release
+- Saved in `data/panel-config.json`
+- Auto-delete of server files on patchline change
 
 #### Console Improvements
-- Reconnect-Button bei WebSocket-Disconnect
-- Alle Logs laden (erhöht auf 10.000)
+- Reconnect button on WebSocket disconnect
+- Load all logs (increased to 10,000)
 
 ---
 
-## Migration von v1.x auf v2.0
+## Migration from v1.x to v2.0
 
-### Schritt 1: Umgebungsvariablen setzen
+### Step 1: Set Environment Variables
 ```bash
-# In .env Datei:
+# In .env file:
 MANAGER_USERNAME=your-admin-username
-MANAGER_PASSWORD=your-strong-password        # min 8 Zeichen, 12+ empfohlen
+MANAGER_PASSWORD=your-strong-password        # min 8 chars, 12+ recommended
 JWT_SECRET=$(openssl rand -base64 48)
-CORS_ORIGINS=https://your-domain.com         # spezifische Domain, nicht *
+CORS_ORIGINS=https://your-domain.com         # specific domain, not *
 ```
 
-### Schritt 2: Dateiberechtigungen korrigieren
+### Step 2: Fix File Permissions
 ```bash
 sudo chown -R 9999:9999 /opt/hytale
 ```
 
-### Schritt 3: Deployment-Konfiguration aktualisieren
+### Step 3: Update Deployment Configuration
 ```yaml
 # In docker-compose.yml:
 security_opt:
@@ -219,29 +219,29 @@ cap_drop:
   - ALL
 ```
 
-### Schritt 4: Security Mode konfigurieren
+### Step 4: Configure Security Mode
 ```bash
-# Für Produktion: SECURITY_MODE=strict (Standard)
-# Für geschlossene Netzwerke: SECURITY_MODE=warn
+# For production: SECURITY_MODE=strict (default)
+# For closed networks: SECURITY_MODE=warn
 ```
 
 ---
 
 ## Pre-Deployment Checklist
 
-- [ ] `MANAGER_USERNAME` auf eindeutigen Admin-Username gesetzt
-- [ ] `MANAGER_PASSWORD` auf starkes Passwort gesetzt (12+ Zeichen empfohlen)
-- [ ] `JWT_SECRET` generiert: `openssl rand -base64 48`
-- [ ] `CORS_ORIGINS` auf spezifische Domain(s) gesetzt - NICHT `*`
-- [ ] Reverse Proxy mit TLS (HTTPS) konfiguriert
-- [ ] `SECURITY_MODE=strict` sichergestellt (Standard)
-- [ ] Permission Health Check unter `/api/health/permissions` ausgeführt
-- [ ] Alle Funktionen vor Produktions-Deployment getestet
+- [ ] `MANAGER_USERNAME` set to unique admin username
+- [ ] `MANAGER_PASSWORD` set to strong password (12+ chars recommended)
+- [ ] `JWT_SECRET` generated: `openssl rand -base64 48`
+- [ ] `CORS_ORIGINS` set to specific domain(s) - NOT `*`
+- [ ] Reverse proxy with TLS (HTTPS) configured
+- [ ] `SECURITY_MODE=strict` ensured (default)
+- [ ] Permission health check at `/api/health/permissions` run
+- [ ] All features tested before production deployment
 
 ---
 
-## Nächste Schritte
+## Next Steps
 
-- [[Installation]] - Neuinstallation
-- [[Konfiguration]] - Alle Einstellungen
-- [[Sicherheit]] - Sicherheitsdetails
+- [[Installation]] - New installation
+- [[Configuration]] - All settings
+- [[Security]] - Security details

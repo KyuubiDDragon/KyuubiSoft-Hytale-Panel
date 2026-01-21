@@ -1,6 +1,6 @@
-# KyuubiSoft Hytale Panel - Wiki
+# KyuubiSoft Hytale Panel
 
-Willkommen zur offiziellen Wiki des **KyuubiSoft Hytale Panels** - einem vollautomatischen Docker-Setup mit Web Admin Panel für Hytale Dedicated Server.
+Welcome to the official documentation for the **KyuubiSoft Hytale Panel** - a production-ready web-based administration panel for Hytale dedicated servers.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-2.0.0-blue" alt="Version">
@@ -10,46 +10,46 @@ Willkommen zur offiziellen Wiki des **KyuubiSoft Hytale Panels** - einem vollaut
 
 ---
 
-## Schnellnavigation
+## Quick Navigation
 
-| Kategorie | Beschreibung |
-|-----------|--------------|
-| [[Installation]] | Installations- und Setup-Anleitung |
-| [[Konfiguration]] | Alle Umgebungsvariablen und Einstellungen |
-| [[Features]] | Übersicht aller Panel-Funktionen |
-| [[API-Dokumentation]] | Vollständige REST API Referenz |
-| [[Sicherheit]] | Sicherheitsfeatures und Best Practices |
-| [[Benutzerverwaltung]] | Rollen, Berechtigungen und Benutzer |
-| [[Fehlerbehebung]] | Häufige Probleme und Lösungen |
-| [[Changelog]] | Versionshistorie und Updates |
-| [[Server-Befehle]] | Hytale Server Befehlsreferenz |
-
----
-
-## Was ist das KyuubiSoft Hytale Panel?
-
-Das **KyuubiSoft Hytale Panel** ist eine vollumfängliche, produktionsreife Web-basierte Administrations- und Managementplattform für Hytale Dedicated Server.
-
-### Hauptmerkmale
-
-- **Vollautomatisches Docker-Setup** - Einfache Bereitstellung mit Docker Compose
-- **Modernes Web-Interface** - Dark Theme UI mit Echtzeit-Updates
-- **Live Konsole** - Echtzeit-Logs mit Filterung und Auto-Scroll
-- **Spielerverwaltung** - Kick, Ban, Teleport, Gamemode und mehr
-- **Backup-System** - Automatische und manuelle Backups mit Wiederherstellung
-- **Scheduler** - Geplante Backups und automatische Neustarts
-- **Mod & Plugin Support** - Upload, Aktivieren/Deaktivieren, Config Editor
-- **Multi-User System** - Mehrere Benutzer mit rollenbasierter Zugriffskontrolle
-- **60+ Berechtigungen** - Granulares Berechtigungssystem
-- **Mehrsprachig** - Deutsch, Englisch, Portugiesisch
+| Category | Description |
+|----------|-------------|
+| [[Installation]] | Installation and setup guide |
+| [[Configuration]] | All environment variables and settings |
+| [[Features]] | Overview of all panel features |
+| [[API-Documentation]] | Complete REST API reference |
+| [[Security]] | Security features and best practices |
+| [[User-Management]] | Roles, permissions and users |
+| [[Troubleshooting]] | Common issues and solutions |
+| [[Changelog]] | Version history and updates |
+| [[Server-Commands]] | Hytale server command reference |
 
 ---
 
-## Technologie-Stack
+## What is the KyuubiSoft Hytale Panel?
+
+The **KyuubiSoft Hytale Panel** is a comprehensive, production-ready web-based administration and management platform for Hytale Dedicated Servers.
+
+### Key Features
+
+- **Fully Automated Docker Setup** - Easy deployment with Docker Compose
+- **Modern Web Interface** - Dark theme UI with real-time updates
+- **Live Console** - Real-time logs with filtering and auto-scroll
+- **Player Management** - Kick, ban, teleport, gamemode and more
+- **Backup System** - Automatic and manual backups with restore
+- **Scheduler** - Scheduled backups and automatic restarts
+- **Mod & Plugin Support** - Upload, enable/disable, config editor
+- **Multi-User System** - Multiple users with role-based access control
+- **60+ Permissions** - Granular permission system
+- **Multi-Language** - German, English, Portuguese
+
+---
+
+## Technology Stack
 
 ### Frontend
 - **Vue.js 3** - Progressive JavaScript Framework
-- **Vite** - Modernes Build-Tool
+- **Vite** - Modern Build Tool
 - **Tailwind CSS** - Utility-First CSS Framework
 - **Pinia** - State Management
 - **XTerm.js** - Terminal Emulator
@@ -57,60 +57,60 @@ Das **KyuubiSoft Hytale Panel** ist eine vollumfängliche, produktionsreife Web-
 ### Backend
 - **Node.js 20** - JavaScript Runtime
 - **Express.js 4** - Web Framework
-- **TypeScript 5** - Typisiertes JavaScript
-- **WebSocket** - Echtzeit-Kommunikation
+- **TypeScript 5** - Typed JavaScript
+- **WebSocket** - Real-time Communication
 - **Dockerode** - Docker API Client
 
-### Infrastruktur
-- **Docker & Docker Compose** - Containerisierung
-- **Alpine Linux** - Minimale Base Images
+### Infrastructure
+- **Docker & Docker Compose** - Containerization
+- **Alpine Linux** - Minimal Base Images
 - **Eclipse Temurin JDK 25** - Java Runtime
 
 ---
 
-## Schnellstart
+## Quick Start
 
-### Voraussetzungen
+### Prerequisites
 
-- Docker und Docker Compose installiert
-- Mindestens 4GB RAM empfohlen
-- UDP Port 5520 erreichbar (QUIC Protokoll)
-- Web Panel Port 18080 erreichbar
+- Docker and Docker Compose installed
+- Minimum 4GB RAM recommended
+- UDP Port 5520 accessible (QUIC protocol)
+- Web Panel Port 18080 accessible
 
-### Schnellinstallation
+### Quick Installation
 
 ```bash
-# Repository klonen
+# Clone repository
 git clone https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel
 cd KyuubiSoft-Hytale-Panel
 
-# .env Datei erstellen
+# Create .env file
 cp .env.example .env
 
-# Secrets generieren und .env bearbeiten
+# Generate secrets and edit .env
 JWT_SECRET=$(openssl rand -base64 48)
 echo "JWT_SECRET=$JWT_SECRET" >> .env
 
-# Container starten
+# Start containers
 docker-compose up -d
 ```
 
-Für detaillierte Installationsanweisungen siehe [[Installation]].
+For detailed installation instructions see [[Installation]].
 
 ---
 
 ## Support & Community
 
-- **Ko-fi**: [https://ko-fi.com/kyuubiddragon](https://ko-fi.com/kyuubiddragon) - Unterstütze das Projekt
+- **Ko-fi**: [https://ko-fi.com/kyuubiddragon](https://ko-fi.com/kyuubiddragon) - Support the project
 - **Discord**: [https://dsc.gg/kyuubisoft](https://dsc.gg/kyuubisoft) - Community Support
 - **GitHub Issues**: [GitHub Repository](https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel/issues)
 
 ---
 
-## Lizenz
+## License
 
-Dieses Projekt ist unter der **GPL-3.0 Lizenz** lizenziert. Siehe [LICENSE](https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel/blob/main/LICENSE) für Details.
+This project is licensed under the **GPL-3.0 License**. See [LICENSE](https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel/blob/main/LICENSE) for details.
 
 ---
 
-**Erstellt mit von KyuubiDDragon (KyuubiSoft)**
+**Created with love by KyuubiDDragon (KyuubiSoft)**

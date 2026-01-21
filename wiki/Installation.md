@@ -1,90 +1,90 @@
 # Installation
 
-Diese Anleitung führt dich durch die Installation des KyuubiSoft Hytale Panels.
+This guide walks you through the installation of the KyuubiSoft Hytale Panel.
 
 ---
 
-## Voraussetzungen
+## Prerequisites
 
-| Anforderung | Minimum | Empfohlen |
-|-------------|---------|-----------|
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
 | **RAM** | 4GB | 8GB+ |
-| **CPU** | 2 Kerne | 4+ Kerne |
-| **Speicher** | 10GB | 50GB+ |
-| **Docker** | v20.10+ | Aktuellste Version |
-| **Docker Compose** | v2.0+ | Aktuellste Version |
+| **CPU** | 2 Cores | 4+ Cores |
+| **Storage** | 10GB | 50GB+ |
+| **Docker** | v20.10+ | Latest version |
+| **Docker Compose** | v2.0+ | Latest version |
 
 ### Ports
 
-| Port | Protokoll | Dienst |
-|------|-----------|--------|
+| Port | Protocol | Service |
+|------|----------|---------|
 | 5520 | **UDP** | Hytale Server (QUIC) |
 | 18080 | TCP | Web Admin Panel |
 | 18081 | TCP | WebMap (optional) |
 | 18082 | TCP | WebMap WebSocket (optional) |
-| 18085 | TCP | KyuubiSoft API Plugin (intern) |
+| 18085 | TCP | KyuubiSoft API Plugin (internal) |
 
-> **Wichtig:** Der Hytale Server verwendet UDP, nicht TCP!
+> **Important:** The Hytale server uses UDP, not TCP!
 
 ---
 
-## Installation mit Portainer (Empfohlen)
+## Installation with Portainer (Recommended)
 
-### Schritt 1: Stack hinzufügen
+### Step 1: Add Stack
 
-1. Öffne Portainer → **Stacks** → **Add Stack**
+1. Open Portainer → **Stacks** → **Add Stack**
 2. Name: `hytale`
 3. Build Method: **Repository**
 4. Repository URL: `https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel`
 
-### Schritt 2: Umgebungsvariablen konfigurieren
+### Step 2: Configure Environment Variables
 
-Setze folgende **Pflicht-Variablen**:
+Set the following **required variables**:
 
 ```env
-# Sicherheitskonfiguration (PFLICHT)
-JWT_SECRET=<dein-geheimer-schlüssel>
-CORS_ORIGINS=http://DEINE-SERVER-IP:18080
+# Security Configuration (REQUIRED)
+JWT_SECRET=<your-secret-key>
+CORS_ORIGINS=http://YOUR-SERVER-IP:18080
 MANAGER_USERNAME=admin
-MANAGER_PASSWORD=DeinSicheresPasswort123
+MANAGER_PASSWORD=YourSecurePassword123
 
-# Server-Konfiguration
+# Server Configuration
 JAVA_MIN_RAM=3G
 JAVA_MAX_RAM=4G
 TZ=Europe/Berlin
 ```
 
-**JWT_SECRET generieren:**
+**Generate JWT_SECRET:**
 ```bash
 openssl rand -base64 48
 ```
 
-### Schritt 3: Server-Dateien einrichten
+### Step 3: Set Up Server Files
 
-Wähle eine der folgenden Optionen:
+Choose one of the following options:
 
-#### Option A: Offizieller Hytale Downloader (Empfohlen)
+#### Option A: Official Hytale Downloader (Recommended)
 
 ```env
 USE_HYTALE_DOWNLOADER=true
 HYTALE_PATCHLINE=release
 ```
 
-Nach dem ersten Start:
+After first start:
 ```bash
 docker attach hytale
 /auth login device
-# Browser-Link folgen und Code eingeben
+# Follow the browser link and enter the code
 ```
 
-#### Option B: Eigene Download-URLs
+#### Option B: Custom Download URLs
 
 ```env
-SERVER_JAR_URL=https://dein-server/HytaleServer.jar
-ASSETS_URL=https://dein-server/Assets.zip
+SERVER_JAR_URL=https://your-server/HytaleServer.jar
+ASSETS_URL=https://your-server/Assets.zip
 ```
 
-#### Option C: Manuelle Kopie
+#### Option C: Manual Copy
 
 ```bash
 docker cp Server/HytaleServer.jar hytale:/opt/hytale/server/
@@ -94,32 +94,32 @@ docker restart hytale
 
 ---
 
-## Manuelle Installation
+## Manual Installation
 
-### Schritt 1: Repository klonen
+### Step 1: Clone Repository
 
 ```bash
 git clone https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel
 cd KyuubiSoft-Hytale-Panel
 ```
 
-### Schritt 2: Umgebungsvariablen konfigurieren
+### Step 2: Configure Environment Variables
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Mindestens diese Variablen setzen:
+Set at least these variables:
 
 ```env
-# PFLICHT - Sicherheit
+# REQUIRED - Security
 JWT_SECRET=$(openssl rand -base64 48)
 CORS_ORIGINS=http://localhost:18080
 MANAGER_USERNAME=admin
-MANAGER_PASSWORD=DeinSicheresPasswort123
+MANAGER_PASSWORD=YourSecurePassword123
 
-# Server-Einstellungen
+# Server Settings
 HOST_DATA_PATH=/opt/hytale
 JAVA_MIN_RAM=3G
 JAVA_MAX_RAM=4G
@@ -128,26 +128,26 @@ MANAGER_PORT=18080
 TZ=Europe/Berlin
 ```
 
-### Schritt 3: Container starten
+### Step 3: Start Containers
 
 ```bash
 docker-compose up -d
 ```
 
-### Schritt 4: Logs prüfen
+### Step 4: Check Logs
 
 ```bash
 docker logs -f hytale
 docker logs -f hytale-manager
 ```
 
-### Schritt 5: Panel öffnen
+### Step 5: Open Panel
 
-Öffne im Browser: `http://DEINE-IP:18080`
+Open in browser: `http://YOUR-IP:18080`
 
 ---
 
-## Server-Authentifizierung
+## Server Authentication
 
 ### Device Login
 
@@ -156,79 +156,79 @@ docker attach hytale
 /auth login device
 ```
 
-1. Folge dem angezeigten Browser-Link
-2. Gib den angezeigten Code ein
-3. Bestätige die Authentifizierung
+1. Follow the displayed browser link
+2. Enter the displayed code
+3. Confirm the authentication
 
-### Authentifizierungsmodus ändern
+### Change Authentication Mode
 
 ```env
-# Für Online-Server (Standard)
+# For online server (default)
 AUTH_MODE=authenticated
 
-# Für LAN-only / Offline
+# For LAN-only / Offline
 AUTH_MODE=offline
 ```
 
 ---
 
-## Update auf Version 2.0
+## Upgrade to Version 2.0
 
-### Schritt 1: Berechtigungen korrigieren
+### Step 1: Fix Permissions
 
 ```bash
 sudo chown -R 9999:9999 /opt/hytale
 sudo chmod -R g+rw /opt/hytale
 ```
 
-### Schritt 2: .env aktualisieren
+### Step 2: Update .env
 
-Neue Pflicht-Variablen hinzufügen:
+Add new required variables:
 
 ```env
-JWT_SECRET=<generiert via openssl rand -base64 48>
-CORS_ORIGINS=http://deine-domain.com
-MANAGER_PASSWORD=<mindestens 12 Zeichen>
+JWT_SECRET=<generated via openssl rand -base64 48>
+CORS_ORIGINS=http://your-domain.com
+MANAGER_PASSWORD=<at least 12 characters>
 SECURITY_MODE=strict
 ```
 
-### Schritt 3: Container neu bauen
+### Step 3: Rebuild Containers
 
 ```bash
 docker-compose build
 docker-compose up -d
 ```
 
-### Migrations-Checkliste
+### Migration Checklist
 
-- [ ] `.env` mit neuen Variablen aktualisiert
-- [ ] JWT_SECRET generiert (mind. 32 Zeichen)
-- [ ] CORS_ORIGINS gesetzt (nicht `*`)
-- [ ] MANAGER_PASSWORD sicher (mind. 12 Zeichen)
-- [ ] Berechtigungen korrigiert (UID 9999)
-- [ ] Container neu gebaut
-- [ ] Panel erreichbar und funktionsfähig
+- [ ] Updated `.env` with new variables
+- [ ] Generated JWT_SECRET (min 32 characters)
+- [ ] Set CORS_ORIGINS (not `*`)
+- [ ] Set secure MANAGER_PASSWORD (min 12 characters)
+- [ ] Fixed permissions (UID 9999)
+- [ ] Rebuilt containers
+- [ ] Panel accessible and functional
 
 ---
 
 ## Docker Volumes
 
-| Volume | Pfad im Container | Inhalt |
-|--------|-------------------|--------|
+| Volume | Container Path | Contents |
+|--------|----------------|----------|
 | `hytale-server` | `/opt/hytale/server` | Server JAR + Assets |
-| `hytale-data` | `/opt/hytale/data` | Welten, Configs |
-| `hytale-backups` | `/opt/hytale/backups` | Backup-Archive |
+| `hytale-data` | `/opt/hytale/data` | Worlds, Configs |
+| `hytale-backups` | `/opt/hytale/backups` | Backup Archives |
 | `hytale-plugins` | `/opt/hytale/plugins` | Server Plugins |
 | `hytale-mods` | `/opt/hytale/mods` | Server Mods |
 | `hytale-downloader` | `/opt/hytale/downloader` | Downloader + Credentials |
 | `hytale-auth` | `/opt/hytale/auth` | Server Auth Credentials |
-| `manager-data` | `/app/data` | Panel-Daten |
+| `manager-data` | `/app/data` | Panel Data |
 
 ---
 
-## Nächste Schritte
+## Next Steps
 
-- [[Konfiguration]] - Alle Einstellungsmöglichkeiten
-- [[Features]] - Panel-Funktionen erkunden
-- [[Benutzerverwaltung]] - Benutzer und Rollen einrichten
-- [[Fehlerbehebung]] - Bei Problemen
+- [[Configuration]] - All configuration options
+- [[Features]] - Explore panel features
+- [[User-Management]] - Set up users and roles
+- [[Troubleshooting]] - If you encounter issues

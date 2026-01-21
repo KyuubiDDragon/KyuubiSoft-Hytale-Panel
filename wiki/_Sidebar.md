@@ -4,27 +4,27 @@
 
 ---
 
-### Erste Schritte
+### Getting Started
 - [Installation](Installation)
-- [Konfiguration](Konfiguration)
+- [Configuration](Configuration)
 
 ---
 
-### Nutzung
+### Usage
 - [Features](Features)
-- [Benutzerverwaltung](Benutzerverwaltung)
-- [Server-Befehle](Server-Befehle)
+- [User Management](User-Management)
+- [Server Commands](Server-Commands)
 
 ---
 
-### Referenz
-- [API-Dokumentation](API-Dokumentation)
-- [Sicherheit](Sicherheit)
+### Reference
+- [API Documentation](API-Documentation)
+- [Security](Security)
 
 ---
 
 ### Support
-- [Fehlerbehebung](Fehlerbehebung)
+- [Troubleshooting](Troubleshooting)
 - [Changelog](Changelog)
 
 ---

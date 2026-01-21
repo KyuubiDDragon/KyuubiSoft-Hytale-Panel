@@ -1,37 +1,37 @@
 # Features
 
-Vollständige Übersicht aller Funktionen des KyuubiSoft Hytale Panels.
+Complete overview of all KyuubiSoft Hytale Panel features.
 
 ---
 
 ## Dashboard
 
-Das Dashboard bietet einen schnellen Überblick über den Serverstatus:
+The dashboard provides a quick overview of server status:
 
-- **Server-Status** - Online/Offline mit Uptime
-- **Spieleranzahl** - Aktuelle und maximale Spieler
-- **Ressourcenverbrauch** - CPU und RAM in Echtzeit
-- **Quick Actions** - Start, Stop, Restart Buttons
-- **Aktivitäts-Feed** - Letzte Admin-Aktionen
+- **Server Status** - Online/Offline with uptime
+- **Player Count** - Current and maximum players
+- **Resource Usage** - CPU and RAM in real-time
+- **Quick Actions** - Start, Stop, Restart buttons
+- **Activity Feed** - Recent admin actions
 
 ---
 
-## Live Konsole
+## Live Console
 
-Echtzeit-Serverprotokollierung mit erweiterten Funktionen:
+Real-time server logging with advanced features:
 
-### Funktionen
-- **Echtzeit-Logs** - Live-Streaming via WebSocket
-- **Log-Filterung** - Nach Level (INFO, WARN, ERROR)
-- **Suchfunktion** - Durchsuchen der Logs
-- **Auto-Scroll** - Automatisches Scrollen zu neuen Einträgen
-- **Befehlshistorie** - Zugriff auf vorherige Befehle
-- **Kopieren** - Logs in Zwischenablage kopieren
-- **Alle Logs laden** - Bis zu 10.000 Zeilen
+### Features
+- **Real-time Logs** - Live streaming via WebSocket
+- **Log Filtering** - By level (INFO, WARN, ERROR)
+- **Search Function** - Search through logs
+- **Auto-Scroll** - Automatic scrolling to new entries
+- **Command History** - Access to previous commands
+- **Copy** - Copy logs to clipboard
+- **Load All Logs** - Up to 10,000 lines
 
-### Befehle ausführen
+### Execute Commands
 ```
-/say Hallo Welt!
+/say Hello World!
 /time set day
 /weather clear
 ```
@@ -40,282 +40,282 @@ Echtzeit-Serverprotokollierung mit erweiterten Funktionen:
 
 ## Performance Monitor
 
-Detaillierte Leistungsüberwachung:
+Detailed performance monitoring:
 
-### Metriken
-| Metrik | Beschreibung |
-|--------|--------------|
-| CPU | Prozessorauslastung in % |
-| RAM | Speicherverbrauch (Used/Total) |
+### Metrics
+| Metric | Description |
+|--------|-------------|
+| CPU | Processor usage in % |
+| RAM | Memory usage (Used/Total) |
 | JVM Heap | Java Heap Memory |
-| TPS | Ticks Per Second (mit Plugin) |
+| TPS | Ticks Per Second (with plugin) |
 | MSPT | Milliseconds Per Tick |
 
-### Grafiken
-- Echtzeit-Graphen mit Verlauf
-- Anpassbarer Zeitraum
-- Export-Funktionalität
+### Graphs
+- Real-time graphs with history
+- Adjustable time period
+- Export functionality
 
 ---
 
-## Spielerverwaltung
+## Player Management
 
-Umfassende Spielerverwaltung mit allen notwendigen Aktionen:
+Comprehensive player management with all necessary actions:
 
-### Spielerliste
-- **Online-Spieler** - Aktuell verbundene Spieler
-- **Offline-Spieler** - Alle jemals beigetretenen Spieler
-- **Suchfunktion** - Schnelle Spielersuche
+### Player List
+- **Online Players** - Currently connected players
+- **Offline Players** - All players who ever joined
+- **Search Function** - Quick player search
 
-### Spieleraktionen
+### Player Actions
 
-| Aktion | Beschreibung | Berechtigung |
-|--------|--------------|--------------|
-| **Kick** | Spieler vom Server werfen | `players.kick` |
-| **Ban** | Spieler dauerhaft sperren | `players.ban` |
-| **Unban** | Sperre aufheben | `players.unban` |
-| **Teleport** | Zu Koordinaten/Spieler teleportieren | `players.teleport` |
-| **Gamemode** | Spielmodus ändern (Creative/Adventure) | `players.gamemode` |
-| **Give** | Items geben | `players.give` |
-| **Heal** | Spieler heilen | `players.heal` |
-| **Kill** | Spieler töten | `players.kill` |
-| **Respawn** | Spieler respawnen | `players.respawn` |
-| **Effekte** | Status-Effekte anwenden/entfernen | `players.effects` |
-| **Inventar leeren** | Inventar löschen | `players.clear_inventory` |
-| **Nachricht** | Private Nachricht senden | `players.message` |
+| Action | Description | Permission |
+|--------|-------------|------------|
+| **Kick** | Remove player from server | `players.kick` |
+| **Ban** | Permanently ban player | `players.ban` |
+| **Unban** | Remove ban | `players.unban` |
+| **Teleport** | Teleport to coordinates/player | `players.teleport` |
+| **Gamemode** | Change game mode (Creative/Adventure) | `players.gamemode` |
+| **Give** | Give items | `players.give` |
+| **Heal** | Heal player | `players.heal` |
+| **Kill** | Kill player | `players.kill` |
+| **Respawn** | Respawn player | `players.respawn` |
+| **Effects** | Apply/remove status effects | `players.effects` |
+| **Clear Inventory** | Clear player inventory | `players.clear_inventory` |
+| **Message** | Send private message | `players.message` |
 
-### Spielerdetails (mit Plugin)
-- **Übersicht** - Name, UUID, Position, Gamemode
-- **Inventar** - Item-Anzeige mit Icons
-- **Aussehen** - Spieler-Skin/Appearance
-- **Chat-Verlauf** - Alle Nachrichten des Spielers
-- **Todespositionen** - Letzte Todespunkte mit Teleport-Option
-
----
-
-## Spielerstatistiken
-
-Detaillierte Statistiken und Analysen:
-
-- **Top-Spieler** - Nach Spielzeit sortiert
-- **Spielzeit-Tracking** - Gesamtspielzeit pro Spieler
-- **Aktivitätstrends** - Tägliche/Wöchentliche Aktivität
-- **Engagement-Metriken** - Durchschnittliche Sitzungsdauer
+### Player Details (with Plugin)
+- **Overview** - Name, UUID, Position, Gamemode
+- **Inventory** - Item display with icons
+- **Appearance** - Player skin/appearance
+- **Chat History** - All messages from player
+- **Death Positions** - Last death locations with teleport option
 
 ---
 
-## Chat-System
+## Player Statistics
 
-Vollständiges Chat-Management:
+Detailed statistics and analytics:
 
-- **Globaler Chat** - Alle Nachrichten
-- **Spieler-Chat** - Nachrichten nach Spieler gefiltert
-- **Zeitfilter** - 7/14/30 Tage oder alle
-- **Suchfunktion** - Nach Inhalt suchen
-- **UUID-Tracking** - Spieler über Namensänderungen verfolgen
+- **Top Players** - Sorted by playtime
+- **Playtime Tracking** - Total playtime per player
+- **Activity Trends** - Daily/Weekly activity
+- **Engagement Metrics** - Average session duration
+
+---
+
+## Chat System
+
+Complete chat management:
+
+- **Global Chat** - All messages
+- **Player Chat** - Messages filtered by player
+- **Time Filter** - 7/14/30 days or all
+- **Search Function** - Search by content
+- **UUID Tracking** - Track players across name changes
 
 ---
 
 ## Whitelist & Bans
 
-Zugriffskontrolle für den Server:
+Server access control:
 
 ### Whitelist
-- Spieler zur Whitelist hinzufügen/entfernen
-- Whitelist aktivieren/deaktivieren
-- Import/Export Funktionalität
+- Add/remove players from whitelist
+- Enable/disable whitelist
+- Import/Export functionality
 
 ### Banlist
-- Spieler bannen/entbannen
-- Ban-Grund angeben
-- Ban-Historie anzeigen
+- Ban/unban players
+- Specify ban reason
+- View ban history
 
 ---
 
-## Backup-System
+## Backup System
 
-Robustes Backup-Management:
+Robust backup management:
 
-### Manuelle Backups
-- **Backup erstellen** - Mit optionalem Namen
-- **Backup wiederherstellen** - Vollständige Wiederherstellung
-- **Backup herunterladen** - Als .tar.gz Archiv
-- **Backup löschen** - Alte Backups entfernen
+### Manual Backups
+- **Create Backup** - With optional name
+- **Restore Backup** - Full restoration
+- **Download Backup** - As .tar.gz archive
+- **Delete Backup** - Remove old backups
 
-### Automatische Backups
-- Im Scheduler konfigurierbar
-- Retention Policy (Anzahl aufbewahren)
-- Zeitgesteuerte Erstellung
+### Automatic Backups
+- Configurable in Scheduler
+- Retention policy (number to keep)
+- Scheduled creation
 
-### Backup-Inhalt
-- Weltdaten
-- Spielerdaten
-- Konfigurationsdateien
+### Backup Contents
+- World data
+- Player data
+- Configuration files
 - Mods & Plugins
 
 ---
 
 ## Scheduler
 
-Automatisierte Aufgaben und Planung:
+Automated tasks and scheduling:
 
 ### Auto-Backups
-- Zeitplan konfigurieren
-- Aufbewahrungsrichtlinie
-- Benachrichtigungen
+- Configure schedule
+- Retention policy
+- Notifications
 
 ### Auto-Restart
-- Geplante Neustarts
-- Countdown-Warnungen
-- Spielerbenachrichtigung vor Restart
+- Scheduled restarts
+- Countdown warnings
+- Player notification before restart
 
 ### Server Broadcasts
-- Geplante Ankündigungen
-- Wiederkehrende Nachrichten
-- Ereignisbasierte Broadcasts
+- Scheduled announcements
+- Recurring messages
+- Event-based broadcasts
 
 ### Quick Commands
-- Benutzerdefinierte Schnellbefehle
-- Ein-Klick-Ausführung
-- Kategorisierung
+- Custom quick commands
+- One-click execution
+- Categorization
 
 ---
 
-## Welten-Verwaltung
+## World Management
 
-Übersicht aller Serverwelten:
+Overview of all server worlds:
 
-- **Weltliste** - Alle geladenen Welten
-- **Weltstatistiken** - Größe, Spieleranzahl
-- **Weltinformationen** - Seed, Spawn-Position
+- **World List** - All loaded worlds
+- **World Statistics** - Size, player count
+- **World Information** - Seed, spawn position
 
 ---
 
 ## Mods & Plugins
 
-### Mod-Verwaltung
-- **Upload** - .jar Dateien hochladen
-- **Aktivieren/Deaktivieren** - Mods ein-/ausschalten
-- **Konfiguration** - Mod-Config-Dateien bearbeiten
-- **Löschen** - Mods entfernen
+### Mod Management
+- **Upload** - Upload .jar files
+- **Enable/Disable** - Toggle mods on/off
+- **Configuration** - Edit mod config files
+- **Delete** - Remove mods
 
-### Plugin-Verwaltung
-- Gleiche Funktionen wie Mods
-- Separate Plugin-Ordner
+### Plugin Management
+- Same features as mods
+- Separate plugin folder
 
-### Mod-Stores
-- **Modtale Integration** - Mods durchsuchen und installieren
-- **StackMart Integration** - Ressourcen entdecken
+### Mod Stores
+- **Modtale Integration** - Browse and install mods
+- **StackMart Integration** - Discover resources
 
 ---
 
 ## Asset Explorer
 
-Durchsuchen und Analysieren von Hytale-Assets:
+Browse and analyze Hytale assets:
 
-### Funktionen
-- **Verzeichnis-Browser** - Navigieren durch Assets
-- **Datei-Viewer** - JSON, Bilder, Text, Hex
-- **Suche** - Plaintext, Glob, Regex
-- **Download** - Assets herunterladen
+### Features
+- **Directory Browser** - Navigate through assets
+- **File Viewer** - JSON, images, text, hex
+- **Search** - Plaintext, Glob, Regex
+- **Download** - Download assets
 
-### Unterstützte Formate
-- JSON-Dateien mit Syntax-Highlighting
-- Bilder (PNG, JPG, etc.)
-- Textdateien
-- Binärdateien (Hex-Ansicht)
+### Supported Formats
+- JSON files with syntax highlighting
+- Images (PNG, JPG, etc.)
+- Text files
+- Binary files (Hex view)
 
 ---
 
-## Konfigurationseditor
+## Configuration Editor
 
-Server-Konfiguration direkt bearbeiten:
+Edit server configuration directly:
 
-### Unterstützte Formate
+### Supported Formats
 - JSON
 - Properties
 - YAML
 - TOML
 - INI
 
-### Funktionen
-- Syntax-Highlighting
-- Validierung
-- Backup vor Änderungen
+### Features
+- Syntax highlighting
+- Validation
+- Backup before changes
 
 ---
 
 ## WebMap Integration
 
-Live-Serverkarte mit EasyWebMap Mod:
+Live server map with EasyWebMap mod:
 
-- **Echtzeit-Karte** - Live-Ansicht der Welt
-- **Spielerpositionen** - Spieler auf der Karte
-- **Zonen/Regionen** - Gebiete anzeigen
-- **HTTPS-Proxy** - Über Panel proxied
+- **Real-time Map** - Live world view
+- **Player Positions** - Players on the map
+- **Zones/Regions** - Display areas
+- **HTTPS Proxy** - Proxied through panel
 
-Zugriff: `http://dein-server:18081`
+Access: `http://your-server:18081`
 
 ---
 
-## Aktivitätsprotokoll
+## Activity Log
 
-Vollständige Audit-Trail aller Admin-Aktionen:
+Complete audit trail of all admin actions:
 
-### Protokollierte Aktionen
-- Benutzer-Logins
+### Logged Actions
+- User logins
 - Server Start/Stop/Restart
-- Spieleraktionen (Kick, Ban, etc.)
-- Konfigurationsänderungen
-- Backup-Operationen
-- Benutzer/Rollen-Änderungen
+- Player actions (Kick, Ban, etc.)
+- Configuration changes
+- Backup operations
+- User/Role changes
 
-### Funktionen
-- Filterung nach Kategorie
-- Filterung nach Benutzer
-- Zeitstempel
-- Erfolg/Fehlschlag Status
+### Features
+- Filter by category
+- Filter by user
+- Timestamps
+- Success/Failure status
 
 ---
 
 ## Hytale Auth
 
-Verwaltung der Server-Authentifizierung:
+Server authentication management:
 
-- **Device Login** - OAuth-Authentifizierung
-- **Status anzeigen** - Authentifizierungsstatus
-- **Credentials zurücksetzen** - Bei Problemen
-- **Persistence-Modus** - Memory oder Encrypted
-
----
-
-## Offizieller Downloader
-
-Automatischer Server-Download:
-
-- **Automatischer Download** - Server-Dateien herunterladen
-- **Patchline wählen** - Release oder Pre-Release
-- **Update-Check** - Auf neue Versionen prüfen
-- **Auto-Update** - Automatische Updates (optional)
+- **Device Login** - OAuth authentication
+- **View Status** - Authentication status
+- **Reset Credentials** - If issues occur
+- **Persistence Mode** - Memory or Encrypted
 
 ---
 
-## Mehrsprachigkeit
+## Official Downloader
 
-Das Panel unterstützt mehrere Sprachen:
+Automatic server download:
 
-| Sprache | Code |
-|---------|------|
-| Deutsch | `de` |
-| Englisch | `en` |
-| Portugiesisch | `pt` |
-
-Sprachauswahl im Panel unter **Settings**.
+- **Automatic Download** - Download server files
+- **Select Patchline** - Release or Pre-Release
+- **Update Check** - Check for new versions
+- **Auto-Update** - Automatic updates (optional)
 
 ---
 
-## Nächste Schritte
+## Multi-Language Support
 
-- [[Benutzerverwaltung]] - Benutzer und Rollen einrichten
-- [[API-Dokumentation]] - REST API nutzen
-- [[Server-Befehle]] - Alle verfügbaren Befehle
+The panel supports multiple languages:
+
+| Language | Code |
+|----------|------|
+| German | `de` |
+| English | `en` |
+| Portuguese | `pt` |
+
+Language selection in Panel under **Settings**.
+
+---
+
+## Next Steps
+
+- [[User-Management]] - Set up users and roles
+- [[API-Documentation]] - Use the REST API
+- [[Server-Commands]] - All available commands

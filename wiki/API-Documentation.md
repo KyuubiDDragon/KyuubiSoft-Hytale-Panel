@@ -1,18 +1,18 @@
-# API Dokumentation
+# API Documentation
 
-Vollständige REST API Referenz des KyuubiSoft Hytale Panels.
+Complete REST API reference for the KyuubiSoft Hytale Panel.
 
 ---
 
-## Authentifizierung
+## Authentication
 
-Alle API-Endpunkte (außer Login) erfordern einen JWT Bearer Token:
+All API endpoints (except login) require a JWT Bearer Token:
 
 ```http
 Authorization: Bearer <access_token>
 ```
 
-### Token erhalten
+### Get Token
 
 ```http
 POST /api/auth/login
@@ -20,11 +20,11 @@ Content-Type: application/json
 
 {
   "username": "admin",
-  "password": "dein-passwort"
+  "password": "your-password"
 }
 ```
 
-**Antwort:**
+**Response:**
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
@@ -35,7 +35,7 @@ Content-Type: application/json
 }
 ```
 
-### Token erneuern
+### Refresh Token
 
 ```http
 POST /api/auth/refresh
@@ -46,27 +46,27 @@ Content-Type: application/json
 }
 ```
 
-### Token-Lebensdauer
-- **Access Token:** 15 Minuten
-- **Refresh Token:** 7 Tage
+### Token Lifetime
+- **Access Token:** 15 minutes
+- **Refresh Token:** 7 days
 
 ---
 
 ## Rate Limiting
 
-| Endpunkt | Limit |
+| Endpoint | Limit |
 |----------|-------|
-| `/api/auth/login` | 5 Versuche / 15 Min (nur fehlgeschlagene) |
-| `/api/auth/refresh` | 10 Anfragen / Minute |
-| `/api/auth/ws-ticket` | 30 Anfragen / Minute |
-| `/api/assets/item-icon/*` | 100 Anfragen / Minute / IP |
+| `/api/auth/login` | 5 attempts / 15 min (failed only) |
+| `/api/auth/refresh` | 10 requests / minute |
+| `/api/auth/ws-ticket` | 30 requests / minute |
+| `/api/assets/item-icon/*` | 100 requests / minute / IP |
 
 ---
 
-## Authentifizierung (`/api/auth`)
+## Authentication (`/api/auth`)
 
 ### POST /api/auth/login
-Login und Token erhalten.
+Login and get tokens.
 
 **Request:**
 ```json
@@ -76,12 +76,12 @@ Login und Token erhalten.
 }
 ```
 
-**Response:** Token-Objekt
+**Response:** Token object
 
 ---
 
 ### POST /api/auth/logout
-Token invalidieren (erfordert Auth).
+Invalidate tokens (requires auth).
 
 **Response:**
 ```json
@@ -93,9 +93,9 @@ Token invalidieren (erfordert Auth).
 ---
 
 ### POST /api/auth/ws-ticket
-WebSocket-Ticket für sichere Verbindung erhalten.
+Get WebSocket ticket for secure connection.
 
-**Berechtigung:** `console.view`
+**Permission:** `console.view`
 
 **Response:**
 ```json
@@ -108,7 +108,7 @@ WebSocket-Ticket für sichere Verbindung erhalten.
 ---
 
 ### GET /api/auth/me
-Aktuellen Benutzer abrufen.
+Get current user.
 
 **Response:**
 ```json
@@ -122,9 +122,9 @@ Aktuellen Benutzer abrufen.
 ---
 
 ### GET /api/auth/users
-Alle Benutzer auflisten.
+List all users.
 
-**Berechtigung:** `users.view`
+**Permission:** `users.view`
 
 **Response:**
 ```json
@@ -142,15 +142,15 @@ Alle Benutzer auflisten.
 ---
 
 ### POST /api/auth/users
-Neuen Benutzer erstellen.
+Create new user.
 
-**Berechtigung:** `users.create`
+**Permission:** `users.create`
 
 **Request:**
 ```json
 {
-  "username": "neuerbenutzer",
-  "password": "sicherespasswort",
+  "username": "newuser",
+  "password": "securepassword",
   "roleId": "moderator"
 }
 ```
@@ -158,14 +158,14 @@ Neuen Benutzer erstellen.
 ---
 
 ### PUT /api/auth/users/:username
-Benutzer aktualisieren.
+Update user.
 
-**Berechtigung:** `users.edit`
+**Permission:** `users.edit`
 
 **Request:**
 ```json
 {
-  "password": "neuespasswort",
+  "password": "newpassword",
   "roleId": "operator"
 }
 ```
@@ -173,18 +173,18 @@ Benutzer aktualisieren.
 ---
 
 ### DELETE /api/auth/users/:username
-Benutzer löschen.
+Delete user.
 
-**Berechtigung:** `users.delete`
+**Permission:** `users.delete`
 
 ---
 
 ## Server (`/api/server`)
 
 ### GET /api/server/status
-Serverstatus abrufen.
+Get server status.
 
-**Berechtigung:** `server.view_status`
+**Permission:** `server.view_status`
 
 **Response:**
 ```json
@@ -198,9 +198,9 @@ Serverstatus abrufen.
 ---
 
 ### GET /api/server/stats
-Server-Statistiken abrufen.
+Get server statistics.
 
-**Berechtigung:** `server.view_status`
+**Permission:** `server.view_status`
 
 **Response:**
 ```json
@@ -214,9 +214,9 @@ Server-Statistiken abrufen.
 ---
 
 ### GET /api/server/memory
-Detaillierte Speicherinformationen.
+Get detailed memory information.
 
-**Berechtigung:** `performance.view`
+**Permission:** `performance.view`
 
 **Response:**
 ```json
@@ -238,15 +238,15 @@ Detaillierte Speicherinformationen.
 ---
 
 ### GET /api/server/quick-settings
-Quick Settings abrufen.
+Get Quick Settings.
 
-**Berechtigung:** `config.view`
+**Permission:** `config.view`
 
 **Response:**
 ```json
 {
-  "serverName": "Mein Server",
-  "motd": "Willkommen!",
+  "serverName": "My Server",
+  "motd": "Welcome!",
   "password": "",
   "maxPlayers": 20,
   "maxViewRadius": 32,
@@ -257,14 +257,14 @@ Quick Settings abrufen.
 ---
 
 ### PUT /api/server/quick-settings
-Quick Settings aktualisieren.
+Update Quick Settings.
 
-**Berechtigung:** `config.edit`
+**Permission:** `config.edit`
 
 **Request:**
 ```json
 {
-  "serverName": "Neuer Name",
+  "serverName": "New Name",
   "maxPlayers": 50
 }
 ```
@@ -272,35 +272,35 @@ Quick Settings aktualisieren.
 ---
 
 ### POST /api/server/start
-Server starten.
+Start server.
 
-**Berechtigung:** `server.start`
+**Permission:** `server.start`
 
 ---
 
 ### POST /api/server/stop
-Server stoppen.
+Stop server.
 
-**Berechtigung:** `server.stop`
+**Permission:** `server.stop`
 
 ---
 
 ### POST /api/server/restart
-Server neustarten.
+Restart server.
 
-**Berechtigung:** `server.restart`
+**Permission:** `server.restart`
 
 ---
 
-## Konsole (`/api/console`)
+## Console (`/api/console`)
 
 ### GET /api/console/logs
-Server-Logs abrufen.
+Get server logs.
 
-**Berechtigung:** `console.view`
+**Permission:** `console.view`
 
-**Query Parameter:**
-- `tail` (optional): Anzahl Zeilen (0-10000, Standard: 100)
+**Query Parameters:**
+- `tail` (optional): Number of lines (0-10000, default: 100)
 
 **Response:**
 ```json
@@ -319,14 +319,14 @@ Server-Logs abrufen.
 ---
 
 ### POST /api/console/command
-Befehl ausführen.
+Execute command.
 
-**Berechtigung:** `console.execute`
+**Permission:** `console.execute`
 
 **Request:**
 ```json
 {
-  "command": "/say Hallo Welt!"
+  "command": "/say Hello World!"
 }
 ```
 
@@ -334,26 +334,26 @@ Befehl ausführen.
 ```json
 {
   "success": true,
-  "command": "/say Hallo Welt!",
+  "command": "/say Hello World!",
   "output": "Message sent"
 }
 ```
 
 ---
 
-## Spieler (`/api/players`)
+## Players (`/api/players`)
 
 ### GET /api/players
-Online-Spieler auflisten.
+List online players.
 
-**Berechtigung:** `players.view`
+**Permission:** `players.view`
 
 **Response:**
 ```json
 {
   "players": [
     {
-      "name": "Spieler1",
+      "name": "Player1",
       "uuid": "abc123...",
       "online": true,
       "joinedAt": "2024-01-01T10:00:00Z"
@@ -366,16 +366,16 @@ Online-Spieler auflisten.
 ---
 
 ### GET /api/players/all
-Alle Spieler (online + offline).
+All players (online + offline).
 
-**Berechtigung:** `players.view`
+**Permission:** `players.view`
 
 ---
 
 ### GET /api/players/count
-Spieleranzahl.
+Player count.
 
-**Berechtigung:** `players.view`
+**Permission:** `players.view`
 
 **Response:**
 ```json
@@ -387,23 +387,23 @@ Spieleranzahl.
 ---
 
 ### POST /api/players/:name/kick
-Spieler kicken.
+Kick player.
 
-**Berechtigung:** `players.kick`
+**Permission:** `players.kick`
 
 **Request:**
 ```json
 {
-  "reason": "Regelverstoß"
+  "reason": "Rule violation"
 }
 ```
 
 ---
 
 ### POST /api/players/:name/ban
-Spieler bannen.
+Ban player.
 
-**Berechtigung:** `players.ban`
+**Permission:** `players.ban`
 
 **Request:**
 ```json
@@ -415,18 +415,18 @@ Spieler bannen.
 ---
 
 ### DELETE /api/players/:name/ban
-Ban aufheben.
+Unban player.
 
-**Berechtigung:** `players.unban`
+**Permission:** `players.unban`
 
 ---
 
 ### POST /api/players/:name/teleport
-Spieler teleportieren.
+Teleport player.
 
-**Berechtigung:** `players.teleport`
+**Permission:** `players.teleport`
 
-**Zu Koordinaten:**
+**To coordinates:**
 ```json
 {
   "x": 100,
@@ -435,19 +435,19 @@ Spieler teleportieren.
 }
 ```
 
-**Zu Spieler:**
+**To player:**
 ```json
 {
-  "target": "AnderSpieler"
+  "target": "OtherPlayer"
 }
 ```
 
 ---
 
 ### POST /api/players/:name/gamemode
-Spielmodus ändern.
+Change game mode.
 
-**Berechtigung:** `players.gamemode`
+**Permission:** `players.gamemode`
 
 **Request:**
 ```json
@@ -456,14 +456,14 @@ Spielmodus ändern.
 }
 ```
 
-Erlaubte Werte: `creative`, `adventure`, `c`, `a`
+Allowed values: `creative`, `adventure`, `c`, `a`
 
 ---
 
 ### POST /api/players/:name/give
-Item geben.
+Give item.
 
-**Berechtigung:** `players.give`
+**Permission:** `players.give`
 
 **Request:**
 ```json
@@ -476,16 +476,16 @@ Item geben.
 ---
 
 ### POST /api/players/:name/heal
-Spieler heilen.
+Heal player.
 
-**Berechtigung:** `players.heal`
+**Permission:** `players.heal`
 
 ---
 
 ### POST /api/players/:name/effect
-Effekt anwenden/entfernen.
+Apply/remove effect.
 
-**Berechtigung:** `players.effects`
+**Permission:** `players.effects`
 
 **Request:**
 ```json
@@ -498,14 +498,14 @@ Effekt anwenden/entfernen.
 ---
 
 ### GET /api/players/:name/deaths
-Todespositionen abrufen.
+Get death positions.
 
-**Berechtigung:** `players.view`
+**Permission:** `players.view`
 
 **Response:**
 ```json
 {
-  "player": "Spieler1",
+  "player": "Player1",
   "positions": [
     {
       "world": "world",
@@ -520,23 +520,23 @@ Todespositionen abrufen.
 ---
 
 ### GET /api/players/chat
-Globalen Chat abrufen.
+Get global chat.
 
-**Berechtigung:** `chat.view`
+**Permission:** `chat.view`
 
-**Query Parameter:**
-- `limit` (optional): Max. Ergebnisse (Standard: 100)
+**Query Parameters:**
+- `limit` (optional): Max results (default: 100)
 - `offset` (optional): Pagination
-- `days` (optional): Tage zurück (Standard: 7, 0 = alle)
+- `days` (optional): Days back (default: 7, 0 = all)
 
 ---
 
 ## Backups (`/api/backups`)
 
 ### GET /api/backups
-Alle Backups auflisten.
+List all backups.
 
-**Berechtigung:** `backups.view`
+**Permission:** `backups.view`
 
 **Response:**
 ```json
@@ -544,7 +544,7 @@ Alle Backups auflisten.
   "backups": [
     {
       "id": "backup_20240101_120000",
-      "name": "Manuelles Backup",
+      "name": "Manual Backup",
       "timestamp": "2024-01-01T12:00:00Z",
       "size": 1048576
     }
@@ -560,48 +560,48 @@ Alle Backups auflisten.
 ---
 
 ### POST /api/backups
-Neues Backup erstellen.
+Create new backup.
 
-**Berechtigung:** `backups.create`
+**Permission:** `backups.create`
 
 **Request:**
 ```json
 {
-  "name": "Vor dem Update"
+  "name": "Before Update"
 }
 ```
 
 ---
 
 ### POST /api/backups/:id/restore
-Backup wiederherstellen.
+Restore backup.
 
-**Berechtigung:** `backups.restore`
+**Permission:** `backups.restore`
 
 ---
 
 ### GET /api/backups/:id/download
-Backup herunterladen.
+Download backup.
 
-**Berechtigung:** `backups.download`
+**Permission:** `backups.download`
 
-**Response:** `.tar.gz` Datei
+**Response:** `.tar.gz` file
 
 ---
 
 ### DELETE /api/backups/:id
-Backup löschen.
+Delete backup.
 
-**Berechtigung:** `backups.delete`
+**Permission:** `backups.delete`
 
 ---
 
-## Rollen (`/api/roles`)
+## Roles (`/api/roles`)
 
 ### GET /api/roles
-Alle Rollen auflisten.
+List all roles.
 
-**Berechtigung:** `roles.view`
+**Permission:** `roles.view`
 
 **Response:**
 ```json
@@ -610,7 +610,7 @@ Alle Rollen auflisten.
     {
       "id": "administrator",
       "name": "Administrator",
-      "description": "Vollzugriff",
+      "description": "Full access",
       "permissions": ["*"],
       "color": "#FF0000",
       "isSystem": true
@@ -622,22 +622,22 @@ Alle Rollen auflisten.
 ---
 
 ### GET /api/roles/permissions
-Verfügbare Berechtigungen auflisten.
+List available permissions.
 
-**Berechtigung:** `roles.view`
+**Permission:** `roles.view`
 
 ---
 
 ### POST /api/roles
-Neue Rolle erstellen.
+Create new role.
 
-**Berechtigung:** `roles.manage`
+**Permission:** `roles.manage`
 
 **Request:**
 ```json
 {
   "name": "Helper",
-  "description": "Hilft Spielern",
+  "description": "Helps players",
   "permissions": ["players.view", "chat.view"],
   "color": "#00FF00"
 }
@@ -646,77 +646,77 @@ Neue Rolle erstellen.
 ---
 
 ### PUT /api/roles/:id
-Rolle aktualisieren.
+Update role.
 
-**Berechtigung:** `roles.manage`
+**Permission:** `roles.manage`
 
 ---
 
 ### DELETE /api/roles/:id
-Rolle löschen.
+Delete role.
 
-**Berechtigung:** `roles.manage`
+**Permission:** `roles.manage`
 
-> **Hinweis:** System-Rollen können nicht gelöscht werden.
+> **Note:** System roles cannot be deleted.
 
 ---
 
 ## Scheduler (`/api/scheduler`)
 
 ### GET /api/scheduler/config
-Scheduler-Konfiguration abrufen.
+Get scheduler configuration.
 
-**Berechtigung:** `scheduler.view`
+**Permission:** `scheduler.view`
 
 ---
 
 ### PUT /api/scheduler/config
-Scheduler-Konfiguration aktualisieren.
+Update scheduler configuration.
 
-**Berechtigung:** `scheduler.edit`
+**Permission:** `scheduler.edit`
 
 ---
 
 ### POST /api/scheduler/backup/run
-Backup sofort ausführen.
+Run backup immediately.
 
-**Berechtigung:** `scheduler.edit`
+**Permission:** `scheduler.edit`
 
 ---
 
 ### GET /api/scheduler/quick-commands
-Quick Commands auflisten.
+List Quick Commands.
 
-**Berechtigung:** `scheduler.view`
+**Permission:** `scheduler.view`
 
 ---
 
 ### POST /api/scheduler/quick-commands
-Quick Command erstellen.
+Create Quick Command.
 
-**Berechtigung:** `scheduler.edit`
+**Permission:** `scheduler.edit`
 
 **Request:**
 ```json
 {
-  "name": "Tag setzen",
+  "name": "Set Day",
   "command": "/time set day",
   "icon": "sun",
-  "category": "Zeit"
+  "category": "Time"
 }
 ```
 
 ---
 
 ### POST /api/scheduler/broadcast
-Broadcast an alle Spieler.
+Broadcast to all players.
 
-**Berechtigung:** `scheduler.edit`
+**Permission:** `scheduler.edit`
 
 **Request:**
 ```json
 {
-  "message": "Server startet in 5 Minuten neu!"
+  "message": "Server restarting in 5 minutes!"
 }
 ```
 
@@ -725,55 +725,55 @@ Broadcast an alle Spieler.
 ## Assets (`/api/assets`)
 
 ### GET /api/assets/status
-Asset-Extraktionsstatus.
+Asset extraction status.
 
-**Berechtigung:** `assets.view`
+**Permission:** `assets.view`
 
 ---
 
 ### POST /api/assets/extract
-Assets extrahieren.
+Extract assets.
 
-**Berechtigung:** `assets.manage`
+**Permission:** `assets.manage`
 
 ---
 
 ### GET /api/assets/browse
-Asset-Verzeichnis durchsuchen.
+Browse asset directory.
 
-**Berechtigung:** `assets.view`
+**Permission:** `assets.view`
 
-**Query Parameter:**
-- `path` (optional): Pfad zum Durchsuchen
+**Query Parameters:**
+- `path` (optional): Path to browse
 
 ---
 
 ### GET /api/assets/search
-Assets durchsuchen.
+Search assets.
 
-**Berechtigung:** `assets.view`
+**Permission:** `assets.view`
 
-**Query Parameter:**
-- `q` (erforderlich): Suchbegriff (min. 2 Zeichen)
-- `content` (optional): Dateiinhalt durchsuchen
-- `ext` (optional): Dateiendungen (`.json,.lua`)
-- `limit` (optional): Max. Ergebnisse (Standard: 100)
-- `regex` (optional): Regex-Suche
-- `glob` (optional): Glob-Pattern
+**Query Parameters:**
+- `q` (required): Search term (min 2 characters)
+- `content` (optional): Search file content
+- `ext` (optional): File extensions (`.json,.lua`)
+- `limit` (optional): Max results (default: 100)
+- `regex` (optional): Regex search
+- `glob` (optional): Glob pattern
 
 ---
 
 ### GET /api/assets/item-icon/:itemId
-Item-Icon abrufen (öffentlich, rate-limited).
+Get item icon (public, rate-limited).
 
-**Response:** PNG-Bild
+**Response:** PNG image
 
 ---
 
 ## Health Check
 
 ### GET /api/health
-Service-Status prüfen.
+Check service status.
 
 **Response:**
 ```json
@@ -786,7 +786,7 @@ Service-Status prüfen.
 ---
 
 ### GET /api/health/permissions
-Verzeichnis-Berechtigungen prüfen.
+Check directory permissions.
 
 **Response:**
 ```json
@@ -803,20 +803,20 @@ Verzeichnis-Berechtigungen prüfen.
 
 ## WebSocket API
 
-### Verbindung herstellen
+### Establish Connection
 
-1. WebSocket-Ticket abrufen:
+1. Get WebSocket ticket:
 ```http
 POST /api/auth/ws-ticket
 Authorization: Bearer <token>
 ```
 
-2. WebSocket verbinden:
+2. Connect WebSocket:
 ```javascript
 const ws = new WebSocket('ws://server:3000/ws?ticket=<ticket>');
 ```
 
-### Nachrichten empfangen
+### Receive Messages
 
 ```javascript
 ws.onmessage = (event) => {
@@ -826,33 +826,33 @@ ws.onmessage = (event) => {
 };
 ```
 
-### Befehle senden
+### Send Commands
 
 ```javascript
 ws.send(JSON.stringify({
   type: 'command',
-  command: '/say Hallo!'
+  command: '/say Hello!'
 }));
 ```
 
 ---
 
-## Fehlerbehandlung
+## Error Handling
 
 ### HTTP Status Codes
 
-| Code | Bedeutung |
-|------|-----------|
-| 200 | Erfolg |
-| 201 | Erstellt |
-| 400 | Ungültige Anfrage |
-| 401 | Nicht authentifiziert |
-| 403 | Keine Berechtigung |
-| 404 | Nicht gefunden |
-| 429 | Rate Limit erreicht |
-| 500 | Server-Fehler |
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request |
+| 401 | Unauthorized |
+| 403 | Forbidden |
+| 404 | Not Found |
+| 429 | Rate Limited |
+| 500 | Server Error |
 
-### Fehler-Response
+### Error Response
 
 ```json
 {
@@ -864,7 +864,7 @@ ws.send(JSON.stringify({
 
 ---
 
-## Nächste Schritte
+## Next Steps
 
-- [[Sicherheit]] - API-Sicherheit verstehen
-- [[Benutzerverwaltung]] - Berechtigungen konfigurieren
+- [[Security]] - Understand API security
+- [[User-Management]] - Configure permissions
