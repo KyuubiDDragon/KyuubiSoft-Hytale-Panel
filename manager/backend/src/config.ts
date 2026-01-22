@@ -134,8 +134,14 @@ export const config = {
   pluginsPath: process.env.PLUGINS_PATH || '/opt/hytale/plugins',
   assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets',
 
-  // Server port (Docker-only, defined in docker-compose.yml)
-  port: parseInt(process.env.MANAGER_PORT || '18080', 10),
+  // Server port - internal port is always 18080, external port from MANAGER_PORT
+  // Internal port is what Express listens on inside the container
+  // External port is what users access from the host (for display purposes)
+  port: 18080,  // Always 18080 inside container
+  externalPort: parseInt(process.env.MANAGER_PORT || '18080', 10),  // Host-mapped port
+
+  // Game server port (for display in setup wizard)
+  serverPort: parseInt(process.env.SERVER_PORT || '5520', 10),
 
   // Timezone
   tz: process.env.TZ || 'Europe/Berlin',
@@ -222,7 +228,7 @@ export function checkSecurityConfig(): void {
     console.log('║  No configuration found. Starting in setup mode.             ║');
     console.log('║                                                              ║');
     console.log('║  Open the panel in your browser to complete the setup:       ║');
-    console.log(`║  → http://localhost:${config.port.toString().padEnd(38)}║`);
+    console.log(`║  → http://localhost:${config.externalPort.toString().padEnd(38)}║`);
     console.log('║                                                              ║');
     console.log('║  The setup wizard will guide you through:                    ║');
     console.log('║    • Creating an admin account                               ║');
