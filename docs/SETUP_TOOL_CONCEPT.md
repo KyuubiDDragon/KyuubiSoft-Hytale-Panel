@@ -558,7 +558,7 @@ Ein interaktiver Setup-Wizard der beim **ersten Start** automatisch erscheint un
 ║  └────────────────────────────────────────────────────────┘  ║
 ║                                                               ║
 ║  Plugin-Version: 1.1.6                                       ║
-║  Kompatibel mit: Hytale Server 1.0.x                         ║
+║  Kompatibel mit: Hytale Server 2.x                           ║
 ║                                                               ║
 ║  ┌────────────────────────────────────────────────────────┐  ║
 ║  │ ℹ️ Das Plugin läuft auf Port 18085 (intern)             │  ║
