@@ -570,8 +570,9 @@ server.listen(config.port, '0.0.0.0', async () => {
 ║         KyuubiSoft Panel v2.0.0                   ║
 ║         Hytale Server Management                  ║
 ╠═══════════════════════════════════════════════════╣
-║  Panel running on http://0.0.0.0:${config.port}          ║
-║  Target container: ${config.gameContainerName.padEnd(28)}║
+║  Panel: http://localhost:${config.externalPort.toString().padEnd(23)}║
+║  Container: ${config.gameContainerName.padEnd(34)}║
+║  Server Port: ${config.serverPort.toString().padEnd(32)}║
 ╚═══════════════════════════════════════════════════╝
   `);
 

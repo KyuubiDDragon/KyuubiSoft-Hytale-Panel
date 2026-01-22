@@ -148,6 +148,12 @@ services:
       # Target container
       - GAME_CONTAINER_NAME=${STACK_NAME:-hytale}
 
+      # Manager port (for display purposes - internal port is always 18080)
+      - MANAGER_PORT=${MANAGER_PORT:-18080}
+
+      # Server port (for display in setup wizard)
+      - SERVER_PORT=${SERVER_PORT:-5520}
+
       # Paths (inside container)
       - SERVER_PATH=/opt/hytale/server
       - BACKUPS_PATH=/opt/hytale/backups

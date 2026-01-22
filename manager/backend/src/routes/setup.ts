@@ -422,13 +422,14 @@ router.get('/detect-ip', async (req: Request, res: Response) => {
       }
     }
 
-    const port = config.port;
+    const port = config.externalPort;
     const panelUrl = detectedIp ? `http://${detectedIp}:${port}` : `http://localhost:${port}`;
 
     res.json({
       ip: detectedIp,
       port,
       panelUrl,
+      serverPort: config.serverPort,
       interfaces: Object.keys(interfaces),
     });
   } catch (error) {
@@ -453,7 +454,8 @@ router.get('/server-info', async (_req: Request, res: Response) => {
     const { config } = await import('../config.js');
 
     res.json({
-      managerPort: config.port,
+      managerPort: config.externalPort,
+      serverPort: config.serverPort,
       gameContainerName: config.gameContainerName,
       serverPath: config.serverPath,
       dataPath: config.dataPath,
