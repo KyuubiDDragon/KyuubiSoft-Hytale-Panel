@@ -25,12 +25,14 @@ import managementRoutes from './routes/management.js';
 import schedulerRoutes from './routes/scheduler.js';
 import assetsRoutes from './routes/assets.js';
 import rolesRouter from './routes/roles.js';
+import setupRoutes from './routes/setup.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
 import { initializePlayerTracking } from './services/players.js';
 import { initializePluginEvents, disconnectFromPluginWebSocket } from './services/pluginEvents.js';
 import { initializeRoles } from './services/roles.js';
+import { isSetupComplete } from './services/setupService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -344,7 +346,68 @@ app.use((req, res, next) => {
 // SECURITY: Limit JSON body size to prevent memory exhaustion attacks
 app.use(express.json({ limit: '100kb' }));
 
-// API Routes
+// ============================================================
+// Setup Routes - MUST be BEFORE auth middleware and other routes
+// These routes work without authentication during first-run setup
+// ============================================================
+app.use('/api/setup', setupRoutes);
+
+// ============================================================
+// Setup Redirect Middleware
+// If setup is not complete, redirect non-setup API requests
+// and frontend routes to the setup wizard
+// ============================================================
+app.use(async (req, res, next) => {
+  // Skip for setup routes (already handled above)
+  if (req.path.startsWith('/api/setup')) {
+    return next();
+  }
+
+  // Skip for health check
+  if (req.path === '/api/health') {
+    return next();
+  }
+
+  // Skip for WebMap proxy routes
+  if (req.path.startsWith('/api/webmap') || req.path.startsWith('/api/worlds') || req.path.startsWith('/api/tiles')) {
+    return next();
+  }
+
+  // Skip for static assets
+  if (req.path.startsWith('/assets') || req.path.endsWith('.js') || req.path.endsWith('.css') ||
+      req.path.endsWith('.png') || req.path.endsWith('.svg') || req.path.endsWith('.ico')) {
+    return next();
+  }
+
+  try {
+    const setupComplete = await isSetupComplete();
+
+    if (!setupComplete) {
+      // For API requests, return 503 with setup required message
+      if (req.path.startsWith('/api/')) {
+        res.status(503).json({
+          error: 'Setup required',
+          message: 'The panel setup has not been completed. Please complete the setup wizard first.',
+          setupRequired: true,
+          redirectUrl: '/setup',
+        });
+        return;
+      }
+
+      // For frontend routes (except /setup), the SPA will handle the redirect
+      // based on the /api/setup/status response
+    }
+  } catch (error) {
+    // On error checking setup status, continue normally
+    console.error('[Setup Check] Error checking setup status:', error);
+  }
+
+  next();
+});
+
+// ============================================================
+// API Routes (require setup to be complete)
+// ============================================================
 app.use('/api/auth', authRoutes);
 app.use('/api/server', serverRoutes);
 app.use('/api/console', consoleRoutes);
