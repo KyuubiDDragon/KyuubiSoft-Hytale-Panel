@@ -247,6 +247,7 @@ async function checkDiskSpace(): Promise<SystemCheck> {
   };
 
   const dataPath = config.dataPath || '/opt/hytale/data';
+  const hostDataPath = config.hostDataPath || '/opt/hytale';
   const minSpaceGB = 10;
   const minSpaceBytes = minSpaceGB * 1024 * 1024 * 1024;
 
@@ -284,11 +285,11 @@ async function checkDiskSpace(): Promise<SystemCheck> {
       if (availableBytes >= minSpaceBytes) {
         check.status = 'ok';
         check.message = `${availableGB.toFixed(1)} GB available`;
-        check.details = `Path: ${dataPath}`;
+        check.details = `Path: ${hostDataPath}`;
       } else {
         check.status = 'error';
         check.message = `Only ${availableGB.toFixed(1)} GB available`;
-        check.details = `Minimum: ${minSpaceGB} GB at ${dataPath}`;
+        check.details = `Minimum: ${minSpaceGB} GB at ${hostDataPath}`;
       }
     } else {
       throw new Error('Could not parse df output');
@@ -362,6 +363,7 @@ async function checkWritePermissions(): Promise<SystemCheck> {
   };
 
   const dataPath = config.dataPath || '/opt/hytale/data';
+  const hostDataPath = config.hostDataPath || '/opt/hytale';
   const testFileName = `.write-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
   const testFilePath = path.join(dataPath, testFileName);
 
@@ -380,18 +382,18 @@ async function checkWritePermissions(): Promise<SystemCheck> {
 
     check.status = 'ok';
     check.message = 'Writable';
-    check.details = `Path: ${dataPath}`;
+    check.details = `Path: ${hostDataPath}/data`;
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
 
     if (err.code === 'EACCES') {
       check.status = 'error';
       check.message = 'Permission denied';
-      check.details = `Cannot write to ${dataPath}. Check directory permissions.`;
+      check.details = `Cannot write to ${hostDataPath}/data. Run: sudo mkdir -p ${hostDataPath}/data && sudo chown -R 1000:1000 ${hostDataPath}`;
     } else if (err.code === 'ENOENT') {
       check.status = 'error';
       check.message = 'Directory not found';
-      check.details = `Path ${dataPath} does not exist and cannot be created.`;
+      check.details = `Host path ${hostDataPath}/data does not exist. Run: sudo mkdir -p ${hostDataPath}/{data,server,backups,plugins,mods,auth,assets,downloader}`;
     } else {
       check.status = 'error';
       check.message = 'Write failed';
