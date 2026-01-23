@@ -473,12 +473,16 @@ function parseOAuthFromLogs(logs: string): {
   }
 
   // Check if authentication succeeded
-  if (logs.includes('Download successful') ||
-      logs.includes('Authentication successful') ||
-      logs.includes('Credentials saved') ||
-      logs.includes('Authorization successful') ||
-      logs.includes('Token saved')) {
+  // Look for specific Hytale server auth success messages
+  if (cleanedLogs.includes('Authentication successful! Mode:') ||
+      cleanedLogs.includes('Authentication successful! Use') ||
+      cleanedLogs.includes('Connection Auth: Authenticated') ||
+      cleanedLogs.includes('Successfully created game session') ||
+      cleanedLogs.includes('Token Source: OAuth') ||
+      cleanedLogs.includes('Download successful') ||
+      cleanedLogs.includes('Credentials saved')) {
     result.authenticated = true;
+    console.log('[Setup] Authentication success detected in logs');
   }
 
   // Check if download completed

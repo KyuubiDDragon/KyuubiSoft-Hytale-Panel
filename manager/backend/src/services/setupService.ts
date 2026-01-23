@@ -656,28 +656,30 @@ export async function getAuthStatusForSetup(): Promise<{
     // Check for downloader authentication
     const downloaderAuthenticated = logs.includes('Credentials saved') ||
       logs.includes('Download successful') ||
-      logs.includes('Authentication successful');
+      logs.includes('AUTHENTICATION REQUIRED') === false && logs.includes('Hytale Server Booted');
 
     // Check for server authentication
-    // Server is authenticated if we see successful login messages
-    const serverAuthenticated = logs.includes('Authorization successful') ||
-      logs.includes('Token saved') ||
-      logs.includes('Login successful') ||
-      logs.includes('Server authenticated') ||
-      logs.includes('Authentication complete') ||
-      // If server is running and NOT showing "No server tokens configured" recently, it's likely authenticated
-      (logs.includes('Hytale Server Booted') && !logs.slice(-2000).includes('No server tokens configured'));
+    // Look for specific Hytale server auth success messages
+    const serverAuthenticated =
+      logs.includes('Authentication successful! Mode:') ||
+      logs.includes('Authentication successful! Use') ||
+      logs.includes('Connection Auth: Authenticated') ||
+      logs.includes('Successfully created game session') ||
+      logs.includes('Token Source: OAuth');
 
     // Check for persistence
-    const persistenceConfigured = logs.includes('Persistence') ||
-      logs.includes('persistence Encrypted') ||
-      logs.includes('Token persistence') ||
-      logs.includes('Credentials stored');
+    // Look for specific persistence confirmation messages
+    const persistenceConfigured =
+      logs.includes('Credential storage changed to: Encrypted') ||
+      logs.includes('Swapped credential store to: EncryptedAuthCredentialStoreProvider') ||
+      logs.includes('credential store to: Encrypted');
 
-    // Check for machine ID
+    // Check for machine ID (usually auto-generated)
     const machineIdGenerated = logs.includes('Machine ID') ||
       logs.includes('machine-id') ||
-      logs.includes('MachineId');
+      logs.includes('MachineId') ||
+      // If server authenticated, machine ID is typically present
+      serverAuthenticated;
 
     return {
       downloaderAuth: {
