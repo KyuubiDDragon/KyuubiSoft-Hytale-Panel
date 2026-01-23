@@ -370,17 +370,26 @@ function parseOAuthFromLogs(logs: string): {
 
   // Look for user code first - alphanumeric code (case insensitive)
   // Format: "Authorization code: sgwqewEx" or "Enter code: ABCD1234"
+  // IMPORTANT: Code must be alphanumeric only, 4-12 chars, and not match common words
   const codePatterns = [
-    /Authorization\s+code[:\s]+([A-Za-z0-9]{4,12})/i,
-    /user_code=([A-Za-z0-9]{4,12})/i,
-    /(?:Enter\s+)?[Cc]ode[:\s]+([A-Za-z0-9]{4,12})/,
+    /Authorization\s+code[:\s]+([A-Za-z0-9]{4,12})(?:\s|$)/i,
+    /user_code=([A-Za-z0-9]{4,12})(?:&|$)/i,
+    /enter\s+(?:the\s+)?code[:\s]+([A-Za-z0-9]{4,12})(?:\s|$)/i,
+    /your\s+code[:\s]+([A-Za-z0-9]{4,12})(?:\s|$)/i,
   ];
+
+  // Words to exclude from being matched as codes
+  const excludeWords = ['waiting', 'loading', 'checking', 'starting', 'authenticating', 'connecting', 'initializing'];
 
   for (const pattern of codePatterns) {
     const codeMatch = logs.match(pattern);
     if (codeMatch) {
-      result.userCode = codeMatch[1];
-      break;
+      const potentialCode = codeMatch[1];
+      // Verify it's not a common word
+      if (!excludeWords.includes(potentialCode.toLowerCase())) {
+        result.userCode = potentialCode;
+        break;
+      }
     }
   }
 
@@ -1398,11 +1407,33 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     };
 
-    // Check container logs for auth info
-    const logs = await getLogs(200);
-    const oauthInfo = parseOAuthFromLogs(logs);
+    // Poll for auth code in logs with timeout (max 30 seconds, check every 2 seconds)
+    let oauthInfo: ReturnType<typeof parseOAuthFromLogs> = {};
+    const maxAttempts = 15;
 
-    if (oauthInfo.userCode) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const logs = await getLogs(200);
+      oauthInfo = parseOAuthFromLogs(logs);
+
+      // Check if we found a valid auth code (must be alphanumeric, 4-12 chars)
+      if (oauthInfo.userCode && /^[A-Za-z0-9]{4,12}$/.test(oauthInfo.userCode)) {
+        console.log(`[Setup] Found auth code after ${attempt + 1} attempts: ${oauthInfo.userCode}`);
+        break;
+      }
+
+      // Check if already authenticated
+      if (oauthInfo.authenticated) {
+        console.log('[Setup] Server already authenticated');
+        break;
+      }
+
+      // Wait 2 seconds before next attempt
+      if (attempt < maxAttempts - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    if (oauthInfo.userCode && /^[A-Za-z0-9]{4,12}$/.test(oauthInfo.userCode)) {
       serverAuthState.authCode = oauthInfo.userCode;
     }
     if (oauthInfo.verificationUrl) {
@@ -1410,6 +1441,16 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
     }
     if (oauthInfo.authenticated) {
       serverAuthState.authenticated = true;
+    }
+
+    // If no valid code found after polling, return error
+    if (!serverAuthState.authCode && !serverAuthState.authenticated) {
+      console.log('[Setup] No auth code found in logs after polling');
+      res.json({
+        success: false,
+        error: 'Auth code not found in server logs. Please ensure the server is running and needs authentication.',
+      });
+      return;
     }
 
     res.json({
