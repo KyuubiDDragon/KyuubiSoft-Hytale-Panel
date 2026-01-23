@@ -229,7 +229,7 @@ async function checkPorts(): Promise<SystemCheck[]> {
     status: 'ok',
     message: 'Active',
     required: false,
-    details: `Panel is running on this port. If using a domain/reverse proxy, this port only needs to be accessible internally.`,
+    details: `Panel active. With reverse proxy, only internal access needed.`,
   });
 
   return results;
@@ -247,7 +247,7 @@ async function checkDiskSpace(): Promise<SystemCheck> {
     required: true,
   };
 
-  const dataPath = config.hostDataPath || '/opt/hytale';
+  const dataPath = config.dataPath || '/opt/hytale/data';
   const minSpaceGB = 10;
   const minSpaceBytes = minSpaceGB * 1024 * 1024 * 1024;
 
@@ -259,7 +259,27 @@ async function checkDiskSpace(): Promise<SystemCheck> {
     if (lines.length >= 2) {
       const parts = lines[1].split(/\s+/);
       // df output: Filesystem, 1B-blocks, Used, Available, Use%, Mounted on
-      const availableBytes = parseInt(parts[3], 10);
+      // Sometimes output can wrap, so find the numeric values
+      let availableBytes = NaN;
+
+      // Try to find the "Available" column (usually index 3)
+      for (let i = 1; i < parts.length; i++) {
+        const val = parseInt(parts[i], 10);
+        if (!isNaN(val) && i >= 3) {
+          availableBytes = val;
+          break;
+        }
+      }
+
+      // Fallback: try parts[3] directly
+      if (isNaN(availableBytes) && parts[3]) {
+        availableBytes = parseInt(parts[3], 10);
+      }
+
+      if (isNaN(availableBytes)) {
+        throw new Error('Could not parse available space from df output');
+      }
+
       const availableGB = availableBytes / (1024 * 1024 * 1024);
 
       if (availableBytes >= minSpaceBytes) {
@@ -269,7 +289,7 @@ async function checkDiskSpace(): Promise<SystemCheck> {
       } else {
         check.status = 'error';
         check.message = `Only ${availableGB.toFixed(1)} GB available`;
-        check.details = `Minimum required: ${minSpaceGB} GB at ${dataPath}`;
+        check.details = `Minimum: ${minSpaceGB} GB at ${dataPath}`;
       }
     } else {
       throw new Error('Could not parse df output');
