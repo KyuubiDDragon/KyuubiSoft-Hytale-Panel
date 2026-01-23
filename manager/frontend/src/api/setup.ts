@@ -1,4 +1,4 @@
-import api from './client'
+import api, { setupApiClient } from './client'
 
 // Types for system check results
 export interface SystemCheckItem {
@@ -497,18 +497,20 @@ export const setupApi = {
 
   /**
    * Start server for the first time (Phase 4.1)
+   * Uses extended timeout as server startup can take time
    */
   async startServerFirstTime(): Promise<ServerFirstStartResponse> {
-    const response = await api.post<ServerFirstStartResponse>('/setup/server/start-first')
+    const response = await setupApiClient.post<ServerFirstStartResponse>('/setup/server/start-first')
     return response.data
   },
 
   /**
    * Start server OAuth device code flow (Phase 4.2)
    * This is separate from the downloader auth!
+   * Uses extended timeout as it polls for auth code in logs
    */
   async startServerAuth(): Promise<ServerAuthResponse> {
-    const response = await api.post<ServerAuthResponse>('/setup/auth/server/start')
+    const response = await setupApiClient.post<ServerAuthResponse>('/setup/auth/server/start')
     return response.data
   },
 

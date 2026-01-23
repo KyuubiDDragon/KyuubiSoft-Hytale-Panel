@@ -51,9 +51,15 @@ export default {
           '0%': { backgroundPosition: '200% 0' },
           '100%': { backgroundPosition: '-200% 0' },
         },
+        'extraction-progress': {
+          '0%': { width: '0%', marginLeft: '0%' },
+          '50%': { width: '40%', marginLeft: '30%' },
+          '100%': { width: '0%', marginLeft: '100%' },
+        },
       },
       animation: {
         shimmer: 'shimmer 1.5s ease-in-out infinite',
+        'extraction-progress': 'extraction-progress 2s ease-in-out infinite',
       },
     },
   },

@@ -11,8 +11,31 @@ const api: AxiosInstance = axios.create({
   },
 })
 
+// Create axios instance with extended timeout for long-running setup operations
+export const setupApiClient: AxiosInstance = axios.create({
+  baseURL: '/api',
+  timeout: 120000, // 2 minutes for setup operations like server start
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
 // Request interceptor - add auth token
 api.interceptors.request.use(
+  (config) => {
+    const authStore = useAuthStore()
+    if (authStore.accessToken) {
+      config.headers.Authorization = `Bearer ${authStore.accessToken}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// Add same interceptors to setupApiClient
+setupApiClient.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
     if (authStore.accessToken) {

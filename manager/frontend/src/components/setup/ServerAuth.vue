@@ -56,6 +56,8 @@ const allAuthStatus = ref({
 let consoleEventSource: EventSource | null = null
 let authPollInterval: ReturnType<typeof setInterval> | null = null
 let expiryCountdownInterval: ReturnType<typeof setInterval> | null = null
+let sseReconnectAttempts = 0
+const MAX_SSE_RECONNECT_ATTEMPTS = 5
 
 // Computed properties
 const formattedServerUserCode = computed(() => {
@@ -93,51 +95,91 @@ function addConsoleLine(message: string, type: 'info' | 'warning' | 'error' = 'i
   scrollConsoleToBottom()
 }
 
+// Connect to SSE for console output with automatic reconnection
+function connectConsoleSSE() {
+  if (consoleEventSource) {
+    consoleEventSource.close()
+    consoleEventSource = null
+  }
+
+  consoleEventSource = new EventSource('/api/setup/server/console')
+
+  consoleEventSource.onmessage = (event) => {
+    // Reset reconnect counter on successful message
+    sseReconnectAttempts = 0
+
+    try {
+      const data = JSON.parse(event.data)
+
+      if (data.type === 'log') {
+        addConsoleLine(data.message, data.level || 'info')
+      } else if (data.type === 'auth_required') {
+        serverNeedsAuth.value = true
+        serverStarted.value = true
+        isServerStarting.value = false
+      } else if (data.type === 'started') {
+        serverStarted.value = true
+        isServerStarting.value = false
+        // Check if auth is needed
+        if (!data.authenticated) {
+          serverNeedsAuth.value = true
+        }
+      } else if (data.type === 'error') {
+        addConsoleLine(data.message, 'error')
+        setupStore.setError(data.message)
+        isServerStarting.value = false
+      }
+    } catch {
+      // Treat as plain text log - check for server boot messages
+      const logText = event.data
+      addConsoleLine(logText)
+
+      // Detect server started from log output
+      if (logText.includes('Server Booted') || logText.includes('Hytale Server Booted')) {
+        serverStarted.value = true
+        isServerStarting.value = false
+      }
+
+      // Detect auth required from log output
+      if (logText.includes('No server tokens configured') || logText.includes('AUTHENTICATION REQUIRED') || logText.includes('/auth login')) {
+        serverNeedsAuth.value = true
+        serverStarted.value = true
+        isServerStarting.value = false
+      }
+    }
+  }
+
+  consoleEventSource.onerror = () => {
+    if (consoleEventSource) {
+      consoleEventSource.close()
+      consoleEventSource = null
+    }
+
+    // Auto-reconnect with exponential backoff (unless we're done)
+    if (isServerStarting.value && sseReconnectAttempts < MAX_SSE_RECONNECT_ATTEMPTS) {
+      sseReconnectAttempts++
+      const delay = Math.min(1000 * Math.pow(2, sseReconnectAttempts - 1), 10000)
+      addConsoleLine(`Connection lost, reconnecting in ${delay / 1000}s...`, 'warning')
+      setTimeout(() => {
+        if (isServerStarting.value) {
+          connectConsoleSSE()
+        }
+      }, delay)
+    }
+  }
+}
+
 // Start the server for the first time (Step 4.1)
 async function startServer() {
   isServerStarting.value = true
   consoleLines.value = []
+  sseReconnectAttempts = 0
 
   // Subscribe to console output via SSE
+  connectConsoleSSE()
+
+  // Trigger server start
   try {
-    consoleEventSource = new EventSource('/api/setup/server/console')
-
-    consoleEventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-
-        if (data.type === 'log') {
-          addConsoleLine(data.message, data.level || 'info')
-        } else if (data.type === 'auth_required') {
-          serverNeedsAuth.value = true
-          serverStarted.value = true
-          isServerStarting.value = false
-        } else if (data.type === 'started') {
-          serverStarted.value = true
-          isServerStarting.value = false
-          // Check if auth is needed
-          if (!data.authenticated) {
-            serverNeedsAuth.value = true
-          }
-        } else if (data.type === 'error') {
-          addConsoleLine(data.message, 'error')
-          setupStore.setError(data.message)
-          isServerStarting.value = false
-        }
-      } catch {
-        // Treat as plain text log
-        addConsoleLine(event.data)
-      }
-    }
-
-    consoleEventSource.onerror = () => {
-      if (consoleEventSource) {
-        consoleEventSource.close()
-        consoleEventSource = null
-      }
-    }
-
-    // Trigger server start
     const result = await setupApi.startServerFirstTime()
 
     if (!result.success) {
@@ -145,8 +187,16 @@ async function startServer() {
       isServerStarting.value = false
     }
   } catch (err) {
-    setupStore.setError(err instanceof Error ? err.message : t('setup.serverStartFailed'))
-    isServerStarting.value = false
+    // Check if it's a timeout error - server might still be starting
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    if (errorMessage.includes('timeout') || errorMessage.includes('504') || errorMessage.includes('Gateway')) {
+      // Don't show error for timeout - the server might still be starting
+      // The SSE connection will update us when the server is ready
+      addConsoleLine('Server start request sent, waiting for server to boot...', 'info')
+    } else {
+      setupStore.setError(errorMessage || t('setup.serverStartFailed'))
+      isServerStarting.value = false
+    }
   }
 }
 
@@ -416,14 +466,20 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
+  // Stop SSE reconnection attempts
+  sseReconnectAttempts = MAX_SSE_RECONNECT_ATTEMPTS + 1
+
   if (consoleEventSource) {
     consoleEventSource.close()
+    consoleEventSource = null
   }
   if (authPollInterval) {
     clearInterval(authPollInterval)
+    authPollInterval = null
   }
   if (expiryCountdownInterval) {
     clearInterval(expiryCountdownInterval)
+    expiryCountdownInterval = null
   }
 })
 </script>

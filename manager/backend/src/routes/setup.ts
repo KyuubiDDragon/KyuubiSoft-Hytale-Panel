@@ -1359,6 +1359,7 @@ router.get('/server/status', async (_req: Request, res: Response) => {
 /**
  * GET /api/setup/server/console
  * SSE endpoint for server console output during setup
+ * Sends structured JSON events that the frontend can understand
  */
 router.get('/server/console', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -1366,21 +1367,91 @@ router.get('/server/console', async (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
+  // Track state to avoid duplicate events
+  let serverBootedDetected = false;
+  let authRequiredDetected = false;
+  let statusEventSent = false;
+  const seenLines = new Set<string>();
+
   const sendLogs = async () => {
     try {
       const logs = await getLogs(50);
-      const lines = logs.split('\n').slice(-20);
-      for (const line of lines) {
-        if (line.trim()) {
-          res.write(`data: ${line}\n\n`);
+      const lines = logs.split('\n');
+
+      // Process last 30 lines to keep UI responsive
+      const recentLines = lines.slice(-30);
+
+      for (const line of recentLines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        // Clean ANSI escape codes for display
+        const cleanLine = trimmedLine.replace(/\x1b\[[0-9;]*m/g, '').replace(/\[m/g, '');
+
+        // Skip if we've already sent this line (use hash of content)
+        const lineHash = cleanLine.substring(0, 100);
+        if (seenLines.has(lineHash)) continue;
+        seenLines.add(lineHash);
+
+        // Keep seen lines set manageable
+        if (seenLines.size > 200) {
+          const toDelete = Array.from(seenLines).slice(0, 100);
+          toDelete.forEach(h => seenLines.delete(h));
+        }
+
+        // Determine log level from content
+        let level: 'info' | 'warning' | 'error' = 'info';
+        if (cleanLine.includes('WARN]') || cleanLine.includes('WARNING')) {
+          level = 'warning';
+        } else if (cleanLine.includes('ERROR]') || cleanLine.includes('Exception')) {
+          level = 'error';
+        }
+
+        // Send log line event
+        res.write(`data: ${JSON.stringify({ type: 'log', message: cleanLine, level })}\n\n`);
+
+        // Check for server booted - look for the actual boot message
+        if (!serverBootedDetected && (
+          cleanLine.includes('Server Booted') ||
+          cleanLine.includes('Hytale Server Booted')
+        )) {
+          serverBootedDetected = true;
+          console.log('[Setup] Server boot detected');
+        }
+
+        // Check for authentication required
+        if (!authRequiredDetected && (
+          cleanLine.includes('No server tokens configured') ||
+          cleanLine.includes('/auth login') ||
+          cleanLine.includes('AUTHENTICATION REQUIRED')
+        )) {
+          authRequiredDetected = true;
+          console.log('[Setup] Auth required detected');
         }
       }
-    } catch {
-      // Ignore errors
+
+      // Send status events (only once) when both conditions are met
+      if (serverBootedDetected && authRequiredDetected && !statusEventSent) {
+        statusEventSent = true;
+        console.log('[Setup] Sending server started + auth required events');
+        // Server is booted and needs auth
+        res.write(`data: ${JSON.stringify({ type: 'started', authenticated: false })}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: 'auth_required' })}\n\n`);
+      } else if (serverBootedDetected && serverAuthState?.authenticated && !statusEventSent) {
+        statusEventSent = true;
+        console.log('[Setup] Sending server started (authenticated) event');
+        // Server is booted and authenticated
+        res.write(`data: ${JSON.stringify({ type: 'started', authenticated: true })}\n\n`);
+      }
+    } catch (error) {
+      console.error('[Setup] Error in sendLogs:', error);
     }
   };
 
-  sendLogs();
+  // Initial send
+  await sendLogs();
+
+  // Send updates every 2 seconds
   const interval = setInterval(sendLogs, 2000);
 
   req.on('close', () => {
