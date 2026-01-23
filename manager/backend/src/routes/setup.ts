@@ -1335,7 +1335,7 @@ router.get('/server/status', async (_req: Request, res: Response) => {
     res.json({
       running: containerStatus.running,
       status: containerStatus.status,
-      uptime: containerStatus.uptime,
+      startedAt: containerStatus.started_at,
     });
   } catch (error) {
     console.error('[Setup] Failed to get server status:', error);
