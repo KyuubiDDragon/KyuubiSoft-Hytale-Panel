@@ -135,14 +135,39 @@ async function proceedFromSelect() {
   }
 }
 
+// State for env config needed message
+const needsEnvConfig = ref(false)
+const envConfigInstructions = ref<string[]>([])
+
 // Start OAuth device code flow
 async function startDeviceCodeFlow() {
   isWaitingForAuth.value = true
   authError.value = null
   authSuccess.value = false
+  needsEnvConfig.value = false
 
   try {
-    const response = await setupApi.startDownloaderAuth()
+    const response = await setupApi.startDownloaderAuth() as {
+      success: boolean
+      deviceCode?: string
+      verificationUrl?: string
+      userCode?: string
+      expiresIn?: number
+      pollInterval?: number
+      error?: string
+      needsEnvConfig?: boolean
+      instructions?: string[]
+    }
+
+    // Check if USE_HYTALE_DOWNLOADER needs to be configured
+    if (response.needsEnvConfig) {
+      needsEnvConfig.value = true
+      envConfigInstructions.value = response.instructions || []
+      authError.value = response.error || t('setup.envConfigRequired')
+      isWaitingForAuth.value = false
+      return
+    }
+
     if (response.success && response.deviceCode) {
       deviceCodeState.value = {
         verificationUrl: response.verificationUrl || '',
@@ -174,7 +199,35 @@ async function pollAuthStatus() {
 
   authPollInterval = setInterval(async () => {
     try {
-      const status = await setupApi.checkDownloaderAuthStatus()
+      const status = await setupApi.checkDownloaderAuthStatus() as {
+        authenticated: boolean
+        expired?: boolean
+        error?: string
+        verificationUrl?: string
+        userCode?: string
+        downloadComplete?: boolean
+      }
+
+      // Update verification URL and user code if they become available
+      if (deviceCodeState.value) {
+        if (status.verificationUrl && !deviceCodeState.value.verificationUrl) {
+          deviceCodeState.value.verificationUrl = status.verificationUrl
+        }
+        if (status.userCode && !deviceCodeState.value.userCode) {
+          deviceCodeState.value.userCode = status.userCode
+        }
+      }
+
+      // Check if download is complete
+      if (status.downloadComplete) {
+        clearInterval(authPollInterval!)
+        authPollInterval = null
+        authSuccess.value = true
+        isWaitingForAuth.value = false
+        currentDownloadStep.value = 'verifying'
+        verifyDownload()
+        return
+      }
 
       if (status.authenticated) {
         clearInterval(authPollInterval!)
@@ -182,7 +235,7 @@ async function pollAuthStatus() {
         authSuccess.value = true
         isWaitingForAuth.value = false
 
-        // Wait a moment to show success, then start download
+        // Wait a moment to show success, then go to downloading view
         setTimeout(() => {
           currentDownloadStep.value = 'downloading'
           startDownload()
@@ -534,6 +587,31 @@ watch(deviceCodeState, () => {
             </div>
             <p class="text-white font-semibold text-lg">{{ t('setup.authSuccess') }}</p>
             <p class="text-gray-400 mt-2">{{ t('setup.startingDownload') }}</p>
+          </div>
+
+          <!-- Env Config Required State -->
+          <div v-else-if="needsEnvConfig" class="py-6">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-status-warning/20 rounded-full mb-4 mx-auto block text-center">
+              <svg class="w-8 h-8 text-status-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <p class="text-white font-semibold text-lg text-center">{{ t('setup.envConfigRequired') }}</p>
+            <p class="text-status-warning mt-2 text-center">{{ authError }}</p>
+
+            <div class="mt-4 bg-dark-300 rounded-lg p-4 text-left">
+              <p class="text-sm text-gray-300 mb-2 font-medium">{{ t('setup.followTheseSteps') }}:</p>
+              <ol class="list-decimal list-inside space-y-2 text-sm text-gray-400">
+                <li v-for="(instruction, index) in envConfigInstructions" :key="index">
+                  <code v-if="instruction.includes('=') || instruction.includes('docker')" class="bg-dark-400 px-1 rounded text-hytale-orange">{{ instruction }}</code>
+                  <span v-else>{{ instruction }}</span>
+                </li>
+              </ol>
+            </div>
+
+            <Button class="mt-4" @click="retryAuth">
+              {{ t('setup.retryAuth') }}
+            </Button>
           </div>
 
           <!-- Error State -->

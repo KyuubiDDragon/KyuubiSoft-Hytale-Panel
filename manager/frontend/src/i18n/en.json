@@ -1278,6 +1278,8 @@
     "downloadStartFailed": "Failed to start download",
     "verificationFailed": "Verification failed",
     "codeValidFor": "Code valid for {time}",
+    "envConfigRequired": "Configuration Required",
+    "followTheseSteps": "Follow these steps",
     "download": {
       "title": "Server Download",
       "description": "Choose how you want to set up the Hytale server files",

@@ -1278,6 +1278,8 @@
     "downloadStartFailed": "Download konnte nicht gestartet werden",
     "verificationFailed": "Verifizierung fehlgeschlagen",
     "codeValidFor": "Code gueltig fuer {time}",
+    "envConfigRequired": "Konfiguration erforderlich",
+    "followTheseSteps": "Folge diesen Schritten",
     "download": {
       "title": "Server-Download",
       "description": "Waehle wie du die Hytale Server-Dateien einrichten moechtest",
