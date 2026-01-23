@@ -123,6 +123,7 @@ const SETUP_STEPS = [
   'admin-account',
   'download-method',
   'download',
+  'server-download',
   'assets-extract',
   'server-auth',
   'server-config',
@@ -368,6 +369,19 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
 
       case 'download':
         // Download progress is handled separately
+        break;
+
+      case 'server-download':
+        // Server download step - stores download method and auto-update preference
+        if (data.method) {
+          setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual';
+        }
+        if (data.autoUpdate !== undefined) {
+          setupConfig.autoUpdate = data.autoUpdate === true;
+        }
+        if (data.customUrls) {
+          (setupConfig as any)._customUrls = data.customUrls;
+        }
         break;
 
       case 'server-auth':
