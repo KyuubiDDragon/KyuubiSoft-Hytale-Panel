@@ -734,77 +734,71 @@ watch(deviceCodeState, () => {
     <!-- Step 3.3: Download Progress -->
     <template v-else-if="currentDownloadStep === 'downloading'">
       <!-- Auth Success Banner -->
-      <div v-if="downloadMethod === 'official'" class="flex items-center gap-3 p-4 bg-status-success/10 border border-status-success/20 rounded-lg">
+      <div v-if="downloadMethod === 'official'" class="flex items-center gap-3 p-4 bg-status-success/10 border border-status-success/20 rounded-lg mb-4">
         <svg class="w-5 h-5 text-status-success flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
         </svg>
         <p class="text-status-success text-sm">{{ t('setup.authSuccessful') }}</p>
       </div>
 
-      <div class="space-y-4">
-        <!-- HytaleServer.jar Progress -->
-        <div class="card">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-white font-medium">HytaleServer.jar</span>
-              <span v-if="downloadProgress.serverJar.complete" class="text-status-success">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </span>
-              <span v-else class="text-gray-400 text-sm">{{ downloadProgress.serverJar.percent }}%</span>
-            </div>
-            <div class="h-2 bg-dark-50 rounded-full overflow-hidden">
-              <div
-                class="h-full transition-all duration-300"
-                :class="downloadProgress.serverJar.complete ? 'bg-status-success' : 'bg-hytale-orange'"
-                :style="{ width: `${downloadProgress.serverJar.percent}%` }"
-              />
-            </div>
-            <p class="text-sm text-gray-400 mt-2">
-              {{ formatBytes(downloadProgress.serverJar.downloaded) }} / {{ formatBytes(downloadProgress.serverJar.total) }}
-            </p>
+      <!-- Download Progress Card -->
+      <div class="card">
+        <div class="card-body text-center py-8">
+          <!-- Animated Download Icon -->
+          <div class="inline-flex items-center justify-center w-20 h-20 bg-hytale-orange/20 rounded-full mb-6">
+            <svg class="w-10 h-10 text-hytale-orange animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
           </div>
-        </div>
 
-        <!-- Assets.zip Progress -->
-        <div class="card">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-white font-medium">Assets.zip</span>
-              <span v-if="downloadProgress.assetsZip.complete" class="text-status-success">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </span>
-              <span v-else class="text-gray-400 text-sm">{{ downloadProgress.assetsZip.percent }}%</span>
+          <h3 class="text-xl font-semibold text-white mb-2">{{ t('setup.downloadingTitle') }}</h3>
+          <p class="text-gray-400 mb-6">{{ t('setup.downloadingDescription') }}</p>
+
+          <!-- Indeterminate Progress Bar -->
+          <div class="h-2 bg-dark-50 rounded-full overflow-hidden mb-6">
+            <div class="h-full bg-gradient-to-r from-hytale-orange via-hytale-orange-light to-hytale-orange bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full" />
+          </div>
+
+          <!-- Download Status -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-center gap-2 text-gray-300">
+              <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{{ t('setup.downloadInProgress') }}</span>
             </div>
-            <div class="h-2 bg-dark-50 rounded-full overflow-hidden">
-              <div
-                class="h-full transition-all duration-300"
-                :class="downloadProgress.assetsZip.complete ? 'bg-status-success' : 'bg-hytale-orange'"
-                :style="{ width: `${downloadProgress.assetsZip.percent}%` }"
-              />
-            </div>
-            <div class="flex items-center justify-between text-sm text-gray-400 mt-2">
-              <span>{{ formatBytes(downloadProgress.assetsZip.downloaded) }} / {{ formatBytes(downloadProgress.assetsZip.total) }}</span>
-              <span v-if="!downloadProgress.assetsZip.complete && downloadProgress.assetsZip.speed > 0">
-                {{ formatBytes(downloadProgress.assetsZip.speed) }}/s
-                <span class="mx-2">-</span>
-                ~{{ formatTime(downloadProgress.assetsZip.eta) }} {{ t('setup.remaining') }}
-              </span>
-            </div>
+            <p class="text-sm text-gray-500">{{ t('setup.downloadInfoNotice') }}</p>
           </div>
         </div>
       </div>
 
-      <!-- Info Notice -->
-      <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
-        <div class="flex items-start gap-3">
-          <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p class="text-sm text-gray-400">{{ t('setup.downloadInfoNotice') }}</p>
+      <!-- Files being downloaded -->
+      <div class="grid grid-cols-2 gap-4 mt-4">
+        <div class="card">
+          <div class="card-body flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-hytale-orange/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-white font-medium text-sm">HytaleServer.jar</p>
+              <p class="text-xs text-gray-500">~80 MB</p>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-body flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-hytale-orange/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-white font-medium text-sm">Assets.zip</p>
+              <p class="text-xs text-gray-500">~3.3 GB</p>
+            </div>
+          </div>
         </div>
       </div>
     </template>

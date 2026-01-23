@@ -1241,6 +1241,7 @@
     "hytaleAuthDescription": "Bei Hytale authentifizieren um Server-Dateien herunterzuladen",
     "downloadingTitle": "Server-Dateien werden heruntergeladen",
     "downloadingDescription": "Server-Dateien werden heruntergeladen...",
+    "downloadInProgress": "Download laeuft...",
     "downloadCompleteTitle": "Download abgeschlossen",
     "downloadVerifyDescription": "Heruntergeladene Dateien werden ueberprueft...",
     "downloadMethodOfficial": "Offizieller Hytale Downloader",

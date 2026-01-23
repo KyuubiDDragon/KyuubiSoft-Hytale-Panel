@@ -46,6 +46,15 @@ export default {
         'glow-success': '0 0 20px rgba(74, 222, 128, 0.3)',
         'glow-error': '0 0 20px rgba(239, 68, 68, 0.3)',
       },
+      keyframes: {
+        shimmer: {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '-200% 0' },
+        },
+      },
+      animation: {
+        shimmer: 'shimmer 1.5s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

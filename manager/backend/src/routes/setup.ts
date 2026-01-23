@@ -1034,7 +1034,26 @@ const assetsProgressHandler = (req: Request, res: Response) => {
   // Send initial status
   const sendStatus = () => {
     const progress = getExtractionProgress();
-    res.write(`data: ${JSON.stringify(progress)}\n\n`);
+
+    // Calculate percent for frontend
+    const percent = progress.bytesTotal > 0
+      ? Math.round((progress.bytesDone / progress.bytesTotal) * 100)
+      : (progress.filesTotal > 0 ? Math.round((progress.filesDone / progress.filesTotal) * 100) : 0);
+
+    // Map status to type for frontend compatibility
+    const type = progress.status === 'extracting' ? 'progress'
+      : progress.status === 'complete' ? 'complete'
+      : progress.status === 'error' ? 'error'
+      : 'progress';
+
+    // Send response with both status (backend) and type (frontend) fields
+    const response = {
+      ...progress,
+      type,
+      percent,
+    };
+
+    res.write(`data: ${JSON.stringify(response)}\n\n`);
 
     // If extraction is complete or errored, close the connection after a short delay
     if (progress.status === 'complete' || progress.status === 'error') {

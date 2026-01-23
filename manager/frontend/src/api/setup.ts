@@ -565,12 +565,16 @@ export function createProgressStream(
 
   eventSource.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data) as ProgressEvent
+      const data = JSON.parse(event.data) as ProgressEvent & { status?: string }
 
-      if (data.type === 'complete') {
+      // Support both 'type' (frontend standard) and 'status' (backend legacy) fields
+      const eventType = data.type || (data.status === 'complete' ? 'complete' : data.status === 'error' ? 'error' : 'progress')
+
+      if (eventType === 'complete') {
+        onProgress(data) // Send final progress update before completing
         onComplete()
         eventSource.close()
-      } else if (data.type === 'error') {
+      } else if (eventType === 'error') {
         onError(data.error || 'Unknown error')
         eventSource.close()
       } else {

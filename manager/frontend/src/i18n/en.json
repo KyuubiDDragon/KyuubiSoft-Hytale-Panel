@@ -1241,6 +1241,7 @@
     "hytaleAuthDescription": "Authenticate with Hytale to download server files",
     "downloadingTitle": "Downloading Server Files",
     "downloadingDescription": "Server files are being downloaded...",
+    "downloadInProgress": "Download in progress...",
     "downloadCompleteTitle": "Download Complete",
     "downloadVerifyDescription": "Verifying downloaded files...",
     "downloadMethodOfficial": "Official Hytale Downloader",
