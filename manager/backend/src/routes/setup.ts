@@ -1292,6 +1292,7 @@ router.post('/server/start-first', async (_req: Request, res: Response) => {
       authCode: '',
       authUrl: '',
       authenticated: false,
+      persistenceConfigured: false,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     };
 
