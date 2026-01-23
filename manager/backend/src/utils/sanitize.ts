@@ -194,6 +194,8 @@ const ALLOWED_COMMAND_PREFIXES = [
   '/whitelist',
   // Op management (admin only)
   '/op', '/deop',
+  // Authentication (for server auth during setup)
+  '/auth',
 ];
 
 /**

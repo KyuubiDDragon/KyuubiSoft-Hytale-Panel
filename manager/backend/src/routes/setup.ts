@@ -15,7 +15,8 @@ import { runSystemChecks, runSingleCheck } from '../services/systemCheck.js';
 import {
   getStatus as getDockerStatus,
   getLogs,
-  startContainer
+  startContainer,
+  execCommand
 } from '../services/docker.js';
 
 const router = Router();
@@ -1555,7 +1556,7 @@ router.get('/server/console', async (req: Request, res: Response) => {
 
 /**
  * POST /api/setup/auth/server/start
- * Start server OAuth device code flow
+ * Start server OAuth device code flow by sending /auth login device command
  */
 router.post('/auth/server/start', async (_req: Request, res: Response) => {
   try {
@@ -1567,6 +1568,18 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
       authenticated: false,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     };
+
+    // Send the /auth login device command to initiate authentication
+    console.log('[Setup] Sending /auth login device command...');
+    const cmdResult = await execCommand('/auth login device');
+    if (!cmdResult.success) {
+      console.error('[Setup] Failed to send auth command:', cmdResult.error);
+    } else {
+      console.log('[Setup] Auth command sent successfully');
+    }
+
+    // Wait a moment for the server to process the command
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Poll for auth code in logs with timeout (max 30 seconds, check every 2 seconds)
     let oauthInfo: ReturnType<typeof parseOAuthFromLogs> = {};
@@ -1719,17 +1732,30 @@ router.post('/auth/verify', async (_req: Request, res: Response) => {
 
 /**
  * POST /api/setup/auth/persistence
- * Setup token persistence
+ * Setup token persistence by sending /auth persistence Encrypted command
  */
 router.post('/auth/persistence', async (_req: Request, res: Response) => {
   try {
-    // Token persistence is handled automatically by the game container
-    // This endpoint just confirms the setup step
+    // Send the /auth persistence Encrypted command to make tokens persistent
+    console.log('[Setup] Sending /auth persistence Encrypted command...');
+    const cmdResult = await execCommand('/auth persistence Encrypted');
+
+    if (!cmdResult.success) {
+      console.error('[Setup] Failed to send persistence command:', cmdResult.error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to send persistence command: ' + cmdResult.error,
+      });
+      return;
+    }
+
+    console.log('[Setup] Persistence command sent successfully');
     res.json({
       success: true,
       message: 'Persistence configured',
     });
   } catch (error) {
+    console.error('[Setup] Failed to setup persistence:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to setup persistence',
