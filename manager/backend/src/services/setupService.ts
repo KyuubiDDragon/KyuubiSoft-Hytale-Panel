@@ -127,6 +127,7 @@ const SETUP_STEPS = [
   'assets-extract',
   'server-auth',
   'server-config',
+  'security-settings',
   'automation',
   'performance',
   'plugin',
@@ -388,6 +389,11 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         // Server auth is handled by hytaleAuth service
         break;
 
+      case 'security-settings':
+        // Security settings step - stores auth configuration status
+        // The actual auth is handled by the setup routes, this just saves the step data
+        break;
+
       case 'summary':
         // Summary doesn't store data
         break;
@@ -636,23 +642,70 @@ export function setDownloadProgress(progress: Partial<DownloadProgress>): void {
 }
 
 /**
- * Get auth status for setup
+ * Get auth status for setup by checking server logs
  */
 export async function getAuthStatusForSetup(): Promise<{
   downloaderAuth: { authenticated: boolean; username?: string };
   serverAuth: { authenticated: boolean; persistent: boolean };
+  machineId: { generated: boolean };
 }> {
-  // This would integrate with hytaleAuth service
-  // For now, return placeholder
-  return {
-    downloaderAuth: {
-      authenticated: false,
-    },
-    serverAuth: {
-      authenticated: false,
-      persistent: false,
-    },
-  };
+  try {
+    // Get recent logs from the server container
+    const logs = await dockerService.getLogs(500);
+
+    // Check for downloader authentication
+    const downloaderAuthenticated = logs.includes('Credentials saved') ||
+      logs.includes('Download successful') ||
+      logs.includes('Authentication successful');
+
+    // Check for server authentication
+    // Server is authenticated if we see successful login messages
+    const serverAuthenticated = logs.includes('Authorization successful') ||
+      logs.includes('Token saved') ||
+      logs.includes('Login successful') ||
+      logs.includes('Server authenticated') ||
+      logs.includes('Authentication complete') ||
+      // If server is running and NOT showing "No server tokens configured" recently, it's likely authenticated
+      (logs.includes('Hytale Server Booted') && !logs.slice(-2000).includes('No server tokens configured'));
+
+    // Check for persistence
+    const persistenceConfigured = logs.includes('Persistence') ||
+      logs.includes('persistence Encrypted') ||
+      logs.includes('Token persistence') ||
+      logs.includes('Credentials stored');
+
+    // Check for machine ID
+    const machineIdGenerated = logs.includes('Machine ID') ||
+      logs.includes('machine-id') ||
+      logs.includes('MachineId');
+
+    return {
+      downloaderAuth: {
+        authenticated: downloaderAuthenticated,
+      },
+      serverAuth: {
+        authenticated: serverAuthenticated,
+        persistent: persistenceConfigured,
+      },
+      machineId: {
+        generated: machineIdGenerated,
+      },
+    };
+  } catch (error) {
+    console.error('[Setup] Failed to get auth status:', error);
+    return {
+      downloaderAuth: {
+        authenticated: false,
+      },
+      serverAuth: {
+        authenticated: false,
+        persistent: false,
+      },
+      machineId: {
+        generated: false,
+      },
+    };
+  }
 }
 
 /**
