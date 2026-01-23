@@ -1,7 +1,55 @@
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
+
+// ============================================================
+// Config.json Integration
+// ============================================================
+
+// Path to config.json (same as in configService.ts)
+const DATA_PATH = process.env.DATA_PATH || '/opt/hytale/data';
+const CONFIG_FILE_PATH = path.join(DATA_PATH, 'config.json');
+
+// Interface for config.json (simplified for this module)
+interface ConfigJson {
+  setupComplete?: boolean;
+  jwtSecret?: string;
+  corsOrigins?: string[];
+  network?: {
+    trustProxy?: boolean;
+  };
+  integrations?: {
+    modtaleApiKey?: string;
+    stackmartApiKey?: string;
+  };
+}
+
+// Try to load config.json synchronously at startup
+let configJson: ConfigJson | null = null;
+try {
+  if (fs.existsSync(CONFIG_FILE_PATH)) {
+    const content = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+    configJson = JSON.parse(content);
+    console.log('[Config] Loaded configuration from config.json');
+  }
+} catch (error) {
+  console.log('[Config] Could not load config.json, using environment variables');
+}
+
+// Helper to get value from config.json or fall back to env
+function getConfigValue<T>(
+  configJsonValue: T | undefined,
+  envValue: T
+): T {
+  return configJsonValue !== undefined ? configJsonValue : envValue;
+}
+
+// ============================================================
+// Security Defaults
+// ============================================================
 
 // Default insecure values that should be changed
 const INSECURE_DEFAULTS = {
@@ -12,56 +60,200 @@ const INSECURE_DEFAULTS = {
 // Security mode: 'strict' blocks startup with insecure config, 'warn' only logs warnings
 const securityMode = process.env.SECURITY_MODE || 'strict';
 
+// ============================================================
+// Configuration Object
+// ============================================================
+
+// Determine JWT secret: prefer config.json, then env, then empty
+const jwtSecretFromConfig = configJson?.jwtSecret;
+const jwtSecretFromEnv = process.env.JWT_SECRET || '';
+const effectiveJwtSecret = jwtSecretFromConfig || jwtSecretFromEnv;
+
+// Determine CORS origins: prefer config.json, then env
+const corsFromConfig = configJson?.corsOrigins;
+const corsFromEnv = process.env.CORS_ORIGINS || '';
+const effectiveCors = corsFromConfig
+  ? corsFromConfig.join(',')
+  : corsFromEnv;
+
+// Determine trust proxy: prefer config.json, then env
+const trustProxyFromConfig = configJson?.network?.trustProxy;
+const trustProxyFromEnv = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
+const effectiveTrustProxy = trustProxyFromConfig !== undefined
+  ? trustProxyFromConfig
+  : trustProxyFromEnv;
+
+// Determine modtale API key: prefer config.json, then env
+const modtaleApiKeyFromConfig = configJson?.integrations?.modtaleApiKey;
+const modtaleApiKeyFromEnv = process.env.MODTALE_API_KEY || '';
+const effectiveModtaleApiKey = modtaleApiKeyFromConfig || modtaleApiKeyFromEnv;
+
 export const config = {
-  // Manager Authentication
-  managerUsername: process.env.MANAGER_USERNAME || '',
-  managerPassword: process.env.MANAGER_PASSWORD || '',
-  jwtSecret: process.env.JWT_SECRET || '',
+  // ============================================================
+  // Values that can come from config.json (after setup)
+  // ============================================================
+
+  // JWT Secret - from config.json if available, otherwise from env
+  // Note: After setup, this comes from config.json and MANAGER_PASSWORD is not used
+  jwtSecret: effectiveJwtSecret,
   jwtExpiresIn: '15m',
   refreshExpiresIn: '7d',
 
-  // Game Server Container
+  // CORS Origins - from config.json if available, otherwise from env
+  corsOrigins: effectiveCors,
+
+  // Reverse Proxy Support - from config.json if available, otherwise from env
+  trustProxy: effectiveTrustProxy,
+
+  // Modtale Integration - from config.json if available, otherwise from env
+  modtaleApiKey: effectiveModtaleApiKey,
+
+  // ============================================================
+  // Legacy values (kept for backward compatibility during migration)
+  // These are only used if config.json doesn't exist (pre-setup)
+  // ============================================================
+
+  // Manager Authentication (only used before setup completes)
+  // After setup, authentication is handled via users.json
+  managerUsername: process.env.MANAGER_USERNAME || '',
+  managerPassword: process.env.MANAGER_PASSWORD || '',
+
+  // ============================================================
+  // Docker/Infrastructure values (always from env)
+  // These cannot be changed via the UI as they affect Docker setup
+  // ============================================================
+
+  // Game Server Container name (Docker-only, cannot change via UI)
   gameContainerName: process.env.GAME_CONTAINER_NAME || 'hytale',
 
-  // Paths (inside manager container)
+  // Paths (inside manager container - Docker volume mounts)
   serverPath: process.env.SERVER_PATH || '/opt/hytale/server',
   backupsPath: process.env.BACKUPS_PATH || '/opt/hytale/backups',
   dataPath: process.env.DATA_PATH || '/opt/hytale/data',
   modsPath: process.env.MODS_PATH || '/opt/hytale/mods',
   pluginsPath: process.env.PLUGINS_PATH || '/opt/hytale/plugins',
-  assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets', // Extracted assets cache (not backed up)
+  assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets',
 
-  // Server
-  port: parseInt(process.env.MANAGER_PORT || '18080', 10),
-  // CORS: No default - must be explicitly configured for security
-  corsOrigins: process.env.CORS_ORIGINS || '',
+  // Server port - internal port is always 18080, external port from MANAGER_PORT
+  // Internal port is what Express listens on inside the container
+  // External port is what users access from the host (for display purposes)
+  port: 18080,  // Always 18080 inside container
+  externalPort: parseInt(process.env.MANAGER_PORT || '18080', 10),  // Host-mapped port
 
-  // Reverse Proxy Support
-  // Set to true/1 when running behind a reverse proxy (nginx, traefik, etc.)
-  // This enables proper handling of X-Forwarded-* headers
-  trustProxy: process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1',
+  // Game server port (for display in setup wizard)
+  serverPort: parseInt(process.env.SERVER_PORT || '5520', 10),
+
+  // WebMap ports (for display in setup wizard)
+  webMapPort: parseInt(process.env.WEBMAP_PORT || '18081', 10),
+  webMapWsPort: parseInt(process.env.WEBMAP_WS_PORT || '18082', 10),
 
   // Timezone
   tz: process.env.TZ || 'Europe/Berlin',
-
-  // Modtale Integration
-  modtaleApiKey: process.env.MODTALE_API_KEY || '',
 
   // Host data path (for error messages - shows the actual host path)
   hostDataPath: process.env.HOST_DATA_PATH || '/opt/hytale',
 
   // Security mode: 'strict' (default) or 'warn'
   securityMode,
+
+  // ============================================================
+  // Setup state
+  // ============================================================
+
+  // Whether setup has been completed (config.json exists and setupComplete is true)
+  setupComplete: configJson?.setupComplete || false,
 };
 
-// SECURITY: Validate security configuration on startup
-// In strict mode (default), critical issues will prevent startup
-// In warn mode, only warnings are logged (for development/closed networks)
+// ============================================================
+// Config Reload Function
+// ============================================================
+
+/**
+ * Reloads the configuration from config.json
+ *
+ * Call this after setup completes to update the in-memory config
+ * with the new values from config.json without restarting the server.
+ */
+export function reloadConfigFromFile(): void {
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const content = fs.readFileSync(CONFIG_FILE_PATH, 'utf-8');
+      const newConfigJson = JSON.parse(content) as ConfigJson;
+
+      // Update mutable config values
+      if (newConfigJson.jwtSecret) {
+        (config as { jwtSecret: string }).jwtSecret = newConfigJson.jwtSecret;
+      }
+      if (newConfigJson.corsOrigins) {
+        (config as { corsOrigins: string }).corsOrigins = newConfigJson.corsOrigins.join(',');
+      }
+      if (newConfigJson.network?.trustProxy !== undefined) {
+        (config as { trustProxy: boolean }).trustProxy = newConfigJson.network.trustProxy;
+      }
+      if (newConfigJson.integrations?.modtaleApiKey !== undefined) {
+        (config as { modtaleApiKey: string }).modtaleApiKey = newConfigJson.integrations.modtaleApiKey;
+      }
+      if (newConfigJson.setupComplete !== undefined) {
+        (config as { setupComplete: boolean }).setupComplete = newConfigJson.setupComplete;
+      }
+
+      console.log('[Config] Configuration reloaded from config.json');
+    }
+  } catch (error) {
+    console.error('[Config] Failed to reload config.json:', error);
+  }
+}
+
+// ============================================================
+// Security Configuration Check
+// ============================================================
+
+/**
+ * Validates security configuration on startup
+ *
+ * In strict mode (default), critical issues will prevent startup.
+ * In warn mode, only warnings are logged (for development/closed networks).
+ *
+ * If no config.json exists, we're in setup mode - skip security check.
+ * If setup is complete (config.json exists with setupComplete: true),
+ * security validation is skipped as credentials are managed differently.
+ */
 export function checkSecurityConfig(): void {
+  // Check if config.json exists (regardless of setupComplete status)
+  const configJsonExists = fs.existsSync(CONFIG_FILE_PATH);
+
+  // If no config.json exists, we're in SETUP MODE - skip security check
+  // The setup wizard will handle initial configuration
+  if (!configJsonExists) {
+    console.log('\n');
+    console.log('╔══════════════════════════════════════════════════════════════╗');
+    console.log('║                   🚀 SETUP MODE 🚀                           ║');
+    console.log('╠══════════════════════════════════════════════════════════════╣');
+    console.log('║  No configuration found. Starting in setup mode.             ║');
+    console.log('║                                                              ║');
+    console.log('║  Open the panel in your browser to complete the setup:       ║');
+    console.log(`║  → http://localhost:${config.externalPort.toString().padEnd(38)}║`);
+    console.log('║                                                              ║');
+    console.log('║  The setup wizard will guide you through:                    ║');
+    console.log('║    • Creating an admin account                               ║');
+    console.log('║    • Downloading server files                                ║');
+    console.log('║    • Configuring your server                                 ║');
+    console.log('╚══════════════════════════════════════════════════════════════╝');
+    console.log('\n');
+    return;
+  }
+
+  // Skip security check if setup is complete
+  // After setup, credentials are stored in config.json (hashed) and users.json
+  if (config.setupComplete) {
+    console.log('[Security] Setup complete - using config.json for security settings');
+    return;
+  }
+
   const criticalErrors: string[] = [];
   const warnings: string[] = [];
 
-  // Critical: Username must be set
+  // Critical: Username must be set (only required before setup)
   if (!config.managerUsername) {
     criticalErrors.push('MANAGER_USERNAME is not set!');
   }
@@ -144,7 +336,13 @@ export function checkSecurityConfig(): void {
   }
 }
 
-// Helper to wrap long text
+// ============================================================
+// Utility Functions
+// ============================================================
+
+/**
+ * Helper to wrap long text for console output
+ */
 function wrapText(text: string, maxLength: number): string[] {
   const words = text.split(' ');
   const lines: string[] = [];
@@ -163,7 +361,27 @@ function wrapText(text: string, maxLength: number): string[] {
   return lines;
 }
 
-// Generate a secure random string for JWT secrets
+/**
+ * Generate a secure random string for JWT secrets
+ *
+ * @deprecated Use configService.generateJwtSecret() instead
+ */
 export function generateSecureSecret(): string {
   return crypto.randomBytes(48).toString('base64');
+}
+
+/**
+ * Check if setup wizard should be shown
+ *
+ * @returns True if config.json doesn't exist or setupComplete is false
+ */
+export function isSetupRequired(): boolean {
+  return !config.setupComplete;
+}
+
+/**
+ * Get the path to config.json
+ */
+export function getConfigFilePath(): string {
+  return CONFIG_FILE_PATH;
 }

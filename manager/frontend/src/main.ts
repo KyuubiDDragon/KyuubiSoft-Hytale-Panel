@@ -9,6 +9,7 @@ import './assets/styles/main.css'
 // Import views
 import Login from './views/Login.vue'
 import Dashboard from './views/Dashboard.vue'
+import SetupWizard from './views/SetupWizard.vue'
 import Console from './views/Console.vue'
 import Backups from './views/Backups.vue'
 import Players from './views/Players.vue'
@@ -28,13 +29,20 @@ import Assets from './views/Assets.vue'
 import Chat from './views/Chat.vue'
 import Help from './views/Help.vue'
 
-// Import auth store
+// Import stores
 import { useAuthStore } from './stores/auth'
+import { useSetupStore } from './stores/setup'
 
 // Create router
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/setup',
+      name: 'setup',
+      component: SetupWizard,
+      meta: { requiresAuth: false, isSetup: true },
+    },
     {
       path: '/login',
       name: 'login',
@@ -175,10 +183,40 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(i18n)
 
-// Navigation guard (must be after pinia is installed)
-router.beforeEach((to, _from, next) => {
-  const authStore = useAuthStore()
+// Setup check cache to avoid repeated API calls
+let setupCheckDone = false
+let setupRequired = false
 
+// Navigation guard (must be after pinia is installed)
+router.beforeEach(async (to, _from, next) => {
+  const authStore = useAuthStore()
+  const setupStore = useSetupStore()
+
+  // Check setup status once on first navigation (unless going to setup page)
+  if (!setupCheckDone && !to.meta.isSetup) {
+    try {
+      setupRequired = await setupStore.loadSetupStatus()
+      setupCheckDone = true
+    } catch {
+      // If setup check fails, assume setup is not required
+      setupCheckDone = true
+      setupRequired = false
+    }
+  }
+
+  // If setup is required and not going to setup page, redirect to setup
+  if (setupRequired && !to.meta.isSetup) {
+    next('/setup')
+    return
+  }
+
+  // If setup is complete and trying to access setup page, redirect away
+  if (!setupRequired && setupCheckDone && to.meta.isSetup) {
+    next('/login')
+    return
+  }
+
+  // Standard auth checks
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
   } else if (to.path === '/login' && authStore.isAuthenticated) {
