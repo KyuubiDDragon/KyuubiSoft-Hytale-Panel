@@ -1203,6 +1203,7 @@
     "authCodeExpired": "Codigo de autenticacao expirou",
     "downloadStartFailed": "Falha ao iniciar download",
     "verificationFailed": "Verificacao falhou",
+    "codeValidFor": "Codigo valido por {time}",
     "download": {
       "title": "Download do Servidor",
       "description": "Escolha como voce quer configurar os arquivos do servidor Hytale",
