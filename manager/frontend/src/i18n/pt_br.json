@@ -1204,6 +1204,8 @@
     "downloadStartFailed": "Falha ao iniciar download",
     "verificationFailed": "Verificacao falhou",
     "codeValidFor": "Codigo valido por {time}",
+    "envConfigRequired": "Configuracao Necessaria",
+    "followTheseSteps": "Siga estes passos",
     "download": {
       "title": "Download do Servidor",
       "description": "Escolha como voce quer configurar os arquivos do servidor Hytale",

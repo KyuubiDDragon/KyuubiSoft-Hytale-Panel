@@ -335,31 +335,58 @@ router.post('/complete', async (_req: Request, res: Response) => {
 // Download Flow Endpoints
 // ==========================================
 
-// In-memory state for OAuth device code flow
+import {
+  getStatus as getDockerStatus,
+  getLogs,
+  restartContainer,
+  startContainer
+} from '../services/docker.js';
+
+// In-memory state for OAuth device code flow (parsed from container logs)
 let downloaderAuthState: {
-  deviceCode: string;
   verificationUrl: string;
   userCode: string;
   expiresAt: Date;
-  pollInterval: number;
   authenticated: boolean;
+  downloadStarted: boolean;
+  downloadComplete: boolean;
 } | null = null;
 
-// In-memory state for download progress
-let downloadState: {
-  status: 'idle' | 'downloading' | 'complete' | 'error';
-  serverJar: { percent: number; downloaded: number; total: number; complete: boolean };
-  assetsZip: { percent: number; downloaded: number; total: number; speed: number; eta: number; complete: boolean };
-  error?: string;
-} = {
-  status: 'idle',
-  serverJar: { percent: 0, downloaded: 0, total: 0, complete: false },
-  assetsZip: { percent: 0, downloaded: 0, total: 0, speed: 0, eta: 0, complete: false },
-};
+// Parse OAuth info from container logs
+function parseOAuthFromLogs(logs: string): { verificationUrl?: string; userCode?: string; authenticated?: boolean; downloadComplete?: boolean } {
+  const result: { verificationUrl?: string; userCode?: string; authenticated?: boolean; downloadComplete?: boolean } = {};
+
+  // Look for the OAuth URL pattern from Hytale downloader
+  // Format varies, but typically contains something like:
+  // "Open URL: https://..." or "Visit: https://..."
+  const urlMatch = logs.match(/(?:Open|Visit|Go to)[:\s]+?(https:\/\/[^\s\n]+)/i);
+  if (urlMatch) {
+    result.verificationUrl = urlMatch[1];
+  }
+
+  // Look for user code - typically 6-8 character alphanumeric
+  // Format: "Enter code: ABCD1234" or "Code: ABCD-1234"
+  const codeMatch = logs.match(/(?:Enter\s+)?[Cc]ode[:\s]+([A-Z0-9]{4,8}(?:-[A-Z0-9]{4})?)/);
+  if (codeMatch) {
+    result.userCode = codeMatch[1];
+  }
+
+  // Check if authentication succeeded
+  if (logs.includes('Download successful') || logs.includes('Authentication successful') || logs.includes('Credentials saved')) {
+    result.authenticated = true;
+  }
+
+  // Check if download completed
+  if (logs.includes('Extraction complete') || logs.includes('Server files verified')) {
+    result.downloadComplete = true;
+  }
+
+  return result;
+}
 
 /**
  * POST /api/setup/download/auth/start
- * Start OAuth device code flow for Hytale downloader authentication
+ * Start the download process - this restarts the game container with USE_HYTALE_DOWNLOADER
  *
  * Response:
  * {
@@ -369,7 +396,8 @@ let downloadState: {
  *   userCode?: string,
  *   expiresIn?: number,
  *   pollInterval?: number,
- *   error?: string
+ *   error?: string,
+ *   needsEnvConfig?: boolean
  * }
  */
 router.post('/download/auth/start', async (_req: Request, res: Response) => {
@@ -384,44 +412,80 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
       return;
     }
 
-    // For now, simulate OAuth device code flow
-    // In production, this would call the actual Hytale OAuth API
-    const deviceCode = `SETUP-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const userCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const expiresIn = 900; // 15 minutes
-    const pollInterval = 5;
+    // Check if game container is running
+    const containerStatus = await getDockerStatus();
+    if (containerStatus.status === 'not_found') {
+      res.status(400).json({
+        success: false,
+        error: 'Game container not found. Make sure docker-compose is running.',
+      });
+      return;
+    }
 
+    // Reset auth state
     downloaderAuthState = {
-      deviceCode,
-      verificationUrl: 'https://auth.hytale.com/device',
-      userCode,
-      expiresAt: new Date(Date.now() + expiresIn * 1000),
-      pollInterval,
+      verificationUrl: '',
+      userCode: '',
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
       authenticated: false,
+      downloadStarted: false,
+      downloadComplete: false,
     };
 
-    // Auto-authenticate after 3 seconds for demo/development
-    // In production, this would be triggered by the actual OAuth callback
-    setTimeout(() => {
-      if (downloaderAuthState && downloaderAuthState.deviceCode === deviceCode) {
-        downloaderAuthState.authenticated = true;
-        console.log('[Setup] Downloader auth auto-completed (demo mode)');
-      }
-    }, 3000);
+    // If container is not running, start it
+    if (!containerStatus.running) {
+      console.log('[Setup] Starting game container for download...');
+      await startContainer();
+
+      // Wait a bit for container to start
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+
+    // Poll logs for OAuth info (initial check)
+    const logs = await getLogs(200);
+    const oauthInfo = parseOAuthFromLogs(logs);
+
+    if (oauthInfo.verificationUrl) {
+      downloaderAuthState.verificationUrl = oauthInfo.verificationUrl;
+    }
+    if (oauthInfo.userCode) {
+      downloaderAuthState.userCode = oauthInfo.userCode;
+    }
+    if (oauthInfo.authenticated) {
+      downloaderAuthState.authenticated = true;
+    }
+    if (oauthInfo.downloadComplete) {
+      downloaderAuthState.downloadComplete = true;
+    }
+
+    // Check if USE_HYTALE_DOWNLOADER might not be set
+    if (logs.includes('SERVER FILES NOT FOUND') && !logs.includes('AUTHENTICATION REQUIRED')) {
+      res.json({
+        success: false,
+        needsEnvConfig: true,
+        error: 'USE_HYTALE_DOWNLOADER=true is not set. Please add it to your .env file and restart containers with docker-compose up -d',
+        instructions: [
+          '1. Add USE_HYTALE_DOWNLOADER=true to your .env file',
+          '2. Run: docker-compose down && docker-compose up -d',
+          '3. Then retry the download'
+        ],
+      });
+      return;
+    }
 
     res.json({
       success: true,
-      deviceCode,
-      verificationUrl: downloaderAuthState.verificationUrl,
-      userCode,
-      expiresIn,
-      pollInterval,
+      deviceCode: 'container-oauth',
+      verificationUrl: downloaderAuthState.verificationUrl || 'Checking container logs...',
+      userCode: downloaderAuthState.userCode || 'Waiting for code...',
+      expiresIn: 900,
+      pollInterval: 3,
     });
   } catch (error) {
-    console.error('[Setup] Failed to start downloader auth:', error);
+    console.error('[Setup] Failed to start download auth:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to start authentication',
+      error: 'Failed to start download process',
       detail: error instanceof Error ? error.message : 'Unknown error',
     });
   }
@@ -429,13 +493,16 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
 
 /**
  * GET /api/setup/download/auth/status
- * Check downloader OAuth authentication status
+ * Check downloader OAuth authentication status by monitoring container logs
  *
  * Response:
  * {
  *   authenticated: boolean,
  *   expired?: boolean,
- *   error?: string
+ *   error?: string,
+ *   verificationUrl?: string,
+ *   userCode?: string,
+ *   downloadComplete?: boolean
  * }
  */
 router.get('/download/auth/status', async (_req: Request, res: Response) => {
@@ -443,7 +510,7 @@ router.get('/download/auth/status', async (_req: Request, res: Response) => {
     if (!downloaderAuthState) {
       res.json({
         authenticated: false,
-        error: 'No authentication in progress',
+        error: 'No download in progress. Start the download first.',
       });
       return;
     }
@@ -457,22 +524,43 @@ router.get('/download/auth/status', async (_req: Request, res: Response) => {
       return;
     }
 
+    // Poll container logs for updates
+    const logs = await getLogs(300);
+    const oauthInfo = parseOAuthFromLogs(logs);
+
+    // Update state with new info
+    if (oauthInfo.verificationUrl && !downloaderAuthState.verificationUrl) {
+      downloaderAuthState.verificationUrl = oauthInfo.verificationUrl;
+    }
+    if (oauthInfo.userCode && !downloaderAuthState.userCode) {
+      downloaderAuthState.userCode = oauthInfo.userCode;
+    }
+    if (oauthInfo.authenticated) {
+      downloaderAuthState.authenticated = true;
+    }
+    if (oauthInfo.downloadComplete) {
+      downloaderAuthState.downloadComplete = true;
+    }
+
     res.json({
       authenticated: downloaderAuthState.authenticated,
       expired: false,
+      verificationUrl: downloaderAuthState.verificationUrl,
+      userCode: downloaderAuthState.userCode,
+      downloadComplete: downloaderAuthState.downloadComplete,
     });
   } catch (error) {
-    console.error('[Setup] Failed to get downloader auth status:', error);
+    console.error('[Setup] Failed to get download auth status:', error);
     res.status(500).json({
       authenticated: false,
-      error: 'Failed to check authentication status',
+      error: 'Failed to check download status',
     });
   }
 });
 
 /**
  * POST /api/setup/download/start
- * Start downloading server files
+ * Start downloading server files (container should already be running with USE_HYTALE_DOWNLOADER)
  *
  * Body:
  * { method: 'official' | 'custom', serverUrl?: string, assetsUrl?: string }
@@ -482,7 +570,7 @@ router.get('/download/auth/status', async (_req: Request, res: Response) => {
  */
 router.post('/download/start', async (req: Request, res: Response) => {
   try {
-    const { method, serverUrl, assetsUrl } = req.body;
+    const { method } = req.body;
 
     // Check if setup is already complete
     const complete = await isSetupComplete();
@@ -494,50 +582,38 @@ router.post('/download/start', async (req: Request, res: Response) => {
       return;
     }
 
-    // Reset download state
-    downloadState = {
-      status: 'downloading',
-      serverJar: { percent: 0, downloaded: 0, total: 50 * 1024 * 1024, complete: false },
-      assetsZip: { percent: 0, downloaded: 0, total: 500 * 1024 * 1024, speed: 0, eta: 0, complete: false },
-    };
+    console.log(`[Setup] Download method selected: ${method}`);
 
-    // Simulate download progress for demo
-    // In production, this would actually download the files
-    const simulateDownload = async () => {
-      // Simulate server JAR download (fast)
-      for (let i = 0; i <= 100; i += 20) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        downloadState.serverJar.percent = i;
-        downloadState.serverJar.downloaded = Math.floor(downloadState.serverJar.total * i / 100);
+    if (method === 'official') {
+      // For official download, the container should already be handling it
+      // Just confirm it's running
+      const containerStatus = await getDockerStatus();
+      if (!containerStatus.running) {
+        await startContainer();
       }
-      downloadState.serverJar.complete = true;
 
-      // Simulate assets download (slower)
-      for (let i = 0; i <= 100; i += 5) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        downloadState.assetsZip.percent = i;
-        downloadState.assetsZip.downloaded = Math.floor(downloadState.assetsZip.total * i / 100);
-        downloadState.assetsZip.speed = 10 * 1024 * 1024; // 10 MB/s
-        downloadState.assetsZip.eta = Math.floor((100 - i) / 5);
-      }
-      downloadState.assetsZip.complete = true;
-      downloadState.status = 'complete';
-    };
-
-    simulateDownload();
-
-    console.log(`[Setup] Starting download with method: ${method}`);
-    if (method === 'custom') {
-      console.log(`[Setup] Custom URLs - Server: ${serverUrl}, Assets: ${assetsUrl}`);
+      res.json({
+        success: true,
+        message: 'Download in progress via game container',
+      });
+    } else if (method === 'custom') {
+      // Custom URLs would need to be set via environment variables
+      // For now, inform user to set them manually
+      res.json({
+        success: false,
+        error: 'Custom URLs must be set in docker-compose.yml or .env file',
+        instructions: [
+          'Add to .env:',
+          '  SERVER_JAR_URL=https://your-url/HytaleServer.jar',
+          '  ASSETS_URL=https://your-url/Assets.zip',
+          'Then restart: docker-compose up -d'
+        ],
+      });
+    } else {
+      res.json({ success: true });
     }
-
-    res.json({
-      success: true,
-    });
   } catch (error) {
     console.error('[Setup] Failed to start download:', error);
-    downloadState.status = 'error';
-    downloadState.error = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({
       success: false,
       error: 'Failed to start download',
@@ -624,7 +700,57 @@ function formatBytes(bytes: number): string {
 
 /**
  * GET /api/setup/download/progress
- * Server-Sent Events endpoint for download progress
+ * Server-Sent Events endpoint for download progress (monitors container logs)
+ *
+ * Response: SSE stream with download progress objects
+ */
+router.get('/download/progress', (req: Request, res: Response) => {
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const sendProgress = async () => {
+    try {
+      const logs = await getLogs(100);
+      const oauthInfo = parseOAuthFromLogs(logs);
+
+      // Parse download progress from logs if available
+      const progressMatch = logs.match(/(\d+(?:\.\d+)?)\s*%/);
+      const percent = progressMatch ? parseFloat(progressMatch[1]) : 0;
+
+      if (oauthInfo.downloadComplete) {
+        res.write(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
+        clearInterval(interval);
+        res.end();
+        return;
+      }
+
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        currentFile: oauthInfo.authenticated ? 'Downloading...' : 'Waiting for authentication...',
+        percent: percent,
+        authenticated: oauthInfo.authenticated,
+        verificationUrl: oauthInfo.verificationUrl,
+        userCode: oauthInfo.userCode,
+      })}\n\n`);
+    } catch (error) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: 'Failed to get progress' })}\n\n`);
+    }
+  };
+
+  sendProgress();
+  const interval = setInterval(sendProgress, 2000);
+
+  req.on('close', () => {
+    clearInterval(interval);
+  });
+});
+
+/**
+ * GET /api/setup/download/status
+ * Server-Sent Events endpoint for download progress (legacy)
  *
  * Response: SSE stream with download progress objects
  */
