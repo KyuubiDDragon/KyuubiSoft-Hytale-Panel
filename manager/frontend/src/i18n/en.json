@@ -1277,6 +1277,7 @@
     "authCodeExpired": "Authentication code expired",
     "downloadStartFailed": "Failed to start download",
     "verificationFailed": "Verification failed",
+    "codeValidFor": "Code valid for {time}",
     "download": {
       "title": "Server Download",
       "description": "Choose how you want to set up the Hytale server files",

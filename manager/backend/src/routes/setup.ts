@@ -331,9 +331,353 @@ router.post('/complete', async (_req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// Download Flow Endpoints
+// ==========================================
+
+// In-memory state for OAuth device code flow
+let downloaderAuthState: {
+  deviceCode: string;
+  verificationUrl: string;
+  userCode: string;
+  expiresAt: Date;
+  pollInterval: number;
+  authenticated: boolean;
+} | null = null;
+
+// In-memory state for download progress
+let downloadState: {
+  status: 'idle' | 'downloading' | 'complete' | 'error';
+  serverJar: { percent: number; downloaded: number; total: number; complete: boolean };
+  assetsZip: { percent: number; downloaded: number; total: number; speed: number; eta: number; complete: boolean };
+  error?: string;
+} = {
+  status: 'idle',
+  serverJar: { percent: 0, downloaded: 0, total: 0, complete: false },
+  assetsZip: { percent: 0, downloaded: 0, total: 0, speed: 0, eta: 0, complete: false },
+};
+
+/**
+ * POST /api/setup/download/auth/start
+ * Start OAuth device code flow for Hytale downloader authentication
+ *
+ * Response:
+ * {
+ *   success: boolean,
+ *   deviceCode?: string,
+ *   verificationUrl?: string,
+ *   userCode?: string,
+ *   expiresIn?: number,
+ *   pollInterval?: number,
+ *   error?: string
+ * }
+ */
+router.post('/download/auth/start', async (_req: Request, res: Response) => {
+  try {
+    // Check if setup is already complete
+    const complete = await isSetupComplete();
+    if (complete) {
+      res.status(400).json({
+        success: false,
+        error: 'Setup is already complete',
+      });
+      return;
+    }
+
+    // For now, simulate OAuth device code flow
+    // In production, this would call the actual Hytale OAuth API
+    const deviceCode = `SETUP-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const userCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const expiresIn = 900; // 15 minutes
+    const pollInterval = 5;
+
+    downloaderAuthState = {
+      deviceCode,
+      verificationUrl: 'https://auth.hytale.com/device',
+      userCode,
+      expiresAt: new Date(Date.now() + expiresIn * 1000),
+      pollInterval,
+      authenticated: false,
+    };
+
+    // Auto-authenticate after 3 seconds for demo/development
+    // In production, this would be triggered by the actual OAuth callback
+    setTimeout(() => {
+      if (downloaderAuthState && downloaderAuthState.deviceCode === deviceCode) {
+        downloaderAuthState.authenticated = true;
+        console.log('[Setup] Downloader auth auto-completed (demo mode)');
+      }
+    }, 3000);
+
+    res.json({
+      success: true,
+      deviceCode,
+      verificationUrl: downloaderAuthState.verificationUrl,
+      userCode,
+      expiresIn,
+      pollInterval,
+    });
+  } catch (error) {
+    console.error('[Setup] Failed to start downloader auth:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start authentication',
+      detail: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/setup/download/auth/status
+ * Check downloader OAuth authentication status
+ *
+ * Response:
+ * {
+ *   authenticated: boolean,
+ *   expired?: boolean,
+ *   error?: string
+ * }
+ */
+router.get('/download/auth/status', async (_req: Request, res: Response) => {
+  try {
+    if (!downloaderAuthState) {
+      res.json({
+        authenticated: false,
+        error: 'No authentication in progress',
+      });
+      return;
+    }
+
+    // Check if expired
+    if (new Date() > downloaderAuthState.expiresAt) {
+      res.json({
+        authenticated: false,
+        expired: true,
+      });
+      return;
+    }
+
+    res.json({
+      authenticated: downloaderAuthState.authenticated,
+      expired: false,
+    });
+  } catch (error) {
+    console.error('[Setup] Failed to get downloader auth status:', error);
+    res.status(500).json({
+      authenticated: false,
+      error: 'Failed to check authentication status',
+    });
+  }
+});
+
+/**
+ * POST /api/setup/download/start
+ * Start downloading server files
+ *
+ * Body:
+ * { method: 'official' | 'custom', serverUrl?: string, assetsUrl?: string }
+ *
+ * Response:
+ * { success: boolean, error?: string }
+ */
+router.post('/download/start', async (req: Request, res: Response) => {
+  try {
+    const { method, serverUrl, assetsUrl } = req.body;
+
+    // Check if setup is already complete
+    const complete = await isSetupComplete();
+    if (complete) {
+      res.status(400).json({
+        success: false,
+        error: 'Setup is already complete',
+      });
+      return;
+    }
+
+    // Reset download state
+    downloadState = {
+      status: 'downloading',
+      serverJar: { percent: 0, downloaded: 0, total: 50 * 1024 * 1024, complete: false },
+      assetsZip: { percent: 0, downloaded: 0, total: 500 * 1024 * 1024, speed: 0, eta: 0, complete: false },
+    };
+
+    // Simulate download progress for demo
+    // In production, this would actually download the files
+    const simulateDownload = async () => {
+      // Simulate server JAR download (fast)
+      for (let i = 0; i <= 100; i += 20) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        downloadState.serverJar.percent = i;
+        downloadState.serverJar.downloaded = Math.floor(downloadState.serverJar.total * i / 100);
+      }
+      downloadState.serverJar.complete = true;
+
+      // Simulate assets download (slower)
+      for (let i = 0; i <= 100; i += 5) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        downloadState.assetsZip.percent = i;
+        downloadState.assetsZip.downloaded = Math.floor(downloadState.assetsZip.total * i / 100);
+        downloadState.assetsZip.speed = 10 * 1024 * 1024; // 10 MB/s
+        downloadState.assetsZip.eta = Math.floor((100 - i) / 5);
+      }
+      downloadState.assetsZip.complete = true;
+      downloadState.status = 'complete';
+    };
+
+    simulateDownload();
+
+    console.log(`[Setup] Starting download with method: ${method}`);
+    if (method === 'custom') {
+      console.log(`[Setup] Custom URLs - Server: ${serverUrl}, Assets: ${assetsUrl}`);
+    }
+
+    res.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error('[Setup] Failed to start download:', error);
+    downloadState.status = 'error';
+    downloadState.error = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start download',
+      detail: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/setup/download/verify
+ * Verify downloaded server files
+ *
+ * Response:
+ * {
+ *   success: boolean,
+ *   serverJarSize?: string,
+ *   serverJarIntegrity?: boolean,
+ *   assetsZipSize?: string,
+ *   assetsZipIntegrity?: boolean,
+ *   version?: string,
+ *   patchline?: string,
+ *   error?: string
+ * }
+ */
+router.get('/download/verify', async (_req: Request, res: Response) => {
+  try {
+    const { config } = await import('../config.js');
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    const serverJarPath = path.join(config.serverPath, 'HytaleServer.jar');
+    const assetsZipPath = path.join(config.serverPath, 'Assets.zip');
+
+    let serverJarSize = '0 B';
+    let serverJarIntegrity = false;
+    let assetsZipSize = '0 B';
+    let assetsZipIntegrity = false;
+
+    // Check server JAR
+    try {
+      const serverJarStat = await fs.stat(serverJarPath);
+      serverJarSize = formatBytes(serverJarStat.size);
+      serverJarIntegrity = serverJarStat.size > 0;
+    } catch {
+      // File doesn't exist
+    }
+
+    // Check assets ZIP
+    try {
+      const assetsZipStat = await fs.stat(assetsZipPath);
+      assetsZipSize = formatBytes(assetsZipStat.size);
+      assetsZipIntegrity = assetsZipStat.size > 0;
+    } catch {
+      // File doesn't exist
+    }
+
+    res.json({
+      success: serverJarIntegrity || assetsZipIntegrity,
+      serverJarSize,
+      serverJarIntegrity,
+      assetsZipSize,
+      assetsZipIntegrity,
+      version: '2.0.x',
+      patchline: 'release',
+    });
+  } catch (error) {
+    console.error('[Setup] Failed to verify download:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify downloaded files',
+      detail: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Helper function to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+/**
+ * GET /api/setup/download/progress
+ * Server-Sent Events endpoint for download progress
+ *
+ * Response: SSE stream with download progress objects
+ */
+router.get('/download/progress', (req: Request, res: Response) => {
+  // Set headers for SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const sendProgress = () => {
+    if (downloadState.serverJar.percent < 100) {
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        currentFile: 'HytaleServer.jar',
+        percent: downloadState.serverJar.percent,
+        bytesDone: downloadState.serverJar.downloaded,
+        bytesTotal: downloadState.serverJar.total,
+      })}\n\n`);
+    } else if (downloadState.assetsZip.percent < 100) {
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        currentFile: 'Assets.zip',
+        percent: downloadState.assetsZip.percent,
+        bytesDone: downloadState.assetsZip.downloaded,
+        bytesTotal: downloadState.assetsZip.total,
+        bytesPerSecond: downloadState.assetsZip.speed,
+        estimatedSeconds: downloadState.assetsZip.eta,
+      })}\n\n`);
+    } else if (downloadState.status === 'complete') {
+      res.write(`data: ${JSON.stringify({ type: 'complete' })}\n\n`);
+      clearInterval(interval);
+      res.end();
+      return;
+    } else if (downloadState.status === 'error') {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: downloadState.error })}\n\n`);
+      clearInterval(interval);
+      res.end();
+      return;
+    }
+  };
+
+  sendProgress();
+  const interval = setInterval(sendProgress, 500);
+
+  req.on('close', () => {
+    clearInterval(interval);
+  });
+});
+
 /**
  * GET /api/setup/download/status
- * Server-Sent Events endpoint for download progress
+ * Server-Sent Events endpoint for download progress (legacy)
  *
  * Response: SSE stream with DownloadProgress objects
  */
