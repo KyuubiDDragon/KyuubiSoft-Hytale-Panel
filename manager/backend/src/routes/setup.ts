@@ -343,6 +343,7 @@ router.post('/complete', async (_req: Request, res: Response) => {
 // In-memory state for OAuth device code flow (parsed from container logs)
 let downloaderAuthState: {
   verificationUrl: string;
+  verificationUrlDirect: string;
   userCode: string;
   expiresAt: Date;
   authenticated: boolean;
@@ -351,22 +352,92 @@ let downloaderAuthState: {
 } | null = null;
 
 // Parse OAuth info from container logs
-function parseOAuthFromLogs(logs: string): { verificationUrl?: string; userCode?: string; authenticated?: boolean; downloadComplete?: boolean } {
-  const result: { verificationUrl?: string; userCode?: string; authenticated?: boolean; downloadComplete?: boolean } = {};
+function parseOAuthFromLogs(logs: string): {
+  verificationUrl?: string;
+  verificationUrlDirect?: string;
+  userCode?: string;
+  authenticated?: boolean;
+  downloadComplete?: boolean;
+} {
+  const result: {
+    verificationUrl?: string;
+    verificationUrlDirect?: string;
+    userCode?: string;
+    authenticated?: boolean;
+    downloadComplete?: boolean;
+  } = {};
 
-  // Look for the OAuth URL pattern from Hytale downloader
-  // Format varies, but typically contains something like:
-  // "Open URL: https://..." or "Visit: https://..."
-  const urlMatch = logs.match(/(?:Open|Visit|Go to)[:\s]+?(https:\/\/[^\s\n]+)/i);
-  if (urlMatch) {
-    result.verificationUrl = urlMatch[1];
+  // Look for user code first - alphanumeric code (case insensitive)
+  // Format: "Authorization code: sgwqewEx" or "Enter code: ABCD1234"
+  const codePatterns = [
+    /Authorization\s+code[:\s]+([A-Za-z0-9]{4,12})/i,
+    /user_code=([A-Za-z0-9]{4,12})/i,
+    /(?:Enter\s+)?[Cc]ode[:\s]+([A-Za-z0-9]{4,12})/,
+  ];
+
+  for (const pattern of codePatterns) {
+    const codeMatch = logs.match(pattern);
+    if (codeMatch) {
+      result.userCode = codeMatch[1];
+      break;
+    }
   }
 
-  // Look for user code - typically 6-8 character alphanumeric
-  // Format: "Enter code: ABCD1234" or "Code: ABCD-1234"
-  const codeMatch = logs.match(/(?:Enter\s+)?[Cc]ode[:\s]+([A-Z0-9]{4,8}(?:-[A-Z0-9]{4})?)/);
-  if (codeMatch) {
-    result.userCode = codeMatch[1];
+  // Look for OAuth URLs from Hytale downloader
+  // Format: "Please visit the following URL to authenticate:" followed by direct URL with user_code
+  // And: "Or visit the following URL and enter the code:" followed by base URL
+  const directUrlMatch = logs.match(/Please visit the following URL[^\n]*\n\s*(https:\/\/[^\s\n]+user_code=[^\s\n]+)/i);
+  if (directUrlMatch) {
+    result.verificationUrlDirect = directUrlMatch[1];
+  }
+
+  const baseUrlMatch = logs.match(/Or visit the following URL and enter the code[^\n]*\n\s*(https:\/\/[^\s\n]+)/i);
+  if (baseUrlMatch) {
+    result.verificationUrl = baseUrlMatch[1];
+  }
+
+  // Fallback: If we only found direct URL, extract base URL from it
+  if (result.verificationUrlDirect && !result.verificationUrl) {
+    try {
+      const url = new URL(result.verificationUrlDirect);
+      url.searchParams.delete('user_code');
+      result.verificationUrl = url.toString();
+    } catch {
+      // URL parsing failed, use direct URL as fallback
+      result.verificationUrl = result.verificationUrlDirect;
+    }
+  }
+
+  // Fallback: If we have base URL and user code, construct direct URL
+  if (result.verificationUrl && result.userCode && !result.verificationUrlDirect) {
+    try {
+      const url = new URL(result.verificationUrl);
+      url.searchParams.set('user_code', result.userCode);
+      result.verificationUrlDirect = url.toString();
+    } catch {
+      // URL parsing failed
+    }
+  }
+
+  // Generic URL fallback for other formats
+  if (!result.verificationUrl && !result.verificationUrlDirect) {
+    const urlMatch = logs.match(/(https:\/\/oauth\.accounts\.hytale\.com\/[^\s\n]+)/i);
+    if (urlMatch) {
+      const url = urlMatch[1];
+      if (url.includes('user_code=')) {
+        result.verificationUrlDirect = url;
+        // Extract base URL
+        try {
+          const parsedUrl = new URL(url);
+          parsedUrl.searchParams.delete('user_code');
+          result.verificationUrl = parsedUrl.toString();
+        } catch {
+          result.verificationUrl = url;
+        }
+      } else {
+        result.verificationUrl = url;
+      }
+    }
   }
 
   // Check if authentication succeeded
@@ -423,6 +494,7 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
     // Reset auth state
     downloaderAuthState = {
       verificationUrl: '',
+      verificationUrlDirect: '',
       userCode: '',
       expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
       authenticated: false,
@@ -445,6 +517,9 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
 
     if (oauthInfo.verificationUrl) {
       downloaderAuthState.verificationUrl = oauthInfo.verificationUrl;
+    }
+    if (oauthInfo.verificationUrlDirect) {
+      downloaderAuthState.verificationUrlDirect = oauthInfo.verificationUrlDirect;
     }
     if (oauthInfo.userCode) {
       downloaderAuthState.userCode = oauthInfo.userCode;
@@ -475,6 +550,7 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
       success: true,
       deviceCode: 'container-oauth',
       verificationUrl: downloaderAuthState.verificationUrl || 'Checking container logs...',
+      verificationUrlDirect: downloaderAuthState.verificationUrlDirect || '',
       userCode: downloaderAuthState.userCode || 'Waiting for code...',
       expiresIn: 900,
       pollInterval: 3,
@@ -530,6 +606,9 @@ router.get('/download/auth/status', async (_req: Request, res: Response) => {
     if (oauthInfo.verificationUrl && !downloaderAuthState.verificationUrl) {
       downloaderAuthState.verificationUrl = oauthInfo.verificationUrl;
     }
+    if (oauthInfo.verificationUrlDirect && !downloaderAuthState.verificationUrlDirect) {
+      downloaderAuthState.verificationUrlDirect = oauthInfo.verificationUrlDirect;
+    }
     if (oauthInfo.userCode && !downloaderAuthState.userCode) {
       downloaderAuthState.userCode = oauthInfo.userCode;
     }
@@ -544,6 +623,7 @@ router.get('/download/auth/status', async (_req: Request, res: Response) => {
       authenticated: downloaderAuthState.authenticated,
       expired: false,
       verificationUrl: downloaderAuthState.verificationUrl,
+      verificationUrlDirect: downloaderAuthState.verificationUrlDirect,
       userCode: downloaderAuthState.userCode,
       downloadComplete: downloaderAuthState.downloadComplete,
     });
@@ -731,6 +811,7 @@ router.get('/download/progress', (req: Request, res: Response) => {
         percent: percent,
         authenticated: oauthInfo.authenticated,
         verificationUrl: oauthInfo.verificationUrl,
+        verificationUrlDirect: oauthInfo.verificationUrlDirect,
         userCode: oauthInfo.userCode,
       })}\n\n`);
     } catch (error) {

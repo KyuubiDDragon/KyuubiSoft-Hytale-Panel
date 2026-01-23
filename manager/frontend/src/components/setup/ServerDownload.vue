@@ -25,6 +25,7 @@ const customAssetsUrl = ref('')
 // OAuth Device Code Flow state
 const deviceCodeState = ref<{
   verificationUrl: string
+  verificationUrlDirect: string
   userCode: string
   expiresIn: number
   pollInterval: number
@@ -151,6 +152,7 @@ async function startDeviceCodeFlow() {
       success: boolean
       deviceCode?: string
       verificationUrl?: string
+      verificationUrlDirect?: string
       userCode?: string
       expiresIn?: number
       pollInterval?: number
@@ -171,6 +173,7 @@ async function startDeviceCodeFlow() {
     if (response.success && response.deviceCode) {
       deviceCodeState.value = {
         verificationUrl: response.verificationUrl || '',
+        verificationUrlDirect: response.verificationUrlDirect || '',
         userCode: response.userCode || '',
         expiresIn: response.expiresIn || 900,
         pollInterval: response.pollInterval || 5,
@@ -204,6 +207,7 @@ async function pollAuthStatus() {
         expired?: boolean
         error?: string
         verificationUrl?: string
+        verificationUrlDirect?: string
         userCode?: string
         downloadComplete?: boolean
       }
@@ -212,6 +216,9 @@ async function pollAuthStatus() {
       if (deviceCodeState.value) {
         if (status.verificationUrl && !deviceCodeState.value.verificationUrl) {
           deviceCodeState.value.verificationUrl = status.verificationUrl
+        }
+        if (status.verificationUrlDirect && !deviceCodeState.value.verificationUrlDirect) {
+          deviceCodeState.value.verificationUrlDirect = status.verificationUrlDirect
         }
         if (status.userCode && !deviceCodeState.value.userCode) {
           deviceCodeState.value.userCode = status.userCode
@@ -631,39 +638,66 @@ watch(deviceCodeState, () => {
           <!-- Device Code Display -->
           <div v-else-if="deviceCodeState" class="space-y-6">
             <div class="text-center">
-              <p class="text-gray-300 mb-4">{{ t('setup.openLinkInBrowser') }}</p>
-
-              <!-- Verification URL -->
-              <div class="bg-dark-300 rounded-lg p-4 mb-4">
-                <p class="text-sm text-gray-400 mb-2">{{ t('setup.verificationUrl') }}</p>
+              <!-- Option 1: Direct Link (One-Click Auth) -->
+              <div v-if="deviceCodeState.verificationUrlDirect" class="bg-dark-300 rounded-lg p-4 mb-4">
+                <p class="text-sm text-gray-400 mb-3">{{ t('setup.quickAuthOption') }}</p>
                 <a
-                  :href="deviceCodeState.verificationUrl"
+                  :href="deviceCodeState.verificationUrlDirect"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-hytale-orange hover:text-hytale-orange-light break-all text-sm"
+                  class="inline-flex items-center gap-2 px-6 py-3 bg-hytale-orange hover:bg-hytale-orange-light text-white font-semibold rounded-lg transition-colors"
                 >
-                  {{ deviceCodeState.verificationUrl }}
-                </a>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  class="mt-3"
-                  @click="copyVerificationUrl"
-                >
-                  <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
-                  {{ t('setup.copyLink') }}
-                </Button>
+                  {{ t('setup.openAuthPage') }}
+                </a>
+                <p class="text-xs text-gray-500 mt-2">{{ t('setup.directLinkHint') }}</p>
               </div>
 
-              <p class="text-gray-300 mb-4">{{ t('setup.enterCode') }}</p>
+              <!-- Divider -->
+              <div v-if="deviceCodeState.verificationUrlDirect && deviceCodeState.verificationUrl" class="flex items-center gap-4 my-4">
+                <div class="flex-1 h-px bg-dark-50"></div>
+                <span class="text-gray-500 text-sm">{{ t('setup.orAlternatively') }}</span>
+                <div class="flex-1 h-px bg-dark-50"></div>
+              </div>
 
-              <!-- User Code Display -->
-              <div class="bg-dark-400 border-2 border-dark-50 rounded-xl p-6 inline-block">
-                <p class="text-3xl font-mono font-bold text-white tracking-widest">
-                  {{ formattedUserCode }}
-                </p>
+              <!-- Option 2: Manual Code Entry -->
+              <div class="bg-dark-300 rounded-lg p-4 mb-4">
+                <p class="text-sm text-gray-400 mb-2">{{ t('setup.manualAuthOption') }}</p>
+
+                <!-- Verification URL (Base URL) -->
+                <div class="mb-4">
+                  <p class="text-xs text-gray-500 mb-1">{{ t('setup.verificationUrl') }}</p>
+                  <a
+                    :href="deviceCodeState.verificationUrl || deviceCodeState.verificationUrlDirect"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-hytale-orange hover:text-hytale-orange-light break-all text-sm"
+                  >
+                    {{ deviceCodeState.verificationUrl || deviceCodeState.verificationUrlDirect }}
+                  </a>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    class="mt-2"
+                    @click="copyVerificationUrl"
+                  >
+                    <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                    {{ t('setup.copyLink') }}
+                  </Button>
+                </div>
+
+                <p class="text-gray-300 mb-3">{{ t('setup.enterCode') }}</p>
+
+                <!-- User Code Display -->
+                <div class="bg-dark-400 border-2 border-dark-50 rounded-xl p-6 inline-block">
+                  <p class="text-3xl font-mono font-bold text-white tracking-widest">
+                    {{ formattedUserCode }}
+                  </p>
+                </div>
               </div>
             </div>
 
