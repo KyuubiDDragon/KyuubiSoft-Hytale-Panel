@@ -1357,6 +1357,48 @@ router.get('/server/status', async (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/setup/server/logs
+ * Get server logs during setup (auth-free endpoint for fallback status check)
+ * Query params: lines (default 200)
+ */
+router.get('/server/logs', async (req: Request, res: Response) => {
+  try {
+    const lines = parseInt(req.query.lines as string) || 200;
+    // Limit max lines for safety
+    const limitedLines = Math.min(lines, 500);
+
+    const logs = await getLogs(limitedLines);
+
+    // Parse status from logs
+    let booted = false;
+    let authRequired = false;
+
+    if (logs.includes('Server Booted') || logs.includes('Hytale Server Booted')) {
+      booted = true;
+    }
+    if (logs.includes('No server tokens configured') ||
+        logs.includes('/auth login') ||
+        logs.includes('AUTHENTICATION REQUIRED')) {
+      authRequired = true;
+    }
+
+    res.json({
+      logs: logs.split('\n'),
+      booted,
+      authRequired,
+    });
+  } catch (error) {
+    console.error('[Setup] Failed to get server logs:', error);
+    res.status(500).json({
+      logs: [],
+      booted: false,
+      authRequired: false,
+      error: 'Failed to get server logs',
+    });
+  }
+});
+
+/**
  * GET /api/setup/server/console
  * SSE endpoint for server console output during setup
  * Sends structured JSON events that the frontend can understand

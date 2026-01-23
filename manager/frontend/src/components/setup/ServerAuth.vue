@@ -175,31 +175,25 @@ let statusCheckInterval: ReturnType<typeof setInterval> | null = null
 // Check server status via REST API (fallback for SSE issues)
 async function checkServerStatusFallback() {
   try {
-    const response = await fetch('/api/setup/server/status')
-    const status = await response.json()
+    // Use auth-free setup endpoint for logs
+    const logsResponse = await fetch('/api/setup/server/logs?lines=200')
+    if (logsResponse.ok) {
+      const logsData = await logsResponse.json()
 
-    // If server is running, check logs for boot/auth status
-    if (status.running) {
-      // Fetch recent logs to check status
-      const logsResponse = await fetch('/api/server/logs?lines=200')
-      if (logsResponse.ok) {
-        const logsData = await logsResponse.json()
-        const logsText = Array.isArray(logsData.logs) ? logsData.logs.join('\n') : (logsData.logs || '')
+      // The endpoint now returns parsed status
+      const isBooted = logsData.booted === true
+      const needsAuth = logsData.authRequired === true
 
-        const isBooted = logsText.includes('Server Booted') || logsText.includes('Hytale Server Booted')
-        const needsAuth = logsText.includes('No server tokens configured') || logsText.includes('/auth login')
+      if (isBooted && needsAuth) {
+        console.log('[Setup] Server status detected via fallback check')
+        serverStarted.value = true
+        serverNeedsAuth.value = true
+        isServerStarting.value = false
 
-        if (isBooted && needsAuth) {
-          console.log('[Setup] Server status detected via fallback check')
-          serverStarted.value = true
-          serverNeedsAuth.value = true
-          isServerStarting.value = false
-
-          // Stop fallback checking
-          if (statusCheckInterval) {
-            clearInterval(statusCheckInterval)
-            statusCheckInterval = null
-          }
+        // Stop fallback checking
+        if (statusCheckInterval) {
+          clearInterval(statusCheckInterval)
+          statusCheckInterval = null
         }
       }
     }

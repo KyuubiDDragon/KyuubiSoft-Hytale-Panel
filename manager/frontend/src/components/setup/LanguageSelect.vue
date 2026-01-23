@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
-import { setLocale } from '@/i18n'
+import { setLocale, getLocale } from '@/i18n'
 import Button from '@/components/ui/Button.vue'
 
 const { t } = useI18n()
@@ -35,10 +35,23 @@ const languages = [
   },
 ]
 
-// Selected language (default to stored value or 'de')
-const selectedLanguage = ref<'de' | 'en' | 'pt_br'>(
-  setupStore.setupData.language?.language || 'de'
-)
+// Get valid locale or default to 'de'
+function getValidLocale(): 'de' | 'en' | 'pt_br' {
+  // First try setup store
+  const storeLocale = setupStore.setupData.language?.language
+  if (storeLocale && ['de', 'en', 'pt_br'].includes(storeLocale)) {
+    return storeLocale as 'de' | 'en' | 'pt_br'
+  }
+  // Then try current i18n locale
+  const currentLocale = getLocale()
+  if (['de', 'en', 'pt_br'].includes(currentLocale)) {
+    return currentLocale as 'de' | 'en' | 'pt_br'
+  }
+  return 'de'
+}
+
+// Selected language
+const selectedLanguage = ref<'de' | 'en' | 'pt_br'>(getValidLocale())
 
 const isSelected = (code: string) => selectedLanguage.value === code
 
@@ -47,6 +60,11 @@ function selectLanguage(code: 'de' | 'en' | 'pt_br') {
   // Apply language change immediately for preview
   setLocale(code)
 }
+
+// Apply the selected language on mount to ensure UI matches selection
+onMounted(() => {
+  setLocale(selectedLanguage.value)
+})
 
 async function handleContinue() {
   const success = await setupStore.saveLanguage({ language: selectedLanguage.value })
