@@ -1024,7 +1024,7 @@ router.post('/assets/extract', async (_req: Request, res: Response) => {
  *
  * Response: SSE stream with ExtractionProgress objects
  */
-router.get('/assets/status', (req: Request, res: Response) => {
+const assetsProgressHandler = (req: Request, res: Response) => {
   // Set headers for SSE
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1055,7 +1055,11 @@ router.get('/assets/status', (req: Request, res: Response) => {
   req.on('close', () => {
     clearInterval(interval);
   });
-});
+};
+
+// Both endpoints point to the same handler (frontend uses /progress, legacy uses /status)
+router.get('/assets/status', assetsProgressHandler);
+router.get('/assets/progress', assetsProgressHandler);
 
 /**
  * GET /api/setup/detect-ip
