@@ -1261,6 +1261,7 @@ let serverAuthState: {
   authCode: string;
   authUrl: string;
   authenticated: boolean;
+  persistenceConfigured: boolean;
   expiresAt: Date;
 } | null = null;
 
@@ -1595,6 +1596,7 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
       authCode: '',
       authUrl: '',
       authenticated: false,
+      persistenceConfigured: false,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     };
 
@@ -1676,6 +1678,7 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
 /**
  * GET /api/setup/auth/server/status
  * Check server authentication status
+ * Automatically sends /auth persistence Encrypted when auth is detected
  */
 router.get('/auth/server/status', async (_req: Request, res: Response) => {
   try {
@@ -1701,8 +1704,21 @@ router.get('/auth/server/status', async (_req: Request, res: Response) => {
       serverAuthState.authUrl = oauthInfo.verificationUrl;
     }
 
+    // Auto-send persistence command when auth is detected and not yet configured
+    if (serverAuthState.authenticated && !serverAuthState.persistenceConfigured) {
+      console.log('[Setup] Auth detected, automatically sending /auth persistence Encrypted...');
+      const cmdResult = await execCommand('/auth persistence Encrypted');
+      if (cmdResult.success) {
+        serverAuthState.persistenceConfigured = true;
+        console.log('[Setup] Persistence command sent automatically');
+      } else {
+        console.error('[Setup] Failed to auto-send persistence command:', cmdResult.error);
+      }
+    }
+
     res.json({
       authenticated: serverAuthState.authenticated,
+      persistenceConfigured: serverAuthState.persistenceConfigured,
       authCode: serverAuthState.authCode,
       authUrl: serverAuthState.authUrl,
       expired: new Date() > serverAuthState.expiresAt,
