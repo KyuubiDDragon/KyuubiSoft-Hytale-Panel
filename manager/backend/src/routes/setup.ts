@@ -370,13 +370,13 @@ function parseOAuthFromLogs(logs: string): {
   } = {};
 
   // Look for user code first - alphanumeric code (case insensitive)
-  // Format: "Authorization code: sgwqewEx" or "Enter code: ABCD1234"
+  // Hytale server format: "Enter code: NumvJGgq"
   // IMPORTANT: Code must be alphanumeric only, 4-12 chars, and not match common words
   const codePatterns = [
-    /Authorization\s+code[:\s]+([A-Za-z0-9]{4,12})(?:\s|$)/i,
-    /user_code=([A-Za-z0-9]{4,12})(?:&|$)/i,
-    /enter\s+(?:the\s+)?code[:\s]+([A-Za-z0-9]{4,12})(?:\s|$)/i,
-    /your\s+code[:\s]+([A-Za-z0-9]{4,12})(?:\s|$)/i,
+    /Enter\s+code:\s*([A-Za-z0-9]{4,12})/i,
+    /Authorization\s+code[:\s]+([A-Za-z0-9]{4,12})/i,
+    /user_code=([A-Za-z0-9]{4,12})/i,
+    /your\s+code[:\s]+([A-Za-z0-9]{4,12})/i,
   ];
 
   // Words to exclude from being matched as codes
@@ -389,29 +389,35 @@ function parseOAuthFromLogs(logs: string): {
       // Verify it's not a common word
       if (!excludeWords.includes(potentialCode.toLowerCase())) {
         result.userCode = potentialCode;
+        console.log('[Setup] Found auth code:', potentialCode);
         break;
       }
     }
   }
 
-  // Look for OAuth URLs from Hytale downloader
-  // Format: "Please visit the following URL to authenticate:" followed by direct URL with user_code
-  // And: "Or visit the following URL and enter the code:" followed by base URL
-  const directUrlMatch = logs.match(/Please visit the following URL[^\n]*\n\s*(https:\/\/[^\s\n]+user_code=[^\s\n]+)/i);
+  // Look for OAuth URLs from Hytale server
+  // Format: "Visit: https://oauth.accounts.hytale.com/oauth2/device/verify"
+  // And: "Or visit: https://oauth.accounts.hytale.com/oauth2/device/verify?user_code=NumvJGgq"
+
+  // Look for direct URL with user_code parameter
+  const directUrlMatch = logs.match(/Or\s+visit:\s*(https:\/\/[^\s\n]+user_code=[^\s\n]+)/i);
   if (directUrlMatch) {
     result.verificationUrlDirect = directUrlMatch[1];
+    console.log('[Setup] Found direct URL:', directUrlMatch[1]);
   }
 
-  const baseUrlMatch = logs.match(/Or visit the following URL and enter the code[^\n]*\n\s*(https:\/\/[^\s\n]+)/i);
+  // Look for base verification URL
+  const baseUrlMatch = logs.match(/Visit:\s*(https:\/\/oauth\.accounts\.hytale\.com\/[^\s\n?]+)/i);
   if (baseUrlMatch) {
     result.verificationUrl = baseUrlMatch[1];
+    console.log('[Setup] Found base URL:', baseUrlMatch[1]);
   }
 
   // Fallback: If we only found direct URL, extract base URL from it
   if (result.verificationUrlDirect && !result.verificationUrl) {
     try {
       const url = new URL(result.verificationUrlDirect);
-      url.searchParams.delete('user_code');
+      url.search = '';
       result.verificationUrl = url.toString();
     } catch {
       // URL parsing failed, use direct URL as fallback
@@ -440,7 +446,7 @@ function parseOAuthFromLogs(logs: string): {
         // Extract base URL
         try {
           const parsedUrl = new URL(url);
-          parsedUrl.searchParams.delete('user_code');
+          parsedUrl.search = '';
           result.verificationUrl = parsedUrl.toString();
         } catch {
           result.verificationUrl = url;
@@ -452,7 +458,11 @@ function parseOAuthFromLogs(logs: string): {
   }
 
   // Check if authentication succeeded
-  if (logs.includes('Download successful') || logs.includes('Authentication successful') || logs.includes('Credentials saved')) {
+  if (logs.includes('Download successful') ||
+      logs.includes('Authentication successful') ||
+      logs.includes('Credentials saved') ||
+      logs.includes('Authorization successful') ||
+      logs.includes('Token saved')) {
     result.authenticated = true;
   }
 
