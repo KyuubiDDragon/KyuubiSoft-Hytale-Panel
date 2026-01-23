@@ -179,9 +179,8 @@ async function checkPorts(): Promise<SystemCheck[]> {
   // Use ports from config - these are the external (host) ports
   const serverPort = config.serverPort;
   const managerPort = config.externalPort;
-  // WebMap ports - read from env or use defaults
-  const webMapPort = parseInt(process.env.WEBMAP_PORT || '18081', 10);
-  const webMapWsPort = parseInt(process.env.WEBMAP_WS_PORT || '18082', 10);
+  const webMapPort = config.webMapPort;
+  const webMapWsPort = config.webMapWsPort;
 
   // Manager port is NOT required because:
   // 1. It's already in use by this Node process

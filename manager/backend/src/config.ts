@@ -143,6 +143,10 @@ export const config = {
   // Game server port (for display in setup wizard)
   serverPort: parseInt(process.env.SERVER_PORT || '5520', 10),
 
+  // WebMap ports (for display in setup wizard)
+  webMapPort: parseInt(process.env.WEBMAP_PORT || '18081', 10),
+  webMapWsPort: parseInt(process.env.WEBMAP_WS_PORT || '18082', 10),
+
   // Timezone
   tz: process.env.TZ || 'Europe/Berlin',
 
