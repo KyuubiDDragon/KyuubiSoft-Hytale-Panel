@@ -677,6 +677,19 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
     // Reload config in memory so auth service can use the new JWT secret immediately
     reloadConfigFromFile();
 
+    // Restart server container so newly installed mods get loaded
+    console.log('[Setup] Restarting server to load installed mods...');
+    try {
+      const restartResult = await dockerService.restartContainer();
+      if (restartResult.success) {
+        console.log('[Setup] Server restart initiated successfully');
+      } else {
+        console.error('[Setup] Failed to restart server:', restartResult.error);
+      }
+    } catch (restartError) {
+      console.error('[Setup] Error restarting server:', restartError);
+    }
+
     return { success: true, jwtSecret };
   } catch (error) {
     return {
