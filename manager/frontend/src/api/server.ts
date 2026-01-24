@@ -218,6 +218,77 @@ export interface PluginServerInfo {
   mspt: number
 }
 
+// Extended TPS metrics from Prometheus endpoint
+export interface PluginTpsMetrics {
+  current: number
+  average: number
+  min: number
+  max: number
+  target: number
+  msptCurrent: number
+  msptAverage: number
+}
+
+// Memory pool info
+export interface MemoryPool {
+  name: string
+  used: number
+  max: number
+  percent: number
+}
+
+// GC stats
+export interface GcStats {
+  name: string
+  count: number
+  timeSeconds: number
+}
+
+// Thread metrics
+export interface ThreadMetrics {
+  current: number
+  daemon: number
+  peak: number
+}
+
+// Extended memory metrics
+export interface ExtendedMemoryMetrics {
+  heapUsed: number
+  heapMax: number
+  heapCommitted: number
+  heapPercent: number
+  nonHeapUsed: number
+  nonHeapCommitted: number
+  pools: MemoryPool[]
+}
+
+// Extended player metrics
+export interface ExtendedPlayerMetrics {
+  online: number
+  max: number
+  joins: number
+  leaves: number
+  perWorld: Record<string, number>
+}
+
+// Prometheus metrics response
+export interface PrometheusMetrics {
+  raw: string
+  parsed?: {
+    tps: PluginTpsMetrics
+    players: ExtendedPlayerMetrics
+    memory: ExtendedMemoryMetrics
+    threads: ThreadMetrics
+    gc: GcStats[]
+    cpu: {
+      process: number
+      system: number
+    }
+    uptime: number
+    worlds: number
+  }
+}
+
 export interface PluginPlayer {
   uuid: string
   name: string
@@ -482,6 +553,16 @@ export const serverApi = {
 
   async getPluginMemory(): Promise<PluginApiResponse<PluginMemoryInfo>> {
     const response = await api.get<PluginApiResponse<PluginMemoryInfo>>('/server/plugin/memory')
+    return response.data
+  },
+
+  async getPluginPrometheusMetrics(): Promise<PluginApiResponse<PrometheusMetrics>> {
+    const response = await api.get<PluginApiResponse<PrometheusMetrics>>('/server/plugin/metrics')
+    return response.data
+  },
+
+  async getPluginTpsMetrics(): Promise<PluginApiResponse<PluginTpsMetrics>> {
+    const response = await api.get<PluginApiResponse<PluginTpsMetrics>>('/server/plugin/tps')
     return response.data
   },
 

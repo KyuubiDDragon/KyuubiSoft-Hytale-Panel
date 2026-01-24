@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { statsApi, type StatsEntry } from '@/api/management'
-import { serverApi, type PluginMemoryInfo } from '@/api/server'
+import { serverApi, type PluginMemoryInfo, type PluginTpsMetrics, type PrometheusMetrics } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 
 const { t } = useI18n()
@@ -11,6 +11,12 @@ const { stats, status, playerCount, refresh, pluginAvailable, tps, mspt, maxPlay
 
 // Plugin memory data
 const pluginMemory = ref<PluginMemoryInfo | null>(null)
+
+// Extended TPS metrics from Prometheus endpoint
+const tpsMetrics = ref<PluginTpsMetrics | null>(null)
+
+// Full Prometheus metrics (includes JVM, threads, GC, etc.)
+const prometheusData = ref<PrometheusMetrics['parsed'] | null>(null)
 
 // Historical data
 const history = ref<StatsEntry[]>([])
@@ -43,6 +49,37 @@ async function fetchPluginMemory() {
   } catch {
     // Plugin memory not available
   }
+}
+
+async function fetchTpsMetrics() {
+  try {
+    const response = await serverApi.getPluginTpsMetrics()
+    if (response.success && response.data) {
+      tpsMetrics.value = response.data
+    }
+  } catch {
+    // TPS metrics not available
+  }
+}
+
+async function fetchPrometheusMetrics() {
+  try {
+    const response = await serverApi.getPluginPrometheusMetrics()
+    if (response.success && response.data?.parsed) {
+      prometheusData.value = response.data.parsed
+    }
+  } catch {
+    // Prometheus metrics not available
+  }
+}
+
+// Helper to format bytes to human readable
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
 function addLocalEntry() {
@@ -85,11 +122,29 @@ const avgTps = computed(() => {
 const maxCpu = computed(() => Math.max(...cpuData.value, 0))
 const maxMemory = computed(() => Math.max(...memoryData.value, 0))
 const maxPlayers = computed(() => Math.max(...playersData.value, 1))
-const minTps = computed(() => {
+
+// Local fallback TPS stats (from client-side tracking)
+const localMinTps = computed(() => {
   const validTps = localHistory.value.filter(h => h.tps !== null).map(h => h.tps as number)
   if (validTps.length === 0) return null
   return Math.min(...validTps)
 })
+const localMaxTps = computed(() => {
+  const validTps = localHistory.value.filter(h => h.tps !== null).map(h => h.tps as number)
+  if (validTps.length === 0) return null
+  return Math.max(...validTps)
+})
+
+// Server-side TPS metrics (from Prometheus, more accurate 60s window)
+const serverTpsMin = computed(() => tpsMetrics.value?.min ?? null)
+const serverTpsMax = computed(() => tpsMetrics.value?.max ?? null)
+const serverTpsAvg = computed(() => tpsMetrics.value?.average ?? null)
+const serverMsptAvg = computed(() => tpsMetrics.value?.msptAverage ?? null)
+
+// Use server metrics if available, otherwise fall back to local
+const displayTpsMin = computed(() => serverTpsMin.value ?? localMinTps.value)
+const displayTpsMax = computed(() => serverTpsMax.value ?? localMaxTps.value)
+const displayTpsAvg = computed(() => serverTpsAvg.value ?? avgTps.value)
 
 // TPS status color
 const tpsStatus = computed(() => {
@@ -144,12 +199,16 @@ onMounted(async () => {
   await loadHistory()
   await refresh()
   await fetchPluginMemory()
+  await fetchTpsMetrics()
+  await fetchPrometheusMetrics()
   addLocalEntry()
 
   // Update every 5 seconds
   refreshInterval = setInterval(async () => {
     await refresh()
     await fetchPluginMemory()
+    await fetchTpsMetrics()
+    await fetchPrometheusMetrics()
     addLocalEntry()
   }, 5000)
 })
@@ -227,15 +286,24 @@ onUnmounted(() => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <div>
-            <p class="text-sm text-gray-400">TPS</p>
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <p class="text-sm text-gray-400">TPS</p>
+              <span v-if="tpsMetrics" class="px-1.5 py-0.5 text-[10px] rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                Prometheus
+              </span>
+            </div>
             <p :class="[
               'text-2xl font-bold',
               tpsStatus === 'green' ? 'text-green-400' : tpsStatus === 'yellow' ? 'text-yellow-400' : tpsStatus === 'red' ? 'text-red-400' : 'text-gray-400'
             ]">
               {{ tps?.toFixed(1) ?? '-' }}
             </p>
-            <p v-if="mspt !== null" class="text-xs text-gray-500">{{ mspt.toFixed(1) }} ms/tick</p>
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+              <span v-if="mspt !== null">{{ mspt.toFixed(1) }} ms/tick</span>
+              <span v-if="displayTpsMin !== null" class="text-gray-600">|</span>
+              <span v-if="displayTpsMin !== null" class="text-yellow-500">Min: {{ displayTpsMin.toFixed(1) }}</span>
+            </div>
           </div>
         </div>
       </Card>
@@ -436,13 +504,15 @@ onUnmounted(() => {
           <div class="flex items-center gap-2">
             <h3 class="font-semibold text-white">TPS History</h3>
             <span class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
-              Plugin
+              Prometheus
             </span>
           </div>
-          <div class="flex items-center gap-4 text-sm">
+          <div class="flex items-center gap-4 text-sm flex-wrap">
             <span class="text-gray-400">{{ t('performance.current') }}: <span :class="tpsStatus === 'green' ? 'text-green-400' : tpsStatus === 'yellow' ? 'text-yellow-400' : 'text-red-400'">{{ tps?.toFixed(1) ?? '-' }}</span></span>
-            <span class="text-gray-400">{{ t('performance.avg') }}: <span class="text-green-400">{{ avgTps?.toFixed(1) ?? '-' }}</span></span>
-            <span class="text-gray-400">Min: <span class="text-green-400">{{ minTps?.toFixed(1) ?? '-' }}</span></span>
+            <span class="text-gray-400">{{ t('performance.avg') }}: <span class="text-green-400">{{ displayTpsAvg?.toFixed(1) ?? '-' }}</span></span>
+            <span class="text-gray-400">Min: <span class="text-yellow-400">{{ displayTpsMin?.toFixed(1) ?? '-' }}</span></span>
+            <span class="text-gray-400">Max: <span class="text-blue-400">{{ displayTpsMax?.toFixed(1) ?? '-' }}</span></span>
+            <span v-if="serverMsptAvg !== null" class="text-gray-400">MSPT Avg: <span class="text-purple-400">{{ serverMsptAvg.toFixed(1) }}ms</span></span>
           </div>
         </div>
         <div class="relative h-48 bg-dark-100 rounded-lg overflow-hidden">
@@ -508,6 +578,140 @@ onUnmounted(() => {
         <div class="p-4 bg-dark-100 rounded-lg">
           <p class="text-sm text-gray-400 mb-1">{{ t('performance.dataPoints') }}</p>
           <p class="text-white">{{ localHistory.length }} / {{ maxLocalHistory }}</p>
+        </div>
+      </div>
+
+      <!-- TPS Metrics Summary (when Prometheus available) -->
+      <div v-if="tpsMetrics" class="mt-4 pt-4 border-t border-dark-100">
+        <h4 class="text-sm font-medium text-gray-400 mb-3">Prometheus TPS Metrics (60s Window)</h4>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div class="p-3 bg-dark-100 rounded-lg text-center">
+            <p class="text-xs text-gray-500 mb-1">Current</p>
+            <p class="text-lg font-bold text-green-400">{{ tpsMetrics.current.toFixed(1) }}</p>
+          </div>
+          <div class="p-3 bg-dark-100 rounded-lg text-center">
+            <p class="text-xs text-gray-500 mb-1">Average</p>
+            <p class="text-lg font-bold text-blue-400">{{ tpsMetrics.average.toFixed(1) }}</p>
+          </div>
+          <div class="p-3 bg-dark-100 rounded-lg text-center">
+            <p class="text-xs text-gray-500 mb-1">Minimum</p>
+            <p class="text-lg font-bold text-yellow-400">{{ tpsMetrics.min.toFixed(1) }}</p>
+          </div>
+          <div class="p-3 bg-dark-100 rounded-lg text-center">
+            <p class="text-xs text-gray-500 mb-1">Maximum</p>
+            <p class="text-lg font-bold text-purple-400">{{ tpsMetrics.max.toFixed(1) }}</p>
+          </div>
+          <div class="p-3 bg-dark-100 rounded-lg text-center">
+            <p class="text-xs text-gray-500 mb-1">MSPT Avg</p>
+            <p class="text-lg font-bold text-orange-400">{{ tpsMetrics.msptAverage.toFixed(1) }}ms</p>
+          </div>
+        </div>
+      </div>
+    </Card>
+
+    <!-- JVM Details (when Prometheus available) -->
+    <Card v-if="prometheusData">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-white">JVM Details</h3>
+        <span class="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+          Prometheus
+        </span>
+      </div>
+
+      <!-- Main JVM Stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+        <!-- Heap Memory -->
+        <div class="p-4 bg-dark-100 rounded-lg">
+          <p class="text-xs text-gray-500 mb-1">Heap Memory</p>
+          <p class="text-lg font-bold text-purple-400">{{ formatBytes(prometheusData.memory.heapUsed) }}</p>
+          <p class="text-xs text-gray-500">/ {{ formatBytes(prometheusData.memory.heapMax) }}</p>
+          <div class="mt-2 h-1.5 bg-dark-200 rounded-full overflow-hidden">
+            <div class="h-full bg-purple-500 rounded-full" :style="{ width: prometheusData.memory.heapPercent + '%' }"></div>
+          </div>
+        </div>
+
+        <!-- Non-Heap Memory -->
+        <div class="p-4 bg-dark-100 rounded-lg">
+          <p class="text-xs text-gray-500 mb-1">Non-Heap Memory</p>
+          <p class="text-lg font-bold text-cyan-400">{{ formatBytes(prometheusData.memory.nonHeapUsed) }}</p>
+          <p class="text-xs text-gray-500">committed: {{ formatBytes(prometheusData.memory.nonHeapCommitted) }}</p>
+        </div>
+
+        <!-- Threads -->
+        <div class="p-4 bg-dark-100 rounded-lg">
+          <p class="text-xs text-gray-500 mb-1">Threads</p>
+          <p class="text-lg font-bold text-green-400">{{ prometheusData.threads.current }}</p>
+          <p class="text-xs text-gray-500">{{ prometheusData.threads.daemon }} daemon / {{ prometheusData.threads.peak }} peak</p>
+        </div>
+
+        <!-- CPU -->
+        <div class="p-4 bg-dark-100 rounded-lg">
+          <p class="text-xs text-gray-500 mb-1">CPU Usage</p>
+          <p class="text-lg font-bold text-blue-400">{{ prometheusData.cpu.process.toFixed(1) }}%</p>
+          <p class="text-xs text-gray-500">System: {{ prometheusData.cpu.system.toFixed(1) }}%</p>
+        </div>
+
+        <!-- Session Stats -->
+        <div class="p-4 bg-dark-100 rounded-lg">
+          <p class="text-xs text-gray-500 mb-1">Session Stats</p>
+          <div class="flex items-center gap-2">
+            <span class="text-lg font-bold text-green-400">+{{ prometheusData.players.joins }}</span>
+            <span class="text-gray-500">/</span>
+            <span class="text-lg font-bold text-red-400">-{{ prometheusData.players.leaves }}</span>
+          </div>
+          <p class="text-xs text-gray-500">joins / leaves</p>
+        </div>
+
+        <!-- Worlds -->
+        <div class="p-4 bg-dark-100 rounded-lg">
+          <p class="text-xs text-gray-500 mb-1">Worlds Loaded</p>
+          <p class="text-lg font-bold text-orange-400">{{ prometheusData.worlds }}</p>
+          <p class="text-xs text-gray-500">active worlds</p>
+        </div>
+      </div>
+
+      <!-- Memory Pools -->
+      <div v-if="prometheusData.memory.pools.length > 0" class="mb-6">
+        <h4 class="text-sm font-medium text-gray-400 mb-3">Memory Pools</h4>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div v-for="pool in prometheusData.memory.pools" :key="pool.name" class="p-3 bg-dark-100 rounded-lg">
+            <p class="text-xs text-gray-500 mb-1 truncate" :title="pool.name">{{ pool.name }}</p>
+            <p class="text-sm font-bold text-white">{{ formatBytes(pool.used) }}</p>
+            <div class="mt-1.5 h-1 bg-dark-200 rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all duration-300"
+                :class="pool.percent > 80 ? 'bg-red-500' : pool.percent > 60 ? 'bg-yellow-500' : 'bg-blue-500'"
+                :style="{ width: Math.min(pool.percent, 100) + '%' }"
+              ></div>
+            </div>
+            <p class="text-[10px] text-gray-600 mt-1">{{ pool.max > 0 ? formatBytes(pool.max) : 'unlimited' }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- GC Stats -->
+      <div v-if="prometheusData.gc.length > 0">
+        <h4 class="text-sm font-medium text-gray-400 mb-3">Garbage Collection</h4>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div v-for="gc in prometheusData.gc" :key="gc.name" class="p-3 bg-dark-100 rounded-lg">
+            <p class="text-xs text-gray-500 mb-1 truncate" :title="gc.name">{{ gc.name }}</p>
+            <div class="flex items-baseline gap-2">
+              <p class="text-lg font-bold text-yellow-400">{{ gc.count }}</p>
+              <p class="text-xs text-gray-500">collections</p>
+            </div>
+            <p class="text-xs text-gray-500">{{ (gc.timeSeconds * 1000).toFixed(0) }}ms total</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Players per World -->
+      <div v-if="Object.keys(prometheusData.players.perWorld).length > 0" class="mt-6">
+        <h4 class="text-sm font-medium text-gray-400 mb-3">Players per World</h4>
+        <div class="flex flex-wrap gap-2">
+          <div v-for="(count, world) in prometheusData.players.perWorld" :key="world" class="px-3 py-2 bg-dark-100 rounded-lg flex items-center gap-2">
+            <span class="text-sm text-gray-400">{{ world }}:</span>
+            <span class="text-sm font-bold text-hytale-orange">{{ count }}</span>
+          </div>
         </div>
       </div>
     </Card>

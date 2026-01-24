@@ -1,5 +1,6 @@
 package com.kyuubisoft.api.web;
 
+import com.kyuubisoft.api.handlers.MetricsHandler;
 import com.kyuubisoft.api.websocket.EventBroadcaster;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -21,6 +22,7 @@ public class WebServer {
 
     private final int port;
     private final EventBroadcaster eventBroadcaster;
+    private MetricsHandler metricsHandler;
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -29,6 +31,10 @@ public class WebServer {
     public WebServer(int port, EventBroadcaster eventBroadcaster) {
         this.port = port;
         this.eventBroadcaster = eventBroadcaster;
+    }
+
+    public void setMetricsHandler(MetricsHandler metricsHandler) {
+        this.metricsHandler = metricsHandler;
     }
 
     public void start() throws InterruptedException {
@@ -52,7 +58,11 @@ public class WebServer {
                         pipeline.addLast(new WebSocketServerProtocolHandler("/ws", null, true));
 
                         // Custom handlers
-                        pipeline.addLast(new HttpRequestHandler());
+                        HttpRequestHandler httpHandler = new HttpRequestHandler();
+                        if (metricsHandler != null) {
+                            httpHandler.setMetricsHandler(metricsHandler);
+                        }
+                        pipeline.addLast(httpHandler);
                         pipeline.addLast(new WebSocketFrameHandler(eventBroadcaster));
                     }
                 })
