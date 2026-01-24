@@ -3,6 +3,7 @@ package com.kyuubisoft.api.web;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.kyuubisoft.api.KyuubiSoftAPI;
+import com.kyuubisoft.api.handlers.MetricsHandler;
 import com.kyuubisoft.api.handlers.PlayersHandler;
 import com.kyuubisoft.api.handlers.ServerHandler;
 import com.kyuubisoft.api.handlers.WorldsHandler;
@@ -36,6 +37,7 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     private static final Pattern SERVER_INFO_PATTERN = Pattern.compile("^/api/server/info$");
     private static final Pattern SERVER_PERFORMANCE_PATTERN = Pattern.compile("^/api/server/performance$");
     private static final Pattern SERVER_MEMORY_PATTERN = Pattern.compile("^/api/server/memory$");
+    private static final Pattern METRICS_PATTERN = Pattern.compile("^/metrics$");
 
     // Route patterns - POST (Player Actions)
     private static final Pattern PLAYER_HEAL_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/heal$");
@@ -48,6 +50,11 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     private final PlayersHandler playersHandler = new PlayersHandler();
     private final WorldsHandler worldsHandler = new WorldsHandler();
     private final ServerHandler serverHandler = new ServerHandler();
+    private MetricsHandler metricsHandler;
+
+    public void setMetricsHandler(MetricsHandler metricsHandler) {
+        this.metricsHandler = metricsHandler;
+    }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
@@ -198,6 +205,16 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
             else if (SERVER_MEMORY_PATTERN.matcher(uri).matches()) {
                 response = serverHandler.getMemory();
             }
+            // GET /metrics - Prometheus format
+            else if (METRICS_PATTERN.matcher(uri).matches()) {
+                if (metricsHandler != null) {
+                    sendPrometheusMetrics(ctx);
+                    return;
+                } else {
+                    sendError(ctx, HttpResponseStatus.SERVICE_UNAVAILABLE, "Metrics not initialized");
+                    return;
+                }
+            }
             // Not found
             else {
                 sendError(ctx, HttpResponseStatus.NOT_FOUND, "Endpoint not found: " + uri);
@@ -255,6 +272,22 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
         response.headers().set(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE, 86400);
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
+
+        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+    }
+
+    private void sendPrometheusMetrics(ChannelHandlerContext ctx) {
+        String metrics = metricsHandler.getMetrics();
+        ByteBuf content = Unpooled.copiedBuffer(metrics, CharsetUtil.UTF_8);
+
+        FullHttpResponse response = new DefaultFullHttpResponse(
+                HttpVersion.HTTP_1_1, HttpResponseStatus.OK, content);
+
+        response.headers().set(HttpHeaderNames.CONTENT_TYPE, metricsHandler.getContentType());
+        response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
+
+        // CORS headers for metrics
+        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 
         ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
     }

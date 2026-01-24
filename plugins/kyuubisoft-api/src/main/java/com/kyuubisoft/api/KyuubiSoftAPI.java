@@ -6,6 +6,9 @@ import com.hypixel.hytale.server.core.event.events.player.PlayerConnectEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerDisconnectEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerChatEvent;
 import com.hypixel.hytale.event.EventRegistry;
+import com.kyuubisoft.api.handlers.MetricsHandler;
+import com.kyuubisoft.api.metrics.PrometheusMetrics;
+import com.kyuubisoft.api.metrics.TpsTracker;
 import com.kyuubisoft.api.web.WebServer;
 import com.kyuubisoft.api.websocket.EventBroadcaster;
 import com.kyuubisoft.api.config.ApiConfig;
@@ -28,6 +31,8 @@ public class KyuubiSoftAPI extends JavaPlugin {
     private WebServer webServer;
     private EventBroadcaster eventBroadcaster;
     private ApiConfig config;
+    private TpsTracker tpsTracker;
+    private PrometheusMetrics prometheusMetrics;
 
     public KyuubiSoftAPI(JavaPluginInit init) {
         super(init);
@@ -41,13 +46,23 @@ public class KyuubiSoftAPI extends JavaPlugin {
     @Override
     protected void setup() {
         LOGGER.info("╔════════════════════════════════════════╗");
-        LOGGER.info("║       KyuubiSoft API v1.1.6            ║");
+        LOGGER.info("║       KyuubiSoft API v1.2.0            ║");
         LOGGER.info("║       by KyuubiDDragon                 ║");
+        LOGGER.info("║       + Prometheus Metrics Support     ║");
         LOGGER.info("╚════════════════════════════════════════╝");
 
         // Load configuration
         config = new ApiConfig(this);
         config.load();
+
+        // Initialize TPS Tracker
+        tpsTracker = new TpsTracker();
+        tpsTracker.start();
+        LOGGER.info("TPS Tracker initialized");
+
+        // Initialize Prometheus Metrics
+        prometheusMetrics = new PrometheusMetrics(tpsTracker);
+        LOGGER.info("Prometheus Metrics initialized");
 
         // Initialize event broadcaster for WebSocket
         eventBroadcaster = new EventBroadcaster();
@@ -56,6 +71,10 @@ public class KyuubiSoftAPI extends JavaPlugin {
         int port = config.getHttpPort();
         webServer = new WebServer(port, eventBroadcaster);
 
+        // Set up metrics handler
+        MetricsHandler metricsHandler = new MetricsHandler(prometheusMetrics);
+        webServer.setMetricsHandler(metricsHandler);
+
         try {
             webServer.start();
             LOGGER.info("API server started on port " + port);
@@ -63,6 +82,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
             LOGGER.info("  GET  http://localhost:" + port + "/api/players");
             LOGGER.info("  GET  http://localhost:" + port + "/api/worlds");
             LOGGER.info("  GET  http://localhost:" + port + "/api/server/info");
+            LOGGER.info("  GET  http://localhost:" + port + "/metrics (Prometheus)");
             LOGGER.info("  WS   ws://localhost:" + port + "/ws");
         } catch (Exception e) {
             LOGGER.severe("Failed to start API server: " + e.getMessage());
@@ -82,6 +102,10 @@ public class KyuubiSoftAPI extends JavaPlugin {
             String uuid = event.getPlayerRef().getUuid().toString();
             LOGGER.info("Player connected: " + playerName);
             eventBroadcaster.broadcastPlayerJoin(playerName, uuid);
+            // Update Prometheus metrics
+            if (prometheusMetrics != null) {
+                prometheusMetrics.incrementPlayerJoins();
+            }
         });
 
         // Player disconnect event
@@ -90,6 +114,10 @@ public class KyuubiSoftAPI extends JavaPlugin {
             String uuid = event.getPlayerRef().getUuid().toString();
             LOGGER.info("Player disconnected: " + playerName);
             eventBroadcaster.broadcastPlayerLeave(playerName, uuid);
+            // Update Prometheus metrics
+            if (prometheusMetrics != null) {
+                prometheusMetrics.incrementPlayerLeaves();
+            }
         });
 
         // Player chat event - use registerGlobal for global chat listener
@@ -181,6 +209,10 @@ public class KyuubiSoftAPI extends JavaPlugin {
     @Override
     protected void shutdown() {
         LOGGER.info("Shutting down KyuubiSoft API...");
+
+        if (tpsTracker != null) {
+            tpsTracker.shutdown();
+        }
 
         if (webServer != null) {
             webServer.stop();
