@@ -171,6 +171,13 @@ export async function getModRegistry(): Promise<ModStoreEntry[]> {
   for (const externalMod of externalMods) {
     const existingMod = modMap.get(externalMod.id);
     if (existingMod) {
+      // Debug: Log what we're merging
+      console.log(`[ModStore] Merging mod ${externalMod.id}:`);
+      console.log(`  - External has configTemplate: ${externalMod.configTemplate !== undefined}`);
+      console.log(`  - External has configPath: ${externalMod.configPath !== undefined}`);
+      console.log(`  - Built-in has configTemplate: ${existingMod.configTemplate !== undefined}`);
+      console.log(`  - Built-in has configPath: ${existingMod.configPath !== undefined}`);
+
       // Merge: external overrides, but keep built-in configTemplate/configPath if not in external
       const mergedMod: ModStoreEntry = {
         ...existingMod,
@@ -180,6 +187,10 @@ export async function getModRegistry(): Promise<ModStoreEntry[]> {
         configPath: externalMod.configPath ?? existingMod.configPath,
         ports: externalMod.ports ?? existingMod.ports,
       };
+
+      console.log(`  - Merged has configTemplate: ${mergedMod.configTemplate !== undefined}`);
+      console.log(`  - Merged has configPath: ${mergedMod.configPath !== undefined}`);
+
       modMap.set(externalMod.id, mergedMod);
     } else {
       // New mod from external registry
@@ -396,15 +407,24 @@ export async function isModInstalled(modId: string, registry?: ModStoreEntry[]):
  * Install a mod from the registry
  */
 export async function installMod(modId: string): Promise<InstallResult> {
+  console.log(`[ModStore] installMod called for: ${modId}`);
   const registry = await getModRegistry();
   const mod = registry.find((m) => m.id === modId);
   if (!mod) {
+    console.log(`[ModStore] Mod ${modId} not found in registry`);
     return { success: false, error: 'Mod not found in registry' };
+  }
+
+  // Debug: Log mod details including configTemplate
+  console.log(`[ModStore] Found mod: ${mod.name}, hasConfigTemplate: ${!!mod.configTemplate}, configPath: ${mod.configPath || 'none'}`);
+  if (mod.configTemplate) {
+    console.log(`[ModStore] configTemplate keys: ${Object.keys(mod.configTemplate).join(', ')}`);
   }
 
   // Check if already installed
   const installed = await isModInstalled(modId, registry);
   if (installed.installed) {
+    console.log(`[ModStore] Mod already installed: ${installed.filename}`);
     return { success: false, error: `Mod already installed: ${installed.filename}` };
   }
 
