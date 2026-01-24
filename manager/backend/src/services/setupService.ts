@@ -673,7 +673,10 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         if (webmapResult.success) {
           console.log('[Setup] EasyWebMap plugin installed successfully:', webmapResult.filename);
           if (webmapResult.configCreated) {
-            console.log('[Setup] EasyWebMap config created');
+            console.log('[Setup] EasyWebMap config created at', path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json'));
+            // Give filesystem time to sync the config file before server restart
+            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('[Setup] EasyWebMap config write confirmed');
           }
         } else {
           // "already installed" is not an error, just info
@@ -710,10 +713,11 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
 
     // Restart server container so newly installed mods get loaded
     // Run in background to avoid HTTP timeout - setup is already complete at this point
-    console.log('[Setup] Scheduling server restart to load installed mods...');
+    // Use longer delay to ensure all config files are fully written to disk before restart
+    console.log('[Setup] Scheduling server restart to load installed mods (3 second delay)...');
     setTimeout(async () => {
       try {
-        console.log('[Setup] Restarting server container...');
+        console.log('[Setup] Restarting server container now...');
         const restartResult = await dockerService.restartContainer();
         if (restartResult.success) {
           console.log('[Setup] Server restart completed successfully');
@@ -723,7 +727,7 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
       } catch (restartError) {
         console.error('[Setup] Error restarting server:', restartError);
       }
-    }, 1000); // 1 second delay to let the HTTP response complete first
+    }, 3000); // 3 second delay to ensure config files are written and HTTP response completes
 
     return { success: true, jwtSecret };
   } catch (error) {

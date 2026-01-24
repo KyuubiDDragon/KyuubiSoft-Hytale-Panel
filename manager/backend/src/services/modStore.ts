@@ -455,9 +455,22 @@ export async function installMod(modId: string): Promise<InstallResult> {
         console.log(`[ModStore] Setting EasyWebMap httpPort to ${config.webMapPort}`);
       }
 
+      console.log(`[ModStore] Creating config directory: ${configDir}`);
       await mkdir(configDir, { recursive: true });
-      await writeFile(configFullPath, JSON.stringify(configData, null, 2), 'utf-8');
-      configCreated = true;
+
+      const configContent = JSON.stringify(configData, null, 2);
+      console.log(`[ModStore] Writing config file: ${configFullPath}`);
+      await writeFile(configFullPath, configContent, 'utf-8');
+
+      // Verify the config was written correctly
+      const { readFile } = await import('fs/promises');
+      const verifyContent = await readFile(configFullPath, 'utf-8');
+      if (verifyContent === configContent) {
+        console.log(`[ModStore] Config file verified successfully (${configContent.length} bytes)`);
+        configCreated = true;
+      } else {
+        console.error('[ModStore] Config file verification failed - content mismatch');
+      }
     } catch (e) {
       console.error('Failed to create config:', e);
       // Non-fatal - mod is still installed
