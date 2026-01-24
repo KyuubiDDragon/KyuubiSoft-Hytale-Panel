@@ -5,6 +5,8 @@ import bcrypt from 'bcryptjs';
 import { config, reloadConfigFromFile } from '../config.js';
 import * as dockerService from './docker.js';
 import { runSystemChecks as runSystemChecksFromService, type SystemCheck, type SystemCheckResult } from './systemCheck.js';
+import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
+import { saveConfig as saveSchedulerConfig } from './scheduler.js';
 
 // Re-export system check types and function
 export type { SystemCheck, SystemCheckResult };
@@ -447,6 +449,61 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
 }
 
 /**
+ * Convert setup automation settings to scheduler config format
+ * Setup uses interval format ("6h") and cron format ("0 4 * * *")
+ * Scheduler uses time format ("HH:MM") and time arrays
+ */
+function convertAutomationToSchedulerConfig(automation: SetupConfig['automation']) {
+  if (!automation) return {};
+
+  // Helper to extract time from cron format "minute hour * * *"
+  const extractTimeFromCron = (cron: string): string => {
+    const parts = cron.split(' ');
+    if (parts.length >= 2) {
+      const minute = parts[0].padStart(2, '0');
+      const hour = parts[1].padStart(2, '0');
+      return `${hour}:${minute}`;
+    }
+    return '04:00'; // Default to 4 AM
+  };
+
+  // Helper to calculate backup time from interval
+  // For simplicity, we schedule backups at fixed times based on interval
+  const intervalToBackupTime = (interval: string): string => {
+    // For now, just use 3 AM as default backup time
+    // In a more complex implementation, this could schedule multiple times per day
+    return '03:00';
+  };
+
+  const result: Record<string, unknown> = {};
+
+  // Convert backup settings
+  if (automation.backups) {
+    result.backups = {
+      enabled: automation.backups.enabled,
+      schedule: intervalToBackupTime(automation.backups.interval),
+      retentionDays: automation.backups.retention,
+      beforeRestart: true,
+    };
+  }
+
+  // Convert restart settings
+  if (automation.restart) {
+    const restartTime = extractTimeFromCron(automation.restart.schedule);
+    result.scheduledRestarts = {
+      enabled: automation.restart.enabled,
+      times: automation.restart.enabled ? [restartTime] : [],
+      warningMinutes: [30, 15, 5, 1],
+      warningMessage: 'Server restart in {minutes} minute(s)!',
+      restartMessage: 'Server is restarting now!',
+      createBackup: true,
+    };
+  }
+
+  return result;
+}
+
+/**
  * Finalize setup - write final config and create admin user
  */
 export async function finalizeSetup(): Promise<{ success: boolean; error?: string; jwtSecret?: string }> {
@@ -560,6 +617,38 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
     };
     await writeFile(CONFIG_JSON_FILE, JSON.stringify(mainConfig, null, 2), 'utf-8');
     console.log('[Setup] Wrote config.json with all settings');
+
+    // Install KyuubiAPI plugin if user selected it
+    if (setupConfig.plugin?.kyuubiApiInstalled) {
+      console.log('[Setup] Installing KyuubiAPI plugin...');
+      try {
+        const pluginResult = await installKyuubiApiPlugin();
+        if (pluginResult.success) {
+          console.log('[Setup] KyuubiAPI plugin installed successfully');
+        } else {
+          console.error('[Setup] Failed to install KyuubiAPI plugin:', pluginResult.error);
+        }
+      } catch (pluginError) {
+        console.error('[Setup] Error installing KyuubiAPI plugin:', pluginError);
+      }
+    }
+
+    // Apply automation settings to scheduler
+    if (setupConfig.automation) {
+      console.log('[Setup] Applying automation settings to scheduler...');
+      try {
+        // Convert setup automation format to scheduler format
+        const schedulerConfig = convertAutomationToSchedulerConfig(setupConfig.automation);
+        const saved = saveSchedulerConfig(schedulerConfig);
+        if (saved) {
+          console.log('[Setup] Scheduler configuration applied successfully');
+        } else {
+          console.error('[Setup] Failed to save scheduler configuration');
+        }
+      } catch (schedulerError) {
+        console.error('[Setup] Error applying scheduler config:', schedulerError);
+      }
+    }
 
     // Reload config in memory so auth service can use the new JWT secret immediately
     reloadConfigFromFile();
