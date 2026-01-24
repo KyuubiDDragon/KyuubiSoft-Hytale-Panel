@@ -52,7 +52,7 @@ function getCronFromSchedule(schedule: string): string {
 }
 
 async function handleSubmit() {
-  const success = await setupStore.saveStep('automation-settings', {
+  const success = await setupStore.saveStep('automation', {
     backups: {
       enabled: backupEnabled.value,
       interval: backupInterval.value,

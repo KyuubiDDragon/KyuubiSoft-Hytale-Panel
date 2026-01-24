@@ -63,7 +63,7 @@ const MAX_SSE_RECONNECT_ATTEMPTS = 5
 // Computed properties
 const formattedServerUserCode = computed(() => {
   if (!serverDeviceCodeState.value) return ''
-  return serverDeviceCodeState.value.userCode.split('').join(' ')
+  return serverDeviceCodeState.value.userCode
 })
 
 const serverAuthTimeRemaining = computed(() => {

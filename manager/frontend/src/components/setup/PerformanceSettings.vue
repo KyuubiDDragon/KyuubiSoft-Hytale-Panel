@@ -99,7 +99,7 @@ async function handleSubmit() {
     return
   }
 
-  const success = await setupStore.saveStep('performance-settings', {
+  const success = await setupStore.saveStep('performance', {
     minRam: minRam.value,
     maxRam: maxRam.value,
     viewRadius: viewRadius.value,
