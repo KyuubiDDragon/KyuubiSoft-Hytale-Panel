@@ -22,6 +22,9 @@ let memoryInterval: ReturnType<typeof setInterval> | null = null
 const updateInfo = ref<UpdateCheckResponse | null>(null)
 const checkingUpdate = ref(false)
 const updateCheckError = ref<string | null>(null)
+const reAuthenticating = ref(false)
+const reAuthUrl = ref<string | null>(null)
+const reAuthCode = ref<string | null>(null)
 
 // Hytale Auth status
 const hytaleAuthStatus = ref<HytaleAuthStatus>({ authenticated: false })
@@ -53,6 +56,75 @@ async function checkForUpdates() {
   } finally {
     checkingUpdate.value = false
   }
+}
+
+async function initiateDownloaderReAuth() {
+  reAuthenticating.value = true
+  try {
+    const result = await serverApi.initiateDownloaderAuth()
+    if (result.alreadyAuthenticated) {
+      // Already authenticated, just refresh
+      await checkForUpdates()
+      return
+    }
+    if (result.verificationUrl) {
+      reAuthUrl.value = result.verificationUrl
+      reAuthCode.value = result.userCode || null
+      // Open the auth URL in a new window
+      window.open(result.verificationUrl, '_blank', 'noopener,noreferrer')
+      // Start polling for completion
+      pollDownloaderAuth()
+    }
+  } catch (err) {
+    updateCheckError.value = err instanceof Error ? err.message : 'Failed to initiate authentication'
+    reAuthenticating.value = false
+  }
+}
+
+async function pollDownloaderAuth() {
+  const maxAttempts = 60 // 5 minutes
+  let attempts = 0
+
+  const poll = async () => {
+    try {
+      const result = await serverApi.pollDownloaderAuth()
+      if (result.completed) {
+        reAuthenticating.value = false
+        reAuthUrl.value = null
+        reAuthCode.value = null
+        // Refresh update info
+        await checkForUpdates()
+        return
+      }
+      if (result.expired) {
+        updateCheckError.value = 'Authentication expired. Please try again.'
+        reAuthenticating.value = false
+        reAuthUrl.value = null
+        reAuthCode.value = null
+        return
+      }
+      // Continue polling
+      attempts++
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 5000) // Poll every 5 seconds
+      } else {
+        updateCheckError.value = 'Authentication timed out. Please try again.'
+        reAuthenticating.value = false
+        reAuthUrl.value = null
+        reAuthCode.value = null
+      }
+    } catch {
+      // Continue polling on error
+      attempts++
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 5000)
+      } else {
+        reAuthenticating.value = false
+      }
+    }
+  }
+
+  poll()
 }
 
 async function checkHytaleAuth() {
@@ -709,8 +781,45 @@ function refreshAll() {
             </div>
           </div>
 
-          <!-- Status Message -->
+          <!-- Auth Required Warning -->
+          <div v-if="updateInfo.authRequired" class="p-3 rounded-lg text-sm font-medium bg-status-warning/20 text-status-warning border border-status-warning/30">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span>{{ updateInfo.message }}</span>
+            </div>
+            <p class="mt-2 text-xs opacity-80">
+              The Hytale downloader needs to be re-authenticated to check for updates.
+            </p>
+
+            <!-- Show auth code when authenticating -->
+            <div v-if="reAuthenticating && reAuthCode" class="mt-3 p-2 bg-dark-300 rounded border border-dark-50">
+              <p class="text-xs text-gray-400 mb-1">Enter this code on the Hytale authentication page:</p>
+              <p class="text-lg font-mono text-white tracking-wider">{{ reAuthCode }}</p>
+              <a
+                v-if="reAuthUrl"
+                :href="reAuthUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-xs text-hytale-orange hover:underline mt-1 inline-block"
+              >
+                Open authentication page →
+              </a>
+            </div>
+
+            <button
+              @click="initiateDownloaderReAuth"
+              :disabled="reAuthenticating"
+              class="mt-3 px-3 py-1.5 bg-status-warning hover:bg-status-warning/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-dark-400 text-xs font-medium rounded transition-colors"
+            >
+              {{ reAuthenticating ? 'Waiting for authentication...' : 'Re-authenticate Downloader' }}
+            </button>
+          </div>
+
+          <!-- Status Message (when not auth required) -->
           <div
+            v-else
             class="p-3 rounded-lg text-sm font-medium"
             :class="updateInfo.updateAvailable
               ? 'bg-hytale-orange/20 text-hytale-orange border border-hytale-orange/30'
