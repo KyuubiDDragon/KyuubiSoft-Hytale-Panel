@@ -56,6 +56,13 @@ export function useServerStats(pollInterval = 5000) {
             patchline.value = null
             worldCount.value = null
             uptimeSeconds.value = null
+            // Get maxPlayers from config as fallback
+            try {
+              const quickSettings = await serverApi.getQuickSettings()
+              maxPlayers.value = quickSettings.maxPlayers
+            } catch {
+              maxPlayers.value = null
+            }
           }
         } catch {
           // Plugin API failed, fall back to old method
@@ -67,6 +74,13 @@ export function useServerStats(pollInterval = 5000) {
           patchline.value = null
           worldCount.value = null
           uptimeSeconds.value = null
+          // Get maxPlayers from config as fallback
+          try {
+            const quickSettings = await serverApi.getQuickSettings()
+            maxPlayers.value = quickSettings.maxPlayers
+          } catch {
+            maxPlayers.value = null
+          }
         }
       } else {
         // Server not running

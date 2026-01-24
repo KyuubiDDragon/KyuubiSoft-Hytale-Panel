@@ -153,11 +153,13 @@ async function fetchExternalRegistry(): Promise<ModStoreEntry[]> {
 
 /**
  * Get the combined mod registry (external + built-in)
+ * External registry values override built-in, but built-in configTemplate/configPath
+ * are preserved if external doesn't have them (for EasyWebMap etc.)
  */
 export async function getModRegistry(): Promise<ModStoreEntry[]> {
   const externalMods = await fetchExternalRegistry();
 
-  // Merge with built-in, external takes priority for same IDs
+  // Merge with built-in, external takes priority but preserves built-in config templates
   const modMap = new Map<string, ModStoreEntry>();
 
   // Add built-in first
@@ -165,9 +167,24 @@ export async function getModRegistry(): Promise<ModStoreEntry[]> {
     modMap.set(mod.id, mod);
   }
 
-  // Override/add from external
-  for (const mod of externalMods) {
-    modMap.set(mod.id, mod);
+  // Merge from external - preserve built-in configTemplate/configPath if external doesn't have them
+  for (const externalMod of externalMods) {
+    const existingMod = modMap.get(externalMod.id);
+    if (existingMod) {
+      // Merge: external overrides, but keep built-in configTemplate/configPath if not in external
+      const mergedMod: ModStoreEntry = {
+        ...existingMod,
+        ...externalMod,
+        // Preserve built-in config template if external doesn't have one
+        configTemplate: externalMod.configTemplate ?? existingMod.configTemplate,
+        configPath: externalMod.configPath ?? existingMod.configPath,
+        ports: externalMod.ports ?? existingMod.ports,
+      };
+      modMap.set(externalMod.id, mergedMod);
+    } else {
+      // New mod from external registry
+      modMap.set(externalMod.id, externalMod);
+    }
   }
 
   return Array.from(modMap.values());
