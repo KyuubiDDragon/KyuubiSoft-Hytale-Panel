@@ -148,13 +148,17 @@ export const config = {
   // Game Server Container name (Docker-only, cannot change via UI)
   gameContainerName: process.env.GAME_CONTAINER_NAME || 'hytale',
 
+  // Host data path (base path for all data directories)
+  hostDataPath: process.env.HOST_DATA_PATH || '/opt/hytale',
+
   // Paths (inside manager container - Docker volume mounts)
-  serverPath: process.env.SERVER_PATH || '/opt/hytale/server',
-  backupsPath: process.env.BACKUPS_PATH || '/opt/hytale/backups',
-  dataPath: process.env.DATA_PATH || '/opt/hytale/data',
-  modsPath: process.env.MODS_PATH || '/opt/hytale/mods',
-  pluginsPath: process.env.PLUGINS_PATH || '/opt/hytale/plugins',
-  assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets',
+  // Derived from HOST_DATA_PATH if individual path variables are not set
+  serverPath: process.env.SERVER_PATH || `${process.env.HOST_DATA_PATH || '/opt/hytale'}/server`,
+  backupsPath: process.env.BACKUPS_PATH || `${process.env.HOST_DATA_PATH || '/opt/hytale'}/backups`,
+  dataPath: process.env.DATA_PATH || `${process.env.HOST_DATA_PATH || '/opt/hytale'}/data`,
+  modsPath: process.env.MODS_PATH || `${process.env.HOST_DATA_PATH || '/opt/hytale'}/mods`,
+  pluginsPath: process.env.PLUGINS_PATH || `${process.env.HOST_DATA_PATH || '/opt/hytale'}/plugins`,
+  assetsPath: process.env.ASSETS_PATH || `${process.env.HOST_DATA_PATH || '/opt/hytale'}/assets`,
 
   // Server port - internal port is always 18080, external port from MANAGER_PORT
   // Internal port is what Express listens on inside the container
@@ -171,9 +175,6 @@ export const config = {
 
   // Timezone
   tz: process.env.TZ || 'Europe/Berlin',
-
-  // Host data path (for error messages - shows the actual host path)
-  hostDataPath: process.env.HOST_DATA_PATH || '/opt/hytale',
 
   // Security mode: 'strict' (default) or 'warn'
   securityMode,
