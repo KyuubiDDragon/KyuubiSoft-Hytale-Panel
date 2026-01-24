@@ -2,6 +2,65 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [2.1.1] - 2026-01-24 - Performance Metrics & Bug Fixes
+
+### Added
+
+- **Advanced Performance Metrics** (KyuubiAPI Plugin 1.2.1)
+  - TPS Tracking: Current, Average, Min, Max (60 second window)
+  - MSPT: Milliseconds per tick with trend analysis
+  - JVM Details: Heap, Non-Heap, Memory Pools breakdown
+  - Threads: Current, Daemon, Peak thread counts
+  - GC Stats: Collections count per garbage collector
+  - Session Stats: Player joins/leaves since server start
+  - Players per World: Real-time breakdown by world
+  - Location: `plugins/kyuubisoft-api/`, `manager/frontend/src/views/Performance.vue`
+
+- **Prometheus Metrics Endpoint** (KyuubiAPI Plugin)
+  - Endpoint: `/metrics` for Prometheus/Grafana integration
+  - Includes all server metrics in Prometheus format
+  - Location: `plugins/kyuubisoft-api/src/main/java/com/kyuubisoft/api/metrics/`
+
+- **EasyWebMap Config Auto-Fix**
+  - `ensureEasyWebMapConfig()` function to fix port after mod startup
+  - Automatically corrects httpPort if mod creates default config
+  - Called 10 seconds after server restart during setup
+  - Location: `manager/backend/src/services/modStore.ts`
+
+- **MaxPlayers Fallback** (Dashboard)
+  - When KyuubiAPI plugin unavailable, reads MaxPlayers from config.json
+  - Uses quick-settings API as fallback source
+  - Location: `manager/frontend/src/composables/useServerStats.ts`
+
+### Fixed
+
+- **KyuubiAPI Plugin: MaxPlayers was hardcoded to 100**
+  - Now reads actual `MaxPlayers` value from server config.json
+  - Location: `plugins/kyuubisoft-api/src/main/java/com/kyuubisoft/api/handlers/ServerHandler.java`
+
+- **EasyWebMap Config Not Created**
+  - External mod registry was overwriting built-in configTemplate
+  - Registry merge now preserves configTemplate/configPath from built-in
+  - Added extensive debug logging for config creation
+  - Location: `manager/backend/src/services/modStore.ts`
+
+- **Container Name Resolution**
+  - Added `STACK_NAME` as fallback for `gameContainerName`
+  - Simplified plugin host resolution in kyuubiApi.ts and pluginEvents.ts
+  - Fixes issues with multiple server stacks
+  - Location: `manager/backend/src/config.ts`, `manager/backend/src/services/kyuubiApi.ts`
+
+- **Setup Wizard Timing Issues**
+  - Increased server restart delay from 1s to 3s
+  - Added 500ms filesystem sync delay after config writes
+  - Added config file verification after write
+  - Location: `manager/backend/src/services/setupService.ts`
+
+### Changed
+
+- **KyuubiAPI Plugin Version**: 1.2.0 → 1.2.1
+- **Debug Logging**: Added extensive logging for mod installation and config creation
+
 ## [2.1.0] - 2026-01-24 - Native Update System
 
 ### Added

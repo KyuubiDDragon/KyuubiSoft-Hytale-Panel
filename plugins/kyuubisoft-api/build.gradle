@@ -14,7 +14,7 @@ java {
 
 dependencies {
     // Hytale Server API (includes Netty, Gson, etc.)
-    compileOnly files('../lib/HytaleServer.jar')
+    compileOnly files('lib/HytaleServer.jar')
 }
 
 jar {
