@@ -49,7 +49,7 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
     github: 'cryptobench/EasyWebMap',
     category: 'map',
     configTemplate: {
-      httpPort: 8081, // Placeholder - replaced with config.webMapPort during install
+      httpPort: 18081, // Placeholder - replaced with config.webMapPort during install
       updateIntervalMs: 1000,
       tileCacheSize: 20000,
       enabledWorlds: [],
@@ -62,14 +62,14 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
       useDiskCache: true,
       enableTilePyramids: true,
       enableHttps: false,
-      httpsPort: 8443,
+      httpsPort: 18082,
       domain: '',
       acmeEmail: '',
       useProductionAcme: true,
     },
     configPath: 'cryptobench_EasyWebMap/config.json', // Relative to modsPath
     ports: [
-      { name: 'HTTP', default: 8081, env: 'WEBMAP_PORT' },
+      { name: 'HTTP', default: 18081, env: 'WEBMAP_PORT' },
     ],
   },
 ];

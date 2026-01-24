@@ -136,7 +136,8 @@ async function handleComplete() {
 }
 
 function handleGoToDashboard() {
-  router.push('/login')
+  // Use hard redirect to ensure clean navigation after setup
+  window.location.href = '/login'
 }
 
 function copyToClipboard(text: string) {

@@ -933,7 +933,7 @@ onMounted(loadData)
                 </span>
                 <!-- Version info -->
                 <span v-if="item.installedVersion" class="text-xs text-gray-400">
-                  v{{ item.installedVersion }}
+                  {{ item.installedVersion }}
                 </span>
                 <!-- Update badge -->
                 <span
