@@ -722,6 +722,127 @@ router.get('/plugin/memory', authMiddleware, requirePermission('server.view_stat
   }
 });
 
+// GET /api/server/plugin/metrics - Get Prometheus metrics from plugin API
+router.get('/plugin/metrics', authMiddleware, requirePermission('performance.view'), async (_req: Request, res: Response) => {
+  try {
+    const result = await kyuubiApiService.getPrometheusMetrics();
+    if (!result.success) {
+      res.status(503).json({ success: false, error: result.error });
+      return;
+    }
+
+    // Parse Prometheus text format into structured data
+    const raw = result.data || '';
+    const parsed = parsePrometheusMetrics(raw);
+
+    res.json({
+      success: true,
+      data: {
+        raw,
+        parsed
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get Prometheus metrics from plugin',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/plugin/tps - Get extended TPS metrics from plugin API
+router.get('/plugin/tps', authMiddleware, requirePermission('performance.view'), async (_req: Request, res: Response) => {
+  try {
+    const result = await kyuubiApiService.getPrometheusMetrics();
+    if (!result.success) {
+      res.status(503).json({ success: false, error: result.error });
+      return;
+    }
+
+    const raw = result.data || '';
+    const tpsMetrics = parseTpsMetrics(raw);
+
+    res.json({
+      success: true,
+      data: tpsMetrics
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get TPS metrics from plugin',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Helper function to parse Prometheus text format
+function parsePrometheusMetrics(raw: string): Record<string, unknown> {
+  const lines = raw.split('\n').filter(line => line && !line.startsWith('#'));
+  const metrics: Record<string, number> = {};
+
+  for (const line of lines) {
+    const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\{[^}]*\})?\s+([\d.eE+-]+)/);
+    if (match) {
+      metrics[match[1]] = parseFloat(match[2]);
+    }
+  }
+
+  return {
+    tps: {
+      current: metrics['hytale_tps_current'] ?? 20,
+      average: metrics['hytale_tps_average'] ?? 20,
+      min: metrics['hytale_tps_min'] ?? 20,
+      max: metrics['hytale_tps_max'] ?? 20,
+      target: metrics['hytale_tps_target'] ?? 20,
+      msptCurrent: metrics['hytale_mspt_current'] ?? 50,
+      msptAverage: metrics['hytale_mspt_average'] ?? 50,
+    },
+    players: {
+      online: metrics['hytale_players_online'] ?? 0,
+      max: metrics['hytale_players_max'] ?? 100,
+      joins: metrics['hytale_player_joins_total'] ?? 0,
+      leaves: metrics['hytale_player_leaves_total'] ?? 0,
+    },
+    memory: {
+      heapUsed: metrics['jvm_memory_heap_used_bytes'] ?? 0,
+      heapMax: metrics['jvm_memory_heap_max_bytes'] ?? 0,
+      heapPercent: metrics['jvm_memory_heap_max_bytes']
+        ? (metrics['jvm_memory_heap_used_bytes'] / metrics['jvm_memory_heap_max_bytes']) * 100
+        : 0,
+    },
+    cpu: {
+      process: (metrics['process_cpu_usage'] ?? 0) * 100,
+      system: (metrics['system_cpu_usage'] ?? 0) * 100,
+    },
+    uptime: metrics['hytale_uptime_seconds'] ?? 0,
+    threads: metrics['jvm_threads_current'] ?? 0,
+  };
+}
+
+// Helper function to parse TPS metrics
+function parseTpsMetrics(raw: string): Record<string, number> {
+  const lines = raw.split('\n').filter(line => line && !line.startsWith('#'));
+  const metrics: Record<string, number> = {};
+
+  for (const line of lines) {
+    const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\{[^}]*\})?\s+([\d.eE+-]+)/);
+    if (match) {
+      metrics[match[1]] = parseFloat(match[2]);
+    }
+  }
+
+  return {
+    current: metrics['hytale_tps_current'] ?? 20,
+    average: metrics['hytale_tps_average'] ?? 20,
+    min: metrics['hytale_tps_min'] ?? 20,
+    max: metrics['hytale_tps_max'] ?? 20,
+    target: metrics['hytale_tps_target'] ?? 20,
+    msptCurrent: metrics['hytale_mspt_current'] ?? 50,
+    msptAverage: metrics['hytale_mspt_average'] ?? 50,
+  };
+}
+
 // GET /api/server/plugin/players/:name/details - Get player details from plugin API
 router.get('/plugin/players/:name/details', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {

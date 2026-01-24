@@ -162,6 +162,42 @@ export interface PluginServerInfo {
   mspt: number
 }
 
+// Extended TPS metrics from Prometheus endpoint
+export interface PluginTpsMetrics {
+  current: number
+  average: number
+  min: number
+  max: number
+  target: number
+  msptCurrent: number
+  msptAverage: number
+}
+
+// Prometheus metrics response
+export interface PrometheusMetrics {
+  raw: string
+  parsed?: {
+    tps: PluginTpsMetrics
+    players: {
+      online: number
+      max: number
+      joins: number
+      leaves: number
+    }
+    memory: {
+      heapUsed: number
+      heapMax: number
+      heapPercent: number
+    }
+    cpu: {
+      process: number
+      system: number
+    }
+    uptime: number
+    threads: number
+  }
+}
+
 export interface PluginPlayer {
   uuid: string
   name: string
@@ -426,6 +462,16 @@ export const serverApi = {
 
   async getPluginMemory(): Promise<PluginApiResponse<PluginMemoryInfo>> {
     const response = await api.get<PluginApiResponse<PluginMemoryInfo>>('/server/plugin/memory')
+    return response.data
+  },
+
+  async getPluginPrometheusMetrics(): Promise<PluginApiResponse<PrometheusMetrics>> {
+    const response = await api.get<PluginApiResponse<PrometheusMetrics>>('/server/plugin/metrics')
+    return response.data
+  },
+
+  async getPluginTpsMetrics(): Promise<PluginApiResponse<PluginTpsMetrics>> {
+    const response = await api.get<PluginApiResponse<PluginTpsMetrics>>('/server/plugin/tps')
     return response.data
   },
 
