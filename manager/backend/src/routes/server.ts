@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { readdir, readFile, writeFile, stat } from 'fs/promises';
+import { readdir, readFile, writeFile, stat, access, constants } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -435,24 +435,95 @@ router.put('/allow-op', authMiddleware, requirePermission('config.edit'), async 
   }
 });
 
+// Helper to check if downloader credentials exist
+async function checkDownloaderCredentials(): Promise<{ exists: boolean; error?: string }> {
+  // Check multiple possible locations for downloader credentials
+  const credentialPaths = [
+    '/opt/hytale/downloader/.hytale-downloader-credentials.json',
+    '/opt/hytale/auth/credentials.json',
+    '/opt/hytale/auth/oauth_credentials.json',
+  ];
+
+  for (const credPath of credentialPaths) {
+    try {
+      await access(credPath, constants.R_OK);
+      console.log(`[Server] Found downloader credentials at: ${credPath}`);
+      return { exists: true };
+    } catch {
+      // Continue checking
+    }
+  }
+
+  console.log('[Server] No downloader credentials found');
+  return { exists: false, error: 'Downloader credentials not found. Re-authentication required.' };
+}
+
 // Helper to get latest version for a patchline
 // SECURITY: Defense-in-depth validation - even though callers use hardcoded values
 const VALID_PATCHLINES = ['release', 'pre-release'] as const;
-async function getLatestVersion(patchline: string): Promise<string> {
+
+interface VersionCheckResult {
+  version: string;
+  authRequired?: boolean;
+  error?: string;
+}
+
+async function getLatestVersion(patchline: string): Promise<VersionCheckResult> {
   // SECURITY: Validate patchline to prevent command injection
   if (!VALID_PATCHLINES.includes(patchline as typeof VALID_PATCHLINES[number])) {
     console.error(`Invalid patchline attempted: ${patchline}`);
-    return 'unknown';
+    return { version: 'unknown', error: 'Invalid patchline' };
   }
 
+  // Run downloader and capture both stdout and stderr to detect auth issues
   const checkResult = await dockerService.execInContainer(
-    `cd /opt/hytale/downloader && ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>/dev/null | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+" | head -1`
+    `cd /opt/hytale/downloader && ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>&1`
   );
 
-  if (checkResult.success && checkResult.output) {
-    return checkResult.output.trim();
+  if (!checkResult.success) {
+    console.error('[Server] Downloader exec failed:', checkResult.error);
+    return { version: 'unknown', error: checkResult.error };
   }
-  return 'unknown';
+
+  const output = checkResult.output || '';
+
+  // Check for authentication errors in output
+  const authErrorPatterns = [
+    /unauthorized/i,
+    /authentication.*required/i,
+    /invalid.*token/i,
+    /token.*expired/i,
+    /login.*required/i,
+    /401/,
+    /403/,
+    /no.*credentials/i,
+    /credentials.*not.*found/i,
+    /please.*authenticate/i,
+  ];
+
+  for (const pattern of authErrorPatterns) {
+    if (pattern.test(output)) {
+      console.log('[Server] Downloader auth error detected:', output.substring(0, 200));
+      return { version: 'unknown', authRequired: true, error: 'Authentication required' };
+    }
+  }
+
+  // Extract version number from output
+  const versionMatch = output.match(/[0-9]+\.[0-9]+\.[0-9]+/);
+  if (versionMatch) {
+    return { version: versionMatch[0] };
+  }
+
+  // If no version found but also no auth error, credentials might be missing
+  // Check if credentials exist
+  const credCheck = await checkDownloaderCredentials();
+  if (!credCheck.exists) {
+    return { version: 'unknown', authRequired: true, error: credCheck.error };
+  }
+
+  // No version found, but credentials exist - might be a network issue
+  console.log('[Server] No version found in output:', output.substring(0, 200));
+  return { version: 'unknown', error: 'Could not fetch version. Check network connection.' };
 }
 
 // GET /api/server/check-update - Check if a Hytale server update is available
@@ -472,32 +543,47 @@ router.get('/check-update', authMiddleware, requirePermission('server.view_statu
     const currentPatchline = panelConfig.patchline;
 
     // Check both patchlines in parallel
-    const [releaseVersion, preReleaseVersion] = await Promise.all([
+    const [releaseResult, preReleaseResult] = await Promise.all([
       getLatestVersion('release'),
       getLatestVersion('pre-release')
     ]);
 
+    // Check if any auth is required
+    const authRequired = releaseResult.authRequired || preReleaseResult.authRequired;
+
     // Check if update is available for current patchline
-    const latestVersion = currentPatchline === 'release' ? releaseVersion : preReleaseVersion;
+    const latestVersionResult = currentPatchline === 'release' ? releaseResult : preReleaseResult;
+    const latestVersion = latestVersionResult.version;
     const updateAvailable = installedVersion !== 'unknown' &&
                            latestVersion !== 'unknown' &&
                            installedVersion !== latestVersion;
+
+    // Determine appropriate message
+    let message: string;
+    if (authRequired) {
+      message = 'Downloader authentication required. Please re-authenticate to check for updates.';
+    } else if (updateAvailable) {
+      message = `Update available: ${installedVersion} → ${latestVersion}`;
+    } else if (installedVersion === latestVersion) {
+      message = 'Server is up to date';
+    } else if (latestVersion === 'unknown') {
+      message = 'Could not fetch latest version. Check network connection or re-authenticate.';
+    } else {
+      message = 'Could not determine update status';
+    }
 
     res.json({
       installedVersion,
       latestVersion,
       updateAvailable,
       patchline: currentPatchline,
+      authRequired, // NEW: indicates if re-authentication is needed
       // Include both patchline versions
       versions: {
-        release: releaseVersion,
-        preRelease: preReleaseVersion
+        release: releaseResult.version,
+        preRelease: preReleaseResult.version
       },
-      message: updateAvailable
-        ? `Update available: ${installedVersion} → ${latestVersion}`
-        : installedVersion === latestVersion
-          ? 'Server is up to date'
-          : 'Could not determine update status'
+      message,
     });
   } catch (error) {
     res.status(500).json({
@@ -825,6 +911,169 @@ router.get('/players/:name/file/inventory', authMiddleware, requirePermission('p
     res.status(500).json({
       success: false,
       error: 'Failed to read player inventory',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================================
+// Downloader Authentication Endpoints
+// ============================================================
+
+// GET /api/server/downloader/auth-status - Check downloader authentication status
+router.get('/downloader/auth-status', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  try {
+    const credCheck = await checkDownloaderCredentials();
+
+    // Try to get version as a test
+    if (credCheck.exists) {
+      const testResult = await getLatestVersion('release');
+      res.json({
+        authenticated: testResult.version !== 'unknown' && !testResult.authRequired,
+        credentialsExist: true,
+        authRequired: testResult.authRequired || false,
+        error: testResult.authRequired ? 'Token expired or invalid' : undefined,
+      });
+    } else {
+      res.json({
+        authenticated: false,
+        credentialsExist: false,
+        authRequired: true,
+        error: 'No credentials found',
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to check downloader auth status',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// In-memory state for downloader OAuth flow
+let downloaderOAuthState: {
+  active: boolean;
+  verificationUrl?: string;
+  userCode?: string;
+  expiresAt?: Date;
+} = { active: false };
+
+// POST /api/server/downloader/initiate-auth - Start downloader OAuth flow
+router.post('/downloader/initiate-auth', authMiddleware, requirePermission('server.control'), async (_req: Request, res: Response) => {
+  try {
+    console.log('[Server] Initiating downloader OAuth flow...');
+
+    // Start the downloader in auth mode
+    // The downloader will output OAuth URLs to stdout
+    const authResult = await dockerService.execInContainer(
+      `cd /opt/hytale/downloader && timeout 30 ./hytale-downloader-linux-amd64 -auth-only 2>&1 || true`
+    );
+
+    if (!authResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to start downloader auth',
+        message: authResult.error,
+      });
+    }
+
+    const output = authResult.output || '';
+    console.log('[Server] Downloader auth output:', output.substring(0, 500));
+
+    // Parse OAuth URLs from output
+    // Format: "Visit: https://oauth.accounts.hytale.com/oauth2/device/verify"
+    // And: "Enter code: XXXXXXXX" or "user_code=XXXXXXXX"
+    const urlMatch = output.match(/(https:\/\/oauth\.accounts\.hytale\.com\/[^\s\n]+)/i);
+    const codeMatch = output.match(/(?:enter\s+code|user_code)[:\s=]+([A-Za-z0-9]{4,12})/i);
+
+    if (!urlMatch) {
+      // Maybe already authenticated?
+      if (output.includes('already') && output.includes('authenticated')) {
+        return res.json({
+          success: true,
+          alreadyAuthenticated: true,
+          message: 'Downloader is already authenticated',
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: 'Could not parse OAuth URL from downloader output',
+        output: output.substring(0, 500),
+      });
+    }
+
+    let verificationUrl = urlMatch[1].trim();
+    const userCode = codeMatch ? codeMatch[1].trim() : null;
+
+    // If URL doesn't have user_code, add it
+    if (userCode && !verificationUrl.includes('user_code=')) {
+      verificationUrl += verificationUrl.includes('?') ? `&user_code=${userCode}` : `?user_code=${userCode}`;
+    }
+
+    // Store state
+    downloaderOAuthState = {
+      active: true,
+      verificationUrl,
+      userCode: userCode || undefined,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+    };
+
+    res.json({
+      success: true,
+      verificationUrl,
+      userCode,
+      expiresIn: 900, // 15 minutes
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to initiate downloader auth',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/downloader/auth-poll - Poll for auth completion
+router.get('/downloader/auth-poll', authMiddleware, requirePermission('server.control'), async (_req: Request, res: Response) => {
+  try {
+    if (!downloaderOAuthState.active) {
+      return res.json({
+        completed: false,
+        error: 'No active auth flow',
+      });
+    }
+
+    // Check if expired
+    if (downloaderOAuthState.expiresAt && new Date() > downloaderOAuthState.expiresAt) {
+      downloaderOAuthState = { active: false };
+      return res.json({
+        completed: false,
+        expired: true,
+        error: 'Auth flow expired',
+      });
+    }
+
+    // Check if credentials now exist and work
+    const credCheck = await checkDownloaderCredentials();
+    if (credCheck.exists) {
+      const testResult = await getLatestVersion('release');
+      if (testResult.version !== 'unknown' && !testResult.authRequired) {
+        downloaderOAuthState = { active: false };
+        return res.json({
+          completed: true,
+          version: testResult.version,
+        });
+      }
+    }
+
+    res.json({
+      completed: false,
+      verificationUrl: downloaderOAuthState.verificationUrl,
+      userCode: downloaderOAuthState.userCode,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to poll auth status',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

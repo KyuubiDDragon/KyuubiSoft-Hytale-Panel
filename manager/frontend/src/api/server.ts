@@ -75,11 +75,38 @@ export interface UpdateCheckResponse {
   latestVersion: string
   updateAvailable: boolean
   patchline?: string
+  authRequired?: boolean // NEW: indicates if downloader needs re-authentication
   versions?: {
     release: string
     preRelease: string
   }
   message: string
+}
+
+export interface DownloaderAuthStatus {
+  authenticated: boolean
+  credentialsExist: boolean
+  authRequired: boolean
+  error?: string
+}
+
+export interface DownloaderAuthInitResponse {
+  success: boolean
+  alreadyAuthenticated?: boolean
+  verificationUrl?: string
+  userCode?: string
+  expiresIn?: number
+  error?: string
+  message?: string
+}
+
+export interface DownloaderAuthPollResponse {
+  completed: boolean
+  expired?: boolean
+  version?: string
+  verificationUrl?: string
+  userCode?: string
+  error?: string
 }
 
 export interface PatchlineResponse {
@@ -453,6 +480,22 @@ export const serverApi = {
 
   async getFilePlayerInventory(playerName: string): Promise<PluginApiResponse<FilePlayerInventory>> {
     const response = await api.get<PluginApiResponse<FilePlayerInventory>>(`/server/players/${encodeURIComponent(playerName)}/file/inventory`)
+    return response.data
+  },
+
+  // Downloader authentication methods
+  async getDownloaderAuthStatus(): Promise<DownloaderAuthStatus> {
+    const response = await api.get<DownloaderAuthStatus>('/server/downloader/auth-status')
+    return response.data
+  },
+
+  async initiateDownloaderAuth(): Promise<DownloaderAuthInitResponse> {
+    const response = await api.post<DownloaderAuthInitResponse>('/server/downloader/initiate-auth')
+    return response.data
+  },
+
+  async pollDownloaderAuth(): Promise<DownloaderAuthPollResponse> {
+    const response = await api.get<DownloaderAuthPollResponse>('/server/downloader/auth-poll')
     return response.data
   },
 }
