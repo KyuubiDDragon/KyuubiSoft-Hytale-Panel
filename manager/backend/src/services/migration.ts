@@ -425,7 +425,7 @@ export async function runMigration(): Promise<boolean> {
 }
 
 // Current panel version for feature tracking
-const CURRENT_PANEL_VERSION = '2.1.0';
+const CURRENT_PANEL_VERSION = '2.1.1';
 
 // Features introduced in each version
 const VERSION_FEATURES: Record<string, string[]> = {

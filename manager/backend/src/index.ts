@@ -569,7 +569,7 @@ process.on('unhandledRejection', (reason, promise) => {
 server.listen(config.port, '0.0.0.0', async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════╗
-║         KyuubiSoft Panel v2.0.0                   ║
+║         KyuubiSoft Panel v2.1.1                   ║
 ║         Hytale Server Management                  ║
 ╠═══════════════════════════════════════════════════╣
 ║  Panel: http://localhost:${config.externalPort.toString().padEnd(23)}║
