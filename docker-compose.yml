@@ -81,6 +81,7 @@ services:
       - ${HOST_DATA_PATH:-/opt/hytale}/mods:/opt/hytale/mods
       - ${HOST_DATA_PATH:-/opt/hytale}/downloader:/opt/hytale/downloader
       - ${HOST_DATA_PATH:-/opt/hytale}/auth:/opt/hytale/auth
+      - ${HOST_DATA_PATH:-/opt/hytale}/updater:/opt/hytale/server/updater
 
     # Console
     stdin_open: true

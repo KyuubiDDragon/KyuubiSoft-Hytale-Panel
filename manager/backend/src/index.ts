@@ -33,7 +33,7 @@ import { initializePlayerTracking } from './services/players.js';
 import { initializePluginEvents, disconnectFromPluginWebSocket } from './services/pluginEvents.js';
 import { initializeRoles } from './services/roles.js';
 import { isSetupComplete } from './services/setupService.js';
-import { checkAndRunMigration } from './services/migration.js';
+import { checkAndRunMigration, migrateUpdateConfig, checkPanelVersionAndFeatures } from './services/migration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -580,6 +580,18 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Check for existing installation and run migration if needed
   // This must happen BEFORE security check as it may create config files
   await checkAndRunMigration();
+
+  // Migrate UpdateConfig for native update system (Hytale 24.01.2026+)
+  const updateMigration = await migrateUpdateConfig();
+  if (updateMigration.migrated) {
+    console.log('[Startup] Migrated to native update system');
+  }
+
+  // Check panel version and new features
+  const versionCheck = await checkPanelVersionAndFeatures();
+  if (versionCheck.newFeatures.length > 0) {
+    console.log('[Startup] New features available:', versionCheck.newFeatures);
+  }
 
   // SECURITY: Check for insecure default credentials
   checkSecurityConfig();

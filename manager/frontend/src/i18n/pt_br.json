@@ -128,7 +128,12 @@
     "enterCodeOnHytale": "Digite este código na página de autenticação do Hytale",
     "openAuthPage": "Abrir página de autenticação",
     "reAuthenticateDownloader": "Reautenticar Downloader",
-    "waitingForAuth": "Aguardando autenticação..."
+    "waitingForAuth": "Aguardando autenticação...",
+    "newFeatures": {
+      "title": "Novos Recursos Disponíveis",
+      "description": "Seu painel foi atualizado para a versão {version}. Novas configurações estão disponíveis:",
+      "configure": "Configurar Agora"
+    }
   },
   "console": {
     "title": "Console do Servidor",
@@ -319,7 +324,40 @@
     "passwordHint": "Deixe vazio para permitir que qualquer um entre",
     "maxPlayers": "Máximo de Jogadores",
     "maxViewRadius": "Raio de Visão",
-    "defaultGameMode": "Modo de Jogo Padrão"
+    "defaultGameMode": "Modo de Jogo Padrão",
+    "updateConfig": {
+      "title": "Sistema de Atualização Nativo",
+      "description": "Configure o sistema de atualização nativo do Hytale. Quando ativado, o servidor verificará e aplicará atualizações automaticamente.",
+      "enabled": "Ativar Atualizações Automáticas",
+      "enabledHint": "Verificar e baixar atualizações do servidor automaticamente",
+      "checkInterval": "Intervalo de Verificação",
+      "interval30min": "A cada 30 minutos",
+      "interval1hour": "A cada hora",
+      "interval2hours": "A cada 2 horas",
+      "interval6hours": "A cada 6 horas",
+      "interval12hours": "A cada 12 horas",
+      "interval24hours": "A cada 24 horas",
+      "patchline": "Canal de Atualização",
+      "stable": "Estável",
+      "beta": "Beta",
+      "releaseHint": "Versões estáveis, recomendado para produção",
+      "preReleaseHint": "Acesso antecipado a novos recursos, pode ser instável",
+      "autoApplyMode": "Aplicar Atualizações Automaticamente",
+      "modeDisabled": "Desativado - Somente manual",
+      "modeWhenEmpty": "Quando o servidor estiver vazio",
+      "modeScheduled": "Agendado com atraso",
+      "modeDisabledHint": "Atualizações serão baixadas mas devem ser aplicadas manualmente",
+      "modeWhenEmptyHint": "Atualizações serão aplicadas automaticamente quando não houver jogadores online",
+      "modeScheduledHint": "Atualizações serão aplicadas após uma contagem regressiva, avisando os jogadores primeiro",
+      "autoApplyDelay": "Atraso para Aplicação",
+      "minutes": "minutos",
+      "notifyPlayers": "Notificar Jogadores",
+      "notifyPlayersHint": "Enviar notificação no jogo quando uma atualização estiver disponível",
+      "backupBefore": "Backup Antes da Atualização",
+      "backupBeforeHint": "Criar backup completo do servidor antes de aplicar atualizações",
+      "backupConfigBefore": "Backup de Configurações",
+      "backupConfigBeforeHint": "Fazer backup dos arquivos de configuração antes de aplicar atualizações"
+    }
   },
   "mods": {
     "title": "Mods e Plugins",

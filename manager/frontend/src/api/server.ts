@@ -109,6 +109,35 @@ export interface DownloaderAuthPollResponse {
   error?: string
 }
 
+// Native Update System Types (Hytale 24.01.2026+)
+export interface UpdateConfig {
+  enabled: boolean
+  checkIntervalSeconds: number
+  notifyPlayersOnAvailable: boolean
+  patchline: 'release' | 'pre-release'
+  runBackupBeforeUpdate: boolean
+  backupConfigBeforeUpdate: boolean
+  autoApplyMode: 'DISABLED' | 'WHEN_EMPTY' | 'SCHEDULED'
+  autoApplyDelayMinutes: number
+}
+
+export interface NativeUpdateStatus {
+  available: boolean
+  currentVersion: string
+  latestVersion: string
+  state: 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'APPLYING' | 'ERROR'
+  progress?: number
+  message?: string
+  error?: string
+}
+
+export interface NewFeaturesStatus {
+  hasNewFeatures: boolean
+  features: string[]
+  dismissed: boolean
+  panelVersion: string
+}
+
 export interface PatchlineResponse {
   patchline: string
   options: string[]
@@ -496,6 +525,53 @@ export const serverApi = {
 
   async pollDownloaderAuth(): Promise<DownloaderAuthPollResponse> {
     const response = await api.get<DownloaderAuthPollResponse>('/server/downloader/auth-poll')
+    return response.data
+  },
+
+  // Native Update System Methods (Hytale 24.01.2026+)
+  async getUpdateConfig(): Promise<UpdateConfig> {
+    const response = await api.get<UpdateConfig>('/server/update-config')
+    return response.data
+  },
+
+  async saveUpdateConfig(config: Partial<UpdateConfig>): Promise<{ success: boolean; message?: string; data?: UpdateConfig }> {
+    const response = await api.put<{ success: boolean; message?: string; data?: UpdateConfig }>('/server/update-config', config)
+    return response.data
+  },
+
+  async getUpdateStatus(): Promise<{ success: boolean; data?: NativeUpdateStatus; error?: string }> {
+    const response = await api.get<{ success: boolean; data?: NativeUpdateStatus; error?: string }>('/server/update-status')
+    return response.data
+  },
+
+  async checkForNativeUpdate(): Promise<{ success: boolean; data?: NativeUpdateStatus; message?: string; error?: string }> {
+    const response = await api.post<{ success: boolean; data?: NativeUpdateStatus; message?: string; error?: string }>('/server/update-check')
+    return response.data
+  },
+
+  async downloadNativeUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
+    const response = await api.post<{ success: boolean; message?: string; error?: string }>('/server/update-download')
+    return response.data
+  },
+
+  async applyNativeUpdate(): Promise<{ success: boolean; message?: string; warning?: string; error?: string }> {
+    const response = await api.post<{ success: boolean; message?: string; warning?: string; error?: string }>('/server/update-apply')
+    return response.data
+  },
+
+  async cancelNativeUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
+    const response = await api.post<{ success: boolean; message?: string; error?: string }>('/server/update-cancel')
+    return response.data
+  },
+
+  // New Features Banner
+  async getNewFeaturesStatus(): Promise<NewFeaturesStatus> {
+    const response = await api.get<NewFeaturesStatus>('/server/new-features')
+    return response.data
+  },
+
+  async dismissNewFeaturesBanner(): Promise<{ success: boolean }> {
+    const response = await api.post<{ success: boolean }>('/server/new-features/dismiss')
     return response.data
   },
 }

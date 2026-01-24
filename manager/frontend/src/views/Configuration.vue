@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import ConfigFormEditor from '@/components/config/ConfigFormEditor.vue'
-import { serverApi, type ConfigFile, type QuickSettings } from '@/api/server'
+import { serverApi, type ConfigFile, type QuickSettings, type UpdateConfig } from '@/api/server'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -35,6 +35,22 @@ const quickSettingsLoading = ref(false)
 const quickSettingsSaving = ref(false)
 
 const gameModes = ['Adventure', 'Creative']
+
+// Update Config (Native Hytale Update System)
+const updateConfig = reactive<UpdateConfig>({
+  enabled: false,
+  checkIntervalSeconds: 3600,
+  notifyPlayersOnAvailable: true,
+  patchline: 'release',
+  runBackupBeforeUpdate: true,
+  backupConfigBeforeUpdate: true,
+  autoApplyMode: 'DISABLED',
+  autoApplyDelayMinutes: 5
+})
+const originalUpdateConfig = ref<UpdateConfig | null>(null)
+const updateConfigLoading = ref(false)
+const updateConfigSaving = ref(false)
+const updateConfigSupported = ref(true)
 
 async function loadQuickSettings() {
   try {
@@ -73,6 +89,52 @@ const quickSettingsChanged = computed(() => {
     quickSettings.maxPlayers !== originalQuickSettings.value.maxPlayers ||
     quickSettings.maxViewRadius !== originalQuickSettings.value.maxViewRadius ||
     quickSettings.defaultGameMode !== originalQuickSettings.value.defaultGameMode
+  )
+})
+
+// Update Config functions
+async function loadUpdateConfig() {
+  try {
+    updateConfigLoading.value = true
+    const config = await serverApi.getUpdateConfig()
+    Object.assign(updateConfig, config)
+    originalUpdateConfig.value = { ...config }
+    updateConfigSupported.value = true
+  } catch (e) {
+    // Native update system not supported on this server version
+    updateConfigSupported.value = false
+    console.log('Native update system not supported:', e)
+  } finally {
+    updateConfigLoading.value = false
+  }
+}
+
+async function saveUpdateConfig() {
+  try {
+    updateConfigSaving.value = true
+    error.value = null
+    await serverApi.saveUpdateConfig(updateConfig)
+    originalUpdateConfig.value = { ...updateConfig }
+    successMessage.value = t('config.saved')
+    setTimeout(() => { successMessage.value = null }, 3000)
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    updateConfigSaving.value = false
+  }
+}
+
+const updateConfigChanged = computed(() => {
+  if (!originalUpdateConfig.value) return false
+  return (
+    updateConfig.enabled !== originalUpdateConfig.value.enabled ||
+    updateConfig.checkIntervalSeconds !== originalUpdateConfig.value.checkIntervalSeconds ||
+    updateConfig.notifyPlayersOnAvailable !== originalUpdateConfig.value.notifyPlayersOnAvailable ||
+    updateConfig.patchline !== originalUpdateConfig.value.patchline ||
+    updateConfig.runBackupBeforeUpdate !== originalUpdateConfig.value.runBackupBeforeUpdate ||
+    updateConfig.backupConfigBeforeUpdate !== originalUpdateConfig.value.backupConfigBeforeUpdate ||
+    updateConfig.autoApplyMode !== originalUpdateConfig.value.autoApplyMode ||
+    updateConfig.autoApplyDelayMinutes !== originalUpdateConfig.value.autoApplyDelayMinutes
   )
 })
 
@@ -147,6 +209,7 @@ const fileExtension = computed(() => {
 onMounted(() => {
   loadConfigFiles()
   loadQuickSettings()
+  loadUpdateConfig()
 })
 </script>
 
@@ -273,6 +336,188 @@ onMounted(() => {
             ]"
           >
             <svg v-if="quickSettingsSaving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            {{ t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Native Update System Configuration -->
+    <Card v-if="!selectedFile && updateConfigSupported" :title="t('config.updateConfig.title')">
+      <div v-if="updateConfigLoading" class="text-center py-8 text-gray-400">
+        {{ t('common.loading') }}
+      </div>
+      <div v-else class="space-y-4">
+        <!-- Info Banner -->
+        <div class="p-3 bg-hytale-orange/10 border border-hytale-orange/30 rounded-lg">
+          <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-hytale-orange flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p class="text-sm text-gray-300">
+              {{ t('config.updateConfig.description') }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Enable Auto Updates -->
+        <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+          <div class="flex-1">
+            <label class="text-sm font-medium text-white">{{ t('config.updateConfig.enabled') }}</label>
+            <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.enabledHint') }}</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" v-model="updateConfig.enabled" class="sr-only peer">
+            <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+          </label>
+        </div>
+
+        <!-- Settings (only when enabled) -->
+        <div v-if="updateConfig.enabled" class="space-y-4 pt-2">
+          <!-- Check Interval -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.checkInterval') }}</label>
+            <select
+              v-model.number="updateConfig.checkIntervalSeconds"
+              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            >
+              <option :value="1800">{{ t('config.updateConfig.interval30min') }}</option>
+              <option :value="3600">{{ t('config.updateConfig.interval1hour') }}</option>
+              <option :value="7200">{{ t('config.updateConfig.interval2hours') }}</option>
+              <option :value="21600">{{ t('config.updateConfig.interval6hours') }}</option>
+              <option :value="43200">{{ t('config.updateConfig.interval12hours') }}</option>
+              <option :value="86400">{{ t('config.updateConfig.interval24hours') }}</option>
+            </select>
+          </div>
+
+          <!-- Patchline -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.patchline') }}</label>
+            <div class="grid grid-cols-2 gap-3">
+              <button
+                @click="updateConfig.patchline = 'release'"
+                :class="[
+                  'p-3 rounded-lg border-2 text-left transition-all',
+                  updateConfig.patchline === 'release'
+                    ? 'border-status-success bg-status-success/10'
+                    : 'border-dark-50 bg-dark-100 hover:border-gray-500'
+                ]"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-white">Release</span>
+                  <span class="px-1.5 py-0.5 text-xs rounded bg-status-success/20 text-status-success">{{ t('config.updateConfig.stable') }}</span>
+                </div>
+                <p class="text-xs text-gray-500">{{ t('config.updateConfig.releaseHint') }}</p>
+              </button>
+              <button
+                @click="updateConfig.patchline = 'pre-release'"
+                :class="[
+                  'p-3 rounded-lg border-2 text-left transition-all',
+                  updateConfig.patchline === 'pre-release'
+                    ? 'border-status-warning bg-status-warning/10'
+                    : 'border-dark-50 bg-dark-100 hover:border-gray-500'
+                ]"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-white">Pre-Release</span>
+                  <span class="px-1.5 py-0.5 text-xs rounded bg-status-warning/20 text-status-warning">{{ t('config.updateConfig.beta') }}</span>
+                </div>
+                <p class="text-xs text-gray-500">{{ t('config.updateConfig.preReleaseHint') }}</p>
+              </button>
+            </div>
+          </div>
+
+          <!-- Auto Apply Mode -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.autoApplyMode') }}</label>
+            <select
+              v-model="updateConfig.autoApplyMode"
+              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            >
+              <option value="DISABLED">{{ t('config.updateConfig.modeDisabled') }}</option>
+              <option value="WHEN_EMPTY">{{ t('config.updateConfig.modeWhenEmpty') }}</option>
+              <option value="SCHEDULED">{{ t('config.updateConfig.modeScheduled') }}</option>
+            </select>
+            <p class="text-xs text-gray-500 mt-1">
+              <template v-if="updateConfig.autoApplyMode === 'DISABLED'">{{ t('config.updateConfig.modeDisabledHint') }}</template>
+              <template v-else-if="updateConfig.autoApplyMode === 'WHEN_EMPTY'">{{ t('config.updateConfig.modeWhenEmptyHint') }}</template>
+              <template v-else>{{ t('config.updateConfig.modeScheduledHint') }}</template>
+            </p>
+          </div>
+
+          <!-- Auto Apply Delay (only for SCHEDULED mode) -->
+          <div v-if="updateConfig.autoApplyMode === 'SCHEDULED'">
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.autoApplyDelay') }}</label>
+            <div class="flex items-center gap-2">
+              <input
+                v-model.number="updateConfig.autoApplyDelayMinutes"
+                type="number"
+                min="1"
+                max="60"
+                class="w-24 bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              />
+              <span class="text-gray-400 text-sm">{{ t('config.updateConfig.minutes') }}</span>
+            </div>
+          </div>
+
+          <!-- Notify Players -->
+          <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+            <div class="flex-1">
+              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.notifyPlayers') }}</label>
+              <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.notifyPlayersHint') }}</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="updateConfig.notifyPlayersOnAvailable" class="sr-only peer">
+              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+            </label>
+          </div>
+
+          <!-- Backup Before Update -->
+          <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+            <div class="flex-1">
+              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.backupBefore') }}</label>
+              <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.backupBeforeHint') }}</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="updateConfig.runBackupBeforeUpdate" class="sr-only peer">
+              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+            </label>
+          </div>
+
+          <!-- Backup Config Before Update -->
+          <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+            <div class="flex-1">
+              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.backupConfigBefore') }}</label>
+              <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.backupConfigBeforeHint') }}</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="updateConfig.backupConfigBeforeUpdate" class="sr-only peer">
+              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Save Button -->
+        <div v-if="authStore.hasPermission('config.edit')" class="flex items-center justify-between pt-4 border-t border-dark-50">
+          <span v-if="updateConfigChanged" class="text-xs text-status-warning">{{ t('config.unsaved') }}</span>
+          <span v-else></span>
+          <button
+            @click="saveUpdateConfig"
+            :disabled="updateConfigSaving || !updateConfigChanged"
+            :class="[
+              'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all',
+              updateConfigChanged
+                ? 'bg-hytale-orange text-dark hover:bg-hytale-yellow'
+                : 'bg-dark-50 text-gray-500 cursor-not-allowed'
+            ]"
+          >
+            <svg v-if="updateConfigSaving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>

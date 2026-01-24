@@ -111,4 +111,36 @@ echo "║  Dann den angezeigten Link im Browser öffnen.            ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
-exec java "${JAVA_ARGS[@]}" -jar HytaleServer.jar "${SERVER_ARGS[@]}"
+# ============================================================
+# Server Restart Loop (handles Exit Code 8 for updates)
+# ============================================================
+# Exit Code 8 = Server requests restart for update (Hytale native update system)
+# The server downloads updates to updater/staging/ and exits with code 8
+# On restart, updates are applied automatically by the launcher
+
+while true; do
+    java "${JAVA_ARGS[@]}" -jar HytaleServer.jar "${SERVER_ARGS[@]}"
+    EXIT_CODE=$?
+
+    echo ""
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] Server exited with code: $EXIT_CODE"
+
+    if [ $EXIT_CODE -eq 8 ]; then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Update restart requested (Exit Code 8)"
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Staged updates will be applied on restart..."
+
+        # Check if staged updates exist
+        if [ -d "/opt/hytale/server/updater/staging" ]; then
+            echo "[$(date +'%Y-%m-%d %H:%M:%S')] Found staged updates in updater/staging/"
+        fi
+
+        sleep 2
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Restarting server..."
+        echo ""
+        continue
+    fi
+
+    # Any other exit code = stop container
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] Server stopped. Container exiting with code: $EXIT_CODE"
+    exit $EXIT_CODE
+done

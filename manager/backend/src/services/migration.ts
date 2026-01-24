@@ -424,6 +424,159 @@ export async function runMigration(): Promise<boolean> {
   }
 }
 
+// Current panel version for feature tracking
+const CURRENT_PANEL_VERSION = '2.1.0';
+
+// Features introduced in each version
+const VERSION_FEATURES: Record<string, string[]> = {
+  '2.1.0': ['native_update_system', 'update_config'],
+};
+
+/**
+ * Migrate UpdateConfig for the native update system (Hytale 24.01.2026+)
+ * This ensures existing installations have the new update settings
+ */
+export async function migrateUpdateConfig(): Promise<{ migrated: boolean; newFeatures: string[] }> {
+  const newFeatures: string[] = [];
+
+  try {
+    // Check if server config.json exists and has updateConfig
+    let serverConfig: Record<string, unknown> = {};
+    try {
+      await access(SERVER_CONFIG_FILE, constants.R_OK);
+      serverConfig = JSON.parse(await readFile(SERVER_CONFIG_FILE, 'utf-8'));
+    } catch {
+      // Server config doesn't exist, that's OK
+      return { migrated: false, newFeatures: [] };
+    }
+
+    // If updateConfig already exists, no migration needed
+    if (serverConfig.updateConfig) {
+      console.log('[Migration] UpdateConfig already exists, no migration needed');
+      return { migrated: false, newFeatures: [] };
+    }
+
+    // Create default updateConfig
+    console.log('[Migration] Adding UpdateConfig to server config...');
+
+    // Read panel-config to get current patchline setting
+    let patchline: 'release' | 'pre-release' = 'release';
+    try {
+      const panelConfig = await readPanelConfig();
+      if (panelConfig?.patchline) {
+        patchline = panelConfig.patchline as 'release' | 'pre-release';
+      }
+    } catch {
+      // Use default
+    }
+
+    // Check if AUTO_UPDATE was set in env
+    const autoUpdate = process.env.AUTO_UPDATE === 'true';
+
+    serverConfig.updateConfig = {
+      enabled: true,
+      checkIntervalSeconds: 3600,
+      notifyPlayersOnAvailable: true,
+      patchline: patchline,
+      runBackupBeforeUpdate: true,
+      backupConfigBeforeUpdate: true,
+      autoApplyMode: autoUpdate ? 'WHEN_EMPTY' : 'DISABLED',
+      autoApplyDelayMinutes: 5,
+    };
+
+    await writeFile(SERVER_CONFIG_FILE, JSON.stringify(serverConfig, null, 2), 'utf-8');
+    console.log('[Migration] UpdateConfig added successfully');
+
+    newFeatures.push('native_update_system');
+    return { migrated: true, newFeatures };
+  } catch (error) {
+    console.error('[Migration] Failed to migrate UpdateConfig:', error);
+    return { migrated: false, newFeatures: [] };
+  }
+}
+
+/**
+ * Update panel version and track new features
+ * Returns list of new features that were added since last version
+ */
+export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: string[]; showBanner: boolean }> {
+  const newFeatures: string[] = [];
+
+  try {
+    // Read config.json to get last known version
+    let mainConfig: Record<string, unknown> = {};
+    try {
+      await access(CONFIG_JSON_FILE, constants.R_OK);
+      mainConfig = JSON.parse(await readFile(CONFIG_JSON_FILE, 'utf-8'));
+    } catch {
+      return { newFeatures: [], showBanner: false };
+    }
+
+    const lastVersion = (mainConfig.panelVersion as string) || '2.0.0';
+    const lastVersionParts = lastVersion.split('.').map(Number);
+    const currentVersionParts = CURRENT_PANEL_VERSION.split('.').map(Number);
+
+    // Check if we're on a newer version
+    const isNewer =
+      currentVersionParts[0] > lastVersionParts[0] ||
+      (currentVersionParts[0] === lastVersionParts[0] && currentVersionParts[1] > lastVersionParts[1]) ||
+      (currentVersionParts[0] === lastVersionParts[0] && currentVersionParts[1] === lastVersionParts[1] && currentVersionParts[2] > lastVersionParts[2]);
+
+    if (!isNewer && lastVersion === CURRENT_PANEL_VERSION) {
+      return { newFeatures: [], showBanner: false };
+    }
+
+    // Collect all new features
+    for (const [version, features] of Object.entries(VERSION_FEATURES)) {
+      const versionParts = version.split('.').map(Number);
+      const isVersionNewer =
+        versionParts[0] > lastVersionParts[0] ||
+        (versionParts[0] === lastVersionParts[0] && versionParts[1] > lastVersionParts[1]) ||
+        (versionParts[0] === lastVersionParts[0] && versionParts[1] === lastVersionParts[1] && versionParts[2] > lastVersionParts[2]);
+
+      if (isVersionNewer) {
+        newFeatures.push(...features);
+      }
+    }
+
+    // Update panel version in config
+    mainConfig.panelVersion = CURRENT_PANEL_VERSION;
+    mainConfig.newFeaturesAvailable = newFeatures.length > 0 ? newFeatures : undefined;
+    mainConfig.newFeaturesBannerDismissed = false;
+
+    await writeFile(CONFIG_JSON_FILE, JSON.stringify(mainConfig, null, 2), 'utf-8');
+
+    console.log(`[Migration] Panel updated from ${lastVersion} to ${CURRENT_PANEL_VERSION}`);
+    if (newFeatures.length > 0) {
+      console.log('[Migration] New features available:', newFeatures);
+    }
+
+    return { newFeatures, showBanner: newFeatures.length > 0 };
+  } catch (error) {
+    console.error('[Migration] Failed to check panel version:', error);
+    return { newFeatures: [], showBanner: false };
+  }
+}
+
+/**
+ * Dismiss the new features banner
+ */
+export async function dismissNewFeaturesBanner(): Promise<boolean> {
+  try {
+    let mainConfig: Record<string, unknown> = {};
+    await access(CONFIG_JSON_FILE, constants.R_OK);
+    mainConfig = JSON.parse(await readFile(CONFIG_JSON_FILE, 'utf-8'));
+
+    mainConfig.newFeaturesBannerDismissed = true;
+    mainConfig.newFeaturesAvailable = undefined;
+
+    await writeFile(CONFIG_JSON_FILE, JSON.stringify(mainConfig, null, 2), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Check if migration is needed and run it if so
  *
@@ -463,4 +616,7 @@ export default {
   isExistingInstallation,
   runMigration,
   checkAndRunMigration,
+  migrateUpdateConfig,
+  checkPanelVersionAndFeatures,
+  dismissNewFeaturesBanner,
 };

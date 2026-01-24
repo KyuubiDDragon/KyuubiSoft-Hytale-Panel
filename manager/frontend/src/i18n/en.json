@@ -128,7 +128,12 @@
     "enterCodeOnHytale": "Enter this code on the Hytale authentication page",
     "openAuthPage": "Open authentication page",
     "reAuthenticateDownloader": "Re-authenticate Downloader",
-    "waitingForAuth": "Waiting for authentication..."
+    "waitingForAuth": "Waiting for authentication...",
+    "newFeatures": {
+      "title": "New Features Available",
+      "description": "Your panel has been updated to version {version}. New settings are now available:",
+      "configure": "Configure Now"
+    }
   },
   "console": {
     "title": "Server Console",
@@ -385,7 +390,40 @@
     "passwordHint": "Leave empty to allow anyone to join",
     "maxPlayers": "Max Players",
     "maxViewRadius": "View Radius",
-    "defaultGameMode": "Default Gamemode"
+    "defaultGameMode": "Default Gamemode",
+    "updateConfig": {
+      "title": "Native Update System",
+      "description": "Configure the Hytale native update system. When enabled, the server will automatically check for and apply updates.",
+      "enabled": "Enable Auto Updates",
+      "enabledHint": "Automatically check for and download server updates",
+      "checkInterval": "Check Interval",
+      "interval30min": "Every 30 minutes",
+      "interval1hour": "Every hour",
+      "interval2hours": "Every 2 hours",
+      "interval6hours": "Every 6 hours",
+      "interval12hours": "Every 12 hours",
+      "interval24hours": "Every 24 hours",
+      "patchline": "Update Channel",
+      "stable": "Stable",
+      "beta": "Beta",
+      "releaseHint": "Stable releases, recommended for production",
+      "preReleaseHint": "Early access to new features, may be unstable",
+      "autoApplyMode": "Auto Apply Updates",
+      "modeDisabled": "Disabled - Manual only",
+      "modeWhenEmpty": "When server is empty",
+      "modeScheduled": "Scheduled with delay",
+      "modeDisabledHint": "Updates will be downloaded but must be applied manually",
+      "modeWhenEmptyHint": "Updates will be applied automatically when no players are online",
+      "modeScheduledHint": "Updates will be applied after a countdown, warning players first",
+      "autoApplyDelay": "Apply Delay",
+      "minutes": "minutes",
+      "notifyPlayers": "Notify Players",
+      "notifyPlayersHint": "Send in-game notification when an update is available",
+      "backupBefore": "Backup Before Update",
+      "backupBeforeHint": "Create a full server backup before applying updates",
+      "backupConfigBefore": "Backup Config Files",
+      "backupConfigBeforeHint": "Backup configuration files before applying updates"
+    }
   },
   "mods": {
     "title": "Mods & Plugins",

@@ -103,6 +103,13 @@ export const PERMISSIONS = {
   // Settings
   'settings.view': 'View settings',
   'settings.edit': 'Edit settings',
+
+  // Updates (Hytale native update system)
+  'updates.view': 'View update status',
+  'updates.check': 'Check for updates',
+  'updates.download': 'Download updates',
+  'updates.apply': 'Apply updates (restart server)',
+  'updates.config': 'Configure auto-update settings',
 } as const;
 
 // Permission type derived from the keys
@@ -163,6 +170,7 @@ export const PERMISSION_CATEGORIES = [
   'activity',
   'hytale_auth',
   'settings',
+  'updates',
 ] as const;
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number];
