@@ -593,8 +593,20 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         if (!serverConfig.Defaults) serverConfig.Defaults = {};
         serverConfig.Defaults.GameMode = setupConfig.server.gameMode;
 
+        // Add UpdateConfig for native update system (Hytale 24.01.2026+)
+        serverConfig.updateConfig = {
+          enabled: true,
+          checkIntervalSeconds: 3600,
+          notifyPlayersOnAvailable: true,
+          patchline: setupConfig.patchline ?? 'release',
+          runBackupBeforeUpdate: true,
+          backupConfigBeforeUpdate: true,
+          autoApplyMode: setupConfig.autoUpdate ? 'WHEN_EMPTY' : 'DISABLED',
+          autoApplyDelayMinutes: 5,
+        };
+
         await writeFile(serverConfigPath, JSON.stringify(serverConfig, null, 2), 'utf-8');
-        console.log('[Setup] Wrote server config.json with all settings');
+        console.log('[Setup] Wrote server config.json with all settings including UpdateConfig');
       } catch {
         // Server directory might not exist yet, skip
         console.log('Note: Server config not written (server directory not ready)');
