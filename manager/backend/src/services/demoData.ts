@@ -704,3 +704,195 @@ import { config } from '../config.js';
 export function isDemoMode(): boolean {
   return config.demoMode;
 }
+
+// ============================================================
+// Update System
+// ============================================================
+
+export function getDemoUpdateStatus() {
+  return {
+    currentVersion: '1.0.0-demo',
+    latestVersion: '1.0.1-demo',
+    updateAvailable: true,
+    releaseNotes: 'Demo release notes: Bug fixes and performance improvements.',
+    downloadProgress: null,
+    status: 'update_available',
+  };
+}
+
+export function getDemoUpdateConfig() {
+  return {
+    autoCheck: true,
+    autoDownload: false,
+    checkInterval: 3600,
+    notifyOnUpdate: true,
+  };
+}
+
+export function getDemoVersionInfo() {
+  return {
+    serverVersion: '1.0.0-demo',
+    panelVersion: '2.1.1',
+    pluginVersion: '1.2.1',
+    patchline: 'release',
+  };
+}
+
+// ============================================================
+// Plugin Update
+// ============================================================
+
+export function getDemoPluginUpdateStatus() {
+  return {
+    available: true,
+    currentVersion: '1.2.0',
+    latestVersion: '1.2.1',
+    changelog: 'New features: Enhanced metrics, bug fixes for player tracking.',
+  };
+}
+
+// ============================================================
+// New Features Banner
+// ============================================================
+
+export function getDemoNewFeatures() {
+  return {
+    version: '2.1.1',
+    features: [
+      {
+        title: 'Demo Mode',
+        description: 'Run the panel without a real Hytale server for demonstration purposes.',
+        icon: 'play-circle',
+      },
+      {
+        title: 'Enhanced Performance Monitoring',
+        description: 'Real-time TPS, MSPT and JVM metrics with historical graphs.',
+        icon: 'activity',
+      },
+      {
+        title: 'Player Statistics',
+        description: 'Track player activity, playtime, and session history.',
+        icon: 'users',
+      },
+    ],
+    dismissed: false,
+  };
+}
+
+// ============================================================
+// Server Config Files
+// ============================================================
+
+export function getDemoConfigFiles() {
+  return [
+    { name: 'config.json', size: 4096, lastModified: new Date().toISOString() },
+    { name: 'whitelist.json', size: 256, lastModified: new Date().toISOString() },
+    { name: 'bans.json', size: 128, lastModified: new Date().toISOString() },
+    { name: 'permissions.json', size: 512, lastModified: new Date().toISOString() },
+  ];
+}
+
+export function getDemoServerConfig() {
+  return {
+    ServerName: 'KyuubiSoft Demo Server',
+    MOTD: 'Welcome to the demo server!',
+    MaxPlayers: 100,
+    MaxViewRadius: 32,
+    Password: '',
+    Defaults: {
+      GameMode: 'Adventure',
+    },
+    Network: {
+      Port: 5520,
+      BindAddress: '0.0.0.0',
+    },
+  };
+}
+
+// ============================================================
+// Downloader / Auth Status
+// ============================================================
+
+export function getDemoDownloaderStatus() {
+  return {
+    authenticated: true,
+    username: 'demo@example.com',
+    lastAuth: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    patchline: 'release',
+  };
+}
+
+// ============================================================
+// Patchline Config
+// ============================================================
+
+export function getDemoPatchlineConfig() {
+  return {
+    patchline: 'release',
+    acceptEarlyPlugins: false,
+    disableSentry: false,
+    allowOp: true,
+  };
+}
+
+// ============================================================
+// Roles
+// ============================================================
+
+export function getDemoRoles() {
+  return [
+    {
+      id: 'admin',
+      name: 'Admin',
+      description: 'Full access to all features',
+      permissions: ['*'],
+      isDefault: false,
+      isSystem: true,
+    },
+    {
+      id: 'moderator',
+      name: 'Moderator',
+      description: 'Player management and monitoring',
+      permissions: ['players.*', 'console.view', 'chat.view', 'server.view_status'],
+      isDefault: false,
+      isSystem: true,
+    },
+    {
+      id: 'operator',
+      name: 'Operator',
+      description: 'Server operation and basic management',
+      permissions: ['server.*', 'console.*', 'backups.view', 'scheduler.view'],
+      isDefault: false,
+      isSystem: true,
+    },
+    {
+      id: 'viewer',
+      name: 'Viewer',
+      description: 'Read-only access',
+      permissions: ['server.view_status', 'players.view', 'console.view'],
+      isDefault: true,
+      isSystem: true,
+    },
+  ];
+}
+
+// ============================================================
+// Users
+// ============================================================
+
+export function getDemoUsers() {
+  return [
+    {
+      username: 'admin',
+      role: 'admin',
+      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      lastLogin: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      username: 'demo',
+      role: 'viewer',
+      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      lastLogin: new Date().toISOString(),
+    },
+  ];
+}

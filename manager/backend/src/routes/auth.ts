@@ -7,6 +7,15 @@ import { getAllUsers, createUser, updateUser, deleteUser, getUser, invalidateUse
 import { getUserPermissions, hasPermission } from '../services/roles.js';
 import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
+import { isDemoMode, getDemoUsers, getDemoRoles } from '../services/demoData.js';
+
+const router = Router();
+
+// Demo credentials
+const DEMO_USERNAME = 'demo';
+const DEMO_PASSWORD = 'demo';
+const DEMO_ADMIN_USERNAME = 'admin';
+const DEMO_ADMIN_PASSWORD = 'admin';
 
 const router = Router();
 
@@ -34,6 +43,34 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
   if (!username || !password) {
     res.status(400).json({ detail: 'Username and password required' });
+    return;
+  }
+
+  // Demo mode: Accept demo credentials
+  if (isDemoMode()) {
+    const isAdmin = username === DEMO_ADMIN_USERNAME && password === DEMO_ADMIN_PASSWORD;
+    const isDemo = username === DEMO_USERNAME && password === DEMO_PASSWORD;
+
+    if (!isAdmin && !isDemo) {
+      res.status(401).json({ detail: 'Invalid credentials. Use demo/demo or admin/admin in demo mode.' });
+      return;
+    }
+
+    const role = isAdmin ? 'admin' : 'viewer';
+    const permissions = isAdmin ? ['*'] : ['server.view_status', 'players.view', 'console.view', 'performance.view', 'backups.view', 'scheduler.view', 'mods.view', 'plugins.view', 'worlds.view', 'chat.view', 'activity.view'];
+
+    // Create tokens even in demo mode for consistent behavior
+    const accessToken = await createAccessToken(username);
+    const refreshToken = createRefreshToken(username);
+
+    res.json({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: 'bearer',
+      role,
+      permissions,
+      demo: true,
+    });
     return;
   }
 
@@ -121,6 +158,16 @@ router.post('/ws-ticket', authMiddleware, wsTicketLimiter, async (req: Authentic
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const username = req.user!;  // authMiddleware guarantees this is set
+
+  // Demo mode: return demo user info
+  if (isDemoMode()) {
+    const isAdmin = username === DEMO_ADMIN_USERNAME;
+    const role = isAdmin ? 'admin' : 'viewer';
+    const permissions = isAdmin ? ['*'] : ['server.view_status', 'players.view', 'console.view', 'performance.view', 'backups.view', 'scheduler.view', 'mods.view', 'plugins.view', 'worlds.view', 'chat.view', 'activity.view'];
+    res.json({ username, role, permissions, demo: true });
+    return;
+  }
+
   const user = await getUser(username);
   const permissions = await getUserPermissions(username);
   if (!user) {
@@ -134,6 +181,12 @@ router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Respons
 
 // GET /api/auth/users - List all users
 router.get('/users', authMiddleware, requirePermission('users.view'), async (_req: AuthenticatedRequest, res: Response) => {
+  // Demo mode: return demo users
+  if (isDemoMode()) {
+    res.json({ users: getDemoUsers() });
+    return;
+  }
+
   try {
     const users = await getAllUsers();
     res.json({ users });

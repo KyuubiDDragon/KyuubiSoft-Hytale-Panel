@@ -11,6 +11,7 @@ import {
 import { PERMISSIONS, Permission } from '../types/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { logActivity } from '../services/activityLog.js';
+import { isDemoMode, getDemoRoles } from '../services/demoData.js';
 
 const router = Router();
 
@@ -20,6 +21,12 @@ router.get(
   authMiddleware,
   requirePermission('roles.view'),
   async (_req: Request, res: Response) => {
+    // Demo mode: return demo roles
+    if (isDemoMode()) {
+      res.json({ roles: getDemoRoles() });
+      return;
+    }
+
     try {
       const roles = await getAllRoles();
       res.json({ roles });
@@ -51,6 +58,18 @@ router.get(
   authMiddleware,
   requirePermission('roles.view'),
   async (req: Request, res: Response) => {
+    // Demo mode: return demo role
+    if (isDemoMode()) {
+      const demoRoles = getDemoRoles();
+      const role = demoRoles.find(r => r.id === req.params.id);
+      if (!role) {
+        res.status(404).json({ error: 'Role not found' });
+        return;
+      }
+      res.json(role);
+      return;
+    }
+
     try {
       const { id } = req.params;
       const role = await getRole(id);

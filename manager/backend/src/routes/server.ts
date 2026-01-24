@@ -8,7 +8,20 @@ import * as kyuubiApiService from '../services/kyuubiApi.js';
 import { getPlayerInventoryFromFile, getPlayerDetailsFromFile } from '../services/players.js';
 import { config } from '../config.js';
 import { dismissNewFeaturesBanner } from '../services/migration.js';
-import { isDemoMode, getDemoQuickSettings, getDemoMemoryStats } from '../services/demoData.js';
+import {
+  isDemoMode,
+  getDemoQuickSettings,
+  getDemoMemoryStats,
+  getDemoUpdateStatus,
+  getDemoUpdateConfig,
+  getDemoVersionInfo,
+  getDemoPluginUpdateStatus,
+  getDemoNewFeatures,
+  getDemoConfigFiles,
+  getDemoServerConfig,
+  getDemoDownloaderStatus,
+  getDemoPatchlineConfig,
+} from '../services/demoData.js';
 
 const router = Router();
 
@@ -251,6 +264,16 @@ async function writePanelConfig(config: PanelConfig): Promise<void> {
 
 // GET /api/server/patchline - Get current patchline setting
 router.get('/patchline', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo patchline
+  if (isDemoMode()) {
+    const demoPatchline = getDemoPatchlineConfig();
+    res.json({
+      patchline: demoPatchline.patchline,
+      options: ['release', 'pre-release'],
+    });
+    return;
+  }
+
   try {
     const panelConfig = await readPanelConfig();
     res.json({
@@ -556,6 +579,26 @@ async function getLatestVersion(patchline: string): Promise<VersionCheckResult> 
 
 // GET /api/server/check-update - Check if a Hytale server update is available
 router.get('/check-update', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock update status
+  if (isDemoMode()) {
+    const updateStatus = getDemoUpdateStatus();
+    res.json({
+      installedVersion: updateStatus.currentVersion,
+      latestVersion: updateStatus.latestVersion,
+      updateAvailable: updateStatus.updateAvailable,
+      patchline: 'release',
+      authRequired: false,
+      versions: {
+        release: updateStatus.latestVersion,
+        preRelease: '1.1.0-pre.1-demo',
+      },
+      message: updateStatus.updateAvailable
+        ? `[DEMO] Update available: ${updateStatus.currentVersion} → ${updateStatus.latestVersion}`
+        : '[DEMO] Server is up to date',
+    });
+    return;
+  }
+
   try {
     // Read installed version from file
     const versionFilePath = path.join(config.serverPath, '.hytale-version');
@@ -623,6 +666,19 @@ router.get('/check-update', authMiddleware, requirePermission('server.view_statu
 
 // GET /api/server/config/files - List config files
 router.get('/config/files', authMiddleware, requirePermission('config.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo config files
+  if (isDemoMode()) {
+    const demoFiles = getDemoConfigFiles();
+    res.json({
+      files: demoFiles.map(f => ({
+        name: f.name,
+        size: f.size,
+        modified: f.lastModified,
+      })),
+    });
+    return;
+  }
+
   try {
     const files = await readdir(config.serverPath);
     const configFiles = files.filter(f =>
@@ -733,6 +789,13 @@ router.get('/plugin/status', authMiddleware, requirePermission('server.view_stat
 
 // GET /api/server/plugin/update-check - Check if plugin update is available
 router.get('/plugin/update-check', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock plugin update status
+  if (isDemoMode()) {
+    const pluginUpdate = getDemoPluginUpdateStatus();
+    res.json(pluginUpdate);
+    return;
+  }
+
   try {
     const updateInfo = kyuubiApiService.isUpdateAvailable();
     res.json(updateInfo);
@@ -1132,6 +1195,19 @@ router.get('/players/:name/file/inventory', authMiddleware, requirePermission('p
 
 // GET /api/server/downloader/auth-status - Check downloader authentication status
 router.get('/downloader/auth-status', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo downloader status
+  if (isDemoMode()) {
+    const demoStatus = getDemoDownloaderStatus();
+    res.json({
+      authenticated: demoStatus.authenticated,
+      credentialsExist: true,
+      authRequired: false,
+      username: demoStatus.username,
+      lastAuth: demoStatus.lastAuth,
+    });
+    return;
+  }
+
   try {
     const credCheck = await checkDownloaderCredentials();
 
@@ -1643,6 +1719,18 @@ router.post('/update-cancel', authMiddleware, requirePermission('updates.downloa
 
 // GET /api/server/new-features - Get new features status
 router.get('/new-features', authMiddleware, requirePermission('dashboard.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo new features
+  if (isDemoMode()) {
+    const demoFeatures = getDemoNewFeatures();
+    res.json({
+      hasNewFeatures: demoFeatures.features.length > 0 && !demoFeatures.dismissed,
+      features: demoFeatures.features,
+      dismissed: demoFeatures.dismissed,
+      panelVersion: demoFeatures.version,
+    });
+    return;
+  }
+
   try {
     const configPath = path.join(config.dataPath, 'config.json');
 
@@ -1674,6 +1762,12 @@ router.get('/new-features', authMiddleware, requirePermission('dashboard.view'),
 
 // POST /api/server/new-features/dismiss - Dismiss new features banner
 router.post('/new-features/dismiss', authMiddleware, requirePermission('dashboard.view'), async (_req: Request, res: Response) => {
+  // Demo mode: simulate dismiss
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] New features banner dismissed (simulated)' });
+    return;
+  }
+
   try {
     const success = await dismissNewFeaturesBanner();
 
