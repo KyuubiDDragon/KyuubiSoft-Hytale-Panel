@@ -7,6 +7,7 @@ import * as dockerService from '../services/docker.js';
 import * as kyuubiApiService from '../services/kyuubiApi.js';
 import { getPlayerInventoryFromFile, getPlayerDetailsFromFile } from '../services/players.js';
 import { config } from '../config.js';
+import { dismissNewFeaturesBanner } from '../services/migration.js';
 
 const router = Router();
 
@@ -1089,6 +1090,399 @@ router.get('/downloader/auth-poll', authMiddleware, requirePermission('server.re
   } catch (error) {
     res.status(500).json({
       error: 'Failed to poll auth status',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================================
+// Native Update System Endpoints (Hytale 24.01.2026+)
+// ============================================================
+
+// UpdateConfig interface
+interface UpdateConfig {
+  enabled: boolean;
+  checkIntervalSeconds: number;
+  notifyPlayersOnAvailable: boolean;
+  patchline: 'release' | 'pre-release';
+  runBackupBeforeUpdate: boolean;
+  backupConfigBeforeUpdate: boolean;
+  autoApplyMode: 'DISABLED' | 'WHEN_EMPTY' | 'SCHEDULED';
+  autoApplyDelayMinutes: number;
+}
+
+// Default UpdateConfig values
+function getDefaultUpdateConfig(): UpdateConfig {
+  return {
+    enabled: true,
+    checkIntervalSeconds: 3600,
+    notifyPlayersOnAvailable: true,
+    patchline: 'release',
+    runBackupBeforeUpdate: true,
+    backupConfigBeforeUpdate: true,
+    autoApplyMode: 'DISABLED',
+    autoApplyDelayMinutes: 5,
+  };
+}
+
+// GET /api/server/update-config - Get native update configuration
+router.get('/update-config', authMiddleware, requirePermission('updates.view'), async (_req: Request, res: Response) => {
+  try {
+    const configPath = path.join(config.serverPath, 'config.json');
+
+    try {
+      await access(configPath, constants.R_OK);
+      const serverConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+      const updateConfig = serverConfig.updateConfig || getDefaultUpdateConfig();
+      res.json(updateConfig);
+    } catch {
+      // Config doesn't exist yet, return defaults
+      res.json(getDefaultUpdateConfig());
+    }
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to read update config',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// PUT /api/server/update-config - Update native update configuration
+router.put('/update-config', authMiddleware, requirePermission('updates.config'), async (req: Request, res: Response) => {
+  try {
+    const {
+      enabled,
+      checkIntervalSeconds,
+      notifyPlayersOnAvailable,
+      patchline,
+      runBackupBeforeUpdate,
+      backupConfigBeforeUpdate,
+      autoApplyMode,
+      autoApplyDelayMinutes
+    } = req.body;
+
+    // Validation
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Field "enabled" must be boolean' });
+    }
+    if (checkIntervalSeconds !== undefined && (!Number.isInteger(checkIntervalSeconds) || checkIntervalSeconds < 60)) {
+      return res.status(400).json({ error: 'Field "checkIntervalSeconds" must be integer >= 60' });
+    }
+    if (patchline !== undefined && !['release', 'pre-release'].includes(patchline)) {
+      return res.status(400).json({ error: 'Field "patchline" must be "release" or "pre-release"' });
+    }
+    if (autoApplyMode !== undefined && !['DISABLED', 'WHEN_EMPTY', 'SCHEDULED'].includes(autoApplyMode)) {
+      return res.status(400).json({ error: 'Field "autoApplyMode" must be DISABLED, WHEN_EMPTY, or SCHEDULED' });
+    }
+    if (autoApplyDelayMinutes !== undefined && (!Number.isInteger(autoApplyDelayMinutes) || autoApplyDelayMinutes < 1)) {
+      return res.status(400).json({ error: 'Field "autoApplyDelayMinutes" must be integer >= 1' });
+    }
+
+    const configPath = path.join(config.serverPath, 'config.json');
+
+    // Read existing config or create new
+    let serverConfig: Record<string, unknown> = {};
+    try {
+      await access(configPath, constants.R_OK);
+      serverConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+    } catch {
+      // Config doesn't exist, will create new
+    }
+
+    // Merge with existing updateConfig
+    const currentUpdateConfig = (serverConfig.updateConfig as UpdateConfig) || getDefaultUpdateConfig();
+    serverConfig.updateConfig = {
+      ...currentUpdateConfig,
+      ...(enabled !== undefined && { enabled }),
+      ...(checkIntervalSeconds !== undefined && { checkIntervalSeconds }),
+      ...(notifyPlayersOnAvailable !== undefined && { notifyPlayersOnAvailable }),
+      ...(patchline !== undefined && { patchline }),
+      ...(runBackupBeforeUpdate !== undefined && { runBackupBeforeUpdate }),
+      ...(backupConfigBeforeUpdate !== undefined && { backupConfigBeforeUpdate }),
+      ...(autoApplyMode !== undefined && { autoApplyMode }),
+      ...(autoApplyDelayMinutes !== undefined && { autoApplyDelayMinutes }),
+    };
+
+    await writeFile(configPath, JSON.stringify(serverConfig, null, 2));
+
+    res.json({
+      success: true,
+      message: 'Update config saved',
+      data: serverConfig.updateConfig
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to save update config',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Native update status interface
+interface NativeUpdateStatus {
+  available: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  state: 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'APPLYING' | 'ERROR';
+  progress?: number;
+  message?: string;
+  error?: string;
+}
+
+// Helper to parse /update status output
+function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
+  if (!output || typeof output !== 'string') {
+    return {
+      available: false,
+      currentVersion: 'unknown',
+      latestVersion: 'unknown',
+      state: 'IDLE',
+      error: 'No output from server'
+    };
+  }
+
+  const lower = output.toLowerCase();
+
+  // Detect state
+  let state: NativeUpdateStatus['state'] = 'IDLE';
+  if (lower.includes('error') || lower.includes('failed')) state = 'ERROR';
+  else if (lower.includes('applying') || lower.includes('installing')) state = 'APPLYING';
+  else if (lower.includes('ready') || lower.includes('staged') || lower.includes('downloaded')) state = 'READY';
+  else if (lower.includes('downloading') || lower.includes('download')) state = 'DOWNLOADING';
+  else if (lower.includes('checking')) state = 'CHECKING';
+
+  // Extract versions using multiple patterns
+  const versionPatterns = [
+    /(?:current|installed).*?([0-9]+\.[0-9]+\.[0-9]+)/i,
+    /version[:\s]+([0-9]+\.[0-9]+\.[0-9]+)/i,
+  ];
+
+  let currentVersion = 'unknown';
+  for (const pattern of versionPatterns) {
+    const match = output.match(pattern);
+    if (match) {
+      currentVersion = match[1];
+      break;
+    }
+  }
+
+  // Extract latest version
+  const latestPatterns = [
+    /(?:latest|available|new).*?([0-9]+\.[0-9]+\.[0-9]+)/i,
+  ];
+
+  let latestVersion = 'unknown';
+  for (const pattern of latestPatterns) {
+    const match = output.match(pattern);
+    if (match) {
+      latestVersion = match[1];
+      break;
+    }
+  }
+
+  // Extract progress
+  const progressMatch = output.match(/(\d+)\s*%/);
+  const progress = progressMatch ? parseInt(progressMatch[1]) : undefined;
+
+  return {
+    available: state === 'READY' || (latestVersion !== 'unknown' && currentVersion !== latestVersion),
+    currentVersion,
+    latestVersion,
+    state,
+    progress,
+    message: output.substring(0, 200)
+  };
+}
+
+// GET /api/server/update-status - Get native update status
+router.get('/update-status', authMiddleware, requirePermission('updates.view'), async (_req: Request, res: Response) => {
+  try {
+    const result = await dockerService.execCommand('/update status');
+
+    if (!result.success) {
+      return res.status(503).json({
+        error: 'Server not responding',
+        message: 'Cannot query update status. Is the server running?'
+      });
+    }
+
+    const status = parseUpdateStatusOutput(result.message || '');
+    res.json({
+      success: true,
+      data: status
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get update status',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/server/update-check - Check for updates
+router.post('/update-check', authMiddleware, requirePermission('updates.check'), async (_req: Request, res: Response) => {
+  try {
+    const result = await dockerService.execCommand('/update check');
+
+    if (!result.success) {
+      return res.status(503).json({
+        success: false,
+        error: result.error || 'Update check failed',
+        message: 'Server may be offline or not responding'
+      });
+    }
+
+    // Give server time to process and get status
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const statusResult = await dockerService.execCommand('/update status');
+    const status = parseUpdateStatusOutput(statusResult.message || '');
+
+    res.json({
+      success: true,
+      message: 'Update check completed',
+      data: status
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Update check failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/server/update-download - Download available update
+router.post('/update-download', authMiddleware, requirePermission('updates.download'), async (_req: Request, res: Response) => {
+  try {
+    const result = await dockerService.execCommand('/update download');
+
+    if (!result.success) {
+      return res.status(503).json({
+        success: false,
+        error: result.error || 'Download failed',
+        message: 'Server may be offline or not responding'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Update download started. Check status for progress.'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Download failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/server/update-apply - Apply downloaded update (restarts server)
+router.post('/update-apply', authMiddleware, requirePermission('updates.apply'), async (_req: Request, res: Response) => {
+  try {
+    // Check if update is ready
+    const statusResult = await dockerService.execCommand('/update status');
+    const status = parseUpdateStatusOutput(statusResult.message || '');
+
+    if (status.state !== 'READY') {
+      return res.status(400).json({
+        success: false,
+        error: 'No update ready to apply',
+        message: 'Download an update first using /update download'
+      });
+    }
+
+    // Apply update (server will restart with exit code 8)
+    const result = await dockerService.execCommand('/update apply');
+
+    res.json({
+      success: true,
+      message: 'Update applied. Server is restarting...',
+      warning: 'Server will restart shortly. Players will be disconnected.'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Apply update failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/server/update-cancel - Cancel ongoing download
+router.post('/update-cancel', authMiddleware, requirePermission('updates.download'), async (_req: Request, res: Response) => {
+  try {
+    const result = await dockerService.execCommand('/update cancel');
+
+    res.json({
+      success: true,
+      message: 'Update download cancelled'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Cancel failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================================
+// New Features Banner Endpoints
+// ============================================================
+
+// GET /api/server/new-features - Get new features status
+router.get('/new-features', authMiddleware, requirePermission('dashboard.view'), async (_req: Request, res: Response) => {
+  try {
+    const configPath = path.join(config.dataPath, 'config.json');
+
+    try {
+      await access(configPath, constants.R_OK);
+      const mainConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+
+      res.json({
+        hasNewFeatures: !!(mainConfig.newFeaturesAvailable && mainConfig.newFeaturesAvailable.length > 0),
+        features: mainConfig.newFeaturesAvailable || [],
+        dismissed: mainConfig.newFeaturesBannerDismissed || false,
+        panelVersion: mainConfig.panelVersion || '2.0.0',
+      });
+    } catch {
+      res.json({
+        hasNewFeatures: false,
+        features: [],
+        dismissed: true,
+        panelVersion: '2.0.0',
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get new features status',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/server/new-features/dismiss - Dismiss new features banner
+router.post('/new-features/dismiss', authMiddleware, requirePermission('dashboard.view'), async (_req: Request, res: Response) => {
+  try {
+    const success = await dismissNewFeaturesBanner();
+
+    if (success) {
+      res.json({
+        success: true,
+        message: 'New features banner dismissed'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to dismiss banner'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to dismiss banner',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

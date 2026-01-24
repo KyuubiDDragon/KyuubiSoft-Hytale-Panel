@@ -3,7 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
-import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type PatchlineResponse, type DownloaderAuthStatus } from '@/api/server'
+import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type PatchlineResponse, type DownloaderAuthStatus, type NewFeaturesStatus } from '@/api/server'
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import { schedulerApi, type SchedulerStatus } from '@/api/scheduler'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
@@ -35,6 +35,10 @@ const enablingPersistence = ref(false)
 // Downloader Auth status (for auto-updates)
 const downloaderAuthStatus = ref<DownloaderAuthStatus | null>(null)
 const showDownloaderAuthWarning = ref(false)
+
+// New Features Banner (shown after panel updates)
+const newFeaturesStatus = ref<NewFeaturesStatus | null>(null)
+const showNewFeaturesBanner = ref(false)
 
 // Scheduler status
 const schedulerStatus = ref<SchedulerStatus | null>(null)
@@ -216,6 +220,27 @@ async function checkDownloaderAuth() {
   }
 }
 
+async function fetchNewFeatures() {
+  try {
+    const status = await serverApi.getNewFeaturesStatus()
+    newFeaturesStatus.value = status
+    showNewFeaturesBanner.value = status.hasNewFeatures && !status.dismissed
+  } catch {
+    // Silently fail
+    showNewFeaturesBanner.value = false
+  }
+}
+
+async function dismissNewFeaturesBanner() {
+  try {
+    await serverApi.dismissNewFeaturesBanner()
+    showNewFeaturesBanner.value = false
+  } catch {
+    // Still hide the banner locally even if the API call fails
+    showNewFeaturesBanner.value = false
+  }
+}
+
 // Computed: Always use panel patchline setting (that's what the user configured)
 // The plugin patchline shows what's currently running, but panel setting is the source of truth
 const displayPatchline = computed(() => panelPatchline.value || patchline.value)
@@ -226,6 +251,7 @@ onMounted(() => {
   fetchSchedulerStatus()
   fetchPanelPatchline()
   checkDownloaderAuth()
+  fetchNewFeatures()
   memoryInterval = setInterval(() => {
     fetchServerMemory()
     checkHytaleAuth()
@@ -351,6 +377,66 @@ function refreshAll() {
 
 <template>
   <div class="space-y-6">
+    <!-- New Features Banner (shown after panel updates) -->
+    <div
+      v-if="showNewFeaturesBanner && newFeaturesStatus"
+      class="bg-gradient-to-r from-hytale-orange/20 to-hytale-yellow/20 border-2 border-hytale-orange rounded-lg p-4"
+    >
+      <div class="flex items-start gap-4">
+        <div class="flex-shrink-0">
+          <svg class="w-8 h-8 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-white mb-1">
+            {{ t('dashboard.newFeatures.title') }}
+          </h3>
+          <p class="text-gray-300 text-sm mb-3">
+            {{ t('dashboard.newFeatures.description', { version: newFeaturesStatus.panelVersion }) }}
+          </p>
+          <ul class="space-y-1 mb-3">
+            <li
+              v-for="(feature, index) in newFeaturesStatus.features"
+              :key="index"
+              class="flex items-center gap-2 text-sm text-gray-200"
+            >
+              <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {{ feature }}
+            </li>
+          </ul>
+          <div class="flex items-center gap-3">
+            <router-link
+              to="/configuration"
+              class="btn btn-primary inline-flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              {{ t('dashboard.newFeatures.configure') }}
+            </router-link>
+            <button
+              @click="dismissNewFeaturesBanner"
+              class="text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              {{ t('common.dismiss') }}
+            </button>
+          </div>
+        </div>
+        <button
+          @click="dismissNewFeaturesBanner"
+          class="flex-shrink-0 text-gray-400 hover:text-white"
+        >
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <!-- Downloader Auth Warning Banner (for auto-updates) -->
     <div
       v-if="showDownloaderAuthWarning"
