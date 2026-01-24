@@ -60,9 +60,10 @@ type PluginEventData = PlayerChatEvent | PlayerDeathEvent | PlayerJoinEvent | Pl
 
 /**
  * Get the plugin host for WebSocket connection
+ * Note: config.gameContainerName already has STACK_NAME fallback built in
  */
 function getPluginHost(): string {
-  return process.env.GAME_CONTAINER_NAME || config.gameContainerName || 'hytale';
+  return config.gameContainerName;
 }
 
 /**

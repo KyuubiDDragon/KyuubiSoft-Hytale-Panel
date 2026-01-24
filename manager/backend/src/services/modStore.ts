@@ -4,7 +4,7 @@
  * Supports external mod registry from kyuubisoft.com
  */
 
-import { writeFile, mkdir, access } from 'fs/promises';
+import { writeFile, mkdir, access, readFile } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import http from 'http';
@@ -153,11 +153,13 @@ async function fetchExternalRegistry(): Promise<ModStoreEntry[]> {
 
 /**
  * Get the combined mod registry (external + built-in)
+ * External registry values override built-in, but built-in configTemplate/configPath
+ * are preserved if external doesn't have them (for EasyWebMap etc.)
  */
 export async function getModRegistry(): Promise<ModStoreEntry[]> {
   const externalMods = await fetchExternalRegistry();
 
-  // Merge with built-in, external takes priority for same IDs
+  // Merge with built-in, external takes priority but preserves built-in config templates
   const modMap = new Map<string, ModStoreEntry>();
 
   // Add built-in first
@@ -165,9 +167,35 @@ export async function getModRegistry(): Promise<ModStoreEntry[]> {
     modMap.set(mod.id, mod);
   }
 
-  // Override/add from external
-  for (const mod of externalMods) {
-    modMap.set(mod.id, mod);
+  // Merge from external - preserve built-in configTemplate/configPath if external doesn't have them
+  for (const externalMod of externalMods) {
+    const existingMod = modMap.get(externalMod.id);
+    if (existingMod) {
+      // Debug: Log what we're merging
+      console.log(`[ModStore] Merging mod ${externalMod.id}:`);
+      console.log(`  - External has configTemplate: ${externalMod.configTemplate !== undefined}`);
+      console.log(`  - External has configPath: ${externalMod.configPath !== undefined}`);
+      console.log(`  - Built-in has configTemplate: ${existingMod.configTemplate !== undefined}`);
+      console.log(`  - Built-in has configPath: ${existingMod.configPath !== undefined}`);
+
+      // Merge: external overrides, but keep built-in configTemplate/configPath if not in external
+      const mergedMod: ModStoreEntry = {
+        ...existingMod,
+        ...externalMod,
+        // Preserve built-in config template if external doesn't have one
+        configTemplate: externalMod.configTemplate ?? existingMod.configTemplate,
+        configPath: externalMod.configPath ?? existingMod.configPath,
+        ports: externalMod.ports ?? existingMod.ports,
+      };
+
+      console.log(`  - Merged has configTemplate: ${mergedMod.configTemplate !== undefined}`);
+      console.log(`  - Merged has configPath: ${mergedMod.configPath !== undefined}`);
+
+      modMap.set(externalMod.id, mergedMod);
+    } else {
+      // New mod from external registry
+      modMap.set(externalMod.id, externalMod);
+    }
   }
 
   return Array.from(modMap.values());
@@ -379,15 +407,24 @@ export async function isModInstalled(modId: string, registry?: ModStoreEntry[]):
  * Install a mod from the registry
  */
 export async function installMod(modId: string): Promise<InstallResult> {
+  console.log(`[ModStore] installMod called for: ${modId}`);
   const registry = await getModRegistry();
   const mod = registry.find((m) => m.id === modId);
   if (!mod) {
+    console.log(`[ModStore] Mod ${modId} not found in registry`);
     return { success: false, error: 'Mod not found in registry' };
+  }
+
+  // Debug: Log mod details including configTemplate
+  console.log(`[ModStore] Found mod: ${mod.name}, hasConfigTemplate: ${!!mod.configTemplate}, configPath: ${mod.configPath || 'none'}`);
+  if (mod.configTemplate) {
+    console.log(`[ModStore] configTemplate keys: ${Object.keys(mod.configTemplate).join(', ')}`);
   }
 
   // Check if already installed
   const installed = await isModInstalled(modId, registry);
   if (installed.installed) {
+    console.log(`[ModStore] Mod already installed: ${installed.filename}`);
     return { success: false, error: `Mod already installed: ${installed.filename}` };
   }
 
@@ -691,6 +728,83 @@ export function getRegistryInfo(): { url: string; cached: boolean; cacheAge?: nu
   };
 }
 
+/**
+ * Ensure EasyWebMap config exists and has correct port
+ * This can be called after server startup to fix config if mod created default
+ */
+export async function ensureEasyWebMapConfig(): Promise<{ success: boolean; created: boolean; updated: boolean; error?: string }> {
+  const configPath = path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json');
+  const expectedPort = config.webMapPort;
+
+  console.log(`[ModStore] ensureEasyWebMapConfig: checking ${configPath}, expected port: ${expectedPort}`);
+
+  try {
+    // Check if EasyWebMap is installed
+    const installed = await isModInstalled('easywebmap');
+    if (!installed.installed) {
+      console.log('[ModStore] EasyWebMap not installed, skipping config check');
+      return { success: true, created: false, updated: false };
+    }
+
+    // Check if config directory exists
+    const configDir = path.dirname(configPath);
+    try {
+      await access(configDir);
+    } catch {
+      // Directory doesn't exist, create it with our config
+      console.log(`[ModStore] Creating config directory: ${configDir}`);
+      await mkdir(configDir, { recursive: true });
+    }
+
+    // Check if config file exists
+    let existingConfig: Record<string, unknown> | null = null;
+    try {
+      const content = await readFile(configPath, 'utf-8');
+      existingConfig = JSON.parse(content);
+      console.log(`[ModStore] Found existing config, httpPort: ${(existingConfig as { httpPort?: number }).httpPort}`);
+    } catch {
+      // Config doesn't exist
+      console.log('[ModStore] Config file does not exist');
+    }
+
+    // Get the config template from registry
+    const registry = await getModRegistry();
+    const mod = registry.find((m) => m.id === 'easywebmap');
+
+    if (!mod?.configTemplate) {
+      console.error('[ModStore] No config template found for EasyWebMap in registry');
+      return { success: false, created: false, updated: false, error: 'No config template in registry' };
+    }
+
+    if (!existingConfig) {
+      // Create new config
+      const newConfig = { ...mod.configTemplate, httpPort: expectedPort };
+      await writeFile(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+      console.log(`[ModStore] Created new EasyWebMap config with httpPort: ${expectedPort}`);
+      return { success: true, created: true, updated: false };
+    }
+
+    // Check if port needs updating
+    if ((existingConfig as { httpPort?: number }).httpPort !== expectedPort) {
+      (existingConfig as { httpPort: number }).httpPort = expectedPort;
+      await writeFile(configPath, JSON.stringify(existingConfig, null, 2), 'utf-8');
+      console.log(`[ModStore] Updated EasyWebMap config httpPort to: ${expectedPort}`);
+      return { success: true, created: false, updated: true };
+    }
+
+    console.log('[ModStore] EasyWebMap config already has correct port');
+    return { success: true, created: false, updated: false };
+  } catch (error) {
+    console.error('[ModStore] Error ensuring EasyWebMap config:', error);
+    return {
+      success: false,
+      created: false,
+      updated: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
 export default {
   MOD_REGISTRY,
   getModRegistry,
@@ -703,4 +817,5 @@ export default {
   getAvailableMods,
   refreshRegistry,
   getRegistryInfo,
+  ensureEasyWebMapConfig,
 };

@@ -7,7 +7,7 @@ import * as dockerService from './docker.js';
 import { runSystemChecks as runSystemChecksFromService, type SystemCheck, type SystemCheckResult } from './systemCheck.js';
 import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
 import { saveConfig as saveSchedulerConfig } from './scheduler.js';
-import { installMod } from './modStore.js';
+import { installMod, ensureEasyWebMapConfig } from './modStore.js';
 
 // Re-export system check types and function
 export type { SystemCheck, SystemCheckResult };
@@ -721,6 +721,24 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         const restartResult = await dockerService.restartContainer();
         if (restartResult.success) {
           console.log('[Setup] Server restart completed successfully');
+
+          // Wait for server to start, then ensure EasyWebMap config has correct port
+          // This fixes cases where the mod creates a default config on first startup
+          if (setupConfig.integrations?.webmap) {
+            console.log('[Setup] Waiting 10 seconds for mods to initialize...');
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            console.log('[Setup] Ensuring EasyWebMap config has correct port...');
+            const configResult = await ensureEasyWebMapConfig();
+            if (configResult.updated) {
+              console.log('[Setup] EasyWebMap config was updated with correct port');
+            } else if (configResult.created) {
+              console.log('[Setup] EasyWebMap config was created');
+            } else if (configResult.success) {
+              console.log('[Setup] EasyWebMap config already correct');
+            } else {
+              console.error('[Setup] Failed to ensure EasyWebMap config:', configResult.error);
+            }
+          }
         } else {
           console.error('[Setup] Failed to restart server:', restartResult.error);
         }

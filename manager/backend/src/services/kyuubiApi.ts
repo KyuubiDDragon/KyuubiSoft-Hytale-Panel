@@ -81,9 +81,12 @@ export function getInstalledVersion(): string | null {
 /**
  * Get the host for connecting to the plugin API
  * Uses the game container name for Docker networking
+ * Note: config.gameContainerName already has STACK_NAME fallback built in
  */
 function getPluginHost(): string {
-  return process.env.GAME_CONTAINER_NAME || config.gameContainerName || 'hytale';
+  const host = config.gameContainerName;
+  console.log(`[KyuubiAPI] Using plugin host: ${host}`);
+  return host;
 }
 
 /**
