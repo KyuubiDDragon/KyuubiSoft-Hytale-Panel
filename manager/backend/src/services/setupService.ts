@@ -69,6 +69,9 @@ export interface SetupConfig {
   };
   downloadMethod?: 'official' | 'custom' | 'manual';
   autoUpdate?: boolean;
+  patchline?: 'release' | 'pre-release';
+  acceptEarlyPlugins?: boolean;
+  disableSentry?: boolean;
 }
 
 // Partial setup data for step-by-step saving
@@ -310,6 +313,13 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
           whitelist: data.whitelist === true,
           allowOp: data.allowOp === true,
         };
+        // Advanced settings
+        if (data.acceptEarlyPlugins !== undefined) {
+          setupConfig.acceptEarlyPlugins = data.acceptEarlyPlugins === true;
+        }
+        if (data.disableSentry !== undefined) {
+          setupConfig.disableSentry = data.disableSentry === true;
+        }
         break;
 
       case 'performance':
@@ -382,9 +392,12 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         break;
 
       case 'server-download':
-        // Server download step - stores download method and auto-update preference
+        // Server download step - stores download method, patchline and auto-update preference
         if (data.method) {
           setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual';
+        }
+        if (data.patchline) {
+          setupConfig.patchline = data.patchline as 'release' | 'pre-release';
         }
         if (data.autoUpdate !== undefined) {
           setupConfig.autoUpdate = data.autoUpdate === true;
@@ -546,12 +559,13 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
 
     // Write panel config
     const panelConfig = {
-      patchline: 'release',
-      acceptEarlyPlugins: false,
-      disableSentry: false,
+      patchline: setupConfig.patchline ?? 'release',
+      acceptEarlyPlugins: setupConfig.acceptEarlyPlugins ?? false,
+      disableSentry: setupConfig.disableSentry ?? false,
       allowOp: setupConfig.server?.allowOp ?? false,
     };
     await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
+    console.log('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
 
     // Write server config.json if server path exists
     if (setupConfig.server) {

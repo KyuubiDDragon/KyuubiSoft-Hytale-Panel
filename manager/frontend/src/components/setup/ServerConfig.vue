@@ -19,6 +19,11 @@ const motd = ref('Welcome to my server!')
 const maxPlayers = ref(20)
 const gameMode = ref('Adventure')
 
+// Advanced settings
+const acceptEarlyPlugins = ref(false)
+const disableSentry = ref(false)
+const showAdvanced = ref(false)
+
 // Validation state
 const serverNameError = ref('')
 const motdError = ref('')
@@ -102,6 +107,8 @@ async function handleSubmit() {
     motd: motd.value,
     maxPlayers: maxPlayers.value,
     gameMode: gameMode.value,
+    acceptEarlyPlugins: acceptEarlyPlugins.value,
+    disableSentry: disableSentry.value,
   })
 
   if (success) {
@@ -125,6 +132,9 @@ onMounted(() => {
     // Support both old format (gameMode) and new format (defaultGamemode)
     const savedGameMode = (savedData as Record<string, unknown>).gameMode as string || savedData.defaultGamemode
     if (savedGameMode) gameMode.value = savedGameMode
+    // Load advanced settings
+    if (savedData.acceptEarlyPlugins !== undefined) acceptEarlyPlugins.value = savedData.acceptEarlyPlugins
+    if (savedData.disableSentry !== undefined) disableSentry.value = savedData.disableSentry
   }
 })
 </script>
@@ -233,6 +243,55 @@ onMounted(() => {
         <p class="mt-1 text-xs text-gray-500">
           {{ t('setup.gameModeHint') }}
         </p>
+      </div>
+
+      <!-- Advanced Settings Toggle -->
+      <div class="border-t border-dark-50/30 pt-4">
+        <button
+          type="button"
+          @click="showAdvanced = !showAdvanced"
+          class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+        >
+          <svg
+            class="w-4 h-4 transition-transform duration-200"
+            :class="{ 'rotate-90': showAdvanced }"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <span class="text-sm font-medium">{{ t('setup.advancedSettings') }}</span>
+        </button>
+
+        <!-- Advanced Settings Content -->
+        <div v-if="showAdvanced" class="mt-4 space-y-4 pl-6">
+          <!-- Accept Early Plugins -->
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input
+              v-model="acceptEarlyPlugins"
+              type="checkbox"
+              class="mt-1 w-4 h-4 rounded border-gray-600 bg-dark-300 text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
+            />
+            <div>
+              <p class="text-white font-medium">{{ t('setup.acceptEarlyPlugins') }}</p>
+              <p class="text-sm text-gray-400">{{ t('setup.acceptEarlyPluginsDesc') }}</p>
+            </div>
+          </label>
+
+          <!-- Disable Sentry -->
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input
+              v-model="disableSentry"
+              type="checkbox"
+              class="mt-1 w-4 h-4 rounded border-gray-600 bg-dark-300 text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
+            />
+            <div>
+              <p class="text-white font-medium">{{ t('setup.disableSentry') }}</p>
+              <p class="text-sm text-gray-400">{{ t('setup.disableSentryDesc') }}</p>
+            </div>
+          </label>
+        </div>
       </div>
 
       <!-- Info Box -->

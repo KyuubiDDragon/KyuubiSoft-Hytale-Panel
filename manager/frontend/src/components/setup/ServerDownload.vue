@@ -14,6 +14,10 @@ const emit = defineEmits<{
   back: []
 }>()
 
+// Patchline selection (affects which server version is downloaded)
+type Patchline = 'release' | 'pre-release'
+const patchline = ref<Patchline>('release')
+
 // Download method selection
 type DownloadMethod = 'official' | 'custom' | 'manual'
 const downloadMethod = ref<DownloadMethod>('official')
@@ -295,7 +299,7 @@ async function startDownload() {
     // Trigger the download on the backend
     const downloadRequest = downloadMethod.value === 'custom'
       ? { method: 'custom', serverUrl: customServerUrl.value, assetsUrl: customAssetsUrl.value }
-      : { method: 'official' }
+      : { method: 'official', patchline: patchline.value }
 
     await setupApi.startDownload(downloadRequest)
   } catch (err) {
@@ -375,6 +379,7 @@ async function handleContinue() {
   // Save download settings
   const success = await setupStore.saveStep('server-download', {
     method: downloadMethod.value,
+    patchline: patchline.value,
     autoUpdate: autoUpdateEnabled.value,
     customUrls: downloadMethod.value === 'custom' ? {
       serverUrl: customServerUrl.value,
@@ -412,6 +417,16 @@ function retryAuth() {
   authError.value = null
   startDeviceCodeFlow()
 }
+
+// Load saved data on mount
+onMounted(() => {
+  const savedData = setupStore.setupData.serverDownload
+  if (savedData) {
+    if (savedData.patchline) patchline.value = savedData.patchline as Patchline
+    if (savedData.method) downloadMethod.value = savedData.method as DownloadMethod
+    if (savedData.autoUpdate !== undefined) autoUpdateEnabled.value = savedData.autoUpdate
+  }
+})
 
 // Cleanup on unmount
 onUnmounted(() => {
@@ -464,6 +479,72 @@ watch(deviceCodeState, () => {
     <!-- Step 3.1: Download Method Selection -->
     <template v-if="currentDownloadStep === 'select'">
       <div class="space-y-4">
+        <!-- Patchline Selection -->
+        <div class="mb-6">
+          <label class="label mb-3">{{ t('setup.patchlineLabel') }}</label>
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Release -->
+            <button
+              type="button"
+              @click="patchline = 'release'"
+              class="p-4 rounded-xl border-2 text-left transition-all duration-200"
+              :class="[
+                patchline === 'release'
+                  ? 'border-status-success bg-status-success/10'
+                  : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+              ]"
+            >
+              <div class="flex items-center gap-3">
+                <div
+                  class="w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                  :class="patchline === 'release' ? 'border-status-success' : 'border-gray-500'"
+                >
+                  <div
+                    v-if="patchline === 'release'"
+                    class="w-2 h-2 rounded-full bg-status-success"
+                  />
+                </div>
+                <div>
+                  <p class="text-white font-semibold">{{ t('setup.patchlineRelease') }}</p>
+                  <p class="text-xs text-gray-400">{{ t('setup.patchlineReleaseDesc') }}</p>
+                </div>
+              </div>
+            </button>
+
+            <!-- Pre-Release -->
+            <button
+              type="button"
+              @click="patchline = 'pre-release'"
+              class="p-4 rounded-xl border-2 text-left transition-all duration-200"
+              :class="[
+                patchline === 'pre-release'
+                  ? 'border-status-warning bg-status-warning/10'
+                  : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+              ]"
+            >
+              <div class="flex items-center gap-3">
+                <div
+                  class="w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                  :class="patchline === 'pre-release' ? 'border-status-warning' : 'border-gray-500'"
+                >
+                  <div
+                    v-if="patchline === 'pre-release'"
+                    class="w-2 h-2 rounded-full bg-status-warning"
+                  />
+                </div>
+                <div>
+                  <p class="text-white font-semibold">{{ t('setup.patchlinePreRelease') }}</p>
+                  <p class="text-xs text-gray-400">{{ t('setup.patchlinePreReleaseDesc') }}</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div class="border-t border-dark-50/30 pt-4">
+          <label class="label mb-3">{{ t('setup.downloadMethodLabel') }}</label>
+        </div>
+
         <!-- Official Downloader Option -->
         <button
           @click="selectMethod('official')"
