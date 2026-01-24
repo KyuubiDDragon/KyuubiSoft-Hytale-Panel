@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/badge/Discord-Support%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://dsc.gg/kyuubisoft)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](LICENSE)
 
-<img src="https://img.shields.io/badge/KyuubiSoft_Panel-v2.0-orange?style=for-the-badge" alt="KyuubiSoft Panel v2.0"/>
+<img src="https://img.shields.io/badge/KyuubiSoft_Panel-v2.1.1-orange?style=for-the-badge" alt="KyuubiSoft Panel v2.1.1"/>
 <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
 <img src="https://img.shields.io/badge/Node.js-Backend-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js"/>
 <img src="https://img.shields.io/badge/Vue.js-Frontend-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white" alt="Vue.js"/>
