@@ -704,17 +704,21 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
     reloadConfigFromFile();
 
     // Restart server container so newly installed mods get loaded
-    console.log('[Setup] Restarting server to load installed mods...');
-    try {
-      const restartResult = await dockerService.restartContainer();
-      if (restartResult.success) {
-        console.log('[Setup] Server restart initiated successfully');
-      } else {
-        console.error('[Setup] Failed to restart server:', restartResult.error);
+    // Run in background to avoid HTTP timeout - setup is already complete at this point
+    console.log('[Setup] Scheduling server restart to load installed mods...');
+    setTimeout(async () => {
+      try {
+        console.log('[Setup] Restarting server container...');
+        const restartResult = await dockerService.restartContainer();
+        if (restartResult.success) {
+          console.log('[Setup] Server restart completed successfully');
+        } else {
+          console.error('[Setup] Failed to restart server:', restartResult.error);
+        }
+      } catch (restartError) {
+        console.error('[Setup] Error restarting server:', restartError);
       }
-    } catch (restartError) {
-      console.error('[Setup] Error restarting server:', restartError);
-    }
+    }, 1000); // 1 second delay to let the HTTP response complete first
 
     return { success: true, jwtSecret };
   } catch (error) {
