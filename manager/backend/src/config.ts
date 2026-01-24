@@ -162,9 +162,6 @@ export const config = {
   pluginsPath: process.env.PLUGINS_PATH || '/opt/hytale/plugins',
   assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets',
 
-  // Host data path (for display purposes only - shows actual host path in error messages)
-  hostDataPath: process.env.HOST_DATA_PATH || '/opt/hytale',
-
   // Server port - internal port is always 18080, external port from MANAGER_PORT
   // Internal port is what Express listens on inside the container
   // External port is what users access from the host (for display purposes)
