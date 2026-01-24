@@ -1,7 +1,7 @@
 {
   "Group": "KyuubiDDragon",
   "Name": "KyuubiSoftAPI",
-  "Version": "1.2.0",
+  "Version": "1.2.1",
   "Description": "REST API for KyuubiSoft Panel - provides player data, server stats, real-time events, and Prometheus metrics",
   "Author": "KyuubiDDragon",
   "Main": "com.kyuubisoft.api.KyuubiSoftAPI",
