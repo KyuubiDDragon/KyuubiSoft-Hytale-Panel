@@ -6,12 +6,14 @@ import { parseLogLine } from './services/logs.js';
 import { processLogLine } from './services/players.js';
 import { hasPermission } from './services/roles.js';
 import type { WsMessage } from './types/index.js';
+import { isDemoMode, getNextDemoLogLine, getDemoOnlinePlayers } from './services/demoData.js';
 
 const clients = new Set<WebSocket>();
 // Map to store username for each WebSocket connection (for permission checks)
 const clientUsernames = new Map<WebSocket, string>();
 let logStream: NodeJS.ReadableStream | null = null;
 let streamRestartTimeout: NodeJS.Timeout | null = null;
+let demoLogInterval: NodeJS.Timeout | null = null;
 
 async function sendExistingLogs(ws: WebSocket): Promise<void> {
   try {
@@ -198,7 +200,59 @@ function demuxDockerStream(chunk: Buffer): string[] {
   return results;
 }
 
+// Demo mode: simulate log streaming with periodic log messages
+function startDemoLogStreaming(): void {
+  if (demoLogInterval) {
+    clearInterval(demoLogInterval);
+  }
+
+  console.log('[DEMO] Demo log streaming started');
+
+  // Send a log message every 3-8 seconds
+  demoLogInterval = setInterval(() => {
+    if (clients.size === 0) {
+      stopDemoLogStreaming();
+      return;
+    }
+
+    const logLine = getNextDemoLogLine();
+    const parsed = parseLogLine(logLine);
+
+    if (parsed) {
+      broadcast({
+        type: 'log',
+        ...parsed,
+      });
+
+      // Check for player events in demo logs
+      const playerEvent = processLogLine(logLine);
+      if (playerEvent) {
+        broadcast({
+          type: 'player_event',
+          event: playerEvent.event,
+          player: playerEvent.player,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  }, 3000 + Math.random() * 5000); // Random interval 3-8 seconds
+}
+
+function stopDemoLogStreaming(): void {
+  if (demoLogInterval) {
+    clearInterval(demoLogInterval);
+    demoLogInterval = null;
+    console.log('[DEMO] Demo log streaming stopped');
+  }
+}
+
 async function startLogStreaming(): Promise<void> {
+  // Demo mode: use simulated log streaming
+  if (isDemoMode()) {
+    startDemoLogStreaming();
+    return;
+  }
+
   // Clear any pending restart timeout
   if (streamRestartTimeout) {
     clearTimeout(streamRestartTimeout);
@@ -308,6 +362,9 @@ function scheduleStreamRestart(): void {
 }
 
 function stopLogStreaming(): void {
+  // Stop demo streaming if active
+  stopDemoLogStreaming();
+
   if (streamRestartTimeout) {
     clearTimeout(streamRestartTimeout);
     streamRestartTimeout = null;

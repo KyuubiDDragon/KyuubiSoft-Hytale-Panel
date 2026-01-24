@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { logActivity, getActivityLog, clearActivityLog, type ActivityLogEntry } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { getRealPathIfSafe, isPathSafe, sanitizeFileName } from '../utils/pathSecurity.js';
+import { isDemoMode, getDemoMods, getDemoPlugins, getDemoWorlds, getDemoActivityLog } from '../services/demoData.js';
 
 // SECURITY: Magic bytes for file type verification
 const FILE_SIGNATURES = {
@@ -865,6 +866,23 @@ async function scanWorldsInPath(worldsPath: string, seenRealPaths: Set<string>):
 
 // GET /api/management/worlds
 router.get('/worlds', authMiddleware, requirePermission('worlds.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock worlds
+  if (isDemoMode()) {
+    const demoWorlds = getDemoWorlds();
+    res.json({
+      worlds: demoWorlds.map(w => ({
+        name: w.name,
+        path: `/opt/hytale/worlds/${w.name}`,
+        size: w.size,
+        lastModified: w.lastPlayed,
+        hasConfig: true,
+        playerCount: w.playerCount,
+      })),
+      checkedPaths: ['/opt/hytale/worlds'],
+    });
+    return;
+  }
+
   try {
     let worlds: WorldInfo[] = [];
     const checkedPaths: string[] = [];
@@ -935,6 +953,23 @@ async function scanDirectory(dirPath: string, type: 'mod' | 'plugin'): Promise<M
 
 // GET /api/management/mods
 router.get('/mods', authMiddleware, requirePermission('mods.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock mods
+  if (isDemoMode()) {
+    const demoMods = getDemoMods();
+    res.json({
+      mods: demoMods.map(m => ({
+        name: m.name,
+        filename: m.filename,
+        size: m.size,
+        lastModified: new Date().toISOString(),
+        enabled: m.enabled,
+        installedVersion: m.version,
+      })),
+      path: '/opt/hytale/mods',
+    });
+    return;
+  }
+
   try {
     const mods = await scanDirectory(config.modsPath, 'mod');
 
@@ -975,6 +1010,23 @@ router.get('/mods', authMiddleware, requirePermission('mods.view'), async (_req:
 
 // GET /api/management/plugins
 router.get('/plugins', authMiddleware, requirePermission('plugins.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock plugins
+  if (isDemoMode()) {
+    const demoPlugins = getDemoPlugins();
+    res.json({
+      plugins: demoPlugins.map(p => ({
+        name: p.name,
+        filename: p.filename,
+        size: p.size,
+        lastModified: new Date().toISOString(),
+        enabled: p.enabled,
+        installedVersion: p.version,
+      })),
+      path: '/opt/hytale/plugins',
+    });
+    return;
+  }
+
   try {
     const plugins = await scanDirectory(config.pluginsPath, 'plugin');
     res.json({ plugins, path: config.pluginsPath });
@@ -1510,6 +1562,21 @@ router.put('/config/write', authMiddleware, requirePermission('config.edit'), as
 
 // GET /api/management/activity
 router.get('/activity', authMiddleware, requirePermission('activity.view'), async (req: Request, res: Response) => {
+  // Demo mode: return mock activity
+  if (isDemoMode()) {
+    const demoActivity = getDemoActivityLog();
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const sliced = demoActivity.slice(offset, offset + limit);
+    res.json({
+      entries: sliced,
+      total: demoActivity.length,
+      limit,
+      offset,
+    });
+    return;
+  }
+
   try {
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = parseInt(req.query.offset as string) || 0;
@@ -1525,6 +1592,12 @@ router.get('/activity', authMiddleware, requirePermission('activity.view'), asyn
 
 // DELETE /api/management/activity
 router.delete('/activity', authMiddleware, requirePermission('activity.clear'), async (req: AuthenticatedRequest, res: Response) => {
+  // Demo mode: simulate clear
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Activity log cleared (simulated)' });
+    return;
+  }
+
   try {
     await clearActivityLog();
 
