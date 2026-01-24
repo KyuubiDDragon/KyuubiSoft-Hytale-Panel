@@ -54,7 +54,7 @@ setupWebSocket(wss);
 
 // WebMap Proxy - MUST be mounted BEFORE helmet so our CSP doesn't affect WebMap content
 // The WebMap loads Leaflet from unpkg.com CDN which would be blocked by our CSP
-const webMapTarget = `http://${config.gameContainerName}:18081`;
+const webMapTarget = `http://${config.gameContainerName}:${config.webMapPort}`;
 
 const createWebMapProxyErrorHandler = () => ({
   error: (err: Error, _req: unknown, res: unknown) => {

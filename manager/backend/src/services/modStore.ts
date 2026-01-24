@@ -39,6 +39,7 @@ export interface ModStoreEntry {
 }
 
 // Built-in fallback registry (used if external registry fails)
+// Note: configTemplate uses placeholder ports - they get replaced with actual config values during install
 const BUILTIN_REGISTRY: ModStoreEntry[] = [
   {
     id: 'easywebmap',
@@ -48,21 +49,27 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
     github: 'cryptobench/EasyWebMap',
     category: 'map',
     configTemplate: {
-      httpPort: 18081,
-      wsPort: 18082,
-      maxZoom: 5,
-      minZoom: 0,
+      httpPort: 8081, // Placeholder - replaced with config.webMapPort during install
+      updateIntervalMs: 1000,
+      tileCacheSize: 20000,
+      enabledWorlds: [],
       tileSize: 256,
-      updateInterval: 1000,
-      enableWebSocket: true,
-      enablePlayerTracking: true,
-      enableChunkRendering: true,
-      bindAddress: '0.0.0.0',
+      maxZoom: 4,
+      renderExploredChunksOnly: true,
+      chunkIndexCacheMs: 30000,
+      tileRefreshRadius: 5,
+      tileRefreshIntervalMs: 60000,
+      useDiskCache: true,
+      enableTilePyramids: true,
+      enableHttps: false,
+      httpsPort: 8443,
+      domain: '',
+      acmeEmail: '',
+      useProductionAcme: true,
     },
     configPath: 'config/cryptobench_EasyWebMap/config.json',
     ports: [
-      { name: 'HTTP', default: 18081, env: 'WEBMAP_PORT' },
-      { name: 'WebSocket', default: 18082, env: 'WEBMAP_WS_PORT' },
+      { name: 'HTTP', default: 8081, env: 'WEBMAP_PORT' },
     ],
   },
 ];
@@ -438,8 +445,17 @@ export async function installMod(modId: string): Promise<InstallResult> {
       const configFullPath = path.join(config.serverPath, mod.configPath);
       const configDir = path.dirname(configFullPath);
 
+      // Create a copy of the template and apply dynamic port values
+      const configData = { ...mod.configTemplate };
+
+      // For EasyWebMap, set the httpPort from environment/config
+      if (modId === 'easywebmap' && 'httpPort' in configData) {
+        configData.httpPort = config.webMapPort;
+        console.log(`[ModStore] Setting EasyWebMap httpPort to ${config.webMapPort}`);
+      }
+
       await mkdir(configDir, { recursive: true });
-      await writeFile(configFullPath, JSON.stringify(mod.configTemplate, null, 2), 'utf-8');
+      await writeFile(configFullPath, JSON.stringify(configData, null, 2), 'utf-8');
       configCreated = true;
     } catch (e) {
       console.error('Failed to create config:', e);

@@ -1121,7 +1121,7 @@ onUnmounted(() => {
           </div>
           <div>
             <h3 class="text-xl font-bold text-white">Hytale Server Manager</h3>
-            <p class="text-gray-400">{{ t('settings.version') }}: 2.0.0</p>
+            <p class="text-gray-400">{{ t('settings.version') }}: 2.1.0</p>
           </div>
         </div>
 
