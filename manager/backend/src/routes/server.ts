@@ -959,7 +959,7 @@ let downloaderOAuthState: {
 } = { active: false };
 
 // POST /api/server/downloader/initiate-auth - Start downloader OAuth flow
-router.post('/downloader/initiate-auth', authMiddleware, requirePermission('server.control'), async (_req: Request, res: Response) => {
+router.post('/downloader/initiate-auth', authMiddleware, requirePermission('server.restart'), async (_req: Request, res: Response) => {
   try {
     console.log('[Server] Initiating downloader OAuth flow...');
 
@@ -1034,7 +1034,7 @@ router.post('/downloader/initiate-auth', authMiddleware, requirePermission('serv
 });
 
 // GET /api/server/downloader/auth-poll - Poll for auth completion
-router.get('/downloader/auth-poll', authMiddleware, requirePermission('server.control'), async (_req: Request, res: Response) => {
+router.get('/downloader/auth-poll', authMiddleware, requirePermission('server.restart'), async (_req: Request, res: Response) => {
   try {
     if (!downloaderOAuthState.active) {
       return res.json({
