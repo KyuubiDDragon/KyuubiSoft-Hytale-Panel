@@ -593,6 +593,11 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         if (!serverConfig.Defaults) serverConfig.Defaults = {};
         serverConfig.Defaults.GameMode = setupConfig.server.gameMode;
 
+        // Performance settings
+        if (setupConfig.performance?.viewRadius) {
+          serverConfig.ViewRadius = setupConfig.performance.viewRadius;
+        }
+
         // Add UpdateConfig for native update system (Hytale 24.01.2026+)
         serverConfig.updateConfig = {
           enabled: true,
