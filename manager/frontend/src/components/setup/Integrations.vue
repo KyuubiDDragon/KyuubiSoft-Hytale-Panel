@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
 import Button from '@/components/ui/Button.vue'
@@ -56,6 +56,16 @@ async function handleSkip() {
 function handleBack() {
   emit('back')
 }
+
+// Load saved data on mount
+onMounted(() => {
+  const savedData = setupStore.setupData.integrations as Record<string, unknown> | null
+  if (savedData) {
+    if (savedData.modtaleApiKey) modtaleApiKey.value = savedData.modtaleApiKey as string
+    if (savedData.stackmartApiKey) stackmartApiKey.value = savedData.stackmartApiKey as string
+    if (typeof savedData.webmapEnabled === 'boolean') webmapEnabled.value = savedData.webmapEnabled
+  }
+})
 </script>
 
 <template>

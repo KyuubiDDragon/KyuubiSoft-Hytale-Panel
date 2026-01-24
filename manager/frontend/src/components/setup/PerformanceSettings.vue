@@ -114,7 +114,7 @@ function handleBack() {
   emit('back')
 }
 
-// Load system info on mount
+// Load system info and saved data on mount
 onMounted(() => {
   // Check if we have system check data with RAM info
   const systemCheck = setupStore.setupData.systemCheck
@@ -127,6 +127,14 @@ onMounted(() => {
         detectedRam.value = Math.round(parseFloat(match[1]))
       }
     }
+  }
+
+  // Load saved performance settings
+  const savedData = setupStore.setupData.performance as Record<string, unknown> | null
+  if (savedData) {
+    if (savedData.minRam) minRam.value = savedData.minRam as string
+    if (savedData.maxRam) maxRam.value = savedData.maxRam as string
+    if (typeof savedData.viewRadius === 'number') viewRadius.value = savedData.viewRadius
   }
 })
 </script>

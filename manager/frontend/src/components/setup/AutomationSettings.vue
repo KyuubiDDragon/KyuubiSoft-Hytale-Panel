@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
 import Button from '@/components/ui/Button.vue'
@@ -73,6 +73,31 @@ async function handleSubmit() {
 function handleBack() {
   emit('back')
 }
+
+// Helper to find schedule value from cron
+function getScheduleFromCron(cron: string): string {
+  const option = restartScheduleOptions.find(o => o.cron === cron)
+  return option?.value || 'daily-4'
+}
+
+// Load saved data on mount
+onMounted(() => {
+  const savedData = setupStore.setupData.automation as Record<string, unknown> | null
+  if (savedData) {
+    const backups = savedData.backups as Record<string, unknown> | undefined
+    if (backups) {
+      if (typeof backups.enabled === 'boolean') backupEnabled.value = backups.enabled
+      if (backups.interval) backupInterval.value = backups.interval as string
+      if (backups.retention) backupRetention.value = backups.retention as number
+    }
+    const restart = savedData.restart as Record<string, unknown> | undefined
+    if (restart) {
+      if (typeof restart.enabled === 'boolean') restartEnabled.value = restart.enabled
+      if (restart.schedule) restartSchedule.value = getScheduleFromCron(restart.schedule as string)
+      if (typeof restart.warnMinutes === 'number') warnBeforeRestart.value = restart.warnMinutes > 0
+    }
+  }
+})
 </script>
 
 <template>

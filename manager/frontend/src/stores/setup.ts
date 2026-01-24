@@ -554,6 +554,21 @@ export const useSetupStore = defineStore('setup', () => {
     try {
       const result = await setupApi.saveStep(stepId, data)
       if (result.success) {
+        // Store data locally based on step ID for persistence
+        const stepDataMap: Record<string, keyof SetupData> = {
+          'server-config': 'serverConfig',
+          'security-settings': 'securitySettings',
+          'automation': 'automation',
+          'performance': 'performance',
+          'plugin': 'plugin',
+          'integrations': 'integrations',
+          'network': 'network',
+        }
+        const dataKey = stepDataMap[stepId]
+        if (dataKey) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (setupData.value as any)[dataKey] = data
+        }
         markStepCompleted(stepId)
         return true
       }
