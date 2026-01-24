@@ -203,6 +203,11 @@ export interface ModInfo {
   size: number
   lastModified: string
   enabled: boolean
+  // Update info (optional - only for mods in registry)
+  storeId?: string
+  installedVersion?: string
+  latestVersion?: string
+  hasUpdate?: boolean
 }
 
 export interface ConfigFile {

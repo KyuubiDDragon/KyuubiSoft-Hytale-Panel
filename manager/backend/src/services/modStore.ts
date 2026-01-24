@@ -67,7 +67,7 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
       acmeEmail: '',
       useProductionAcme: true,
     },
-    configPath: 'config/cryptobench_EasyWebMap/config.json',
+    configPath: 'cryptobench_EasyWebMap/config.json', // Relative to modsPath
     ports: [
       { name: 'HTTP', default: 8081, env: 'WEBMAP_PORT' },
     ],
@@ -442,7 +442,8 @@ export async function installMod(modId: string): Promise<InstallResult> {
   let configCreated = false;
   if (mod.configTemplate && mod.configPath) {
     try {
-      const configFullPath = path.join(config.serverPath, mod.configPath);
+      // Config path is relative to modsPath (where the JAR is installed)
+      const configFullPath = path.join(config.modsPath, mod.configPath);
       const configDir = path.dirname(configFullPath);
 
       // Create a copy of the template and apply dynamic port values

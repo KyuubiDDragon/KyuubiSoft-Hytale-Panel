@@ -69,7 +69,7 @@ function generateSafeFilename(originalName: string): string {
   const uniqueId = crypto.randomBytes(4).toString('hex');
   return `${safeName}_${uniqueId}${ext}`;
 }
-import { getAvailableMods, installMod, uninstallMod, updateMod, getLatestRelease, refreshRegistry, getRegistryInfo } from '../services/modStore.js';
+import { getAvailableMods, installMod, uninstallMod, updateMod, getLatestRelease, refreshRegistry, getRegistryInfo, getModRegistry, checkModUpdate } from '../services/modStore.js';
 import {
   searchMods as modtaleSearch,
   getModDetails as modtaleGetDetails,
@@ -891,6 +891,11 @@ interface ModInfo {
   size: number;
   lastModified: string;
   enabled: boolean;
+  // Update info (optional - only for mods in registry)
+  storeId?: string;
+  installedVersion?: string;
+  latestVersion?: string;
+  hasUpdate?: boolean;
 }
 
 async function scanDirectory(dirPath: string, type: 'mod' | 'plugin'): Promise<ModInfo[]> {
@@ -932,7 +937,37 @@ async function scanDirectory(dirPath: string, type: 'mod' | 'plugin'): Promise<M
 router.get('/mods', authMiddleware, requirePermission('mods.view'), async (_req: Request, res: Response) => {
   try {
     const mods = await scanDirectory(config.modsPath, 'mod');
-    res.json({ mods, path: config.modsPath });
+
+    // Get mod registry to check for updates
+    const registry = await getModRegistry();
+
+    // Enrich mods with update info from registry
+    const enrichedMods = await Promise.all(mods.map(async (mod) => {
+      // Try to match mod to registry entry by filename
+      const modNameLower = mod.name.toLowerCase();
+      const registryEntry = registry.find(entry =>
+        modNameLower.includes(entry.id.toLowerCase()) ||
+        modNameLower.includes(entry.name.toLowerCase())
+      );
+
+      if (registryEntry) {
+        try {
+          const updateInfo = await checkModUpdate(registryEntry.id);
+          return {
+            ...mod,
+            storeId: registryEntry.id,
+            installedVersion: updateInfo.installedVersion,
+            latestVersion: updateInfo.latestVersion,
+            hasUpdate: updateInfo.hasUpdate,
+          };
+        } catch {
+          return { ...mod, storeId: registryEntry.id };
+        }
+      }
+      return mod;
+    }));
+
+    res.json({ mods: enrichedMods, path: config.modsPath });
   } catch (error) {
     res.status(500).json({ error: 'Failed to read mods' });
   }

@@ -238,6 +238,28 @@ async function updateStoreMod(modId: string) {
   }
 }
 
+// Update installed mod from the mods list
+async function updateInstalledMod(item: ModInfo) {
+  if (!item.storeId) return
+
+  updatingMod.value = item.storeId
+  error.value = ''
+  try {
+    const result = await modStoreApi.update(item.storeId)
+    if (result.success) {
+      updateSuccess.value = item.storeId
+      await loadData() // Reload mods list
+      setTimeout(() => { updateSuccess.value = null }, 3000)
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    updatingMod.value = null
+  }
+}
+
 function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
     map: 'bg-blue-500/20 text-blue-400',
@@ -909,12 +931,36 @@ onMounted(loadData)
                 >
                   {{ item.enabled ? t('mods.enabled') : t('mods.disabled') }}
                 </span>
+                <!-- Version info -->
+                <span v-if="item.installedVersion" class="text-xs text-gray-400">
+                  v{{ item.installedVersion }}
+                </span>
+                <!-- Update badge -->
+                <span
+                  v-if="item.hasUpdate"
+                  class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse cursor-pointer"
+                  :title="`${t('mods.updateAvailable')}: ${item.latestVersion}`"
+                  @click.stop="updateInstalledMod(item)"
+                >
+                  ↑ {{ item.latestVersion }}
+                </span>
               </div>
             </div>
           </div>
 
           <!-- Actions -->
           <div class="flex items-center gap-3">
+            <!-- Update Button -->
+            <button
+              v-if="item.hasUpdate && item.storeId && authStore.hasPermission('mods.install')"
+              @click="updateInstalledMod(item)"
+              class="p-2 text-hytale-orange hover:text-hytale-orange-light transition-colors"
+              :title="t('mods.update')"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
             <!-- Config Button -->
             <button
               v-if="authStore.hasPermission(activeTab === 'mods' ? 'mods.config' : 'plugins.config')"
