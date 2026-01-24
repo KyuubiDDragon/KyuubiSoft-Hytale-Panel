@@ -3,10 +3,15 @@ package com.kyuubisoft.api.handlers;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.common.util.java.ManifestUtil;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.time.Instant;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Handler for server-related API endpoints
@@ -14,6 +19,35 @@ import java.time.Instant;
 public class ServerHandler {
 
     private static final long SERVER_START_TIME = System.currentTimeMillis();
+    private static final Pattern MAX_PLAYERS_PATTERN = Pattern.compile("\"MaxPlayers\"\\s*:\\s*(\\d+)");
+
+    /**
+     * Read MaxPlayers from config.json
+     */
+    private int getMaxPlayersFromConfig() {
+        try {
+            File configFile = new File("config.json");
+            if (!configFile.exists()) {
+                return 100; // Default if config doesn't exist
+            }
+
+            StringBuilder content = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    content.append(line);
+                }
+            }
+
+            Matcher matcher = MAX_PLAYERS_PATTERN.matcher(content.toString());
+            if (matcher.find()) {
+                return Integer.parseInt(matcher.group(1));
+            }
+        } catch (Exception e) {
+            System.err.println("[KyuubiAPI] Failed to read MaxPlayers from config: " + e.getMessage());
+        }
+        return 100; // Default fallback
+    }
 
     /**
      * GET /api/server/info
@@ -34,10 +68,10 @@ public class ServerHandler {
         // Player counts
         try {
             info.onlinePlayers = Universe.get().getPlayers().size();
-            info.maxPlayers = 100; // TODO: Get from config when available
+            info.maxPlayers = getMaxPlayersFromConfig();
         } catch (Exception e) {
             info.onlinePlayers = 0;
-            info.maxPlayers = 100;
+            info.maxPlayers = getMaxPlayersFromConfig();
         }
 
         // World count
