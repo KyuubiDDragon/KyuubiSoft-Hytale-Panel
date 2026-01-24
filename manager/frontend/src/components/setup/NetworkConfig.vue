@@ -105,9 +105,13 @@ async function handleContinue() {
       break
   }
 
+  // Map frontend access mode to backend format
+  const backendAccessMode = accessMode.value === 'localhost' ? 'local' :
+                            accessMode.value === 'custom' ? 'domain' : 'lan'
+
   const success = await setupStore.saveStep('network', {
-    accessMode: accessMode.value,
-    customDomain: accessMode.value === 'custom' ? customDomain.value : null,
+    accessMode: backendAccessMode,
+    domain: accessMode.value === 'custom' ? customDomain.value : null,
     trustProxy: trustProxy.value,
     detectedIp: detectedIp.value,
     panelPort: port,
@@ -125,6 +129,21 @@ function handleBack() {
 
 onMounted(() => {
   detectLocalIp()
+
+  // Load saved data
+  const savedData = setupStore.setupData.network as Record<string, unknown> | null
+  if (savedData) {
+    // Reverse-map backend access mode to frontend format
+    const backendMode = savedData.accessMode as string | undefined
+    if (backendMode === 'local') accessMode.value = 'localhost'
+    else if (backendMode === 'domain') accessMode.value = 'custom'
+    else if (backendMode === 'lan') accessMode.value = 'lan'
+
+    if (savedData.domain) customDomain.value = savedData.domain as string
+    if (typeof savedData.trustProxy === 'boolean') trustProxy.value = savedData.trustProxy
+    if (savedData.detectedIp) detectedIp.value = savedData.detectedIp as string
+    if (savedData.panelPort) detectedPort.value = savedData.panelPort as number
+  }
 })
 </script>
 

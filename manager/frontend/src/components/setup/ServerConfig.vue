@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
 import Button from '@/components/ui/Button.vue'
@@ -112,6 +112,21 @@ async function handleSubmit() {
 function handleBack() {
   emit('back')
 }
+
+// Load saved data on mount
+onMounted(() => {
+  const savedData = setupStore.setupData.serverConfig
+  if (savedData) {
+    // Support both old format (name) and new format (serverName)
+    const savedName = (savedData as Record<string, unknown>).name as string || savedData.serverName
+    if (savedName) serverName.value = savedName
+    if (savedData.motd) motd.value = savedData.motd
+    if (savedData.maxPlayers) maxPlayers.value = savedData.maxPlayers
+    // Support both old format (gameMode) and new format (defaultGamemode)
+    const savedGameMode = (savedData as Record<string, unknown>).gameMode as string || savedData.defaultGamemode
+    if (savedGameMode) gameMode.value = savedGameMode
+  }
+})
 </script>
 
 <template>

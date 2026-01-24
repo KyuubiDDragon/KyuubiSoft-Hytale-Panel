@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
 import Button from '@/components/ui/Button.vue'
@@ -70,6 +70,16 @@ async function handleSubmit() {
 function handleBack() {
   emit('back')
 }
+
+// Load saved data on mount
+onMounted(() => {
+  const savedData = setupStore.setupData.securitySettings as Record<string, unknown> | null
+  if (savedData) {
+    if (savedData.password) serverPassword.value = savedData.password as string
+    if (typeof savedData.whitelist === 'boolean') whitelistEnabled.value = savedData.whitelist
+    if (typeof savedData.allowOp === 'boolean') allowOperator.value = savedData.allowOp
+  }
+})
 </script>
 
 <template>

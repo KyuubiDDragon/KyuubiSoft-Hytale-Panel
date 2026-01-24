@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
 import Button from '@/components/ui/Button.vue'
@@ -65,6 +65,14 @@ async function handleContinue() {
 function handleBack() {
   emit('back')
 }
+
+// Load saved data on mount
+onMounted(() => {
+  const savedData = setupStore.setupData.plugin as Record<string, unknown> | null
+  if (savedData) {
+    if (typeof savedData.installPlugin === 'boolean') installPlugin.value = savedData.installPlugin
+  }
+})
 </script>
 
 <template>
