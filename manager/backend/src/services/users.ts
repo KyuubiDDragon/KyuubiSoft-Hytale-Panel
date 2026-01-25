@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { config } from '../config.js';
+import { isDemoMode } from './demoData.js';
 
 // User interface
 export interface User {
@@ -90,12 +91,55 @@ async function writeUsers(data: UsersData): Promise<void> {
 
 // Get all users (without password hashes)
 export async function getAllUsers(): Promise<Omit<User, 'passwordHash'>[]> {
+  // Demo mode: return demo users
+  if (isDemoMode()) {
+    return [
+      {
+        username: 'admin',
+        roleId: 'admin',
+        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        lastLogin: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+        tokenVersion: 1,
+      },
+      {
+        username: 'demo',
+        roleId: 'viewer',
+        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        lastLogin: new Date().toISOString(),
+        tokenVersion: 1,
+      },
+    ];
+  }
+
   const data = await readUsers();
   return data.users.map(({ passwordHash, ...user }) => user);
 }
 
 // Get user by username
 export async function getUser(username: string): Promise<User | null> {
+  // Demo mode: return demo user data
+  if (isDemoMode()) {
+    const demoUsers: Record<string, User> = {
+      'demo': {
+        username: 'demo',
+        passwordHash: '',
+        roleId: 'viewer',
+        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        lastLogin: new Date().toISOString(),
+        tokenVersion: 1,
+      },
+      'admin': {
+        username: 'admin',
+        passwordHash: '',
+        roleId: 'admin',
+        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        lastLogin: new Date().toISOString(),
+        tokenVersion: 1,
+      },
+    };
+    return demoUsers[username.toLowerCase()] || null;
+  }
+
   const data = await readUsers();
   return data.users.find(u => u.username === username) || null;
 }
@@ -103,6 +147,26 @@ export async function getUser(username: string): Promise<User | null> {
 // Verify user credentials
 // SECURITY: Use async bcrypt to prevent blocking the event loop
 export async function verifyUserCredentials(username: string, password: string): Promise<User | null> {
+  // Demo mode: use hardcoded demo credentials
+  if (isDemoMode()) {
+    const demoCredentials: Record<string, { password: string; roleId: string }> = {
+      'demo': { password: 'demo', roleId: 'viewer' },
+      'admin': { password: 'admin', roleId: 'admin' },
+    };
+
+    const cred = demoCredentials[username.toLowerCase()];
+    if (cred && password === cred.password) {
+      return {
+        username: username.toLowerCase(),
+        passwordHash: '', // Not needed for demo
+        roleId: cred.roleId,
+        createdAt: new Date().toISOString(),
+        tokenVersion: 1,
+      };
+    }
+    return null;
+  }
+
   const user = await getUser(username);
   if (!user) {
     return null;
@@ -219,6 +283,11 @@ export async function deleteUser(username: string): Promise<void> {
 
 // Update last login time
 export async function updateLastLogin(username: string): Promise<void> {
+  // Demo mode: no-op (don't persist)
+  if (isDemoMode()) {
+    return;
+  }
+
   const data = await readUsers();
   const userIndex = data.users.findIndex(u => u.username === username);
 
@@ -241,11 +310,22 @@ export async function invalidateUserTokens(username: string): Promise<void> {
 
 // Get current token version for a user
 export async function getTokenVersion(username: string): Promise<number> {
+  // Demo mode: always return 1 (no token invalidation tracking)
+  if (isDemoMode()) {
+    return 1;
+  }
+
   const user = await getUser(username);
   return user?.tokenVersion ?? 1;
 }
 
 // Initialize users on startup
 export async function initializeUsers(): Promise<void> {
+  // Demo mode: no initialization needed
+  if (isDemoMode()) {
+    console.log('[Users] Demo mode - using in-memory demo users');
+    return;
+  }
+
   await readUsers();
 }

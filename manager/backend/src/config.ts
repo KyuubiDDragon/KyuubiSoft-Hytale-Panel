@@ -88,9 +88,16 @@ const demoMode = process.env.DEMO_MODE === 'true' || process.env.DEMO_MODE === '
 // ============================================================
 
 // Determine JWT secret: prefer config.json, then env, then empty
+// In demo mode, auto-generate a secret if none is provided
 const jwtSecretFromConfig = configJson?.jwtSecret;
 const jwtSecretFromEnv = process.env.JWT_SECRET || '';
-const effectiveJwtSecret = jwtSecretFromConfig || jwtSecretFromEnv;
+let effectiveJwtSecret = jwtSecretFromConfig || jwtSecretFromEnv;
+
+// Auto-generate JWT secret for demo mode if none is configured
+if (demoMode && !effectiveJwtSecret) {
+  effectiveJwtSecret = crypto.randomBytes(48).toString('base64');
+  console.log('[Demo Mode] Auto-generated JWT secret for demo session');
+}
 
 // Determine CORS origins: prefer config.json, then env
 const corsFromConfig = configJson?.corsOrigins;
@@ -259,6 +266,26 @@ export function reloadConfigFromFile(): void {
  * security validation is skipped as credentials are managed differently.
  */
 export function checkSecurityConfig(): void {
+  // Skip security checks in demo mode
+  // Demo mode auto-generates JWT secret and uses mock credentials
+  if (config.demoMode) {
+    console.log('\n');
+    console.log('╔══════════════════════════════════════════════════════════════╗');
+    console.log('║                   🎮 DEMO MODE 🎮                             ║');
+    console.log('╠══════════════════════════════════════════════════════════════╣');
+    console.log('║  Running in demonstration mode with simulated data.          ║');
+    console.log('║  No real server connection required.                         ║');
+    console.log('║                                                              ║');
+    console.log('║  Demo accounts available:                                    ║');
+    console.log('║    • Viewer: demo / demo                                     ║');
+    console.log('║    • Admin:  admin / admin                                   ║');
+    console.log('║                                                              ║');
+    console.log(`║  Open: http://localhost:${config.externalPort.toString().padEnd(38)}║`);
+    console.log('╚══════════════════════════════════════════════════════════════╝');
+    console.log('\n');
+    return;
+  }
+
   // Check if config.json exists (regardless of setupComplete status)
   const configJsonExists = fs.existsSync(CONFIG_FILE_PATH);
 
