@@ -23,7 +23,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version)
-export const PLUGIN_VERSION = '1.2.1';
+export const PLUGIN_VERSION = '1.2.2';
 export const PLUGIN_PORT = 18085;
 export const PLUGIN_JAR_NAME = `KyuubiSoftAPI-${PLUGIN_VERSION}.jar`;
 
