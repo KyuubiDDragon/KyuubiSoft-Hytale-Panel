@@ -204,10 +204,36 @@ function getDirectorySize(dirPath: string): number {
  */
 export function getAssetStatus(): AssetStatus {
   const sourceFile = findAssetsArchive();
-  const meta = readAssetMeta();
+  let meta = readAssetMeta();
 
   let needsUpdate = false;
   let sourceSize = 0;
+
+  // Check if assets directory exists and has content (manually copied)
+  const assetsExist = fs.existsSync(config.assetsPath);
+  let fileCount = meta?.fileCount || 0;
+  let totalSize = 0;
+
+  if (assetsExist) {
+    totalSize = getDirectorySize(config.assetsPath);
+
+    // If no meta but assets exist with files, create meta for manually copied assets
+    if (!meta && totalSize > 0) {
+      fileCount = countFiles(config.assetsPath);
+      if (fileCount > 0) {
+        // Create metadata for manually copied assets
+        const newMeta: AssetMeta = {
+          sourceHash: 'manual-copy',
+          extractedAt: new Date().toISOString(),
+          sourceFile: 'manual',
+          fileCount: fileCount,
+        };
+        writeAssetMeta(newMeta);
+        meta = newMeta;
+        console.log(`[Assets] Detected manually copied assets: ${fileCount} files`);
+      }
+    }
+  }
 
   if (sourceFile) {
     try {
@@ -217,21 +243,24 @@ export function getAssetStatus(): AssetStatus {
       // Ignore
     }
 
-    if (meta) {
+    if (meta && meta.sourceHash !== 'manual-copy') {
       const currentHash = calculateFileHashSync(sourceFile);
       needsUpdate = currentHash !== meta.sourceHash;
     }
   }
 
+  // Assets are extracted if meta exists OR if the directory has files
+  const extracted = (meta !== null) || (assetsExist && totalSize > 0);
+
   return {
-    extracted: meta !== null && fs.existsSync(config.assetsPath),
+    extracted: extracted,
     sourceExists: sourceFile !== null,
     sourceFile: sourceFile,
     sourceSize: sourceSize,
     extractedAt: meta?.extractedAt || null,
-    fileCount: meta?.fileCount || 0,
+    fileCount: meta?.fileCount || fileCount,
     needsUpdate: needsUpdate,
-    totalSize: fs.existsSync(config.assetsPath) ? getDirectorySize(config.assetsPath) : 0,
+    totalSize: totalSize,
     extracting: extractionInProgress,
     extractProgress: extractionProgress,
   };

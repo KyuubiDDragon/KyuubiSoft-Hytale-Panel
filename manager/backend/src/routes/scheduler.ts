@@ -64,16 +64,21 @@ router.get('/status', authMiddleware, requirePermission('scheduler.view'), async
   if (isDemoMode()) {
     const tasks = getDemoSchedulerTasks();
     res.json({
-      autoBackup: {
+      backups: {
         enabled: true,
-        lastRun: tasks[0].lastRun,
         nextRun: tasks[0].nextRun,
+        lastRun: tasks[0].lastRun,
+        schedule: '0 4 * * *',
+      },
+      announcements: {
+        enabled: true,
+        activeCount: 2,
       },
       scheduledRestarts: {
         enabled: true,
-        lastRun: tasks[1].lastRun,
-        nextRun: tasks[1].nextRun,
-        pending: null,
+        nextRestart: tasks[1].nextRun,
+        pendingRestart: null,
+        times: ['05:00'],
       },
     });
     return;

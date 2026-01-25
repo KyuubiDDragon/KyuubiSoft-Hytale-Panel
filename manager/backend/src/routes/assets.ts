@@ -47,21 +47,25 @@ function setCachedIconPath(itemId: string, path: string | null): void {
 
 // GET /api/assets/status - Get extraction status
 router.get('/status', authMiddleware, requirePermission('assets.view'), (_req: Request, res: Response) => {
-  // Demo mode: return demo asset status
-  if (isDemoMode()) {
+  // In demo mode, still check for real assets first (user may have copied Assets.zip)
+  const status = assetService.getAssetStatus();
+
+  // If in demo mode and no real assets exist, return demo status
+  if (isDemoMode() && !status.sourceExists && !status.extracted) {
     res.json(getDemoAssetStatus());
     return;
   }
 
-  const status = assetService.getAssetStatus();
   res.json(status);
 });
 
 // POST /api/assets/extract - Extract assets from archive
 router.post('/extract', authMiddleware, requirePermission('assets.manage'), (_req: Request, res: Response) => {
-  // Demo mode: simulate extraction
-  if (isDemoMode()) {
-    res.json({ success: true, message: '[DEMO] Asset extraction simulated' });
+  // In demo mode, still allow real extraction if Assets.zip exists
+  const archiveExists = assetService.findAssetsArchive() !== null;
+
+  if (isDemoMode() && !archiveExists) {
+    res.json({ success: true, message: '[DEMO] No Assets.zip found. Copy it to the server directory to use real icons.' });
     return;
   }
 
@@ -270,16 +274,52 @@ router.get('/item-icon/:itemId', publicAssetLimiter, (req: Request, res: Respons
   }
 
   // Strip namespace prefix if present (e.g., "hytale:Cobalt_Sword" -> "Cobalt_Sword")
-  const originalId = itemId;
   if (itemId.includes(':')) {
     itemId = itemId.split(':')[1];
   }
+
+  // Helper function to generate placeholder SVG for demo mode
+  const sendPlaceholderIcon = () => {
+    const itemLower = itemId.toLowerCase();
+    let color = '#6b7280'; // Default gray
+    let icon = '📦'; // Default box
+
+    if (itemLower.includes('weapon') || itemLower.includes('sword') || itemLower.includes('bow') || itemLower.includes('battleaxe')) {
+      color = '#ef4444'; icon = '⚔️'; // Red - weapons
+    } else if (itemLower.includes('armor') || itemLower.includes('shield')) {
+      color = '#3b82f6'; icon = '🛡️'; // Blue - armor
+    } else if (itemLower.includes('tool') || itemLower.includes('pickaxe') || itemLower.includes('hatchet') || itemLower.includes('shovel')) {
+      color = '#f59e0b'; icon = '⛏️'; // Yellow - tools
+    } else if (itemLower.includes('food') || itemLower.includes('kebab') || itemLower.includes('meat') || itemLower.includes('fish')) {
+      color = '#22c55e'; icon = '🍖'; // Green - food
+    } else if (itemLower.includes('potion') || itemLower.includes('health') || itemLower.includes('stamina')) {
+      color = '#a855f7'; icon = '🧪'; // Purple - potions
+    } else if (itemLower.includes('material') || itemLower.includes('ingot') || itemLower.includes('wood')) {
+      color = '#78716c'; icon = '🧱'; // Stone - materials
+    } else if (itemLower.includes('torch') || itemLower.includes('furniture')) {
+      color = '#fb923c'; icon = '🔥'; // Orange - utility
+    }
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="8" fill="${color}" fill-opacity="0.2"/>
+      <rect x="2" y="2" width="60" height="60" rx="6" fill="none" stroke="${color}" stroke-width="2" stroke-opacity="0.5"/>
+      <text x="32" y="40" text-anchor="middle" font-size="24">${icon}</text>
+    </svg>`;
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(svg);
+  };
 
   // Check cache first for fast lookup
   const cachedPath = getCachedIconPath(itemId);
   if (cachedPath !== undefined) {
     if (cachedPath === null) {
-      // Cached as not found
+      // Cached as not found - in demo mode return placeholder
+      if (isDemoMode()) {
+        sendPlaceholderIcon();
+        return;
+      }
       res.status(404).json({ detail: 'Item icon not found (cached)', itemId });
       return;
     }
@@ -374,6 +414,12 @@ router.get('/item-icon/:itemId', publicAssetLimiter, (req: Request, res: Respons
   // Cache as not found to avoid repeated searches
   setCachedIconPath(itemId, null);
 
+  // In demo mode, return placeholder instead of 404
+  if (isDemoMode()) {
+    sendPlaceholderIcon();
+    return;
+  }
+
   // SECURITY: Don't expose debug information in production
   res.status(404).json({ detail: 'Item icon not found' });
 });
@@ -382,6 +428,19 @@ router.get('/item-icon/:itemId', publicAssetLimiter, (req: Request, res: Respons
 // Searches for player character textures in the assets
 // NOTE: Public endpoint with rate limiting - required for <img> tags
 router.get('/player-avatar', publicAssetLimiter, (req: Request, res: Response) => {
+  // Helper function to send placeholder avatar
+  const sendPlaceholderAvatar = () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="32" fill="#4f46e5" fill-opacity="0.2"/>
+      <circle cx="32" cy="24" r="12" fill="#4f46e5" fill-opacity="0.6"/>
+      <ellipse cx="32" cy="52" rx="18" ry="14" fill="#4f46e5" fill-opacity="0.6"/>
+    </svg>`;
+
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(svg);
+  };
+
   // Try specific paths first (common Hytale asset locations)
   const specificPaths = [
     // UI portraits/avatars
@@ -454,7 +513,12 @@ router.get('/player-avatar', publicAssetLimiter, (req: Request, res: Response) =
     }
   }
 
-  // Not found
+  // Not found - in demo mode return placeholder
+  if (isDemoMode()) {
+    sendPlaceholderAvatar();
+    return;
+  }
+
   res.status(404).json({ detail: 'Player avatar texture not found in assets' });
 });
 
