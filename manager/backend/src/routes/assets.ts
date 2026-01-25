@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import * as assetService from '../services/assets.js';
+import { isDemoMode, getDemoAssetStatus, getDemoAssetDirectory, getDemoAssetTree, getDemoAssetSearchResults, getDemoItems } from '../services/demoData.js';
 
 const router = Router();
 
@@ -46,12 +47,24 @@ function setCachedIconPath(itemId: string, path: string | null): void {
 
 // GET /api/assets/status - Get extraction status
 router.get('/status', authMiddleware, requirePermission('assets.view'), (_req: Request, res: Response) => {
+  // Demo mode: return demo asset status
+  if (isDemoMode()) {
+    res.json(getDemoAssetStatus());
+    return;
+  }
+
   const status = assetService.getAssetStatus();
   res.json(status);
 });
 
 // POST /api/assets/extract - Extract assets from archive
 router.post('/extract', authMiddleware, requirePermission('assets.manage'), (_req: Request, res: Response) => {
+  // Demo mode: simulate extraction
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Asset extraction simulated' });
+    return;
+  }
+
   const result = assetService.extractAssets();
 
   // Clear icon path cache when re-extracting
@@ -70,6 +83,12 @@ router.post('/extract', authMiddleware, requirePermission('assets.manage'), (_re
 
 // DELETE /api/assets/cache - Clear extracted assets
 router.delete('/cache', authMiddleware, requirePermission('assets.manage'), (_req: Request, res: Response) => {
+  // Demo mode: simulate cache clear
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Asset cache cleared (simulated)' });
+    return;
+  }
+
   const result = assetService.clearAssets();
 
   // Clear icon path cache as well
@@ -88,6 +107,13 @@ router.delete('/cache', authMiddleware, requirePermission('assets.manage'), (_re
 
 // GET /api/assets/browse - List directory contents
 router.get('/browse', authMiddleware, requirePermission('assets.view'), (req: Request, res: Response) => {
+  // Demo mode: return demo directory
+  if (isDemoMode()) {
+    const relativePath = (req.query.path as string) || '';
+    res.json({ path: relativePath, items: getDemoAssetDirectory() });
+    return;
+  }
+
   const relativePath = (req.query.path as string) || '';
 
   const items = assetService.listAssetDirectory(relativePath);
@@ -105,6 +131,12 @@ router.get('/browse', authMiddleware, requirePermission('assets.view'), (req: Re
 
 // GET /api/assets/tree - Get directory tree
 router.get('/tree', authMiddleware, requirePermission('assets.view'), (req: Request, res: Response) => {
+  // Demo mode: return demo tree
+  if (isDemoMode()) {
+    res.json(getDemoAssetTree());
+    return;
+  }
+
   const relativePath = (req.query.path as string) || '';
   const maxDepth = Math.min(parseInt(req.query.depth as string) || 3, 5);
 
@@ -124,6 +156,18 @@ router.get('/file', authMiddleware, requirePermission('assets.view'), (req: Requ
 
   if (!relativePath) {
     res.status(400).json({ detail: 'Path parameter required' });
+    return;
+  }
+
+  // Demo mode: return demo file content
+  if (isDemoMode()) {
+    res.json({
+      path: relativePath,
+      content: '// [DEMO] File content not available in demo mode',
+      mimeType: 'text/plain',
+      size: 50,
+      isBinary: false,
+    });
     return;
   }
 
@@ -150,6 +194,13 @@ router.get('/search', authMiddleware, requirePermission('assets.view'), (req: Re
 
   if (!query || query.length < 2) {
     res.status(400).json({ detail: 'Search query must be at least 2 characters' });
+    return;
+  }
+
+  // Demo mode: return demo search results
+  if (isDemoMode()) {
+    const results = getDemoAssetSearchResults(query);
+    res.json({ query, count: results.length, results, mode: 'demo' });
     return;
   }
 
@@ -456,6 +507,19 @@ router.get('/item-icon-search/:itemId', authMiddleware, requirePermission('asset
 // GET /api/assets/items - Get list of all available items
 // Returns items with their IDs, display names, and icon paths
 router.get('/items', authMiddleware, requirePermission('assets.view'), (req: Request, res: Response) => {
+  // Demo mode: return demo items
+  if (isDemoMode()) {
+    const items = getDemoItems();
+    const query = (req.query.q as string) || '';
+    if (query) {
+      const filtered = items.filter(i => i.name.toLowerCase().includes(query.toLowerCase()));
+      res.json({ items: filtered, count: filtered.length, query });
+    } else {
+      res.json({ items, count: items.length, total: items.length });
+    }
+    return;
+  }
+
   const query = (req.query.q as string) || '';
   const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
 
@@ -481,6 +545,12 @@ router.get('/items', authMiddleware, requirePermission('assets.view'), (req: Req
 // GET /api/assets/debug/structure - Get top-level structure of extracted assets
 // Useful for debugging and finding where icons are located
 router.get('/debug/structure', authMiddleware, requirePermission('assets.view'), (_req: Request, res: Response) => {
+  // Demo mode: return demo tree structure
+  if (isDemoMode()) {
+    res.json({ structure: getDemoAssetTree(), hint: '[DEMO] Use /api/assets/browse?path=<path> to explore further' });
+    return;
+  }
+
   const tree = assetService.getAssetTree('', 2);
 
   if (tree === null) {

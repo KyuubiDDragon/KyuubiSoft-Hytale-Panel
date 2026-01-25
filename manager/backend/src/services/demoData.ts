@@ -1062,3 +1062,86 @@ export function getDemoStackMartResults() {
     pageSize: 20,
   };
 }
+
+// ============================================================
+// Assets
+// ============================================================
+
+export function getDemoAssetStatus() {
+  return {
+    extracted: true,
+    extracting: false,
+    archivePath: '/opt/hytale/assets.zip',
+    extractPath: '/opt/hytale/assets',
+    lastExtracted: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    fileCount: 15420,
+    totalSize: 1024 * 1024 * 512, // 512 MB
+    demo: true,
+  };
+}
+
+export function getDemoAssetDirectory() {
+  return [
+    { name: 'Common', type: 'directory', size: 0, modified: new Date().toISOString() },
+    { name: 'Textures', type: 'directory', size: 0, modified: new Date().toISOString() },
+    { name: 'Models', type: 'directory', size: 0, modified: new Date().toISOString() },
+    { name: 'Sounds', type: 'directory', size: 0, modified: new Date().toISOString() },
+    { name: 'config.json', type: 'file', size: 2048, modified: new Date().toISOString() },
+    { name: 'manifest.json', type: 'file', size: 1024, modified: new Date().toISOString() },
+  ];
+}
+
+export function getDemoAssetTree() {
+  return {
+    name: 'assets',
+    type: 'directory',
+    children: [
+      {
+        name: 'Common',
+        type: 'directory',
+        children: [
+          { name: 'Icons', type: 'directory', children: [] },
+          { name: 'UI', type: 'directory', children: [] },
+        ],
+      },
+      {
+        name: 'Textures',
+        type: 'directory',
+        children: [
+          { name: 'Blocks', type: 'directory', children: [] },
+          { name: 'Items', type: 'directory', children: [] },
+          { name: 'Entities', type: 'directory', children: [] },
+        ],
+      },
+      {
+        name: 'Models',
+        type: 'directory',
+        children: [
+          { name: 'Characters', type: 'directory', children: [] },
+          { name: 'Creatures', type: 'directory', children: [] },
+        ],
+      },
+    ],
+  };
+}
+
+export function getDemoAssetSearchResults(query: string) {
+  return [
+    { path: `Common/Icons/${query}_icon.png`, name: `${query}_icon.png`, type: 'file', size: 4096 },
+    { path: `Textures/Items/${query}.png`, name: `${query}.png`, type: 'file', size: 8192 },
+    { path: `Models/${query}_model.json`, name: `${query}_model.json`, type: 'file', size: 2048 },
+  ];
+}
+
+export function getDemoItems() {
+  return [
+    { id: 'cobalt_sword', name: 'Cobalt Sword', category: 'weapon', rarity: 'rare' },
+    { id: 'iron_pickaxe', name: 'Iron Pickaxe', category: 'tool', rarity: 'common' },
+    { id: 'health_potion', name: 'Health Potion', category: 'consumable', rarity: 'common' },
+    { id: 'dragon_scale_armor', name: 'Dragon Scale Armor', category: 'armor', rarity: 'legendary' },
+    { id: 'magic_staff', name: 'Magic Staff', category: 'weapon', rarity: 'epic' },
+    { id: 'wood_planks', name: 'Wood Planks', category: 'block', rarity: 'common' },
+    { id: 'cobalt_ore', name: 'Cobalt Ore', category: 'block', rarity: 'uncommon' },
+    { id: 'torch', name: 'Torch', category: 'utility', rarity: 'common' },
+  ];
+}

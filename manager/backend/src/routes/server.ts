@@ -290,6 +290,13 @@ router.get('/patchline', authMiddleware, requirePermission('server.view_status')
 
 // PUT /api/server/patchline - Set patchline setting
 router.put('/patchline', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  // Demo mode: simulate patchline change
+  if (isDemoMode()) {
+    const { patchline } = req.body;
+    res.json({ success: true, patchline, changed: true, message: '[DEMO] Patchline changed (simulated)' });
+    return;
+  }
+
   try {
     const { patchline } = req.body;
 
@@ -341,6 +348,12 @@ router.put('/patchline', authMiddleware, requirePermission('config.edit'), async
 
 // GET /api/server/accept-early-plugins - Get current acceptEarlyPlugins setting
 router.get('/accept-early-plugins', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo setting
+  if (isDemoMode()) {
+    res.json({ acceptEarlyPlugins: true });
+    return;
+  }
+
   try {
     const panelConfig = await readPanelConfig();
     res.json({
@@ -356,6 +369,13 @@ router.get('/accept-early-plugins', authMiddleware, requirePermission('server.vi
 
 // PUT /api/server/accept-early-plugins - Set acceptEarlyPlugins setting
 router.put('/accept-early-plugins', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  // Demo mode: simulate setting change
+  if (isDemoMode()) {
+    const { acceptEarlyPlugins } = req.body;
+    res.json({ success: true, acceptEarlyPlugins, changed: true, message: '[DEMO] Setting changed (simulated)' });
+    return;
+  }
+
   try {
     const { acceptEarlyPlugins } = req.body;
 
@@ -390,6 +410,12 @@ router.put('/accept-early-plugins', authMiddleware, requirePermission('config.ed
 
 // GET /api/server/disable-sentry - Get current disableSentry setting
 router.get('/disable-sentry', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo setting
+  if (isDemoMode()) {
+    res.json({ disableSentry: false });
+    return;
+  }
+
   try {
     const panelConfig = await readPanelConfig();
     res.json({
@@ -405,6 +431,13 @@ router.get('/disable-sentry', authMiddleware, requirePermission('server.view_sta
 
 // PUT /api/server/disable-sentry - Set disableSentry setting
 router.put('/disable-sentry', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  // Demo mode: simulate setting change
+  if (isDemoMode()) {
+    const { disableSentry } = req.body;
+    res.json({ success: true, disableSentry, changed: true, message: '[DEMO] Setting changed (simulated)' });
+    return;
+  }
+
   try {
     const { disableSentry } = req.body;
 
@@ -439,6 +472,12 @@ router.put('/disable-sentry', authMiddleware, requirePermission('config.edit'), 
 
 // GET /api/server/allow-op - Get current allowOp setting
 router.get('/allow-op', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo setting
+  if (isDemoMode()) {
+    res.json({ allowOp: true });
+    return;
+  }
+
   try {
     const panelConfig = await readPanelConfig();
     res.json({
@@ -454,6 +493,13 @@ router.get('/allow-op', authMiddleware, requirePermission('server.view_status'),
 
 // PUT /api/server/allow-op - Set allowOp setting
 router.put('/allow-op', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  // Demo mode: simulate setting change
+  if (isDemoMode()) {
+    const { allowOp } = req.body;
+    res.json({ success: true, allowOp, changed: true, message: '[DEMO] Setting changed (simulated)' });
+    return;
+  }
+
   try {
     const { allowOp } = req.body;
 
@@ -712,6 +758,12 @@ router.get('/config/files', authMiddleware, requirePermission('config.view'), as
 router.get('/config/:filename', authMiddleware, requirePermission('config.view'), async (req: Request, res: Response) => {
   const { filename } = req.params;
 
+  // Demo mode: return demo config content
+  if (isDemoMode()) {
+    res.json({ filename, content: getDemoServerConfig() });
+    return;
+  }
+
   // Security: prevent path traversal
   if (filename.includes('..') || filename.includes('/')) {
     res.status(400).json({ error: 'Invalid filename' });
@@ -740,6 +792,12 @@ router.get('/config/:filename', authMiddleware, requirePermission('config.view')
 router.put('/config/:filename', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
   const { filename } = req.params;
   const { content } = req.body;
+
+  // Demo mode: simulate config save
+  if (isDemoMode()) {
+    res.json({ success: true, filename, message: '[DEMO] Config saved (simulated)' });
+    return;
+  }
 
   // Security: prevent path traversal
   if (filename.includes('..') || filename.includes('/')) {
@@ -809,6 +867,12 @@ router.get('/plugin/update-check', authMiddleware, requirePermission('server.vie
 
 // POST /api/server/plugin/install - Install or update the KyuubiSoft API plugin
 router.post('/plugin/install', authMiddleware, requirePermission('mods.install'), async (_req: Request, res: Response) => {
+  // Demo mode: simulate plugin install
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Plugin installed (simulated)', version: '1.0.0' });
+    return;
+  }
+
   try {
     const result = await kyuubiApiService.installPlugin();
     if (!result.success) {
@@ -830,6 +894,12 @@ router.post('/plugin/install', authMiddleware, requirePermission('mods.install')
 
 // DELETE /api/server/plugin/uninstall - Uninstall the KyuubiSoft API plugin
 router.delete('/plugin/uninstall', authMiddleware, requirePermission('mods.install'), async (_req: Request, res: Response) => {
+  // Demo mode: simulate plugin uninstall
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Plugin uninstalled (simulated)' });
+    return;
+  }
+
   try {
     const result = await kyuubiApiService.uninstallPlugin();
     if (!result.success) {
@@ -1412,6 +1482,12 @@ function getDefaultUpdateConfig(): UpdateConfig {
 
 // GET /api/server/update-config - Get native update configuration
 router.get('/update-config', authMiddleware, requirePermission('updates.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo update config
+  if (isDemoMode()) {
+    res.json(getDemoUpdateConfig());
+    return;
+  }
+
   try {
     const configPath = path.join(config.serverPath, 'config.json');
 
@@ -1434,6 +1510,12 @@ router.get('/update-config', authMiddleware, requirePermission('updates.view'), 
 
 // PUT /api/server/update-config - Update native update configuration
 router.put('/update-config', authMiddleware, requirePermission('updates.config'), async (req: Request, res: Response) => {
+  // Demo mode: simulate config update
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Update config saved (simulated)' });
+    return;
+  }
+
   try {
     const {
       enabled,
@@ -1581,6 +1663,12 @@ function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
 
 // GET /api/server/update-status - Get native update status
 router.get('/update-status', authMiddleware, requirePermission('updates.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return demo update status
+  if (isDemoMode()) {
+    res.json({ success: true, data: getDemoUpdateStatus() });
+    return;
+  }
+
   try {
     const result = await dockerService.execCommand('/update status');
 
@@ -1639,6 +1727,12 @@ router.post('/update-check', authMiddleware, requirePermission('updates.check'),
 
 // POST /api/server/update-download - Download available update
 router.post('/update-download', authMiddleware, requirePermission('updates.download'), async (_req: Request, res: Response) => {
+  // Demo mode: simulate update download
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Update download started (simulated)', data: { state: 'DOWNLOADING', progress: 0 } });
+    return;
+  }
+
   try {
     const result = await dockerService.execCommand('/update download');
 
@@ -1665,6 +1759,12 @@ router.post('/update-download', authMiddleware, requirePermission('updates.downl
 
 // POST /api/server/update-apply - Apply downloaded update (restarts server)
 router.post('/update-apply', authMiddleware, requirePermission('updates.apply'), async (_req: Request, res: Response) => {
+  // Demo mode: simulate update apply
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Update applied (simulated)', warning: 'Server would restart in real mode' });
+    return;
+  }
+
   try {
     // Check if update is ready
     const statusResult = await dockerService.execCommand('/update status');
@@ -1697,6 +1797,12 @@ router.post('/update-apply', authMiddleware, requirePermission('updates.apply'),
 
 // POST /api/server/update-cancel - Cancel ongoing download
 router.post('/update-cancel', authMiddleware, requirePermission('updates.download'), async (_req: Request, res: Response) => {
+  // Demo mode: simulate update cancel
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Update cancelled (simulated)' });
+    return;
+  }
+
   try {
     const result = await dockerService.execCommand('/update cancel');
 
