@@ -36,6 +36,8 @@ All notable changes to the Hytale Server Manager will be documented in this file
 ### Changed
 
 - **KyuubiAPI Plugin Version**: 1.2.1 → 1.2.2
+  - Updated pre-built JAR: `manager/backend/assets/plugins/KyuubiSoftAPI-1.2.2.jar`
+  - Updated `PLUGIN_VERSION` constant in `kyuubiApi.ts`
 
 ## [2.1.1] - 2026-01-24 - Performance Metrics & Bug Fixes
 
