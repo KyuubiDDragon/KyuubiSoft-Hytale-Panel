@@ -1145,3 +1145,83 @@ export function getDemoItems() {
     { id: 'torch', name: 'Torch', category: 'utility', rarity: 'common' },
   ];
 }
+
+// ============================================================
+// Demo Chat Log Data (for chatLog service)
+// ============================================================
+
+interface StoredChatMessage {
+  id: string;
+  timestamp: string;
+  player: string;
+  uuid?: string;
+  message: string;
+}
+
+const DEMO_STORED_CHAT_MESSAGES: StoredChatMessage[] = [
+  {
+    id: 'chat-001',
+    timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    player: 'KyuubiDDragon',
+    uuid: '550e8400-e29b-41d4-a716-446655440001',
+    message: 'Hey everyone! Welcome to the demo server!',
+  },
+  {
+    id: 'chat-002',
+    timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+    player: 'DragonSlayer99',
+    uuid: '550e8400-e29b-41d4-a716-446655440002',
+    message: 'Thanks! This panel looks amazing!',
+  },
+  {
+    id: 'chat-003',
+    timestamp: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+    player: 'CrystalMiner',
+    uuid: '550e8400-e29b-41d4-a716-446655440003',
+    message: 'Found some cobalt ore in the caves!',
+  },
+  {
+    id: 'chat-004',
+    timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    player: 'KyuubiDDragon',
+    uuid: '550e8400-e29b-41d4-a716-446655440001',
+    message: 'Nice! Share the coordinates?',
+  },
+  {
+    id: 'chat-005',
+    timestamp: new Date(Date.now() - 1 * 60 * 1000).toISOString(),
+    player: 'CrystalMiner',
+    uuid: '550e8400-e29b-41d4-a716-446655440003',
+    message: 'Sure, X: 245, Y: 32, Z: -180',
+  },
+];
+
+export function getDemoGlobalChatLog(options?: { days?: number; limit?: number; offset?: number }) {
+  const limit = options?.limit ?? 100;
+  const offset = options?.offset ?? 0;
+
+  const result = DEMO_STORED_CHAT_MESSAGES.slice(offset, offset + limit);
+
+  return {
+    messages: result,
+    total: DEMO_STORED_CHAT_MESSAGES.length,
+    availableDays: 7,
+  };
+}
+
+export function getDemoPlayerChatLog(playerName: string, options?: { days?: number; limit?: number; offset?: number }) {
+  const limit = options?.limit ?? 100;
+  const offset = options?.offset ?? 0;
+
+  const playerMessages = DEMO_STORED_CHAT_MESSAGES.filter(
+    m => m.player.toLowerCase() === playerName.toLowerCase()
+  );
+
+  const result = playerMessages.slice(offset, offset + limit);
+
+  return {
+    messages: result,
+    total: playerMessages.length,
+    availableDays: 7,
+  };
+}

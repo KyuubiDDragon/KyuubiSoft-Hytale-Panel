@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { isDemoMode, getDemoActivityLog } from './demoData.js';
 
 // Activity log entry
 export interface ActivityLogEntry {
@@ -74,6 +75,11 @@ export async function logActivity(
     success,
   };
 
+  // Demo mode: return entry without persisting
+  if (isDemoMode()) {
+    return entry;
+  }
+
   activityLog.push(entry);
 
   // Keep only recent entries in memory
@@ -94,6 +100,43 @@ export function getActivityLog(options?: {
   category?: ActivityLogEntry['category'];
   user?: string;
 }): { entries: ActivityLogEntry[]; total: number } {
+  // Demo mode: return demo activity entries
+  if (isDemoMode()) {
+    const demoEntries = getDemoActivityLog();
+    // Map demo entries to ActivityLogEntry format
+    let entries: ActivityLogEntry[] = demoEntries.map(e => ({
+      id: e.id,
+      timestamp: e.timestamp,
+      user: e.user,
+      action: e.action,
+      target: undefined,
+      details: e.details,
+      category: e.category as ActivityLogEntry['category'],
+      success: true,
+    }));
+
+    // Filter by category
+    if (options?.category) {
+      entries = entries.filter(e => e.category === options.category);
+    }
+    // Filter by user
+    if (options?.user) {
+      entries = entries.filter(e => e.user === options.user);
+    }
+
+    const total = entries.length;
+
+    // Apply pagination
+    if (options?.offset) {
+      entries = entries.slice(options.offset);
+    }
+    if (options?.limit) {
+      entries = entries.slice(0, options.limit);
+    }
+
+    return { entries, total };
+  }
+
   let entries = [...activityLog].reverse(); // Most recent first
 
   // Filter by category
@@ -121,6 +164,11 @@ export function getActivityLog(options?: {
 
 // Clear activity log
 export async function clearActivityLog(): Promise<void> {
+  // Demo mode: return without persisting
+  if (isDemoMode()) {
+    return;
+  }
+
   activityLog.length = 0;
   await saveLogs();
 }

@@ -7,6 +7,7 @@
 
 import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import path from 'path';
+import { isDemoMode, getDemoGlobalChatLog, getDemoPlayerChatLog } from './demoData.js';
 
 // Chat message entry
 export interface ChatMessage {
@@ -173,9 +174,6 @@ async function savePlayerDeathPositions(playerName: string): Promise<void> {
  * Add a chat message (stores globally and per-player)
  */
 export async function addChatMessage(player: string, message: string, uuid?: string): Promise<ChatMessage> {
-  const today = getDateKey();
-  await loadTodaysChatLog();
-
   const entry: ChatMessage = {
     id: generateId(),
     timestamp: new Date().toISOString(),
@@ -183,6 +181,14 @@ export async function addChatMessage(player: string, message: string, uuid?: str
     uuid,
     message,
   };
+
+  // Demo mode: return simulated entry without saving
+  if (isDemoMode()) {
+    return entry;
+  }
+
+  const today = getDateKey();
+  await loadTodaysChatLog();
 
   // Add to today's global log
   todaysChatLog.push(entry);
@@ -208,6 +214,11 @@ export async function getGlobalChatLog(options?: {
   limit?: number;
   offset?: number;
 }): Promise<{ messages: ChatMessage[]; total: number; availableDays: number }> {
+  // Demo mode: return mock chat data
+  if (isDemoMode()) {
+    return getDemoGlobalChatLog(options);
+  }
+
   await loadTodaysChatLog();
 
   const days = options?.days ?? 7;
@@ -270,6 +281,11 @@ export async function getPlayerChatLog(
     offset?: number;
   }
 ): Promise<{ messages: ChatMessage[]; total: number; availableDays: number }> {
+  // Demo mode: return mock chat data for player
+  if (isDemoMode()) {
+    return getDemoPlayerChatLog(playerName, options);
+  }
+
   const normalized = normalizePlayerName(playerName);
   const playerDir = path.join(PLAYER_CHAT_DIR, normalized);
   const days = options?.days ?? 7;
@@ -333,6 +349,11 @@ export async function recordDeathPosition(
     y: Math.round(y * 100) / 100,
     z: Math.round(z * 100) / 100,
   };
+
+  // Demo mode: return simulated entry without saving
+  if (isDemoMode()) {
+    return entry;
+  }
 
   const positions = await loadPlayerDeathPositions(player);
   positions.push(entry);
