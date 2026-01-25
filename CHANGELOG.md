@@ -2,6 +2,31 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [2.1.2] - 2026-01-25 - HTTP Support & Console Spam Fixes
+
+### Added
+
+- **Prefabs Volume Mount**: Added prefabs folder to Docker volume configuration
+  - Game server: read-write access at `/opt/hytale/prefabs`
+  - Manager: read-only access for asset browsing
+  - Location: `docker-compose.yml`
+
+### Fixed
+
+- **HTTP Connection Support**: Panel now clearly supports both HTTP and HTTPS deployments
+  - Updated CORS_ORIGINS error messages to show HTTP examples (e.g., `http://your-ip:18080`)
+  - Users no longer confused that HTTPS is required
+  - Location: `manager/backend/src/config.ts`
+
+- **API Plugin Console Spam**: Removed excessive logging that spammed console
+  - Removed `console.log` in `getPluginHost()` that logged on every API request
+  - Location: `manager/backend/src/services/kyuubiApi.ts`
+
+- **HytaleAuth Debug Logging**: Reduced verbose debug output
+  - Removed 6 excessive `console.log` statements for auth operations
+  - Error logging preserved for actual failures
+  - Location: `manager/backend/src/services/hytaleAuth.ts`
+
 ## [2.1.1] - 2026-01-24 - Performance Metrics & Bug Fixes
 
 ### Added
