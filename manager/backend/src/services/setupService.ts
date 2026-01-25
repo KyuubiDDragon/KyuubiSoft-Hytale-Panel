@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { config, reloadConfigFromFile } from '../config.js';
+import { isDemoMode } from './demoData.js';
 import * as dockerService from './docker.js';
 import { runSystemChecks as runSystemChecksFromService, type SystemCheck, type SystemCheckResult } from './systemCheck.js';
 import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
@@ -194,8 +195,14 @@ async function writeSetupConfig(setupConfig: SetupConfig): Promise<void> {
 /**
  * Check if setup is complete
  * Returns true if config exists and has setupComplete=true
+ * In demo mode, always returns true (setup is skipped)
  */
 export async function isSetupComplete(): Promise<boolean> {
+  // Demo mode: setup is always complete
+  if (isDemoMode()) {
+    return true;
+  }
+
   try {
     const setupConfig = await readSetupConfig();
     return setupConfig.setupComplete === true;
@@ -209,6 +216,16 @@ export async function isSetupComplete(): Promise<boolean> {
  * Returns complete status info including current step and completed steps
  */
 export async function getSetupStatus(): Promise<SetupStatus> {
+  // Demo mode: return completed status
+  if (isDemoMode()) {
+    return {
+      setupComplete: true,
+      currentStep: SETUP_STEPS.length,
+      totalSteps: SETUP_STEPS.length,
+      stepsCompleted: [...SETUP_STEPS],
+    };
+  }
+
   try {
     const setupConfig = await readSetupConfig();
     const stepsCompleted: string[] = [];
