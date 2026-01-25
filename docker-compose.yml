@@ -146,6 +146,9 @@ services:
       # Trust proxy for X-Forwarded-* headers (set to true if behind reverse proxy)
       - TRUST_PROXY=${TRUST_PROXY:-false}
 
+      # Demo mode (disables real server, uses mock data)
+      - DEMO_MODE=${DEMO_MODE:-false}
+
       # Target container
       - GAME_CONTAINER_NAME=${STACK_NAME:-hytale}
 
