@@ -1,7 +1,12 @@
 {
   "demo": {
     "banner": "MODO DEMO",
-    "description": "Todos os dados sao simulados. Nenhum servidor real conectado."
+    "description": "Todos os dados sao simulados. Nenhum servidor real conectado.",
+    "modeActive": "Modo Demo Ativo",
+    "selectAccount": "Selecione uma conta para testar:",
+    "viewerLogin": "Entrar como Visualizador",
+    "adminLogin": "Entrar como Administrador",
+    "noRealData": "Todos os dados sao simulados. Nenhuma alteracao real possivel."
   },
   "common": {
     "loading": "Carregando...",

@@ -1,7 +1,12 @@
 {
   "demo": {
     "banner": "DEMO MODE",
-    "description": "All data is simulated. No real server connected."
+    "description": "All data is simulated. No real server connected.",
+    "modeActive": "Demo Mode Active",
+    "selectAccount": "Select an account to test:",
+    "viewerLogin": "Login as Viewer",
+    "adminLogin": "Login as Administrator",
+    "noRealData": "All data is simulated. No real changes possible."
   },
   "common": {
     "loading": "Loading...",

@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useDemoStore } from '@/stores/demo'
 import { setLocale, getLocale } from '@/i18n'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
@@ -10,22 +11,27 @@ import Input from '@/components/ui/Input.vue'
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
+const demoStore = useDemoStore()
 
 const username = ref('')
 const password = ref('')
 const error = ref('')
 const infoMessage = ref('')
 const loading = ref(false)
+const demoLoading = ref<'demo' | 'admin' | null>(null)
 const showPassword = ref(false)
 const currentLocale = ref(getLocale())
 
 // Check for logout message from session invalidation
-onMounted(() => {
+onMounted(async () => {
   const logoutMessage = sessionStorage.getItem('logoutMessage')
   if (logoutMessage) {
     infoMessage.value = logoutMessage
     sessionStorage.removeItem('logoutMessage')
   }
+
+  // Check if demo mode is enabled
+  await demoStore.checkDemoMode()
 })
 
 function toggleLocale() {
@@ -48,6 +54,24 @@ async function handleLogin() {
     error.value = t('auth.invalidCredentials')
   } finally {
     loading.value = false
+  }
+}
+
+async function handleDemoLogin(type: 'demo' | 'admin') {
+  error.value = ''
+  demoLoading.value = type
+
+  try {
+    const credentials = type === 'admin'
+      ? { username: 'admin', password: 'admin' }
+      : { username: 'demo', password: 'demo' }
+
+    await authStore.login(credentials)
+    router.push('/')
+  } catch (err) {
+    error.value = t('auth.invalidCredentials')
+  } finally {
+    demoLoading.value = null
   }
 }
 </script>
@@ -82,8 +106,51 @@ async function handleLogin() {
           <p class="text-status-error text-sm">{{ error }}</p>
         </div>
 
-        <!-- Login Form -->
-        <form @submit.prevent="handleLogin" class="space-y-5">
+        <!-- Demo Mode Buttons -->
+        <div v-if="demoStore.isDemoMode" class="space-y-4">
+          <div class="text-center mb-6">
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-hytale-orange/10 border border-hytale-orange/30 rounded-full">
+              <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-sm text-hytale-orange font-medium">{{ t('demo.modeActive') }}</span>
+            </div>
+            <p class="text-gray-400 text-sm mt-3">{{ t('demo.selectAccount') }}</p>
+          </div>
+
+          <Button
+            @click="handleDemoLogin('demo')"
+            :loading="demoLoading === 'demo'"
+            :disabled="demoLoading !== null"
+            variant="secondary"
+            class="w-full"
+          >
+            <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            {{ t('demo.viewerLogin') }}
+          </Button>
+
+          <Button
+            @click="handleDemoLogin('admin')"
+            :loading="demoLoading === 'admin'"
+            :disabled="demoLoading !== null"
+            class="w-full"
+          >
+            <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            {{ t('demo.adminLogin') }}
+          </Button>
+
+          <p class="text-center text-gray-500 text-xs mt-4">
+            {{ t('demo.noRealData') }}
+          </p>
+        </div>
+
+        <!-- Regular Login Form -->
+        <form v-else @submit.prevent="handleLogin" class="space-y-5">
           <div>
             <label class="label">{{ t('auth.username') }}</label>
             <Input
