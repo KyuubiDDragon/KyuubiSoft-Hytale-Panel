@@ -374,6 +374,13 @@ function toggleQuickSlot(index: number) {
     expandedQuickSlot.value = index
   }
 }
+
+// Handle search input blur with delay to allow dropdown click
+function handleSearchBlur() {
+  window.setTimeout(() => {
+    showPlayerDropdown.value = false
+  }, 200)
+}
 </script>
 
 <template>
@@ -398,7 +405,7 @@ function toggleQuickSlot(index: number) {
               :placeholder="t('avatarInventory.searchPlayer')"
               class="w-full pl-10 pr-4 py-2.5 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50"
               @focus="showPlayerDropdown = true"
-              @blur="setTimeout(() => showPlayerDropdown = false, 200)"
+              @blur="handleSearchBlur"
             />
           </div>
 
@@ -554,24 +561,64 @@ function toggleQuickSlot(index: number) {
 
             <!-- Quick Slots Row -->
             <div class="flex justify-center gap-2 mt-4">
-              <!-- Accessory Quick Slot -->
+              <!-- Utility Quick Slot -->
               <div class="relative group">
                 <div
                   class="inventory-slot w-11 h-11 border-2 border-purple-500/30 bg-slate-800/50 rounded-lg flex items-center justify-center cursor-pointer hover:border-purple-500/60 transition-all"
+                  :class="{ 'border-purple-500/60': expandedQuickSlot === 0 }"
                   @mouseenter="expandedQuickSlot = 0"
                 >
-                  <svg class="w-5 h-5 text-purple-400/60" fill="currentColor" viewBox="0 0 24 24">
+                  <template v-if="utilityGrid[0]">
+                    <img
+                      v-if="!iconFailed(utilityGrid[0].itemId)"
+                      :src="getItemIconUrl(utilityGrid[0].itemId)"
+                      :alt="utilityGrid[0].displayName"
+                      class="w-8 h-8 object-contain"
+                      @error="onIconError(utilityGrid[0].itemId)"
+                    />
+                    <div v-else :class="['w-8 h-8 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(utilityGrid[0].itemId)]">
+                      {{ getFallbackLetter(utilityGrid[0].itemId) }}
+                    </div>
+                  </template>
+                  <svg v-else class="w-5 h-5 text-purple-400/60" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                   </svg>
+                  <span class="absolute -right-1 -bottom-1 text-purple-400/80 text-xs">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
+                  </span>
                 </div>
-                <!-- Expanded Slots -->
+                <!-- Expanded Utility Slots -->
                 <div
                   v-if="expandedQuickSlot === 0"
                   class="absolute left-full top-0 ml-2 flex gap-1 p-2 bg-slate-800/95 border border-slate-600/50 rounded-lg shadow-xl z-10"
                   @mouseleave="expandedQuickSlot = null"
                 >
-                  <div v-for="i in 4" :key="i" class="w-9 h-9 border border-purple-500/30 bg-slate-700/50 rounded flex items-center justify-center">
-                    <span class="text-xs text-purple-400/40">{{ i }}</span>
+                  <div
+                    v-for="(item, index) in utilityGrid"
+                    :key="`utility-exp-${index}`"
+                    class="w-9 h-9 border rounded flex items-center justify-center relative cursor-pointer transition-all"
+                    :class="[
+                      item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50 hover:bg-slate-600/50' : 'border-purple-500/30 bg-slate-700/50'
+                    ]"
+                    @mouseenter="item && showTooltip(item, $event)"
+                    @mouseleave="hideTooltip"
+                  >
+                    <template v-if="item">
+                      <img
+                        v-if="!iconFailed(item.itemId)"
+                        :src="getItemIconUrl(item.itemId)"
+                        :alt="item.displayName"
+                        class="w-7 h-7 object-contain"
+                        @error="onIconError(item.itemId)"
+                      />
+                      <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
+                        {{ getFallbackLetter(item.itemId) }}
+                      </div>
+                      <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[8px] font-bold text-white drop-shadow-lg">
+                        {{ item.amount }}
+                      </span>
+                    </template>
+                    <span v-else class="text-xs text-purple-400/40">{{ index + 1 }}</span>
                   </div>
                 </div>
               </div>
@@ -580,6 +627,7 @@ function toggleQuickSlot(index: number) {
               <div class="relative group">
                 <div
                   class="inventory-slot w-11 h-11 border-2 border-amber-500/30 bg-slate-800/50 rounded-lg flex items-center justify-center cursor-pointer hover:border-amber-500/60 transition-all"
+                  :class="{ 'border-amber-500/60': expandedQuickSlot === 1 }"
                   @mouseenter="expandedQuickSlot = 1"
                 >
                   <svg class="w-5 h-5 text-amber-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -605,9 +653,13 @@ function toggleQuickSlot(index: number) {
               <div class="relative group">
                 <div
                   class="inventory-slot w-11 h-11 border-2 border-green-500/30 bg-slate-800/50 rounded-lg flex items-center justify-center cursor-pointer hover:border-green-500/60 transition-all"
+                  :class="{ 'border-green-500/60': expandedQuickSlot === 2 }"
                   @mouseenter="expandedQuickSlot = 2"
                 >
                   <span class="text-green-400/60 font-bold text-lg">Y</span>
+                  <span class="absolute -right-1 -bottom-1 text-green-400/80 text-xs">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
+                  </span>
                 </div>
                 <!-- Expanded Emote Slots -->
                 <div
