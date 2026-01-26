@@ -511,11 +511,11 @@ function handleSearchBlur() {
                       {{ armorSlotLabels[index] }}
                     </div>
                     <!-- Durability bar -->
-                    <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-slate-900 rounded-b overflow-hidden">
+                    <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 rounded-b overflow-hidden">
                       <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
                     </div>
                   </template>
-                  <span v-else class="text-blue-400/40 font-bold text-sm">{{ armorSlotLabels[index] }}</span>
+                  <span v-else class="text-blue-400/40 font-bold text-xs">{{ armorSlotLabels[index] }}</span>
                 </div>
               </div>
 
@@ -580,7 +580,7 @@ function handleSearchBlur() {
                       {{ getFallbackLetter(utilityGrid[0].itemId) }}
                     </div>
                   </template>
-                  <svg v-else class="w-5 h-5 text-purple-400/60" fill="currentColor" viewBox="0 0 24 24">
+                  <svg v-else class="w-4 h-4 text-purple-400/60" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                   </svg>
                   <span class="absolute -right-0.5 -bottom-0.5 text-purple-400/80">
@@ -630,7 +630,7 @@ function handleSearchBlur() {
                   :class="{ 'border-amber-500/60': expandedQuickSlot === 1 }"
                   @mouseenter="expandedQuickSlot = 1"
                 >
-                  <svg class="w-5 h-5 text-amber-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-4 h-4 text-amber-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                   </svg>
                   <span class="absolute -right-0.5 -bottom-0.5 text-amber-400/80">
