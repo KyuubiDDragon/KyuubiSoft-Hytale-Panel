@@ -353,7 +353,11 @@ const storageGrid = computed(() => {
 
 const backpackGrid = computed(() => {
   if (!inventory.value) return []
-  const capacity = inventory.value.backpack.length > 0 ? Math.max(7, inventory.value.backpack.length) : 7
+  // Backpack has 8/16/24 slots based on content
+  const itemCount = inventory.value.backpack.length
+  let capacity = 8
+  if (itemCount > 16) capacity = 24
+  else if (itemCount > 8) capacity = 16
   return generateGrid(inventory.value.backpack, capacity)
 })
 
@@ -462,7 +466,7 @@ function handleSearchBlur() {
       <!-- Player Inventory View -->
       <div v-else class="flex gap-3 max-w-7xl mx-auto h-full">
         <!-- Left Panel: Avatar + Equipment + Stats -->
-        <div class="w-[320px] flex-shrink-0 flex flex-col gap-2">
+        <div class="w-[360px] flex-shrink-0 flex flex-col gap-2">
           <!-- Player Name Header -->
           <div class="bg-gradient-to-r from-slate-800/80 to-slate-900/80 rounded-t-lg border border-slate-600/50 px-4 py-2">
             <h2 class="text-lg font-bold text-white uppercase tracking-wide">{{ selectedPlayer }}</h2>
@@ -477,7 +481,7 @@ function handleSearchBlur() {
                 <div
                   v-for="(item, index) in armorGrid"
                   :key="`armor-${index}`"
-                  class="w-11 h-11 border-2 rounded-lg flex items-center justify-center relative cursor-pointer transition-all"
+                  class="w-14 h-14 border-2 rounded-lg flex items-center justify-center relative cursor-pointer transition-all"
                   :class="[
                     item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50' : 'border-blue-500/30 bg-slate-800/50'
                   ]"
@@ -490,10 +494,10 @@ function handleSearchBlur() {
                       v-if="!iconFailed(item.itemId)"
                       :src="getItemIconUrl(item.itemId)"
                       :alt="item.displayName"
-                      class="w-8 h-8 object-contain"
+                      class="w-12 h-12 object-contain"
                       @error="onIconError(item.itemId)"
                     />
-                    <div v-else :class="['w-8 h-8 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
+                    <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                       {{ armorSlotLabels[index] }}
                     </div>
                     <!-- Durability bar -->
@@ -827,7 +831,7 @@ function handleSearchBlur() {
               <div
                 v-for="(item, index) in backpackGrid"
                 :key="`backpack-${index}`"
-                class="w-12 h-12 border rounded flex items-center justify-center relative cursor-pointer transition-all"
+                class="w-14 h-14 border rounded flex items-center justify-center relative cursor-pointer transition-all"
                 :class="[
                   item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50 hover:bg-slate-600/50' : 'border-slate-600/30 bg-slate-800/30'
                 ]"
@@ -839,10 +843,10 @@ function handleSearchBlur() {
                     v-if="!iconFailed(item.itemId)"
                     :src="getItemIconUrl(item.itemId)"
                     :alt="item.displayName"
-                    class="w-10 h-10 object-contain"
+                    class="w-12 h-12 object-contain"
                     @error="onIconError(item.itemId)"
                   />
-                  <div v-else :class="['w-10 h-10 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
+                  <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
                   <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
@@ -867,7 +871,7 @@ function handleSearchBlur() {
               <div
                 v-for="(item, index) in storageGrid"
                 :key="`storage-${index}`"
-                class="w-12 h-12 border rounded flex items-center justify-center relative cursor-pointer transition-all"
+                class="w-14 h-14 border rounded flex items-center justify-center relative cursor-pointer transition-all"
                 :class="[
                   item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50 hover:bg-slate-600/50' : 'border-slate-600/30 bg-slate-800/30'
                 ]"
@@ -879,10 +883,10 @@ function handleSearchBlur() {
                     v-if="!iconFailed(item.itemId)"
                     :src="getItemIconUrl(item.itemId)"
                     :alt="item.displayName"
-                    class="w-10 h-10 object-contain"
+                    class="w-12 h-12 object-contain"
                     @error="onIconError(item.itemId)"
                   />
-                  <div v-else :class="['w-10 h-10 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
+                  <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
                   <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
@@ -911,7 +915,7 @@ function handleSearchBlur() {
               <div
                 v-for="(item, index) in hotbarGrid"
                 :key="`hotbar-${index}`"
-                class="w-12 h-12 border rounded flex items-center justify-center relative cursor-pointer transition-all"
+                class="w-14 h-14 border rounded flex items-center justify-center relative cursor-pointer transition-all"
                 :class="[
                   item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50 hover:bg-slate-600/50' : 'border-slate-600/30 bg-slate-800/30',
                   inventory?.activeHotbarSlot === index ? 'ring-1 ring-hytale-orange ring-offset-1 ring-offset-slate-900' : ''
@@ -924,10 +928,10 @@ function handleSearchBlur() {
                     v-if="!iconFailed(item.itemId)"
                     :src="getItemIconUrl(item.itemId)"
                     :alt="item.displayName"
-                    class="w-10 h-10 object-contain"
+                    class="w-12 h-12 object-contain"
                     @error="onIconError(item.itemId)"
                   />
-                  <div v-else :class="['w-10 h-10 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
+                  <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
                   <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
