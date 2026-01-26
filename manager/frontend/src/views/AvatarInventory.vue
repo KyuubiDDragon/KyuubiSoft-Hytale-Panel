@@ -2,9 +2,10 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { playersApi, type UnifiedPlayerEntry } from '@/api/players'
+import { playersApi, type UnifiedPlayerEntry, type ChatMessage, type DeathPosition } from '@/api/players'
 import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
 import { assetsApi } from '@/api/assets'
+import Button from '@/components/ui/Button.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -47,6 +48,19 @@ const expandedQuickSlot = ref<number | null>(null)
 // Track which icons failed to load
 const failedIcons = ref<Set<string>>(new Set())
 
+// Right panel tab state
+const activeTab = ref<'inventory' | 'info' | 'chat' | 'deaths'>('inventory')
+
+// Chat state
+const chatMessages = ref<ChatMessage[]>([])
+const chatLoading = ref(false)
+const chatTotal = ref(0)
+
+// Death positions state
+const deathPositions = ref<DeathPosition[]>([])
+const deathsLoading = ref(false)
+const teleportingDeath = ref(false)
+
 function updateWindowDimensions() {
   windowWidth.value = window.innerWidth
   windowHeight.value = window.innerHeight
@@ -88,6 +102,12 @@ async function selectPlayer(playerName: string) {
   avatarError.value = false
   failedIcons.value = new Set()
 
+  // Reset tab data
+  activeTab.value = 'inventory'
+  chatMessages.value = []
+  chatTotal.value = 0
+  deathPositions.value = []
+
   // Update URL
   router.replace({ query: { player: playerName } })
 
@@ -115,6 +135,78 @@ async function selectPlayer(playerName: string) {
   } finally {
     loading.value = false
   }
+}
+
+// Load chat messages when tab is selected
+async function loadChat() {
+  if (!selectedPlayer.value || chatMessages.value.length > 0) return
+
+  chatLoading.value = true
+  try {
+    const result = await playersApi.getPlayerChatLog(selectedPlayer.value, { limit: 100 })
+    chatMessages.value = result.messages
+    chatTotal.value = result.total
+  } catch {
+    // Silently fail
+  } finally {
+    chatLoading.value = false
+  }
+}
+
+// Load death positions when tab is selected
+async function loadDeaths() {
+  if (!selectedPlayer.value || deathPositions.value.length > 0) return
+
+  deathsLoading.value = true
+  try {
+    const result = await playersApi.getDeathPositions(selectedPlayer.value)
+    deathPositions.value = result.positions
+  } catch {
+    // Silently fail
+  } finally {
+    deathsLoading.value = false
+  }
+}
+
+// Teleport to death position
+async function teleportToDeath(index: number) {
+  if (!selectedPlayer.value) return
+
+  teleportingDeath.value = true
+  try {
+    await playersApi.teleportToDeath(selectedPlayer.value, index)
+  } catch {
+    // Silently fail
+  } finally {
+    teleportingDeath.value = false
+  }
+}
+
+// Watch for tab changes
+watch(activeTab, (tab) => {
+  if (tab === 'chat') {
+    loadChat()
+  } else if (tab === 'deaths') {
+    loadDeaths()
+  }
+})
+
+// Format chat timestamp
+function formatChatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleString()
+}
+
+// Get unique color for player name in chat
+function getPlayerColor(name: string): string {
+  const colors = [
+    'text-blue-400', 'text-green-400', 'text-yellow-400', 'text-purple-400',
+    'text-pink-400', 'text-cyan-400', 'text-orange-400', 'text-red-400',
+  ]
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return colors[Math.abs(hash) % colors.length]
 }
 
 // Avatar URL using hyvatar.io API
@@ -603,10 +695,80 @@ function toggleQuickSlot(index: number) {
           </div>
         </div>
 
-        <!-- Right Panel: Inventory -->
+        <!-- Right Panel: Tabs -->
         <div class="flex-1 space-y-4">
-          <!-- Backpack Section -->
-          <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-xl border border-slate-600/30 p-4">
+          <!-- Tab Navigation -->
+          <div class="flex gap-1 bg-slate-800/40 p-1 rounded-lg">
+            <button
+              @click="activeTab = 'inventory'"
+              :class="[
+                'flex-1 px-4 py-2 rounded-md font-medium text-sm transition-all',
+                activeTab === 'inventory'
+                  ? 'bg-slate-700 text-white shadow'
+                  : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
+              ]"
+            >
+              <span class="flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                {{ t('avatarInventory.inventory') }}
+              </span>
+            </button>
+            <button
+              @click="activeTab = 'info'"
+              :class="[
+                'flex-1 px-4 py-2 rounded-md font-medium text-sm transition-all',
+                activeTab === 'info'
+                  ? 'bg-slate-700 text-white shadow'
+                  : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
+              ]"
+            >
+              <span class="flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {{ t('avatarInventory.info') }}
+              </span>
+            </button>
+            <button
+              @click="activeTab = 'chat'"
+              :class="[
+                'flex-1 px-4 py-2 rounded-md font-medium text-sm transition-all',
+                activeTab === 'chat'
+                  ? 'bg-slate-700 text-white shadow'
+                  : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
+              ]"
+            >
+              <span class="flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                {{ t('avatarInventory.chat') }}
+              </span>
+            </button>
+            <button
+              @click="activeTab = 'deaths'"
+              :class="[
+                'flex-1 px-4 py-2 rounded-md font-medium text-sm transition-all',
+                activeTab === 'deaths'
+                  ? 'bg-slate-700 text-white shadow'
+                  : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
+              ]"
+            >
+              <span class="flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                {{ t('avatarInventory.deaths') }}
+              </span>
+            </button>
+          </div>
+
+          <!-- Tab Content: Inventory -->
+          <div v-if="activeTab === 'inventory'" class="space-y-4">
+            <!-- Backpack Section -->
+            <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-xl border border-slate-600/30 p-4">
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                 <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -752,6 +914,215 @@ function toggleQuickSlot(index: number) {
                 </template>
                 <!-- Slot number -->
                 <span class="absolute top-0.5 left-1 text-[9px] font-bold text-slate-500">{{ index + 1 }}</span>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <!-- Tab Content: Info -->
+          <div v-else-if="activeTab === 'info'" class="space-y-4">
+            <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-xl border border-slate-600/30 p-4">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">{{ t('avatarInventory.playerInfo') }}</h3>
+
+              <div v-if="details" class="grid grid-cols-2 gap-4">
+                <!-- World -->
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {{ t('avatarInventory.world') }}
+                  </div>
+                  <p class="text-white font-medium">{{ details.world || '-' }}</p>
+                </div>
+
+                <!-- Gamemode -->
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {{ t('avatarInventory.gamemode') }}
+                  </div>
+                  <p class="text-white font-medium capitalize">{{ details.gameMode || '-' }}</p>
+                </div>
+
+                <!-- Position -->
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {{ t('avatarInventory.position') }}
+                  </div>
+                  <p class="text-white font-medium font-mono text-sm">
+                    <span v-if="details.position">
+                      {{ details.position.x.toFixed(1) }}, {{ details.position.y.toFixed(1) }}, {{ details.position.z.toFixed(1) }}
+                    </span>
+                    <span v-else class="text-gray-500">-</span>
+                  </p>
+                </div>
+
+                <!-- Discovered Zones -->
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    {{ t('avatarInventory.discoveredZones') }}
+                  </div>
+                  <p class="text-white font-medium">{{ details.discoveredZones?.length || 0 }}</p>
+                </div>
+
+                <!-- Memories -->
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    {{ t('avatarInventory.memories') }}
+                  </div>
+                  <p class="text-white font-medium">{{ details.memoriesCount || 0 }} NPCs</p>
+                </div>
+
+                <!-- Unique Items -->
+                <div class="bg-slate-800/50 rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    {{ t('avatarInventory.uniqueItems') }}
+                  </div>
+                  <p class="text-white font-medium">{{ details.uniqueItemsUsed?.length || 0 }}</p>
+                </div>
+              </div>
+
+              <div v-else class="flex flex-col items-center justify-center py-12 text-center">
+                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="text-gray-400">{{ t('avatarInventory.noInfoData') }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Chat -->
+          <div v-else-if="activeTab === 'chat'" class="space-y-4">
+            <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-xl border border-slate-600/30 p-4">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">{{ t('avatarInventory.chatHistory') }}</h3>
+
+              <!-- Loading -->
+              <div v-if="chatLoading" class="flex items-center justify-center py-12">
+                <svg class="w-6 h-6 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+              </div>
+
+              <!-- No messages -->
+              <div v-else-if="chatMessages.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
+                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <p class="text-gray-400">{{ t('avatarInventory.noChat') }}</p>
+              </div>
+
+              <!-- Chat messages -->
+              <div v-else class="space-y-2 max-h-[500px] overflow-y-auto">
+                <div class="text-xs text-gray-500 mb-3">
+                  {{ chatTotal }} {{ t('avatarInventory.messages') }}
+                </div>
+                <div
+                  v-for="msg in chatMessages"
+                  :key="msg.id"
+                  class="p-3 bg-slate-800/50 rounded-lg"
+                >
+                  <div class="flex items-center gap-2 mb-1">
+                    <span :class="['font-semibold text-sm', getPlayerColor(msg.player)]">
+                      {{ msg.player }}
+                    </span>
+                    <span class="text-xs text-gray-500">{{ formatChatTime(msg.timestamp) }}</span>
+                  </div>
+                  <p class="text-gray-300 text-sm break-words">{{ msg.message }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Content: Deaths -->
+          <div v-else-if="activeTab === 'deaths'" class="space-y-4">
+            <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-xl border border-slate-600/30 p-4">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">{{ t('avatarInventory.deathLocations') }}</h3>
+
+              <!-- Loading -->
+              <div v-if="deathsLoading" class="flex items-center justify-center py-12">
+                <svg class="w-6 h-6 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+              </div>
+
+              <!-- No deaths -->
+              <div v-else-if="deathPositions.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
+                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+                <p class="text-gray-400">{{ t('avatarInventory.noDeaths') }}</p>
+              </div>
+
+              <!-- Death positions list -->
+              <div v-else class="space-y-3 max-h-[500px] overflow-y-auto">
+                <div class="text-xs text-gray-500 mb-3">
+                  {{ deathPositions.length }} {{ t('avatarInventory.deathCount') }}
+                </div>
+
+                <div
+                  v-for="(death, index) in [...deathPositions].reverse()"
+                  :key="death.id"
+                  class="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:border-red-500/30 transition-colors"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2C6.48 2 2 6.48 2 12c0 3.69 2.47 6.86 6 8.1V22h8v-1.9c3.53-1.24 6-4.41 6-8.1 0-5.52-4.48-10-10-10z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-white font-semibold">
+                            {{ t('avatarInventory.day') }} {{ death.day }}
+                          </span>
+                          <span v-if="index === 0" class="text-xs px-2 py-0.5 bg-red-500/30 text-red-300 rounded-full">
+                            {{ t('avatarInventory.latest') }}
+                          </span>
+                        </div>
+                        <div class="text-sm text-gray-400 font-mono mt-1">
+                          {{ death.world }}: {{ death.position.x.toFixed(1) }}, {{ death.position.y.toFixed(1) }}, {{ death.position.z.toFixed(1) }}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      :disabled="teleportingDeath"
+                      @click="teleportToDeath(deathPositions.length - 1 - index)"
+                      class="flex items-center gap-2"
+                    >
+                      <svg v-if="teleportingDeath" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      </svg>
+                      <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      </svg>
+                      {{ t('avatarInventory.teleport') }}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
