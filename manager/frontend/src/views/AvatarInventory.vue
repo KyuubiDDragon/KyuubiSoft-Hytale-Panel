@@ -837,11 +837,11 @@ function handleSearchBlur() {
             </div>
 
             <!-- Backpack Grid -->
-            <div class="flex flex-wrap gap-px">
+            <div class="grid grid-cols-8 gap-0.5">
               <div
                 v-for="(item, index) in backpackGrid"
                 :key="`backpack-${index}`"
-                class="w-7 h-7 border rounded flex items-center justify-center relative cursor-pointer transition-all"
+                class="w-9 h-9 border rounded flex items-center justify-center relative cursor-pointer transition-all"
                 :class="[
                   item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50 hover:bg-slate-600/50' : 'border-slate-600/30 bg-slate-800/30'
                 ]"
@@ -853,13 +853,13 @@ function handleSearchBlur() {
                     v-if="!iconFailed(item.itemId)"
                     :src="getItemIconUrl(item.itemId)"
                     :alt="item.displayName"
-                    class="w-5 h-5 object-contain"
+                    class="w-7 h-7 object-contain"
                     @error="onIconError(item.itemId)"
                   />
-                  <div v-else :class="['w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold', getItemColorClass(item.itemId)]">
+                  <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
-                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0 text-[7px] font-bold text-white drop-shadow-lg">
+                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[8px] font-bold text-white drop-shadow-lg">
                     {{ item.amount }}
                   </span>
                 </template>
@@ -876,12 +876,12 @@ function handleSearchBlur() {
               {{ t('avatarInventory.inventory') }}
             </h3>
 
-            <!-- Storage Grid (7x4 = 28 slots) -->
-            <div class="flex flex-wrap gap-px">
+            <!-- Storage Grid (8x4 = 32 slots) -->
+            <div class="grid grid-cols-8 gap-0.5">
               <div
                 v-for="(item, index) in storageGrid"
                 :key="`storage-${index}`"
-                class="w-7 h-7 border rounded flex items-center justify-center relative cursor-pointer transition-all"
+                class="w-9 h-9 border rounded flex items-center justify-center relative cursor-pointer transition-all"
                 :class="[
                   item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50 hover:bg-slate-600/50' : 'border-slate-600/30 bg-slate-800/30'
                 ]"
@@ -893,13 +893,13 @@ function handleSearchBlur() {
                     v-if="!iconFailed(item.itemId)"
                     :src="getItemIconUrl(item.itemId)"
                     :alt="item.displayName"
-                    class="w-5 h-5 object-contain"
+                    class="w-7 h-7 object-contain"
                     @error="onIconError(item.itemId)"
                   />
-                  <div v-else :class="['w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold', getItemColorClass(item.itemId)]">
+                  <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
-                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0 text-[7px] font-bold text-white drop-shadow-lg">
+                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[8px] font-bold text-white drop-shadow-lg">
                     {{ item.amount }}
                   </span>
                   <!-- Durability bar -->
@@ -921,11 +921,11 @@ function handleSearchBlur() {
             </h3>
 
             <!-- Hotbar Grid -->
-            <div class="flex flex-wrap gap-px">
+            <div class="grid grid-cols-8 gap-0.5">
               <div
                 v-for="(item, index) in hotbarGrid"
                 :key="`hotbar-${index}`"
-                class="w-7 h-7 border rounded flex items-center justify-center relative cursor-pointer transition-all"
+                class="w-9 h-9 border rounded flex items-center justify-center relative cursor-pointer transition-all"
                 :class="[
                   item ? getItemRarityBorder(item.itemId) + ' bg-slate-700/50 hover:bg-slate-600/50' : 'border-slate-600/30 bg-slate-800/30',
                   inventory?.activeHotbarSlot === index ? 'ring-1 ring-hytale-orange ring-offset-1 ring-offset-slate-900' : ''
@@ -938,13 +938,13 @@ function handleSearchBlur() {
                     v-if="!iconFailed(item.itemId)"
                     :src="getItemIconUrl(item.itemId)"
                     :alt="item.displayName"
-                    class="w-5 h-5 object-contain"
+                    class="w-7 h-7 object-contain"
                     @error="onIconError(item.itemId)"
                   />
-                  <div v-else :class="['w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold', getItemColorClass(item.itemId)]">
+                  <div v-else :class="['w-7 h-7 rounded flex items-center justify-center text-xs font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
-                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0 text-[7px] font-bold text-white drop-shadow-lg">
+                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[8px] font-bold text-white drop-shadow-lg">
                     {{ item.amount }}
                   </span>
                   <!-- Durability bar -->
@@ -953,7 +953,7 @@ function handleSearchBlur() {
                   </div>
                 </template>
                 <!-- Slot number -->
-                <span class="absolute top-0 left-0.5 text-[6px] font-bold text-slate-500">{{ index + 1 }}</span>
+                <span class="absolute top-0 left-0.5 text-[7px] font-bold text-slate-500">{{ index + 1 }}</span>
               </div>
             </div>
           </div>
