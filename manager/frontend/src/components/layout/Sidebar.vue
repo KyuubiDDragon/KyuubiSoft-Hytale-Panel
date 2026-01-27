@@ -38,6 +38,7 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'permissions', path: '/permissions', icon: 'permissions', label: t('nav.permissions'), group: 'management', permission: 'players.permissions' },
   { name: 'worlds', path: '/worlds', icon: 'worlds', label: t('nav.worlds'), group: 'management', permission: 'worlds.view' },
   { name: 'mods', path: '/mods', icon: 'mods', label: t('nav.mods'), group: 'management', permission: 'mods.view' },
+  { name: 'modUpdates', path: '/mod-updates', icon: 'modUpdates', label: t('nav.modUpdates'), group: 'management', permission: 'mods.view' },
   { name: 'assets', path: '/assets', icon: 'assets', label: t('nav.assets'), group: 'management', permission: 'assets.view' },
   { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data', permission: 'backups.view' },
   { name: 'scheduler', path: '/scheduler', icon: 'scheduler', label: t('nav.scheduler'), group: 'data', permission: 'scheduler.view' },
@@ -165,6 +166,11 @@ function isActive(path: string): boolean {
             <!-- Mods Icon -->
             <svg v-else-if="item.icon === 'mods'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+
+            <!-- Mod Updates Icon -->
+            <svg v-else-if="item.icon === 'modUpdates'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
 
             <!-- Assets Icon -->
