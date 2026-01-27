@@ -244,6 +244,12 @@ export const modsApi = {
     const response = await api.get<{ configs: ConfigFile[] }>(`/management/mods/${encodeURIComponent(filename)}/configs`)
     return response.data
   },
+
+  /** Get update status for ALL mods from all sources (Modtale, StackMart, CurseForge, ModStore) */
+  async getAllUpdates(): Promise<ModUpdateStatus> {
+    const response = await api.get<ModUpdateStatus>('/management/mods/all-updates')
+    return response.data
+  },
 }
 
 export const pluginsApi = {

@@ -158,6 +158,10 @@ const curseforgeInstalled = ref<Record<string, CurseForgeInstalledInfo>>({})
 const updateStatus = ref<ModUpdateStatus | null>(null)
 const updatesLoading = ref(false)
 const updatesChecking = ref(false)
+
+// All updates from all sources (unified)
+const allUpdatesStatus = ref<ModUpdateStatus | null>(null)
+const allUpdatesLoading = ref(false)
 const showTrackDialog = ref(false)
 const trackFilename = ref('')
 const trackCurseforgeInput = ref('')
@@ -296,7 +300,7 @@ async function updateInstalledMod(item: ModInfo) {
     const result = await modStoreApi.update(item.storeId)
     if (result.success) {
       updateSuccess.value = item.storeId
-      await loadData() // Reload mods list
+      await Promise.all([loadData(), loadAllUpdates()]) // Reload mods list and updates
       setTimeout(() => { updateSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -456,6 +460,27 @@ const currentItems = computed(() => activeTab.value === 'mods' ? mods.value : pl
 const currentPath = computed(() => activeTab.value === 'mods' ? modsPath.value : pluginsPath.value)
 const enabledCount = computed(() => currentItems.value.filter(i => i.enabled).length)
 
+// Enrich mods/plugins with update info from all sources
+const enrichedItems = computed(() => {
+  return currentItems.value.map(item => {
+    // Check if update info already exists (from mod store)
+    if (item.hasUpdate !== undefined) return item
+
+    // Get update info from unified sources
+    const updateInfo = getModUpdateInfo(item.filename)
+    if (updateInfo) {
+      return {
+        ...item,
+        hasUpdate: updateInfo.hasUpdate,
+        latestVersion: updateInfo.latestVersion,
+        installedVersion: updateInfo.installedVersion || item.installedVersion,
+        updateSource: updateInfo.source,
+      }
+    }
+    return item
+  })
+})
+
 function switchToStore() {
   activeTab.value = 'store'
   if (storeMods.value.length === 0) {
@@ -539,7 +564,7 @@ async function installFromModtale(project: ModtaleProject) {
     const result = await modtaleApi.install(project.id)
     if (result.success) {
       modtaleInstallSuccess.value = project.id
-      await Promise.all([loadData(), loadModtaleInstalled()])
+      await Promise.all([loadData(), loadModtaleInstalled(), loadAllUpdates()])
       setTimeout(() => { modtaleInstallSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -693,7 +718,7 @@ async function installFromStackMart(resource: StackMartResource) {
     const result = await stackmartApi.install(resource.id)
     if (result.success) {
       stackmartInstallSuccess.value = resource.id
-      await Promise.all([loadData(), loadStackMartInstalled()])
+      await Promise.all([loadData(), loadStackMartInstalled(), loadAllUpdates()])
       setTimeout(() => { stackmartInstallSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -825,8 +850,7 @@ async function installCurseForgeMod(mod: CurseForgeMod) {
     const result = await curseforgeApi.install(mod.id)
     if (result.success) {
       curseforgeInstallSuccess.value = mod.id
-      await loadCurseForgeInstalled()
-      await loadData()
+      await Promise.all([loadCurseForgeInstalled(), loadData(), loadAllUpdates()])
       setTimeout(() => { curseforgeInstallSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -889,6 +913,31 @@ async function loadUpdateStatus() {
     // Silently fail
   } finally {
     updatesLoading.value = false
+  }
+}
+
+// Load unified updates from all sources
+async function loadAllUpdates() {
+  allUpdatesLoading.value = true
+  try {
+    allUpdatesStatus.value = await modsApi.getAllUpdates()
+  } catch {
+    // Silently fail
+  } finally {
+    allUpdatesLoading.value = false
+  }
+}
+
+// Get update info for a specific mod by filename
+function getModUpdateInfo(filename: string): { hasUpdate: boolean; latestVersion: string; installedVersion: string; source: string } | null {
+  if (!allUpdatesStatus.value) return null
+  const mod = allUpdatesStatus.value.mods.find(m => m.filename === filename)
+  if (!mod) return null
+  return {
+    hasUpdate: mod.hasUpdate,
+    latestVersion: mod.latestVersion || '-',
+    installedVersion: mod.installedVersion || '-',
+    source: mod.source || 'unknown',
   }
 }
 
@@ -967,8 +1016,8 @@ async function installTrackedMod(filename: string) {
   try {
     const result = await modupdatesApi.install(filename)
     if (result.success) {
-      // Reload both mods list and update status
-      await Promise.all([loadData(), loadUpdateStatus()])
+      // Reload mods list, CFWidget status, and all updates
+      await Promise.all([loadData(), loadUpdateStatus(), loadAllUpdates()])
     } else {
       error.value = result.error || t('errors.serverError')
     }
@@ -986,7 +1035,9 @@ function formatUpdateDate(dateStr: string | null): string {
 
 onMounted(() => {
   loadData()
-  // Load updates status if navigating directly to updates tab
+  // Always load unified updates to show update badges in mods/plugins tabs
+  loadAllUpdates()
+  // Load CFWidget status if navigating directly to updates tab
   if (initialTab === 'updates') {
     loadUpdateStatus()
   }
@@ -1186,7 +1237,7 @@ onMounted(() => {
         {{ t('common.loading') }}
       </div>
 
-      <div v-else-if="currentItems.length === 0" class="text-center text-gray-500 p-8">
+      <div v-else-if="enrichedItems.length === 0" class="text-center text-gray-500 p-8">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
         </svg>
@@ -1195,7 +1246,7 @@ onMounted(() => {
 
       <div v-else class="divide-y divide-dark-50/30">
         <div
-          v-for="item in currentItems"
+          v-for="item in enrichedItems"
           :key="item.filename"
           class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
@@ -1242,11 +1293,13 @@ onMounted(() => {
                 <!-- Update badge -->
                 <span
                   v-if="item.hasUpdate"
-                  class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse cursor-pointer"
-                  :title="`${t('mods.updateAvailable')}: ${item.latestVersion}`"
-                  @click.stop="updateInstalledMod(item)"
+                  class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse"
+                  :class="{ 'cursor-pointer': item.storeId }"
+                  :title="`${t('mods.updateAvailable')}: ${item.latestVersion}${item.updateSource ? ' (' + item.updateSource + ')' : ''}`"
+                  @click.stop="item.storeId ? updateInstalledMod(item) : null"
                 >
                   ↑ {{ item.latestVersion }}
+                  <span v-if="item.updateSource" class="text-[10px] opacity-70 ml-1">({{ item.updateSource }})</span>
                 </span>
               </div>
             </div>
@@ -1254,14 +1307,26 @@ onMounted(() => {
 
           <!-- Actions -->
           <div class="flex items-center gap-3">
-            <!-- Update Button -->
+            <!-- Update Button (Store mods) -->
             <button
               v-if="item.hasUpdate && item.storeId && authStore.hasPermission('mods.install')"
               @click="updateInstalledMod(item)"
               class="p-2 text-hytale-orange hover:text-hytale-orange-light transition-colors"
-              :title="t('mods.update')"
+              :title="t('mods.update') + ' (ModStore)'"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <!-- Update Button (CFWidget tracked mods) -->
+            <button
+              v-if="item.hasUpdate && !item.storeId && item.updateSource === 'cfwidget' && authStore.hasPermission('mods.install')"
+              @click="installTrackedMod(item.filename)"
+              :disabled="installingFilename === item.filename"
+              class="p-2 text-hytale-orange hover:text-hytale-orange-light transition-colors disabled:opacity-50"
+              :title="t('mods.update') + ' (CFWidget)'"
+            >
+              <svg :class="['w-5 h-5', installingFilename === item.filename ? 'animate-spin' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>

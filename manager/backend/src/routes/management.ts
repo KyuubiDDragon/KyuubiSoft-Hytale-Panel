@@ -1141,6 +1141,29 @@ router.get('/mods', authMiddleware, requirePermission('mods.view'), async (_req:
   }
 });
 
+// GET /api/management/mods/all-updates - Get update status from ALL sources (Modtale, StackMart, CurseForge, ModStore)
+router.get('/mods/all-updates', authMiddleware, requirePermission('mods.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock status
+  if (isDemoMode()) {
+    res.json({
+      totalTracked: 0,
+      updatesAvailable: 0,
+      lastChecked: new Date().toISOString(),
+      mods: [],
+      demo: true,
+    });
+    return;
+  }
+
+  try {
+    const status = await getUnifiedUpdateStatus();
+    res.json(status);
+  } catch (error) {
+    console.error('All mods update status error:', error);
+    res.status(500).json({ error: 'Failed to get update status' });
+  }
+});
+
 // GET /api/management/plugins
 router.get('/plugins', authMiddleware, requirePermission('plugins.view'), async (_req: Request, res: Response) => {
   // Demo mode: return mock plugins
@@ -3238,8 +3261,8 @@ router.get('/modupdates/status', authMiddleware, requirePermission('mods.view'),
   }
 
   try {
-    // Use unified status that includes ALL sources (CFWidget, Modtale, StackMart, ModStore)
-    const status = await getUnifiedUpdateStatus();
+    // CFWidget status - for manually tracked mods via CurseForge slug
+    const status = await cfwidgetStatus();
     res.json(status);
   } catch (error) {
     console.error('Mod updates status error:', error);
