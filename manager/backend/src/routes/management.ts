@@ -3287,12 +3287,13 @@ router.post('/modupdates/track', authMiddleware, requirePermission('mods.install
   try {
     const { filename, curseforgeInput, currentVersion } = req.body;
 
-    if (!filename || !curseforgeInput) {
-      res.status(400).json({ success: false, error: 'Missing filename or curseforgeInput' });
+    // Only curseforgeInput is required - filename can be empty for wishlist items
+    if (!curseforgeInput) {
+      res.status(400).json({ success: false, error: 'Missing curseforgeInput' });
       return;
     }
 
-    const result = await cfwidgetTrackMod(filename, curseforgeInput, currentVersion);
+    const result = await cfwidgetTrackMod(filename || '', curseforgeInput, currentVersion);
 
     if (result.success) {
       const user = req.user || 'system';

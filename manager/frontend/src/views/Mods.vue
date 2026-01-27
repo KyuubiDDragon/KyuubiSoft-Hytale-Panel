@@ -165,6 +165,7 @@ const trackCurrentVersion = ref('')
 const tracking = ref(false)
 const trackError = ref('')
 const untrackingFilename = ref<string | null>(null)
+const trackAsWishlist = ref(false) // Track mod without installing (wishlist)
 
 // Get mods that are not yet tracked
 const untrackedMods = computed(() => {
@@ -912,12 +913,18 @@ function openTrackDialog(mod?: ModInfo) {
   trackCurseforgeInput.value = ''
   trackCurrentVersion.value = ''
   trackError.value = ''
+  trackAsWishlist.value = false
   showTrackDialog.value = true
 }
 
 async function trackMod() {
-  if (!trackFilename.value || !trackCurseforgeInput.value) {
+  // Require curseforgeInput always, filename only if not wishlist mode
+  if (!trackCurseforgeInput.value) {
     trackError.value = t('modupdates.invalidUrl')
+    return
+  }
+  if (!trackAsWishlist.value && !trackFilename.value) {
+    trackError.value = t('modupdates.selectFile')
     return
   }
 
@@ -925,7 +932,7 @@ async function trackMod() {
   trackError.value = ''
   try {
     const result = await modupdatesApi.track(
-      trackFilename.value,
+      trackAsWishlist.value ? '' : trackFilename.value,
       trackCurseforgeInput.value,
       trackCurrentVersion.value || undefined
     )
@@ -2651,12 +2658,21 @@ onMounted(() => {
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                   <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                  <!-- Wishlist item (not installed) -->
                   <span
-                    v-if="mod.hasUpdate"
+                    v-if="mod.installed === false"
+                    class="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400"
+                  >
+                    {{ t('modupdates.wishlist') }}
+                  </span>
+                  <!-- Installed with update available -->
+                  <span
+                    v-else-if="mod.hasUpdate"
                     class="px-2 py-0.5 text-xs rounded-full bg-status-warning/20 text-status-warning"
                   >
                     {{ t('modupdates.updateAvailable') }}
                   </span>
+                  <!-- Installed and up to date -->
                   <span
                     v-else
                     class="px-2 py-0.5 text-xs rounded-full bg-status-success/20 text-status-success"
@@ -2664,9 +2680,11 @@ onMounted(() => {
                     {{ t('modupdates.noUpdate') }}
                   </span>
                 </div>
-                <p class="text-sm text-gray-400 truncate">{{ mod.filename }}</p>
+                <p v-if="mod.installed !== false" class="text-sm text-gray-400 truncate">{{ mod.filename }}</p>
+                <p v-else class="text-sm text-gray-400 truncate">{{ mod.curseforgeSlug }}</p>
                 <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                  <span>{{ t('modupdates.installedVersion') }}: {{ mod.installedVersion || '-' }}</span>
+                  <span v-if="mod.installed !== false">{{ t('modupdates.installedVersion') }}: {{ mod.installedVersion || '-' }}</span>
+                  <span v-else class="text-purple-400">{{ t('modupdates.notInstalled') }}</span>
                   <span>{{ t('modupdates.latestVersion') }}: {{ mod.latestVersion || '-' }}</span>
                 </div>
               </div>
@@ -2720,9 +2738,33 @@ onMounted(() => {
 
           <!-- Form -->
           <div class="space-y-4">
-            <!-- Filename Select or Input -->
+            <!-- CurseForge URL/Slug (first, as it's required) -->
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.filename') }}</label>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.curseforgeUrl') }} *</label>
+              <input
+                v-model="trackCurseforgeInput"
+                type="text"
+                class="input w-full"
+                :placeholder="t('modupdates.curseforgeUrlHint')"
+              />
+            </div>
+
+            <!-- Wishlist checkbox -->
+            <div class="flex items-center gap-2">
+              <input
+                id="track-wishlist"
+                v-model="trackAsWishlist"
+                type="checkbox"
+                class="w-4 h-4 rounded border-gray-600 bg-dark-100 text-hytale-orange focus:ring-hytale-orange"
+              />
+              <label for="track-wishlist" class="text-sm text-gray-300">
+                {{ t('modupdates.trackAsWishlist') }}
+              </label>
+            </div>
+
+            <!-- Filename Select or Input (only if not wishlist) -->
+            <div v-if="!trackAsWishlist">
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.filename') }} *</label>
               <select
                 v-if="untrackedMods.length > 0"
                 v-model="trackFilename"
@@ -2742,19 +2784,8 @@ onMounted(() => {
               />
             </div>
 
-            <!-- CurseForge URL/Slug -->
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.curseforgeUrl') }}</label>
-              <input
-                v-model="trackCurseforgeInput"
-                type="text"
-                class="input w-full"
-                :placeholder="t('modupdates.curseforgeUrlHint')"
-              />
-            </div>
-
-            <!-- Current Version (optional) -->
-            <div>
+            <!-- Current Version (optional, only if not wishlist) -->
+            <div v-if="!trackAsWishlist">
               <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.installedVersion') }} (optional)</label>
               <input
                 v-model="trackCurrentVersion"
@@ -2772,7 +2803,7 @@ onMounted(() => {
             </button>
             <button
               class="btn btn-primary"
-              :disabled="tracking || !trackFilename || !trackCurseforgeInput"
+              :disabled="tracking || !trackCurseforgeInput || (!trackAsWishlist && !trackFilename)"
               @click="trackMod"
             >
               <svg v-if="tracking" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">

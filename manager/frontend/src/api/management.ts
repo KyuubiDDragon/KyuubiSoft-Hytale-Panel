@@ -979,6 +979,7 @@ export interface TrackedMod {
   projectTitle?: string
   projectUrl?: string
   thumbnail?: string
+  installed: boolean // false = wishlist item, not yet installed
 }
 
 export interface ModUpdateStatus {

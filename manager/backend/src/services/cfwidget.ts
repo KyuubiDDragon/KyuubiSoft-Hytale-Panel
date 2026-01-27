@@ -78,6 +78,7 @@ export interface TrackedMod {
   projectTitle?: string;
   projectUrl?: string;
   thumbnail?: string;
+  installed: boolean; // false = wishlist item, not yet installed
 }
 
 export interface ModUpdateStatus {
@@ -296,6 +297,7 @@ export function extractSlugFromUrl(input: string): string | null {
 
 /**
  * Track a mod for update checking
+ * If filename is empty, the mod is added as a "wishlist" item (not yet installed)
  */
 export async function trackMod(
   filename: string,
@@ -315,36 +317,45 @@ export async function trackMod(
     return { success: false, error: 'Mod not found on CurseForge' };
   }
 
-  // Extract version from filename if not provided
-  const installedVersion = currentVersion || extractVersionFromFilename(filename) || undefined;
+  // Check if this is a wishlist item (no filename = not installed yet)
+  const isWishlist = !filename || filename.trim() === '';
+
+  // For wishlist items, use a placeholder filename based on slug
+  const actualFilename = isWishlist ? `[wishlist]${slug}` : filename;
+
+  // Extract version from filename if not provided (only for installed mods)
+  const installedVersion = isWishlist ? undefined : (currentVersion || extractVersionFromFilename(filename) || undefined);
 
   const latestFile = modInfo.download;
 
   const trackedMod: TrackedMod = {
-    filename,
+    filename: actualFilename,
     curseforgeSlug: slug,
     installedVersion,
     latestFileId: latestFile?.id,
     latestVersion: latestFile?.display || latestFile?.name,
     latestFileName: latestFile?.name,
-    hasUpdate: false, // Will be determined by version comparison
+    hasUpdate: isWishlist, // Wishlist items always show as "needs install"
     lastChecked: new Date().toISOString(),
     projectId: modInfo.id,
     projectTitle: modInfo.title,
     projectUrl: modInfo.urls?.curseforge,
     thumbnail: modInfo.thumbnail,
+    installed: !isWishlist,
   };
 
-  // Simple update check based on file ID or version string
-  if (trackedMod.installedFileId && trackedMod.latestFileId) {
-    trackedMod.hasUpdate = trackedMod.latestFileId > trackedMod.installedFileId;
-  } else if (trackedMod.installedVersion && trackedMod.latestVersion) {
-    trackedMod.hasUpdate = trackedMod.installedVersion !== trackedMod.latestVersion;
+  // For installed mods, check if update is available
+  if (!isWishlist) {
+    if (trackedMod.installedFileId && trackedMod.latestFileId) {
+      trackedMod.hasUpdate = trackedMod.latestFileId > trackedMod.installedFileId;
+    } else if (trackedMod.installedVersion && trackedMod.latestVersion) {
+      trackedMod.hasUpdate = trackedMod.installedVersion !== trackedMod.latestVersion;
+    }
   }
 
   // Save to tracked mods
   const data = await loadTrackedMods();
-  data.mods[filename] = trackedMod;
+  data.mods[actualFilename] = trackedMod;
   await saveTrackedMods(data);
 
   return { success: true, mod: trackedMod };
@@ -383,8 +394,13 @@ export async function checkModUpdate(filename: string): Promise<TrackedMod | nul
     return null;
   }
 
-  // Auto-extract version from filename if not already set (migration for old entries)
-  if (!tracked.installedVersion) {
+  // Migration: set installed field for old entries
+  if (tracked.installed === undefined) {
+    tracked.installed = !filename.startsWith('[wishlist]');
+  }
+
+  // Auto-extract version from filename if not already set (only for installed mods)
+  if (tracked.installed && !tracked.installedVersion) {
     const extractedVersion = extractVersionFromFilename(filename);
     if (extractedVersion) {
       tracked.installedVersion = extractedVersion;
@@ -406,7 +422,15 @@ export async function checkModUpdate(filename: string): Promise<TrackedMod | nul
   tracked.projectTitle = modInfo.title;
   tracked.thumbnail = modInfo.thumbnail;
 
-  // Update check - compare versions
+  // Wishlist items always show as "needs install"
+  if (!tracked.installed) {
+    tracked.hasUpdate = true;
+    data.mods[filename] = tracked;
+    await saveTrackedMods(data);
+    return tracked;
+  }
+
+  // Update check for installed mods - compare versions
   tracked.hasUpdate = false;
   if (tracked.installedFileId && tracked.latestFileId) {
     tracked.hasUpdate = tracked.latestFileId > tracked.installedFileId;

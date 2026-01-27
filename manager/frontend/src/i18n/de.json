@@ -578,7 +578,11 @@
     "modNotFound": "Mod nicht auf CurseForge gefunden",
     "invalidUrl": "Ungültige CurseForge URL oder Slug",
     "autoCheck": "Automatische Prüfung (stündlich)",
-    "viewOnCurseforge": "Auf CurseForge anzeigen"
+    "viewOnCurseforge": "Auf CurseForge anzeigen",
+    "trackAsWishlist": "Ohne Installation verfolgen (Wunschliste)",
+    "wishlist": "Wunschliste",
+    "notInstalled": "Nicht installiert",
+    "selectFile": "Bitte wähle eine Mod-Datei aus"
   },
   "performance": {
     "title": "Performance Monitor",
