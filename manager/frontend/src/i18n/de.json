@@ -143,6 +143,16 @@
       "title": "Neue Funktionen verfügbar",
       "description": "Dein Panel wurde auf Version {version} aktualisiert. Neue Einstellungen sind jetzt verfügbar:",
       "configure": "Jetzt konfigurieren"
+    },
+    "modUpdates": {
+      "title": "Mod Updates",
+      "noUpdates": "Keine Updates",
+      "updatesAvailable": "{count} Update(s) verfügbar",
+      "allUpToDate": "Alle aktuell",
+      "noTracked": "Keine Mods verfolgt",
+      "checking": "Prüfe...",
+      "checkNow": "Prüfen",
+      "viewAll": "Alle anzeigen"
     }
   },
   "console": {
@@ -539,6 +549,35 @@
     "gameVersions": "Spielversionen",
     "curseforgeApiSettings": "CurseForge API Einstellungen",
     "thirdPartyDisabled": "Dieser Mod erlaubt keine Third-Party Downloads. Bitte lade ihn direkt von CurseForge herunter."
+  },
+  "modupdates": {
+    "title": "Mod Updates",
+    "status": "Update Status",
+    "available": "Updates verfügbar",
+    "upToDate": "Alle Mods aktuell",
+    "noTrackedMods": "Keine Mods werden verfolgt",
+    "tracked": "Verfolgte Mods",
+    "checking": "Prüfe auf Updates...",
+    "checkAll": "Alle prüfen",
+    "checkNow": "Jetzt prüfen",
+    "lastChecked": "Zuletzt geprüft",
+    "never": "Nie",
+    "trackMod": "Mod verfolgen",
+    "untrack": "Nicht mehr verfolgen",
+    "curseforgeUrl": "CurseForge URL oder Slug",
+    "curseforgeUrlHint": "z.B. https://www.curseforge.com/hytale/mods/mod-name oder mod-name",
+    "installedVersion": "Installierte Version",
+    "latestVersion": "Neueste Version",
+    "updateAvailable": "Update verfügbar",
+    "noUpdate": "Aktuell",
+    "filename": "Dateiname",
+    "trackSuccess": "Mod wird jetzt verfolgt",
+    "trackError": "Fehler beim Verfolgen der Mod",
+    "untrackSuccess": "Mod wird nicht mehr verfolgt",
+    "modNotFound": "Mod nicht auf CurseForge gefunden",
+    "invalidUrl": "Ungültige CurseForge URL oder Slug",
+    "autoCheck": "Automatische Prüfung (stündlich)",
+    "viewOnCurseforge": "Auf CurseForge anzeigen"
   },
   "performance": {
     "title": "Performance Monitor",

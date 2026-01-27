@@ -962,3 +962,117 @@ export const curseforgeApi = {
     return response.data
   },
 }
+
+// ============== MOD UPDATES (CFWidget) ==============
+
+export interface TrackedMod {
+  filename: string
+  curseforgeSlug: string
+  installedFileId?: number
+  installedVersion?: string
+  latestFileId?: number
+  latestVersion?: string
+  latestFileName?: string
+  hasUpdate: boolean
+  lastChecked: string
+  projectId?: number
+  projectTitle?: string
+  projectUrl?: string
+  thumbnail?: string
+}
+
+export interface ModUpdateStatus {
+  totalTracked: number
+  updatesAvailable: number
+  lastChecked: string | null
+  mods: TrackedMod[]
+}
+
+export interface CFWidgetProject {
+  id: number
+  title: string
+  summary: string
+  thumbnail: string
+  game: string
+  type: string
+  urls: {
+    curseforge: string
+    project: string
+  }
+  downloads: {
+    monthly: number
+    total: number
+  }
+  categories: string[]
+  files: Array<{
+    id: number
+    url: string
+    display: string
+    name: string
+    type: 'release' | 'beta' | 'alpha'
+    version: string
+    filesize: number
+    versions: string[]
+    downloads: number
+    uploaded_at: string
+  }>
+}
+
+export const modupdatesApi = {
+  /** Get cached update status (fast, no API calls) */
+  async getStatus(): Promise<ModUpdateStatus> {
+    const response = await api.get<ModUpdateStatus>('/management/modupdates/status')
+    return response.data
+  },
+
+  /** Check all tracked mods for updates (slower, makes API calls) */
+  async checkAll(): Promise<ModUpdateStatus> {
+    const response = await api.post<ModUpdateStatus>('/management/modupdates/check')
+    return response.data
+  },
+
+  /** Check a single mod for updates */
+  async checkMod(filename: string): Promise<{ success: boolean; mod?: TrackedMod }> {
+    const response = await api.post<{ success: boolean; mod?: TrackedMod }>(`/management/modupdates/check/${encodeURIComponent(filename)}`)
+    return response.data
+  },
+
+  /** Track a mod by CurseForge URL or slug */
+  async track(filename: string, curseforgeInput: string, currentVersion?: string): Promise<{ success: boolean; error?: string; mod?: TrackedMod }> {
+    const response = await api.post<{ success: boolean; error?: string; mod?: TrackedMod }>('/management/modupdates/track', {
+      filename,
+      curseforgeInput,
+      currentVersion,
+    })
+    return response.data
+  },
+
+  /** Untrack a mod */
+  async untrack(filename: string): Promise<{ success: boolean }> {
+    const response = await api.delete<{ success: boolean }>(`/management/modupdates/track/${encodeURIComponent(filename)}`)
+    return response.data
+  },
+
+  /** Lookup mod info by CurseForge URL or slug */
+  async lookup(input: string): Promise<{ success: boolean; project?: CFWidgetProject; error?: string }> {
+    const response = await api.get<{ success: boolean; project?: CFWidgetProject; error?: string }>('/management/modupdates/lookup', {
+      params: { input },
+    })
+    return response.data
+  },
+
+  /** Update the installed version of a tracked mod */
+  async updateInstalledVersion(filename: string, version: string, fileId?: number): Promise<{ success: boolean }> {
+    const response = await api.put<{ success: boolean }>(`/management/modupdates/version/${encodeURIComponent(filename)}`, {
+      version,
+      fileId,
+    })
+    return response.data
+  },
+
+  /** Clear the CFWidget cache */
+  async clearCache(): Promise<{ success: boolean }> {
+    const response = await api.post<{ success: boolean }>('/management/modupdates/cache/clear')
+    return response.data
+  },
+}

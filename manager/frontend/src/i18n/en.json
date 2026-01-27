@@ -143,6 +143,16 @@
       "title": "New Features Available",
       "description": "Your panel has been updated to version {version}. New settings are now available:",
       "configure": "Configure Now"
+    },
+    "modUpdates": {
+      "title": "Mod Updates",
+      "noUpdates": "No updates",
+      "updatesAvailable": "{count} update(s) available",
+      "allUpToDate": "All up to date",
+      "noTracked": "No mods tracked",
+      "checking": "Checking...",
+      "checkNow": "Check",
+      "viewAll": "View all"
     }
   },
   "console": {
@@ -539,6 +549,35 @@
     "gameVersions": "Game Versions",
     "curseforgeApiSettings": "CurseForge API Settings",
     "thirdPartyDisabled": "This mod does not allow third-party downloads. Please download directly from CurseForge."
+  },
+  "modupdates": {
+    "title": "Mod Updates",
+    "status": "Update Status",
+    "available": "Updates available",
+    "upToDate": "All mods up to date",
+    "noTrackedMods": "No mods are being tracked",
+    "tracked": "Tracked Mods",
+    "checking": "Checking for updates...",
+    "checkAll": "Check All",
+    "checkNow": "Check Now",
+    "lastChecked": "Last checked",
+    "never": "Never",
+    "trackMod": "Track Mod",
+    "untrack": "Untrack",
+    "curseforgeUrl": "CurseForge URL or Slug",
+    "curseforgeUrlHint": "e.g. https://www.curseforge.com/hytale/mods/mod-name or mod-name",
+    "installedVersion": "Installed Version",
+    "latestVersion": "Latest Version",
+    "updateAvailable": "Update available",
+    "noUpdate": "Up to date",
+    "filename": "Filename",
+    "trackSuccess": "Mod is now being tracked",
+    "trackError": "Failed to track mod",
+    "untrackSuccess": "Mod is no longer being tracked",
+    "modNotFound": "Mod not found on CurseForge",
+    "invalidUrl": "Invalid CurseForge URL or slug",
+    "autoCheck": "Automatic check (hourly)",
+    "viewOnCurseforge": "View on CurseForge"
   },
   "performance": {
     "title": "Performance Monitor",

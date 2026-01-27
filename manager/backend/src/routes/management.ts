@@ -123,6 +123,17 @@ import {
   type CurseForgeSortField,
   type CurseForgeSortOrder,
 } from '../services/curseforge.js';
+import {
+  getModInfo as cfwidgetGetMod,
+  extractSlugFromUrl,
+  trackMod as cfwidgetTrackMod,
+  untrackMod as cfwidgetUntrackMod,
+  checkModUpdate as cfwidgetCheckMod,
+  checkAllUpdates as cfwidgetCheckAll,
+  getUpdateStatus as cfwidgetStatus,
+  updateInstalledVersion as cfwidgetUpdateVersion,
+  clearCFWidgetCache,
+} from '../services/cfwidget.js';
 
 // SECURITY: Allowed file extensions for uploads
 // Removed .dll and .so as they are native executables
@@ -3191,6 +3202,250 @@ router.delete('/curseforge/uninstall/:modId', authMiddleware, requirePermission(
   } catch (error) {
     console.error('CurseForge uninstall error:', error);
     res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
+  }
+});
+
+// ============================================
+// CFWidget Integration Endpoints (Free API - No Key Required)
+// Used for mod update checking via CurseForge slugs
+// ============================================
+
+// GET /api/management/modupdates/status - Get current update status (cached)
+router.get('/modupdates/status', authMiddleware, requirePermission('mods.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock status
+  if (isDemoMode()) {
+    res.json({
+      totalTracked: 3,
+      updatesAvailable: 1,
+      lastChecked: new Date().toISOString(),
+      mods: [
+        {
+          filename: 'KyuubiSoftAchievements-1.0.0.jar',
+          curseforgeSlug: 'kyuubisoft-achievements-titles-rewards',
+          installedVersion: '1.0.0',
+          latestVersion: 'KyuubiSoft Achievements 1.0.1',
+          hasUpdate: true,
+          lastChecked: new Date().toISOString(),
+          projectTitle: 'KyuubiSoft Achievements',
+        },
+      ],
+      demo: true,
+    });
+    return;
+  }
+
+  try {
+    const status = await cfwidgetStatus();
+    res.json(status);
+  } catch (error) {
+    console.error('Mod updates status error:', error);
+    res.status(500).json({ error: 'Failed to get update status' });
+  }
+});
+
+// POST /api/management/modupdates/check - Check all mods for updates (runs full check)
+router.post('/modupdates/check', authMiddleware, requirePermission('mods.view'), async (_req: Request, res: Response) => {
+  // Demo mode: return mock check result
+  if (isDemoMode()) {
+    res.json({
+      totalTracked: 3,
+      updatesAvailable: 1,
+      lastChecked: new Date().toISOString(),
+      mods: [],
+      demo: true,
+    });
+    return;
+  }
+
+  try {
+    const status = await cfwidgetCheckAll();
+    res.json(status);
+  } catch (error) {
+    console.error('Mod updates check error:', error);
+    res.status(500).json({ error: 'Failed to check for updates' });
+  }
+});
+
+// POST /api/management/modupdates/track - Track a mod for updates
+router.post('/modupdates/track', authMiddleware, requirePermission('mods.install'), async (req: AuthenticatedRequest, res: Response) => {
+  // Demo mode: simulate tracking
+  if (isDemoMode()) {
+    const { filename, curseforgeUrl } = req.body;
+    res.json({
+      success: true,
+      mod: {
+        filename,
+        curseforgeSlug: 'demo-mod',
+        hasUpdate: false,
+        lastChecked: new Date().toISOString(),
+      },
+      message: '[DEMO] Mod tracking added (simulated)',
+    });
+    return;
+  }
+
+  try {
+    const { filename, curseforgeUrl, currentVersion } = req.body;
+
+    if (!filename || !curseforgeUrl) {
+      res.status(400).json({ success: false, error: 'Missing filename or curseforgeUrl' });
+      return;
+    }
+
+    const result = await cfwidgetTrackMod(filename, curseforgeUrl, currentVersion);
+
+    if (result.success) {
+      const user = req.user || 'system';
+      logActivity(
+        user,
+        'track_mod_updates',
+        'mod',
+        true,
+        filename,
+        `Started tracking updates for ${filename}`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Track mod error:', error);
+    res.status(500).json({ success: false, error: 'Failed to track mod' });
+  }
+});
+
+// DELETE /api/management/modupdates/track/:filename - Stop tracking a mod
+router.delete('/modupdates/track/:filename', authMiddleware, requirePermission('mods.delete'), async (req: AuthenticatedRequest, res: Response) => {
+  // Demo mode: simulate untracking
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Mod tracking removed (simulated)' });
+    return;
+  }
+
+  try {
+    const { filename } = req.params;
+    const success = await cfwidgetUntrackMod(decodeURIComponent(filename));
+
+    if (success) {
+      const user = req.user || 'system';
+      logActivity(
+        user,
+        'untrack_mod_updates',
+        'mod',
+        true,
+        filename,
+        `Stopped tracking updates for ${filename}`
+      );
+    }
+
+    res.json({ success });
+  } catch (error) {
+    console.error('Untrack mod error:', error);
+    res.status(500).json({ success: false, error: 'Failed to untrack mod' });
+  }
+});
+
+// GET /api/management/modupdates/check/:filename - Check single mod for update
+router.get('/modupdates/check/:filename', authMiddleware, requirePermission('mods.view'), async (req: Request, res: Response) => {
+  // Demo mode: return mock result
+  if (isDemoMode()) {
+    res.json({
+      filename: req.params.filename,
+      hasUpdate: false,
+      lastChecked: new Date().toISOString(),
+      demo: true,
+    });
+    return;
+  }
+
+  try {
+    const { filename } = req.params;
+    const mod = await cfwidgetCheckMod(decodeURIComponent(filename));
+
+    if (mod) {
+      res.json(mod);
+    } else {
+      res.status(404).json({ error: 'Mod not tracked' });
+    }
+  } catch (error) {
+    console.error('Check mod update error:', error);
+    res.status(500).json({ error: 'Failed to check mod update' });
+  }
+});
+
+// GET /api/management/modupdates/lookup - Lookup mod info by CurseForge URL/slug
+router.get('/modupdates/lookup', authMiddleware, requirePermission('mods.view'), async (req: Request, res: Response) => {
+  // Demo mode: return mock lookup
+  if (isDemoMode()) {
+    res.json({
+      id: 1445274,
+      title: 'Demo Mod',
+      summary: 'A demo mod for testing',
+      thumbnail: 'https://via.placeholder.com/64',
+      download: {
+        name: 'demo-mod-1.0.0.jar',
+        display: 'Demo Mod 1.0.0',
+      },
+      demo: true,
+    });
+    return;
+  }
+
+  try {
+    const { url } = req.query;
+
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ error: 'Missing url parameter' });
+      return;
+    }
+
+    const slug = extractSlugFromUrl(url);
+
+    if (!slug) {
+      res.status(400).json({ error: 'Invalid CurseForge URL or slug' });
+      return;
+    }
+
+    const modInfo = await cfwidgetGetMod(slug);
+
+    if (modInfo) {
+      res.json(modInfo);
+    } else {
+      res.status(404).json({ error: 'Mod not found' });
+    }
+  } catch (error) {
+    console.error('Lookup mod error:', error);
+    res.status(500).json({ error: 'Failed to lookup mod' });
+  }
+});
+
+// POST /api/management/modupdates/refresh - Clear CFWidget cache
+router.post('/modupdates/refresh', authMiddleware, requirePermission('mods.install'), async (_req: Request, res: Response) => {
+  clearCFWidgetCache();
+  res.json({ success: true, message: 'CFWidget cache cleared' });
+});
+
+// PUT /api/management/modupdates/version/:filename - Update installed version for a tracked mod
+router.put('/modupdates/version/:filename', authMiddleware, requirePermission('mods.install'), async (req: Request, res: Response) => {
+  // Demo mode: simulate version update
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Version updated (simulated)' });
+    return;
+  }
+
+  try {
+    const { filename } = req.params;
+    const { version, fileId } = req.body;
+
+    if (!version) {
+      res.status(400).json({ success: false, error: 'Missing version' });
+      return;
+    }
+
+    const success = await cfwidgetUpdateVersion(decodeURIComponent(filename), version, fileId);
+    res.json({ success });
+  } catch (error) {
+    console.error('Update version error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update version' });
   }
 });
 
