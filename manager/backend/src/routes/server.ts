@@ -8,6 +8,7 @@ import * as kyuubiApiService from '../services/kyuubiApi.js';
 import { getPlayerInventoryFromFile, getPlayerDetailsFromFile } from '../services/players.js';
 import { config } from '../config.js';
 import { dismissNewFeaturesBanner } from '../services/migration.js';
+import { checkPanelUpdate, getCurrentVersion } from '../services/panelVersionService.js';
 import {
   isDemoMode,
   getDemoQuickSettings,
@@ -1919,6 +1920,41 @@ router.post('/new-features/dismiss', authMiddleware, requirePermission('dashboar
     res.status(500).json({
       success: false,
       error: 'Failed to dismiss banner',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================================
+// Panel Version Check Endpoints
+// ============================================================
+
+// GET /api/server/panel-version - Get current panel version and check for updates
+router.get('/panel-version', authMiddleware, requirePermission('dashboard.view'), async (req: Request, res: Response) => {
+  // Demo mode: return demo panel version info
+  if (isDemoMode()) {
+    const currentVersion = await getCurrentVersion();
+    res.json({
+      currentVersion,
+      latestVersion: currentVersion,
+      updateAvailable: false,
+      releaseUrl: 'https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel/releases',
+      releaseNotes: '[DEMO] No release notes in demo mode',
+      publishedAt: new Date().toISOString(),
+      lastChecked: new Date().toISOString(),
+    });
+    return;
+  }
+
+  try {
+    // Check if force refresh is requested via query param
+    const forceRefresh = req.query.refresh === 'true';
+    const versionInfo = await checkPanelUpdate(forceRefresh);
+
+    res.json(versionInfo);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to check panel version',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
