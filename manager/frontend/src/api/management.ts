@@ -982,8 +982,9 @@ export interface TrackedMod {
   installed?: boolean // false = wishlist item, not yet installed
   // Unified updates fields
   name?: string
-  source?: 'cfwidget' | 'modtale' | 'stackmart' | 'modstore'
+  source?: 'cfwidget' | 'curseforge' | 'modtale' | 'stackmart' | 'modstore'
   sourceId?: string
+  modId?: number
 }
 
 export interface ModUpdateStatus {

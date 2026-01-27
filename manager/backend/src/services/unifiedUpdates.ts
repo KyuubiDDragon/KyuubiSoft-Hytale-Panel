@@ -1,13 +1,15 @@
 /**
  * Unified Updates Service
  * Aggregates mod update information from all sources:
- * - CFWidget (CurseForge mods)
+ * - CFWidget (CurseForge mods via free proxy)
+ * - CurseForge API (direct API)
  * - Modtale
  * - StackMart
  * - Mod Store
  */
 
 import { getUpdateStatus as getCFWidgetStatus, type TrackedMod } from './cfwidget.js';
+import { getInstalledCurseForgeInfo, checkForUpdates as checkCurseForgeUpdates } from './curseforge.js';
 import { getInstalledModtaleInfo, getModDetails as getModtaleDetails } from './modtale.js';
 import { getInstalledStackMartInfo, getResourceDetails as getStackMartDetails } from './stackmart.js';
 import { getModRegistry, isModInstalled, getLatestRelease } from './modStore.js';
@@ -15,7 +17,7 @@ import { getModRegistry, isModInstalled, getLatestRelease } from './modStore.js'
 export interface UnifiedModUpdate {
   filename: string;
   name: string;
-  source: 'cfwidget' | 'modtale' | 'stackmart' | 'modstore';
+  source: 'cfwidget' | 'curseforge' | 'modtale' | 'stackmart' | 'modstore';
   installedVersion: string;
   latestVersion: string;
   hasUpdate: boolean;
@@ -24,6 +26,7 @@ export interface UnifiedModUpdate {
   lastChecked?: string;
   // Source-specific IDs
   sourceId?: string;
+  modId?: number;
 }
 
 export interface UnifiedUpdateStatus {
@@ -62,7 +65,38 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
     console.error('[UnifiedUpdates] Failed to get CFWidget status:', e);
   }
 
-  // 2. Get Modtale installed mods
+  // 2. Get CurseForge API installed mods (not already in CFWidget)
+  try {
+    const curseforgeInstalled = await getInstalledCurseForgeInfo();
+    const curseforgeUpdates = await checkCurseForgeUpdates();
+
+    for (const [modIdStr, info] of Object.entries(curseforgeInstalled)) {
+      // Skip if already tracked in CFWidget (by filename)
+      if (allMods.some(m => m.filename === info.filename)) continue;
+
+      // Find update info
+      const updateInfo = curseforgeUpdates.find(u => u.modId === parseInt(modIdStr));
+      const hasUpdate = updateInfo?.hasUpdate || false;
+      const latestVersion = updateInfo?.latestVersion || info.version;
+
+      allMods.push({
+        filename: info.filename,
+        name: info.modName,
+        source: 'curseforge',
+        installedVersion: info.version,
+        latestVersion,
+        hasUpdate,
+        lastChecked: new Date().toISOString(),
+        sourceId: modIdStr,
+        modId: info.modId,
+      });
+      if (hasUpdate) updatesAvailable++;
+    }
+  } catch (e) {
+    console.error('[UnifiedUpdates] Failed to get CurseForge API status:', e);
+  }
+
+  // 3. Get Modtale installed mods (not already tracked)
   try {
     const modtaleInstalled = await getInstalledModtaleInfo();
     for (const [, info] of Object.entries(modtaleInstalled)) {
