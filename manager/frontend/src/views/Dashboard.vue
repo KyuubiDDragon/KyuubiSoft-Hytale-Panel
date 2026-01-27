@@ -721,7 +721,7 @@ function refreshAll() {
       </div>
 
       <!-- Mod Updates Card -->
-      <router-link to="/mod-updates" class="card hover:border-hytale-orange/50 transition-colors cursor-pointer">
+      <router-link to="/mods?tab=updates" class="card hover:border-hytale-orange/50 transition-colors cursor-pointer">
         <div class="card-body p-4">
           <div class="flex items-center gap-3">
             <div class="flex-shrink-0">

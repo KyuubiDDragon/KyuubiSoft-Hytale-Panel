@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import {
@@ -11,6 +12,7 @@ import {
   modtaleApi,
   stackmartApi,
   curseforgeApi,
+  modupdatesApi,
   type ModInfo,
   type ConfigFile,
   type ModStoreEntry,
@@ -31,10 +33,13 @@ import {
   type CurseForgeStatus,
   type CurseForgeSortField,
   type CurseForgeInstalledInfo,
+  type TrackedMod,
+  type ModUpdateStatus,
 } from '@/api/management'
 import { getLocale } from '@/i18n'
 
 const { t } = useI18n()
+const route = useRoute()
 const authStore = useAuthStore()
 
 // Helper to get localized string based on current locale
@@ -63,9 +68,11 @@ function getLocalizedText(text: string | LocalizedString | undefined | null): st
   return String(text)
 }
 
-type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge'
+type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge' | 'updates'
 
-const activeTab = ref<TabType>('mods')
+// Check for tab query parameter
+const initialTab = (route.query.tab as TabType) || 'mods'
+const activeTab = ref<TabType>(initialTab)
 const mods = ref<ModInfo[]>([])
 const plugins = ref<ModInfo[]>([])
 const modsPath = ref('')
@@ -146,6 +153,25 @@ const curseforgeInstallSuccess = ref<number | null>(null)
 const curseforgeUninstallingId = ref<number | null>(null)
 const showCurseForgeSettings = ref(false)
 const curseforgeInstalled = ref<Record<string, CurseForgeInstalledInfo>>({})
+
+// Mod Updates state (CFWidget)
+const updateStatus = ref<ModUpdateStatus | null>(null)
+const updatesLoading = ref(false)
+const updatesChecking = ref(false)
+const showTrackDialog = ref(false)
+const trackFilename = ref('')
+const trackCurseforgeInput = ref('')
+const trackCurrentVersion = ref('')
+const tracking = ref(false)
+const trackError = ref('')
+const untrackingFilename = ref<string | null>(null)
+
+// Get mods that are not yet tracked
+const untrackedMods = computed(() => {
+  if (!updateStatus.value) return mods.value.filter(m => m.enabled)
+  const trackedFilenames = updateStatus.value.mods.map(m => m.filename)
+  return mods.value.filter(m => !trackedFilenames.includes(m.filename) && m.enabled)
+})
 
 async function loadData() {
   loading.value = true
@@ -851,6 +877,89 @@ watch(curseforgePage, () => {
   searchCurseForge()
 })
 
+// ==================== MOD UPDATES (CFWidget) ====================
+
+async function loadUpdateStatus() {
+  updatesLoading.value = true
+  try {
+    updateStatus.value = await modupdatesApi.getStatus()
+  } catch {
+    // Silently fail
+  } finally {
+    updatesLoading.value = false
+  }
+}
+
+async function checkAllUpdates() {
+  updatesChecking.value = true
+  try {
+    updateStatus.value = await modupdatesApi.checkAll()
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    updatesChecking.value = false
+  }
+}
+
+function switchToUpdates() {
+  activeTab.value = 'updates'
+  if (!updateStatus.value) {
+    loadUpdateStatus()
+  }
+}
+
+function openTrackDialog(mod?: ModInfo) {
+  trackFilename.value = mod?.filename || ''
+  trackCurseforgeInput.value = ''
+  trackCurrentVersion.value = ''
+  trackError.value = ''
+  showTrackDialog.value = true
+}
+
+async function trackMod() {
+  if (!trackFilename.value || !trackCurseforgeInput.value) {
+    trackError.value = t('modupdates.invalidUrl')
+    return
+  }
+
+  tracking.value = true
+  trackError.value = ''
+  try {
+    const result = await modupdatesApi.track(
+      trackFilename.value,
+      trackCurseforgeInput.value,
+      trackCurrentVersion.value || undefined
+    )
+    if (result.success) {
+      showTrackDialog.value = false
+      await loadUpdateStatus()
+    } else {
+      trackError.value = result.error || t('modupdates.trackError')
+    }
+  } catch {
+    trackError.value = t('modupdates.trackError')
+  } finally {
+    tracking.value = false
+  }
+}
+
+async function untrackMod(filename: string) {
+  untrackingFilename.value = filename
+  try {
+    await modupdatesApi.untrack(filename)
+    await loadUpdateStatus()
+  } catch {
+    error.value = t('errors.serverError')
+  } finally {
+    untrackingFilename.value = null
+  }
+}
+
+function formatUpdateDate(dateStr: string | null): string {
+  if (!dateStr) return t('modupdates.never')
+  return new Date(dateStr).toLocaleString()
+}
+
 onMounted(loadData)
 </script>
 
@@ -989,6 +1098,23 @@ onMounted(loadData)
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
         </svg>
         CurseForge
+      </button>
+      <button
+        @click="switchToUpdates"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          activeTab === 'updates'
+            ? (updateStatus && updateStatus.updatesAvailable > 0 ? 'bg-status-warning text-dark' : 'bg-status-success text-dark')
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        {{ t('modupdates.title') }}
+        <span v-if="updateStatus && updateStatus.updatesAvailable > 0" class="px-1.5 py-0.5 text-xs rounded-full bg-white/20">
+          {{ updateStatus.updatesAvailable }}
+        </span>
       </button>
     </div>
 
@@ -2385,6 +2511,272 @@ onMounted(loadData)
               </button>
             </div>
           </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MOD UPDATES TAB ==================== -->
+    <template v-if="activeTab === 'updates'">
+      <!-- Updates Header Card -->
+      <Card>
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-white">{{ t('modupdates.status') }}</h2>
+            <p class="text-sm text-gray-400 mt-1">
+              {{ t('modupdates.lastChecked') }}: {{ formatUpdateDate(updateStatus?.lastChecked || null) }}
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              class="btn btn-secondary"
+              :disabled="updatesChecking"
+              @click="checkAllUpdates"
+            >
+              <svg v-if="updatesChecking" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <svg v-else class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ t('modupdates.checkAll') }}
+            </button>
+            <button
+              v-if="authStore.hasPermission('mods.edit')"
+              class="btn btn-primary"
+              @click="openTrackDialog()"
+            >
+              <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              {{ t('modupdates.trackMod') }}
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <!-- Status Summary -->
+      <div v-if="updateStatus" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-lg bg-hytale-orange/20 flex items-center justify-center">
+              <svg class="w-6 h-6 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.tracked') }}</p>
+              <p class="text-2xl font-bold text-white">{{ updateStatus.totalTracked }}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center" :class="updateStatus.updatesAvailable > 0 ? 'bg-status-warning/20' : 'bg-status-success/20'">
+              <svg class="w-6 h-6" :class="updateStatus.updatesAvailable > 0 ? 'text-status-warning' : 'text-status-success'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.available') }}</p>
+              <p class="text-2xl font-bold" :class="updateStatus.updatesAvailable > 0 ? 'text-status-warning' : 'text-status-success'">
+                {{ updateStatus.updatesAvailable }}
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
+              <svg class="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.autoCheck') }}</p>
+              <p class="text-lg font-medium text-white">1h</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="updatesLoading" class="flex items-center justify-center py-12">
+        <svg class="w-8 h-8 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+
+      <!-- Tracked Mods List -->
+      <Card v-else-if="updateStatus">
+        <template #header>
+          <h2 class="text-lg font-semibold text-white">{{ t('modupdates.tracked') }}</h2>
+        </template>
+
+        <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-gray-400">
+          {{ t('modupdates.noTrackedMods') }}
+        </div>
+
+        <div v-else class="divide-y divide-gray-700">
+          <div
+            v-for="mod in updateStatus.mods"
+            :key="mod.filename"
+            class="py-4 first:pt-0 last:pb-0"
+          >
+            <div class="flex items-center gap-4">
+              <!-- Thumbnail -->
+              <div class="flex-shrink-0">
+                <img
+                  v-if="mod.thumbnail"
+                  :src="mod.thumbnail"
+                  :alt="mod.projectTitle"
+                  class="w-12 h-12 rounded-lg object-cover"
+                />
+                <div v-else class="w-12 h-12 rounded-lg bg-gray-700 flex items-center justify-center">
+                  <svg class="w-6 h-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                  <span
+                    v-if="mod.hasUpdate"
+                    class="px-2 py-0.5 text-xs rounded-full bg-status-warning/20 text-status-warning"
+                  >
+                    {{ t('modupdates.updateAvailable') }}
+                  </span>
+                  <span
+                    v-else
+                    class="px-2 py-0.5 text-xs rounded-full bg-status-success/20 text-status-success"
+                  >
+                    {{ t('modupdates.noUpdate') }}
+                  </span>
+                </div>
+                <p class="text-sm text-gray-400 truncate">{{ mod.filename }}</p>
+                <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                  <span>{{ t('modupdates.installedVersion') }}: {{ mod.installedVersion || '-' }}</span>
+                  <span>{{ t('modupdates.latestVersion') }}: {{ mod.latestVersion || '-' }}</span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center gap-2">
+                <a
+                  v-if="mod.projectUrl"
+                  :href="mod.projectUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn btn-sm btn-secondary"
+                  :title="t('modupdates.viewOnCurseforge')"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+                <button
+                  v-if="authStore.hasPermission('mods.edit')"
+                  class="btn btn-sm btn-danger"
+                  :disabled="untrackingFilename === mod.filename"
+                  :title="t('modupdates.untrack')"
+                  @click="untrackMod(mod.filename)"
+                >
+                  <svg v-if="untrackingFilename === mod.filename" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </template>
+
+    <!-- Track Mod Dialog -->
+    <div v-if="showTrackDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div class="bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
+        <div class="p-6">
+          <h3 class="text-lg font-semibold text-white mb-4">{{ t('modupdates.trackMod') }}</h3>
+
+          <!-- Error -->
+          <div v-if="trackError" class="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
+            {{ trackError }}
+          </div>
+
+          <!-- Form -->
+          <div class="space-y-4">
+            <!-- Filename Select or Input -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.filename') }}</label>
+              <select
+                v-if="untrackedMods.length > 0"
+                v-model="trackFilename"
+                class="input w-full"
+              >
+                <option value="">-- {{ t('common.search') }} --</option>
+                <option v-for="mod in untrackedMods" :key="mod.filename" :value="mod.filename">
+                  {{ mod.filename }}
+                </option>
+              </select>
+              <input
+                v-else
+                v-model="trackFilename"
+                type="text"
+                class="input w-full"
+                :placeholder="t('modupdates.filename')"
+              />
+            </div>
+
+            <!-- CurseForge URL/Slug -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.curseforgeUrl') }}</label>
+              <input
+                v-model="trackCurseforgeInput"
+                type="text"
+                class="input w-full"
+                :placeholder="t('modupdates.curseforgeUrlHint')"
+              />
+            </div>
+
+            <!-- Current Version (optional) -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.installedVersion') }} (optional)</label>
+              <input
+                v-model="trackCurrentVersion"
+                type="text"
+                class="input w-full"
+                placeholder="1.0.0"
+              />
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-2 mt-6">
+            <button class="btn btn-secondary" @click="showTrackDialog = false">
+              {{ t('common.cancel') }}
+            </button>
+            <button
+              class="btn btn-primary"
+              :disabled="tracking || !trackFilename || !trackCurseforgeInput"
+              @click="trackMod"
+            >
+              <svg v-if="tracking" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ t('modupdates.trackMod') }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
