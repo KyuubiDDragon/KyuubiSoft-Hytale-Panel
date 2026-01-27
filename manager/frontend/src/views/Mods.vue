@@ -10,6 +10,7 @@ import {
   modStoreApi,
   modtaleApi,
   stackmartApi,
+  curseforgeApi,
   type ModInfo,
   type ConfigFile,
   type ModStoreEntry,
@@ -26,6 +27,10 @@ import {
   type StackMartSortOption,
   type StackMartCategory,
   type StackMartInstalledInfo,
+  type CurseForgeMod,
+  type CurseForgeStatus,
+  type CurseForgeSortField,
+  type CurseForgeInstalledInfo,
 } from '@/api/management'
 import { getLocale } from '@/i18n'
 
@@ -58,7 +63,7 @@ function getLocalizedText(text: string | LocalizedString | undefined | null): st
   return String(text)
 }
 
-type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart'
+type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge'
 
 const activeTab = ref<TabType>('mods')
 const mods = ref<ModInfo[]>([])
@@ -126,6 +131,21 @@ const showStackMartDetail = ref(false)
 const stackmartDetailResource = ref<StackMartResourceDetails | null>(null)
 const stackmartDetailLoading = ref(false)
 const stackmartInstalled = ref<Record<string, StackMartInstalledInfo>>({})
+
+// CurseForge state
+const curseforgeStatus = ref<CurseForgeStatus | null>(null)
+const curseforgeMods = ref<CurseForgeMod[]>([])
+const curseforgeLoading = ref(false)
+const curseforgeSearch = ref('')
+const curseforgeSortField = ref<CurseForgeSortField>('Popularity')
+const curseforgePage = ref(0)
+const curseforgeTotalCount = ref(0)
+const curseforgePageSize = ref(20)
+const curseforgeInstallingId = ref<number | null>(null)
+const curseforgeInstallSuccess = ref<number | null>(null)
+const curseforgeUninstallingId = ref<number | null>(null)
+const showCurseForgeSettings = ref(false)
+const curseforgeInstalled = ref<Record<string, CurseForgeInstalledInfo>>({})
 
 async function loadData() {
   loading.value = true
@@ -718,6 +738,119 @@ watch(stackmartPage, () => {
   searchStackMart()
 })
 
+// ========== CurseForge Functions ==========
+
+async function loadCurseForgeStatus() {
+  try {
+    curseforgeStatus.value = await curseforgeApi.getStatus()
+  } catch {
+    curseforgeStatus.value = { configured: false, hasApiKey: false, apiAvailable: false, gameId: 0 }
+  }
+}
+
+async function loadCurseForgeInstalled() {
+  try {
+    const result = await curseforgeApi.getInstalled()
+    curseforgeInstalled.value = result.mods || {}
+  } catch {
+    curseforgeInstalled.value = {}
+  }
+}
+
+async function searchCurseForge() {
+  if (!curseforgeStatus.value?.apiAvailable) return
+
+  curseforgeLoading.value = true
+  error.value = ''
+  try {
+    const result = await curseforgeApi.search({
+      search: curseforgeSearch.value || undefined,
+      sortField: curseforgeSortField.value,
+      pageSize: curseforgePageSize.value,
+      index: curseforgePage.value * curseforgePageSize.value,
+    })
+    curseforgeMods.value = result.data
+    curseforgeTotalCount.value = result.pagination.totalCount
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.connectionFailed')
+  } finally {
+    curseforgeLoading.value = false
+  }
+}
+
+async function switchToCurseForge() {
+  activeTab.value = 'curseforge'
+  if (!curseforgeStatus.value) {
+    await loadCurseForgeStatus()
+  }
+  loadCurseForgeInstalled()
+  if (curseforgeStatus.value?.apiAvailable && curseforgeMods.value.length === 0) {
+    await searchCurseForge()
+  }
+}
+
+async function installCurseForgeMod(mod: CurseForgeMod) {
+  curseforgeInstallingId.value = mod.id
+  curseforgeInstallSuccess.value = null
+  error.value = ''
+  try {
+    const result = await curseforgeApi.install(mod.id)
+    if (result.success) {
+      curseforgeInstallSuccess.value = mod.id
+      await loadCurseForgeInstalled()
+      await loadData()
+      setTimeout(() => { curseforgeInstallSuccess.value = null }, 3000)
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    curseforgeInstallingId.value = null
+  }
+}
+
+async function uninstallCurseForgeMod(modId: number) {
+  const modInfo = curseforgeInstalled.value[modId.toString()]
+  if (!confirm(t('mods.confirmUninstall', { name: modInfo?.modName || modId }))) return
+
+  curseforgeUninstallingId.value = modId
+  error.value = ''
+  try {
+    const result = await curseforgeApi.uninstall(modId)
+    if (result.success) {
+      await loadCurseForgeInstalled()
+      await loadData()
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    curseforgeUninstallingId.value = null
+  }
+}
+
+function isCurseForgeModInstalled(modId: number): boolean {
+  return curseforgeInstalled.value[modId.toString()] !== undefined
+}
+
+function getCurseForgeInstalledVersion(modId: number): string | undefined {
+  return curseforgeInstalled.value[modId.toString()]?.version
+}
+
+const curseforgeTotalPages = computed(() => Math.ceil(curseforgeTotalCount.value / curseforgePageSize.value))
+
+// Watch for CurseForge search/filter changes
+watch([curseforgeSearch, curseforgeSortField], () => {
+  curseforgePage.value = 0
+  searchCurseForge()
+})
+
+watch(curseforgePage, () => {
+  searchCurseForge()
+})
+
 onMounted(loadData)
 </script>
 
@@ -841,6 +974,21 @@ onMounted(loadData)
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
         </svg>
         StackMart
+      </button>
+      <button
+        @click="switchToCurseForge"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          activeTab === 'curseforge'
+            ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+        </svg>
+        CurseForge
       </button>
     </div>
 
@@ -1800,6 +1948,280 @@ onMounted(loadData)
         </div>
       </Card>
     </template>
+
+    <!-- ========== CurseForge Tab ========== -->
+    <template v-if="activeTab === 'curseforge'">
+      <!-- CurseForge Info Card with Settings Button -->
+      <Card>
+        <div class="flex items-start gap-4">
+          <div class="p-3 bg-gradient-to-r from-orange-600/20 to-red-600/20 rounded-lg">
+            <svg class="w-6 h-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-3">
+              <h3 class="font-semibold text-white">CurseForge</h3>
+              <button
+                @click="showCurseForgeSettings = true"
+                class="p-1 text-gray-400 hover:text-white transition-colors"
+                title="API Settings"
+              >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-sm text-gray-400 mt-1">{{ t('mods.curseforgeDescription') }}</p>
+            <p class="text-sm text-gray-500 mt-2">{{ t('mods.restartNote') }}</p>
+          </div>
+        </div>
+      </Card>
+
+      <!-- CurseForge Unavailable Warning -->
+      <Card v-if="curseforgeStatus && !curseforgeStatus.apiAvailable">
+        <div class="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+          <h3 class="font-medium text-orange-400 mb-2 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            {{ t('mods.curseforgeUnavailable') }}
+          </h3>
+          <p class="text-sm text-gray-400 mb-3">
+            {{ t('mods.curseforgeApiKeyInstructions') }}
+          </p>
+          <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
+            <li>{{ t('mods.curseforgeApiKeyStep1') }} <a href="https://console.curseforge.com/" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:underline">console.curseforge.com</a></li>
+            <li>{{ t('mods.curseforgeApiKeyStep2') }}</li>
+            <li>{{ t('mods.curseforgeApiKeyStep3') }}</li>
+          </ol>
+          <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
+            CURSEFORGE_API_KEY=your_api_key_here
+          </code>
+        </div>
+      </Card>
+
+      <!-- CurseForge Search & Filters -->
+      <Card v-if="curseforgeStatus?.apiAvailable" :title="t('mods.curseforgeResults')" :padding="false">
+        <!-- Search Bar -->
+        <div class="p-4 border-b border-dark-50/30">
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <input
+                v-model="curseforgeSearch"
+                type="text"
+                :placeholder="t('mods.searchCurseForge')"
+                class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <select
+              v-model="curseforgeSortField"
+              class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-orange-500"
+            >
+              <option value="Popularity">{{ t('mods.sortPopular') }}</option>
+              <option value="TotalDownloads">{{ t('mods.sortDownloads') }}</option>
+              <option value="LastUpdated">{{ t('mods.sortUpdated') }}</option>
+              <option value="Name">{{ t('mods.sortName') }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="curseforgeLoading" class="text-center text-gray-500 p-8">
+          <svg class="w-8 h-8 mx-auto animate-spin text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </div>
+
+        <!-- No Results -->
+        <div v-else-if="curseforgeMods.length === 0" class="text-center text-gray-500 p-8">
+          <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {{ t('mods.noCurseForgeResults') }}
+        </div>
+
+        <!-- Mod Grid -->
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+          <div
+            v-for="mod in curseforgeMods"
+            :key="mod.id"
+            class="p-4 bg-dark-100 rounded-lg hover:bg-dark-50/50 transition-colors"
+          >
+            <div class="flex gap-4">
+              <!-- Mod Logo -->
+              <div class="w-16 h-16 rounded-lg overflow-hidden bg-dark-200 shrink-0">
+                <img
+                  v-if="mod.logo"
+                  :src="mod.logo.thumbnailUrl"
+                  :alt="mod.name"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center text-gray-600">
+                  <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Mod Info -->
+              <div class="flex-1 min-w-0">
+                <h4 class="font-semibold text-white truncate">{{ mod.name }}</h4>
+                <p class="text-sm text-gray-400 line-clamp-2 mt-1">{{ mod.summary }}</p>
+                <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                  <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ formatDownloads(mod.downloadCount) }}
+                  </span>
+                  <span v-if="mod.authors?.length">{{ mod.authors[0].name }}</span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex flex-col gap-2 shrink-0">
+                <!-- Installed Badge -->
+                <span
+                  v-if="isCurseForgeModInstalled(mod.id)"
+                  class="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded"
+                >
+                  {{ t('mods.installed') }} v{{ getCurseForgeInstalledVersion(mod.id) }}
+                </span>
+
+                <!-- Uninstall Button (if installed) -->
+                <button
+                  v-if="isCurseForgeModInstalled(mod.id) && authStore.hasPermission('mods.delete')"
+                  @click.stop="uninstallCurseForgeMod(mod.id)"
+                  :disabled="curseforgeUninstallingId === mod.id"
+                  class="px-3 py-1 bg-red-500/20 text-red-400 text-xs rounded hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                >
+                  {{ curseforgeUninstallingId === mod.id ? t('mods.uninstalling') : t('mods.uninstall') }}
+                </button>
+
+                <!-- Install Button (if not installed) -->
+                <button
+                  v-if="!isCurseForgeModInstalled(mod.id) && authStore.hasPermission('mods.install')"
+                  @click.stop="installCurseForgeMod(mod)"
+                  :disabled="curseforgeInstallingId === mod.id"
+                  class="px-3 py-1 bg-gradient-to-r from-orange-600 to-red-600 text-white text-xs rounded hover:from-orange-500 hover:to-red-500 transition-colors disabled:opacity-50"
+                >
+                  <span v-if="curseforgeInstallingId === mod.id">{{ t('mods.installing') }}</span>
+                  <span v-else>{{ t('mods.install') }}</span>
+                </button>
+
+                <!-- Success Badge -->
+                <span
+                  v-if="curseforgeInstallSuccess === mod.id"
+                  class="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded flex items-center gap-1"
+                >
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {{ t('mods.installed') }}
+                </span>
+
+                <!-- External Link -->
+                <a
+                  :href="mod.links.websiteUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-orange-400 hover:text-orange-300 text-xs flex items-center gap-1"
+                >
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  {{ t('mods.viewOnCurseforge') }}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="curseforgeTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-dark-50/30">
+          <button
+            @click="curseforgePage = Math.max(0, curseforgePage - 1)"
+            :disabled="curseforgePage === 0"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &larr;
+          </button>
+          <span class="text-gray-400">
+            {{ curseforgePage + 1 }} / {{ curseforgeTotalPages }}
+          </span>
+          <button
+            @click="curseforgePage = Math.min(curseforgeTotalPages - 1, curseforgePage + 1)"
+            :disabled="curseforgePage >= curseforgeTotalPages - 1"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &rarr;
+          </button>
+        </div>
+      </Card>
+    </template>
+
+    <!-- CurseForge Settings Modal -->
+    <div v-if="showCurseForgeSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-dark-200 rounded-xl w-full max-w-md">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">{{ t('mods.curseforgeApiSettings') }}</h2>
+          <button @click="showCurseForgeSettings = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('mods.statusLabel') }}:</span>
+                <span :class="curseforgeStatus?.apiAvailable ? 'text-green-400' : 'text-red-400'">
+                  {{ curseforgeStatus?.apiAvailable ? t('mods.online') : t('mods.offline') }}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('mods.apiKeyLabel') }}:</span>
+                <span :class="curseforgeStatus?.hasApiKey ? 'text-green-400' : 'text-yellow-400'">
+                  {{ curseforgeStatus?.hasApiKey ? t('mods.configured') : t('mods.notConfigured') }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+            <h3 class="font-medium text-orange-400 mb-2 flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {{ t('mods.setupApiKey') }}
+            </h3>
+            <p class="text-sm text-gray-400 mb-3">
+              {{ t('mods.curseforgeApiKeyInstructions') }}
+            </p>
+            <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
+              <li>{{ t('mods.curseforgeApiKeyStep1') }} <a href="https://console.curseforge.com/" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:underline">console.curseforge.com</a></li>
+              <li>{{ t('mods.curseforgeApiKeyStep2') }}</li>
+              <li>{{ t('mods.curseforgeApiKeyStep3') }}</li>
+            </ol>
+            <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
+              CURSEFORGE_API_KEY=your_api_key_here
+            </code>
+          </div>
+
+          <button
+            @click="showCurseForgeSettings = false"
+            class="w-full px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white font-medium rounded-lg hover:from-orange-500 hover:to-red-500 transition-colors"
+          >
+            {{ t('mods.close') }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- StackMart Settings Modal -->
     <div v-if="showStackMartSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
