@@ -75,7 +75,8 @@
     "chat": "Chat-Protokoll",
     "roles": "Rollen",
     "help": "Befehlshilfe",
-    "avatarInventory": "Avatar & Inventar"
+    "avatarInventory": "Avatar & Inventar",
+    "modUpdates": "Mod Updates"
   },
   "dashboard": {
     "title": "Dashboard",
