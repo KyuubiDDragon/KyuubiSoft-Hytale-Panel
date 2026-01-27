@@ -21,7 +21,7 @@ const CURSEFORGE_CDN_BASE = 'edge.forgecdn.net';
 
 // Game IDs - Hytale's CurseForge game ID
 // See: https://www.curseforge.com/hytale
-const DEFAULT_GAME_ID = 6095; // Hytale
+const DEFAULT_GAME_ID = 46500; // Hytale
 
 // Cache configuration
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes

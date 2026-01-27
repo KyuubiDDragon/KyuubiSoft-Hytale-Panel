@@ -126,10 +126,10 @@ const curseforgeApiKeyFromEnv = process.env.CURSEFORGE_API_KEY || '';
 const effectiveCurseforgeApiKey = curseforgeApiKeyFromConfig || curseforgeApiKeyFromEnv;
 
 // Determine CurseForge game ID: prefer config.json, then env
-// Default is 6095 (Hytale) - see https://www.curseforge.com/hytale
+// Default is 46500 (Hytale) - see https://www.curseforge.com/hytale
 const curseforgeGameIdFromConfig = configJson?.integrations?.curseforgeGameId;
 const curseforgeGameIdFromEnv = process.env.CURSEFORGE_GAME_ID ? parseInt(process.env.CURSEFORGE_GAME_ID, 10) : undefined;
-const effectiveCurseforgeGameId = curseforgeGameIdFromConfig || curseforgeGameIdFromEnv || 6095;
+const effectiveCurseforgeGameId = curseforgeGameIdFromConfig || curseforgeGameIdFromEnv || 46500;
 
 export const config = {
   // ============================================================
