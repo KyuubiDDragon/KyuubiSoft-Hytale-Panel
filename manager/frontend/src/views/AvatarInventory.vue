@@ -348,16 +348,16 @@ const utilityGrid = computed(() => {
 
 const storageGrid = computed(() => {
   if (!inventory.value) return []
-  return generateGrid(inventory.value.storage, 28) // 7x4
+  return generateGrid(inventory.value.storage, 27) // 9x3
 })
 
 const backpackGrid = computed(() => {
   if (!inventory.value) return []
-  // Backpack has 8/16/24 slots based on content
+  // Backpack has 9/18/27 slots based on content (9 per row)
   const itemCount = inventory.value.backpack.length
-  let capacity = 8
-  if (itemCount > 16) capacity = 24
-  else if (itemCount > 8) capacity = 16
+  let capacity = 9
+  if (itemCount > 18) capacity = 27
+  else if (itemCount > 9) capacity = 18
   return generateGrid(inventory.value.backpack, capacity)
 })
 
@@ -511,7 +511,7 @@ function handleSearchBlur() {
 
               <!-- Avatar Display -->
               <div class="flex-1 relative">
-                <div class="aspect-[3/4] max-h-[240px] bg-gradient-to-b from-slate-700/30 to-slate-900/50 rounded-lg border border-slate-600/30 overflow-hidden relative">
+                <div class="aspect-[3/4] max-h-[280px] bg-gradient-to-b from-slate-700/30 to-slate-900/50 rounded-lg border border-slate-600/30 overflow-hidden relative">
                   <!-- Loading Spinner -->
                   <div v-if="avatarLoading" class="absolute inset-0 flex items-center justify-center">
                     <svg class="w-10 h-10 animate-spin text-hytale-orange/50" fill="none" viewBox="0 0 24 24">
@@ -728,18 +728,18 @@ function handleSearchBlur() {
         <!-- Right Panel: Tabs -->
         <div class="flex-1 flex flex-col gap-2 min-w-0">
           <!-- Tab Navigation -->
-          <div class="flex gap-1 bg-slate-800/40 p-0.5 rounded">
+          <div class="flex gap-1 bg-slate-800/40 p-1 rounded-lg">
             <button
               @click="activeTab = 'inventory'"
               :class="[
-                'flex-1 px-2 py-1 rounded font-medium text-xs transition-all',
+                'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'inventory'
                   ? 'bg-slate-700 text-white shadow'
                   : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
               ]"
             >
-              <span class="flex items-center justify-center gap-1">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span class="flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
                 {{ t('avatarInventory.inventory') }}
@@ -748,14 +748,14 @@ function handleSearchBlur() {
             <button
               @click="activeTab = 'info'"
               :class="[
-                'flex-1 px-2 py-1 rounded font-medium text-xs transition-all',
+                'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'info'
                   ? 'bg-slate-700 text-white shadow'
                   : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
               ]"
             >
-              <span class="flex items-center justify-center gap-1">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span class="flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {{ t('avatarInventory.info') }}
@@ -764,14 +764,14 @@ function handleSearchBlur() {
             <button
               @click="activeTab = 'chat'"
               :class="[
-                'flex-1 px-2 py-1 rounded font-medium text-xs transition-all',
+                'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'chat'
                   ? 'bg-slate-700 text-white shadow'
                   : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
               ]"
             >
-              <span class="flex items-center justify-center gap-1">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span class="flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
                 {{ t('avatarInventory.chat') }}
@@ -780,14 +780,14 @@ function handleSearchBlur() {
             <button
               @click="activeTab = 'deaths'"
               :class="[
-                'flex-1 px-2 py-1 rounded font-medium text-xs transition-all',
+                'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'deaths'
                   ? 'bg-slate-700 text-white shadow'
                   : 'text-gray-400 hover:text-white hover:bg-slate-700/50'
               ]"
             >
-              <span class="flex items-center justify-center gap-1">
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <span class="flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 {{ t('avatarInventory.deaths') }}
@@ -827,7 +827,7 @@ function handleSearchBlur() {
             </div>
 
             <!-- Backpack Grid -->
-            <div class="grid grid-cols-8 gap-0.5 w-fit">
+            <div class="grid grid-cols-9 gap-0.5 w-fit">
               <div
                 v-for="(item, index) in backpackGrid"
                 :key="`backpack-${index}`"
@@ -857,17 +857,17 @@ function handleSearchBlur() {
             </div>
           </div>
 
-          <!-- Main Inventory Section -->
-          <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-lg border border-slate-600/30 p-2">
-            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-              <svg class="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <!-- Main Inventory Section (includes Storage + Hotbar) -->
+          <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-lg border border-slate-600/30 p-3">
+            <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
               {{ t('avatarInventory.inventory') }}
             </h3>
 
-            <!-- Storage Grid (8x4 = 32 slots) -->
-            <div class="grid grid-cols-8 gap-0.5 w-fit">
+            <!-- Storage Grid (9x3 = 27 slots) -->
+            <div class="grid grid-cols-9 gap-0.5 w-fit">
               <div
                 v-for="(item, index) in storageGrid"
                 :key="`storage-${index}`"
@@ -899,19 +899,17 @@ function handleSearchBlur() {
                 </template>
               </div>
             </div>
-          </div>
 
-          <!-- Hotbar Section -->
-          <div class="bg-gradient-to-b from-slate-800/60 to-slate-900/60 rounded-lg border border-slate-600/30 p-2">
-            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+            <!-- Hotbar Label -->
+            <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mt-3 mb-1.5 flex items-center gap-1">
               <svg class="w-3 h-3 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
               </svg>
               {{ t('avatarInventory.hotbar') }}
-            </h3>
+            </h4>
 
             <!-- Hotbar Grid -->
-            <div class="grid grid-cols-8 gap-0.5 w-fit">
+            <div class="grid grid-cols-9 gap-0.5 w-fit">
               <div
                 v-for="(item, index) in hotbarGrid"
                 :key="`hotbar-${index}`"
