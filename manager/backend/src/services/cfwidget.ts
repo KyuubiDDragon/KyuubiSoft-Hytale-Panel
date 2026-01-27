@@ -642,6 +642,20 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/__+/g, '_');
 }
 
+/**
+ * Construct CurseForge CDN download URL from file ID and filename
+ * CurseForge CDN format: https://mediafilez.forgecdn.net/files/{first4}/{remaining}/{filename}
+ */
+function constructDownloadUrl(fileId: number, filename: string): string {
+  const idStr = fileId.toString();
+  // Split file ID: first 4 digits, then remaining digits
+  const first = idStr.slice(0, 4);
+  const remaining = idStr.slice(4);
+  // URL encode the filename for special characters
+  const encodedFilename = encodeURIComponent(filename);
+  return `https://mediafilez.forgecdn.net/files/${first}/${remaining}/${encodedFilename}`;
+}
+
 export interface CFWidgetInstallResult {
   success: boolean;
   error?: string;
@@ -698,14 +712,17 @@ export async function installTrackedMod(
     return { success: false, error: 'Invalid destination path' };
   }
 
+  // Construct proper CDN download URL (CFWidget returns website URL, not CDN URL)
+  const downloadUrl = constructDownloadUrl(latestFile.id, latestFile.name);
+
   console.log(`[CFWidget] Downloading ${modInfo.title} to ${destPath}`);
-  console.log(`[CFWidget] Download URL: ${latestFile.url}`);
+  console.log(`[CFWidget] Download URL: ${downloadUrl}`);
 
   // Download the file
-  const downloaded = await downloadFile(latestFile.url, destPath);
+  const downloaded = await downloadFile(downloadUrl, destPath);
   if (!downloaded) {
-    console.error(`[CFWidget] Download failed for URL: ${latestFile.url}`);
-    return { success: false, error: `Failed to download mod file from ${latestFile.url}` };
+    console.error(`[CFWidget] Download failed for URL: ${downloadUrl}`);
+    return { success: false, error: `Failed to download mod file from ${downloadUrl}` };
   }
 
   // If this was a wishlist item or an update, handle old file

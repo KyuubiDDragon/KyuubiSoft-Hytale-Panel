@@ -29,7 +29,6 @@ import Assets from './views/Assets.vue'
 import Chat from './views/Chat.vue'
 import Help from './views/Help.vue'
 import AvatarInventory from './views/AvatarInventory.vue'
-import ModUpdates from './views/ModUpdates.vue'
 
 // Import stores
 import { useAuthStore } from './stores/auth'
@@ -103,12 +102,6 @@ const router = createRouter({
       path: '/mods',
       name: 'mods',
       component: Mods,
-      meta: { requiresAuth: true },
-    },
-    {
-      path: '/mod-updates',
-      name: 'modUpdates',
-      component: ModUpdates,
       meta: { requiresAuth: true },
     },
     {
