@@ -154,6 +154,12 @@
       "checking": "Checking...",
       "checkNow": "Check",
       "viewAll": "View all"
+    },
+    "panelUpdate": {
+      "title": "Panel Update Available",
+      "description": "A new version of the panel is available: {current} → {latest}",
+      "viewRelease": "View Release",
+      "publishedAt": "Released"
     }
   },
   "console": {

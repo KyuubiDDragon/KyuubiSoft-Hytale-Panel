@@ -143,6 +143,22 @@
       "title": "Novos Recursos Disponíveis",
       "description": "Seu painel foi atualizado para a versão {version}. Novas configurações estão disponíveis:",
       "configure": "Configurar Agora"
+    },
+    "modUpdates": {
+      "title": "Atualizações de Mods",
+      "noUpdates": "Sem atualizações",
+      "updatesAvailable": "{count} atualização(ões) disponível(eis)",
+      "allUpToDate": "Tudo atualizado",
+      "noTracked": "Nenhum mod rastreado",
+      "checking": "Verificando...",
+      "checkNow": "Verificar",
+      "viewAll": "Ver todos"
+    },
+    "panelUpdate": {
+      "title": "Atualização do Painel Disponível",
+      "description": "Uma nova versão do painel está disponível: {current} → {latest}",
+      "viewRelease": "Ver Release",
+      "publishedAt": "Publicado"
     }
   },
   "console": {

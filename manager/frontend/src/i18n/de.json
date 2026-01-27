@@ -154,6 +154,12 @@
       "checking": "Prüfe...",
       "checkNow": "Prüfen",
       "viewAll": "Alle anzeigen"
+    },
+    "panelUpdate": {
+      "title": "Panel-Update verfügbar",
+      "description": "Eine neue Version des Panels ist verfügbar: {current} → {latest}",
+      "viewRelease": "Release anzeigen",
+      "publishedAt": "Veröffentlicht"
     }
   },
   "console": {
