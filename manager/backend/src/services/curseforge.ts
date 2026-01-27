@@ -9,6 +9,7 @@ import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
 import { sanitizeFileName } from '../utils/pathSecurity.js';
+import { trackMod as cfwidgetTrackMod, untrackMod as cfwidgetUntrackMod } from './cfwidget.js';
 
 // Security: Regex pattern for validating mod IDs (CurseForge uses numeric IDs)
 const MOD_ID_PATTERN = /^\d{1,10}$/;
@@ -812,7 +813,7 @@ export async function installModFromCurseForge(
     return { success: false, error: 'Failed to download mod file' };
   }
 
-  // Track the installed mod
+  // Track the installed mod (CurseForge internal tracking)
   await trackInstalledMod({
     modId: mod.id,
     modName: mod.name,
@@ -823,6 +824,15 @@ export async function installModFromCurseForge(
     releaseType: file.releaseType,
     gameVersions: file.gameVersions,
   });
+
+  // Also track in CFWidget for unified update checking in Updates tab
+  try {
+    await cfwidgetTrackMod(filename, mod.slug, file.displayName);
+    console.log(`[CurseForge] Mod ${mod.name} also tracked in CFWidget for update checking`);
+  } catch (e) {
+    console.error('[CurseForge] Failed to track mod in CFWidget:', e);
+    // Don't fail the install if CFWidget tracking fails
+  }
 
   return {
     success: true,
@@ -1014,6 +1024,14 @@ export async function uninstallCurseForge(modId: number): Promise<{ success: boo
   }
 
   await untrackInstalledMod(modId);
+
+  // Also untrack from CFWidget
+  try {
+    await cfwidgetUntrackMod(installed.filename);
+    console.log(`[CurseForge] Mod ${installed.modName} also untracked from CFWidget`);
+  } catch (e) {
+    console.error('[CurseForge] Failed to untrack mod from CFWidget:', e);
+  }
 
   return { success: true };
 }
