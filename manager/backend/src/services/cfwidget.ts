@@ -224,6 +224,32 @@ export async function getModInfo(slug: string): Promise<CFWidgetProject | null> 
 }
 
 /**
+ * Extract version from filename
+ * Supports patterns like:
+ * - ModName-1.0.2-SNAPSHOT_80dc15d9.jar → 1.0.2-SNAPSHOT
+ * - ModName-2026.1.12-30731_6cb09a36.jar → 2026.1.12-30731
+ * - ModName-1.0.0_e0eb041a.zip → 1.0.0
+ * - ModName-1.3.1.jar → 1.3.1
+ */
+export function extractVersionFromFilename(filename: string): string | null {
+  if (!filename) return null;
+
+  // Remove extension
+  const nameWithoutExt = filename.replace(/\.(jar|zip)$/i, '');
+
+  // Pattern: ModName-Version_hash or ModName-Version
+  // Try to match version pattern after the mod name
+  // Version typically starts after the first hyphen and contains numbers/dots
+  const match = nameWithoutExt.match(/-(\d+[\d.\-a-zA-Z]*?)(?:_[a-f0-9]+)?$/i);
+
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  return null;
+}
+
+/**
  * Extract slug from CurseForge URL
  * Supports formats:
  * - https://www.curseforge.com/hytale/mods/mod-slug
@@ -289,12 +315,15 @@ export async function trackMod(
     return { success: false, error: 'Mod not found on CurseForge' };
   }
 
+  // Extract version from filename if not provided
+  const installedVersion = currentVersion || extractVersionFromFilename(filename) || undefined;
+
   const latestFile = modInfo.download;
 
   const trackedMod: TrackedMod = {
     filename,
     curseforgeSlug: slug,
-    installedVersion: currentVersion,
+    installedVersion,
     latestFileId: latestFile?.id,
     latestVersion: latestFile?.display || latestFile?.name,
     latestFileName: latestFile?.name,

@@ -903,9 +903,8 @@ async function checkAllUpdates() {
 
 function switchToUpdates() {
   activeTab.value = 'updates'
-  if (!updateStatus.value) {
-    loadUpdateStatus()
-  }
+  // Always load status when switching to updates tab
+  loadUpdateStatus()
 }
 
 function openTrackDialog(mod?: ModInfo) {
@@ -960,7 +959,13 @@ function formatUpdateDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleString()
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  // Load updates status if navigating directly to updates tab
+  if (initialTab === 'updates') {
+    loadUpdateStatus()
+  }
+})
 </script>
 
 <template>
