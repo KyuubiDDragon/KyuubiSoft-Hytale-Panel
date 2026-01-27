@@ -3285,14 +3285,14 @@ router.post('/modupdates/track', authMiddleware, requirePermission('mods.install
   }
 
   try {
-    const { filename, curseforgeUrl, currentVersion } = req.body;
+    const { filename, curseforgeInput, currentVersion } = req.body;
 
-    if (!filename || !curseforgeUrl) {
-      res.status(400).json({ success: false, error: 'Missing filename or curseforgeUrl' });
+    if (!filename || !curseforgeInput) {
+      res.status(400).json({ success: false, error: 'Missing filename or curseforgeInput' });
       return;
     }
 
-    const result = await cfwidgetTrackMod(filename, curseforgeUrl, currentVersion);
+    const result = await cfwidgetTrackMod(filename, curseforgeInput, currentVersion);
 
     if (result.success) {
       const user = req.user || 'system';
