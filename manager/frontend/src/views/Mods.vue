@@ -166,6 +166,7 @@ const tracking = ref(false)
 const trackError = ref('')
 const untrackingFilename = ref<string | null>(null)
 const trackAsWishlist = ref(false) // Track mod without installing (wishlist)
+const installingFilename = ref<string | null>(null) // Mod being installed/updated
 
 // Get mods that are not yet tracked
 const untrackedMods = computed(() => {
@@ -958,6 +959,23 @@ async function untrackMod(filename: string) {
     error.value = t('errors.serverError')
   } finally {
     untrackingFilename.value = null
+  }
+}
+
+async function installTrackedMod(filename: string) {
+  installingFilename.value = filename
+  try {
+    const result = await modupdatesApi.install(filename)
+    if (result.success) {
+      // Reload both mods list and update status
+      await Promise.all([loadData(), loadUpdateStatus()])
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch {
+    error.value = t('errors.serverError')
+  } finally {
+    installingFilename.value = null
   }
 }
 
@@ -2691,6 +2709,40 @@ onMounted(() => {
 
               <!-- Actions -->
               <div class="flex items-center gap-2">
+                <!-- Install button (for wishlist items) -->
+                <button
+                  v-if="mod.installed === false && authStore.hasPermission('mods.install')"
+                  class="btn btn-sm bg-purple-600 hover:bg-purple-700 text-white"
+                  :disabled="installingFilename === mod.filename"
+                  :title="t('modupdates.install')"
+                  @click="installTrackedMod(mod.filename)"
+                >
+                  <svg v-if="installingFilename === mod.filename" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span class="ml-1">{{ t('modupdates.install') }}</span>
+                </button>
+                <!-- Update button (for installed mods with updates) -->
+                <button
+                  v-else-if="mod.hasUpdate && authStore.hasPermission('mods.install')"
+                  class="btn btn-sm bg-status-warning hover:bg-yellow-600 text-dark"
+                  :disabled="installingFilename === mod.filename"
+                  :title="t('modupdates.update')"
+                  @click="installTrackedMod(mod.filename)"
+                >
+                  <svg v-if="installingFilename === mod.filename" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span class="ml-1">{{ t('modupdates.update') }}</span>
+                </button>
                 <a
                   v-if="mod.projectUrl"
                   :href="mod.projectUrl"

@@ -1076,4 +1076,16 @@ export const modupdatesApi = {
     const response = await api.post<{ success: boolean }>('/management/modupdates/cache/clear')
     return response.data
   },
+
+  /** Install or update a tracked mod */
+  async install(filename: string): Promise<{ success: boolean; error?: string; filename?: string; modName?: string; version?: string }> {
+    const response = await api.post<{ success: boolean; error?: string; filename?: string; modName?: string; version?: string }>(`/management/modupdates/install/${encodeURIComponent(filename)}`)
+    return response.data
+  },
+
+  /** Uninstall a tracked mod (delete file and untrack) */
+  async uninstall(filename: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.delete<{ success: boolean; error?: string }>(`/management/modupdates/uninstall/${encodeURIComponent(filename)}`)
+    return response.data
+  },
 }
