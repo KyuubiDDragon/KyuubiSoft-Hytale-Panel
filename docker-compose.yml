@@ -178,6 +178,9 @@ services:
       # StackMart API (optional)
       - STACKMART_API_KEY=${STACKMART_API_KEY:-}
 
+      # CurseForge API (optional - for CurseForge mod browser)
+      - CURSEFORGE_API_KEY=${CURSEFORGE_API_KEY:-}
+
       # Host data path (for error messages)
       - HOST_DATA_PATH=${HOST_DATA_PATH:-/opt/hytale}
 

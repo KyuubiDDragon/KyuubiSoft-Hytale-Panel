@@ -132,6 +132,8 @@ import {
   checkAllUpdates as cfwidgetCheckAll,
   getUpdateStatus as cfwidgetStatus,
   updateInstalledVersion as cfwidgetUpdateVersion,
+  installTrackedMod as cfwidgetInstallMod,
+  uninstallTrackedMod as cfwidgetUninstallMod,
   clearCFWidgetCache,
 } from '../services/cfwidget.js';
 
@@ -3447,6 +3449,72 @@ router.put('/modupdates/version/:filename', authMiddleware, requirePermission('m
   } catch (error) {
     console.error('Update version error:', error);
     res.status(500).json({ success: false, error: 'Failed to update version' });
+  }
+});
+
+// POST /api/management/modupdates/install/:filename - Install or update a tracked mod
+router.post('/modupdates/install/:filename', authMiddleware, requirePermission('mods.install'), async (req: AuthenticatedRequest, res: Response) => {
+  // Demo mode: simulate install
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Mod installed (simulated)', filename: 'demo-mod.jar' });
+    return;
+  }
+
+  try {
+    const { filename } = req.params;
+    const decodedFilename = decodeURIComponent(filename);
+
+    const result = await cfwidgetInstallMod(decodedFilename);
+
+    if (result.success) {
+      const user = req.user || 'system';
+      logActivity(
+        user,
+        'install_mod_cfwidget',
+        'mod',
+        true,
+        result.filename || decodedFilename,
+        `Installed ${result.modName} v${result.version}`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('CFWidget install error:', error);
+    res.status(500).json({ success: false, error: 'Failed to install mod' });
+  }
+});
+
+// DELETE /api/management/modupdates/uninstall/:filename - Uninstall a tracked mod (delete file and untrack)
+router.delete('/modupdates/uninstall/:filename', authMiddleware, requirePermission('mods.delete'), async (req: AuthenticatedRequest, res: Response) => {
+  // Demo mode: simulate uninstall
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Mod uninstalled (simulated)' });
+    return;
+  }
+
+  try {
+    const { filename } = req.params;
+    const decodedFilename = decodeURIComponent(filename);
+
+    const result = await cfwidgetUninstallMod(decodedFilename);
+
+    if (result.success) {
+      const user = req.user || 'system';
+      logActivity(
+        user,
+        'uninstall_mod_cfwidget',
+        'mod',
+        true,
+        decodedFilename,
+        `Uninstalled mod`
+      );
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('CFWidget uninstall error:', error);
+    res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
   }
 });
 

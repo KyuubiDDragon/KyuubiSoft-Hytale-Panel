@@ -588,7 +588,11 @@
     "trackAsWishlist": "Track without installing (Wishlist)",
     "wishlist": "Wishlist",
     "notInstalled": "Not installed",
-    "selectFile": "Please select a mod file"
+    "selectFile": "Please select a mod file",
+    "install": "Install",
+    "update": "Update",
+    "installing": "Installing...",
+    "updating": "Updating..."
   },
   "performance": {
     "title": "Performance Monitor",

@@ -4,7 +4,8 @@
  * No API key required - uses https://api.cfwidget.com
  */
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, access, unlink } from 'fs/promises';
+import { createWriteStream } from 'fs';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
@@ -544,6 +545,206 @@ export async function updateInstalledVersion(
   return true;
 }
 
+// ============== Download & Install ==============
+
+/**
+ * Download a file from URL to destination
+ */
+async function downloadFile(url: string, destPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const file = createWriteStream(destPath);
+
+    const request = https.get(url, (response) => {
+      // Handle redirects
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        const redirectUrl = response.headers.location;
+        if (redirectUrl) {
+          file.close();
+          downloadFile(redirectUrl, destPath).then(resolve);
+          return;
+        }
+      }
+
+      if (response.statusCode !== 200) {
+        file.close();
+        resolve(false);
+        return;
+      }
+
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close();
+        resolve(true);
+      });
+    });
+
+    request.on('error', (err) => {
+      console.error('[CFWidget] Download error:', err);
+      file.close();
+      resolve(false);
+    });
+
+    file.on('error', (err) => {
+      console.error('[CFWidget] File write error:', err);
+      file.close();
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Sanitize filename for safe file system operations
+ */
+function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/__+/g, '_');
+}
+
+export interface CFWidgetInstallResult {
+  success: boolean;
+  error?: string;
+  filename?: string;
+  modName?: string;
+  version?: string;
+}
+
+/**
+ * Install or update a tracked mod from CFWidget
+ */
+export async function installTrackedMod(
+  trackedFilename: string
+): Promise<CFWidgetInstallResult> {
+  const data = await loadTrackedMods();
+  const tracked = data.mods[trackedFilename];
+
+  if (!tracked) {
+    return { success: false, error: 'Mod not tracked' };
+  }
+
+  // Get fresh mod info
+  const modInfo = await getModInfo(tracked.curseforgeSlug);
+  if (!modInfo) {
+    return { success: false, error: 'Could not fetch mod info from CurseForge' };
+  }
+
+  const latestFile = modInfo.download;
+  if (!latestFile || !latestFile.url) {
+    return { success: false, error: 'No download available for this mod' };
+  }
+
+  // Sanitize filename
+  const safeFilename = sanitizeFilename(latestFile.name);
+  if (!safeFilename) {
+    return { success: false, error: 'Invalid filename' };
+  }
+
+  // Ensure mods directory exists
+  try {
+    await access(config.modsPath);
+  } catch {
+    await mkdir(config.modsPath, { recursive: true });
+  }
+
+  // Build destination path
+  const destPath = path.join(config.modsPath, safeFilename);
+  const resolvedDest = path.resolve(destPath);
+  const resolvedTarget = path.resolve(config.modsPath);
+
+  // Security: Prevent path traversal
+  if (!resolvedDest.startsWith(resolvedTarget + path.sep)) {
+    console.error('[CFWidget] Path traversal attempt detected');
+    return { success: false, error: 'Invalid destination path' };
+  }
+
+  console.log(`[CFWidget] Downloading ${modInfo.title} to ${destPath}`);
+
+  // Download the file
+  const downloaded = await downloadFile(latestFile.url, destPath);
+  if (!downloaded) {
+    return { success: false, error: 'Failed to download mod file' };
+  }
+
+  // If this was a wishlist item or an update, handle old file
+  const isWishlist = !tracked.installed;
+  const isUpdate = tracked.installed && tracked.filename !== safeFilename;
+
+  // Delete old file if updating to new version
+  if (isUpdate && tracked.filename && !tracked.filename.startsWith('[wishlist]')) {
+    try {
+      const oldPath = path.join(config.modsPath, tracked.filename);
+      await unlink(oldPath);
+      console.log(`[CFWidget] Deleted old version: ${tracked.filename}`);
+    } catch {
+      // Old file might not exist, that's OK
+    }
+  }
+
+  // Update tracked mod data
+  const oldKey = trackedFilename;
+  delete data.mods[oldKey];
+
+  // Create updated tracked mod entry
+  const updatedMod: TrackedMod = {
+    filename: safeFilename,
+    curseforgeSlug: tracked.curseforgeSlug,
+    installedVersion: extractVersionFromFilename(safeFilename) || latestFile.display || latestFile.version,
+    installedFileId: latestFile.id,
+    latestFileId: latestFile.id,
+    latestVersion: latestFile.display || latestFile.name,
+    latestFileName: latestFile.name,
+    hasUpdate: false, // Just installed/updated, so no update available
+    lastChecked: new Date().toISOString(),
+    projectId: modInfo.id,
+    projectTitle: modInfo.title,
+    projectUrl: modInfo.urls?.curseforge,
+    thumbnail: modInfo.thumbnail,
+    installed: true,
+  };
+
+  data.mods[safeFilename] = updatedMod;
+  await saveTrackedMods(data);
+
+  console.log(`[CFWidget] ${isWishlist ? 'Installed' : 'Updated'} ${modInfo.title} (${safeFilename})`);
+
+  return {
+    success: true,
+    filename: safeFilename,
+    modName: modInfo.title,
+    version: updatedMod.installedVersion,
+  };
+}
+
+/**
+ * Uninstall a tracked mod (delete file and untrack)
+ */
+export async function uninstallTrackedMod(
+  filename: string
+): Promise<{ success: boolean; error?: string }> {
+  const data = await loadTrackedMods();
+  const tracked = data.mods[filename];
+
+  if (!tracked) {
+    return { success: false, error: 'Mod not tracked' };
+  }
+
+  // Only delete file if it's installed (not a wishlist item)
+  if (tracked.installed && !filename.startsWith('[wishlist]')) {
+    try {
+      const filePath = path.join(config.modsPath, filename);
+      await unlink(filePath);
+      console.log(`[CFWidget] Deleted mod file: ${filename}`);
+    } catch (err) {
+      console.error('[CFWidget] Failed to delete mod file:', err);
+      // Continue to untrack even if file deletion fails
+    }
+  }
+
+  // Remove from tracked mods
+  delete data.mods[filename];
+  await saveTrackedMods(data);
+
+  return { success: true };
+}
+
 // ============== Automatic Update Checker ==============
 
 let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -614,6 +815,8 @@ export default {
   checkAllUpdates,
   getUpdateStatus,
   updateInstalledVersion,
+  installTrackedMod,
+  uninstallTrackedMod,
   clearCFWidgetCache,
   startAutoUpdateCheck,
   stopAutoUpdateCheck,
