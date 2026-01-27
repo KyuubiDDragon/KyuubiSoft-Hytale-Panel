@@ -136,6 +136,7 @@ import {
   uninstallTrackedMod as cfwidgetUninstallMod,
   clearCFWidgetCache,
 } from '../services/cfwidget.js';
+import { getUnifiedUpdateStatus } from '../services/unifiedUpdates.js';
 
 // SECURITY: Allowed file extensions for uploads
 // Removed .dll and .so as they are native executables
@@ -3237,7 +3238,8 @@ router.get('/modupdates/status', authMiddleware, requirePermission('mods.view'),
   }
 
   try {
-    const status = await cfwidgetStatus();
+    // Use unified status that includes ALL sources (CFWidget, Modtale, StackMart, ModStore)
+    const status = await getUnifiedUpdateStatus();
     res.json(status);
   } catch (error) {
     console.error('Mod updates status error:', error);

@@ -967,19 +967,23 @@ export const curseforgeApi = {
 
 export interface TrackedMod {
   filename: string
-  curseforgeSlug: string
+  curseforgeSlug?: string
   installedFileId?: number
   installedVersion?: string
   latestFileId?: number
   latestVersion?: string
   latestFileName?: string
   hasUpdate: boolean
-  lastChecked: string
+  lastChecked?: string
   projectId?: number
   projectTitle?: string
   projectUrl?: string
   thumbnail?: string
-  installed: boolean // false = wishlist item, not yet installed
+  installed?: boolean // false = wishlist item, not yet installed
+  // Unified updates fields
+  name?: string
+  source?: 'cfwidget' | 'modtale' | 'stackmart' | 'modstore'
+  sourceId?: string
 }
 
 export interface ModUpdateStatus {
