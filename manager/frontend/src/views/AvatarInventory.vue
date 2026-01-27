@@ -551,12 +551,38 @@ function handleSearchBlur() {
 
             <!-- Quick Slots Row -->
             <div class="flex justify-center gap-2 mt-3">
-              <!-- Utility Quick Slot -->
+              <!-- Pet/Companion Quick Slot (Left - no function) -->
+              <div class="relative group">
+                <div
+                  class="w-10 h-10 border-2 border-amber-500/30 bg-slate-800/50 rounded-lg flex items-center justify-center cursor-pointer hover:border-amber-500/60 transition-all"
+                  :class="{ 'border-amber-500/60': expandedQuickSlot === 0 }"
+                  @mouseenter="expandedQuickSlot = 0"
+                >
+                  <svg class="w-4 h-4 text-amber-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                  <span class="absolute -right-0.5 -bottom-0.5 text-amber-400/80">
+                    <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
+                  </span>
+                </div>
+                <!-- Expanded Pet Slots -->
+                <div
+                  v-if="expandedQuickSlot === 0"
+                  class="absolute left-full top-0 ml-1.5 flex gap-1 p-1.5 bg-slate-800/95 border border-slate-600/50 rounded-lg shadow-xl z-10"
+                  @mouseleave="expandedQuickSlot = null"
+                >
+                  <div v-for="i in 4" :key="i" class="w-8 h-8 border border-amber-500/30 bg-slate-700/50 rounded flex items-center justify-center">
+                    <span class="text-[9px] text-amber-400/40">{{ i }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Utility Quick Slot (Middle - has items) -->
               <div class="relative group">
                 <div
                   class="w-10 h-10 border-2 border-purple-500/30 bg-slate-800/50 rounded-lg flex items-center justify-center cursor-pointer hover:border-purple-500/60 transition-all"
-                  :class="{ 'border-purple-500/60': expandedQuickSlot === 0 }"
-                  @mouseenter="expandedQuickSlot = 0"
+                  :class="{ 'border-purple-500/60': expandedQuickSlot === 1 }"
+                  @mouseenter="expandedQuickSlot = 1"
                 >
                   <template v-if="utilityGrid[0]">
                     <img
@@ -579,7 +605,7 @@ function handleSearchBlur() {
                 </div>
                 <!-- Expanded Utility Slots -->
                 <div
-                  v-if="expandedQuickSlot === 0"
+                  v-if="expandedQuickSlot === 1"
                   class="absolute left-full top-0 ml-1.5 flex gap-1 p-1.5 bg-slate-800/95 border border-slate-600/50 rounded-lg shadow-xl z-10"
                   @mouseleave="expandedQuickSlot = null"
                 >
@@ -613,33 +639,7 @@ function handleSearchBlur() {
                 </div>
               </div>
 
-              <!-- Pet/Companion Quick Slot -->
-              <div class="relative group">
-                <div
-                  class="w-10 h-10 border-2 border-amber-500/30 bg-slate-800/50 rounded-lg flex items-center justify-center cursor-pointer hover:border-amber-500/60 transition-all"
-                  :class="{ 'border-amber-500/60': expandedQuickSlot === 1 }"
-                  @mouseenter="expandedQuickSlot = 1"
-                >
-                  <svg class="w-4 h-4 text-amber-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  <span class="absolute -right-0.5 -bottom-0.5 text-amber-400/80">
-                    <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5v10z"/></svg>
-                  </span>
-                </div>
-                <!-- Expanded Pet Slots -->
-                <div
-                  v-if="expandedQuickSlot === 1"
-                  class="absolute left-full top-0 ml-1.5 flex gap-1 p-1.5 bg-slate-800/95 border border-slate-600/50 rounded-lg shadow-xl z-10"
-                  @mouseleave="expandedQuickSlot = null"
-                >
-                  <div v-for="i in 4" :key="i" class="w-8 h-8 border border-amber-500/30 bg-slate-700/50 rounded flex items-center justify-center">
-                    <span class="text-[9px] text-amber-400/40">{{ i }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Emote Quick Slot -->
+              <!-- Emote Quick Slot (Right - no function) -->
               <div class="relative group">
                 <div
                   class="w-10 h-10 border-2 border-green-500/30 bg-slate-800/50 rounded-lg flex items-center justify-center cursor-pointer hover:border-green-500/60 transition-all"
