@@ -26,6 +26,8 @@ interface ConfigJson {
   integrations?: {
     modtaleApiKey?: string;
     stackmartApiKey?: string;
+    curseforgeApiKey?: string;
+    curseforgeGameId?: number;
     webmap?: boolean;
   };
   automation?: {
@@ -118,6 +120,17 @@ const modtaleApiKeyFromConfig = configJson?.integrations?.modtaleApiKey;
 const modtaleApiKeyFromEnv = process.env.MODTALE_API_KEY || '';
 const effectiveModtaleApiKey = modtaleApiKeyFromConfig || modtaleApiKeyFromEnv;
 
+// Determine CurseForge API key: prefer config.json, then env
+const curseforgeApiKeyFromConfig = configJson?.integrations?.curseforgeApiKey;
+const curseforgeApiKeyFromEnv = process.env.CURSEFORGE_API_KEY || '';
+const effectiveCurseforgeApiKey = curseforgeApiKeyFromConfig || curseforgeApiKeyFromEnv;
+
+// Determine CurseForge game ID: prefer config.json, then env
+// Default is 432 (Minecraft) - can be changed when Hytale has an official ID
+const curseforgeGameIdFromConfig = configJson?.integrations?.curseforgeGameId;
+const curseforgeGameIdFromEnv = process.env.CURSEFORGE_GAME_ID ? parseInt(process.env.CURSEFORGE_GAME_ID, 10) : undefined;
+const effectiveCurseforgeGameId = curseforgeGameIdFromConfig || curseforgeGameIdFromEnv || 432;
+
 export const config = {
   // ============================================================
   // Values that can come from config.json (after setup)
@@ -137,6 +150,10 @@ export const config = {
 
   // Modtale Integration - from config.json if available, otherwise from env
   modtaleApiKey: effectiveModtaleApiKey,
+
+  // CurseForge Integration - from config.json if available, otherwise from env
+  curseforgeApiKey: effectiveCurseforgeApiKey,
+  curseforgeGameId: effectiveCurseforgeGameId,
 
   // WebMap enabled - from config.json after setup
   webmapEnabled: configJson?.integrations?.webmap ?? false,
@@ -236,6 +253,12 @@ export function reloadConfigFromFile(): void {
       }
       if (newConfigJson.integrations?.modtaleApiKey !== undefined) {
         (config as { modtaleApiKey: string }).modtaleApiKey = newConfigJson.integrations.modtaleApiKey;
+      }
+      if (newConfigJson.integrations?.curseforgeApiKey !== undefined) {
+        (config as { curseforgeApiKey: string }).curseforgeApiKey = newConfigJson.integrations.curseforgeApiKey;
+      }
+      if (newConfigJson.integrations?.curseforgeGameId !== undefined) {
+        (config as { curseforgeGameId: number }).curseforgeGameId = newConfigJson.integrations.curseforgeGameId;
       }
       if (newConfigJson.integrations?.webmap !== undefined) {
         (config as { webmapEnabled: boolean }).webmapEnabled = newConfigJson.integrations.webmap;

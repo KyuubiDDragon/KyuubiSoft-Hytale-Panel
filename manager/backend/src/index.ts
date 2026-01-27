@@ -34,6 +34,7 @@ import { initializePluginEvents, disconnectFromPluginWebSocket } from './service
 import { initializeRoles } from './services/roles.js';
 import { isSetupComplete } from './services/setupService.js';
 import { checkAndRunMigration, migrateUpdateConfig, checkPanelVersionAndFeatures } from './services/migration.js';
+import { startAutoUpdateCheck } from './services/cfwidget.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -610,6 +611,9 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Start schedulers
   startSchedulers();
+
+  // Start CFWidget mod update checker (checks hourly for CurseForge mod updates)
+  startAutoUpdateCheck();
 });
 
 // Graceful shutdown

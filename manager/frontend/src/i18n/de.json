@@ -143,6 +143,16 @@
       "title": "Neue Funktionen verfügbar",
       "description": "Dein Panel wurde auf Version {version} aktualisiert. Neue Einstellungen sind jetzt verfügbar:",
       "configure": "Jetzt konfigurieren"
+    },
+    "modUpdates": {
+      "title": "Mod Updates",
+      "noUpdates": "Keine Updates",
+      "updatesAvailable": "{count} Update(s) verfügbar",
+      "allUpToDate": "Alle aktuell",
+      "noTracked": "Keine Mods verfolgt",
+      "checking": "Prüfe...",
+      "checkNow": "Prüfen",
+      "viewAll": "Alle anzeigen"
     }
   },
   "console": {
@@ -518,7 +528,56 @@
     "stackmartApiKeyInstructions": "Um Publisher-Funktionen zu nutzen, erstelle einen API-Key auf stackmart.org:",
     "stackmartApiKeyStep1": "Gehe zu",
     "stackmartApiKeyStep2": "Erstelle einen Publisher-Account",
-    "stackmartApiKeyStep3": "Generiere einen Publisher API Key"
+    "stackmartApiKeyStep3": "Generiere einen Publisher API Key",
+    "curseforgeDescription": "Durchsuche und installiere Mods von CurseForge - der größten Gaming-Mod-Plattform.",
+    "curseforgeUnavailable": "CurseForge API nicht verfügbar. Bitte API-Key konfigurieren.",
+    "searchCurseForge": "Mods auf CurseForge suchen...",
+    "curseforgeResults": "CurseForge Ergebnisse",
+    "noCurseForgeResults": "Keine Mods gefunden",
+    "curseforgeApiKeyInstructions": "Um CurseForge zu nutzen, benötigst du einen API-Key:",
+    "curseforgeApiKeyStep1": "Gehe zu",
+    "curseforgeApiKeyStep2": "Beantrage einen API-Key für Third-Party",
+    "curseforgeApiKeyStep3": "Füge den Key in die Konfiguration ein",
+    "checkingUpdates": "Prüfe auf Updates...",
+    "updatesAvailable": "Updates verfügbar",
+    "noUpdatesAvailable": "Alle Mods sind aktuell",
+    "updateAll": "Alle aktualisieren",
+    "releaseType": "Release-Typ",
+    "release": "Release",
+    "beta": "Beta",
+    "alpha": "Alpha",
+    "gameVersions": "Spielversionen",
+    "curseforgeApiSettings": "CurseForge API Einstellungen",
+    "thirdPartyDisabled": "Dieser Mod erlaubt keine Third-Party Downloads. Bitte lade ihn direkt von CurseForge herunter."
+  },
+  "modupdates": {
+    "title": "Mod Updates",
+    "status": "Update Status",
+    "available": "Updates verfügbar",
+    "upToDate": "Alle Mods aktuell",
+    "noTrackedMods": "Keine Mods werden verfolgt",
+    "tracked": "Verfolgte Mods",
+    "checking": "Prüfe auf Updates...",
+    "checkAll": "Alle prüfen",
+    "checkNow": "Jetzt prüfen",
+    "lastChecked": "Zuletzt geprüft",
+    "never": "Nie",
+    "trackMod": "Mod verfolgen",
+    "untrack": "Nicht mehr verfolgen",
+    "curseforgeUrl": "CurseForge URL oder Slug",
+    "curseforgeUrlHint": "z.B. https://www.curseforge.com/hytale/mods/mod-name oder mod-name",
+    "installedVersion": "Installierte Version",
+    "latestVersion": "Neueste Version",
+    "updateAvailable": "Update verfügbar",
+    "noUpdate": "Aktuell",
+    "filename": "Dateiname",
+    "trackSuccess": "Mod wird jetzt verfolgt",
+    "trackError": "Fehler beim Verfolgen der Mod",
+    "untrackSuccess": "Mod wird nicht mehr verfolgt",
+    "modNotFound": "Mod nicht auf CurseForge gefunden",
+    "invalidUrl": "Ungültige CurseForge URL oder Slug",
+    "autoCheck": "Automatische Prüfung (stündlich)",
+    "viewOnCurseforge": "Auf CurseForge anzeigen"
   },
   "performance": {
     "title": "Performance Monitor",
@@ -1600,6 +1659,13 @@
         "apiKey": "API-Schlüssel",
         "apiKeyPlaceholder": "StackMart API-Schlüssel eingeben...",
         "hint": "Hole dir deinen API-Schlüssel von stackmart.org für Publisher-Funktionen"
+      },
+      "curseforge": {
+        "title": "CurseForge",
+        "description": "Zugriff auf CurseForge zum Durchsuchen und Installieren von Mods mit Update-Prüfung",
+        "apiKey": "API-Schlüssel",
+        "apiKeyPlaceholder": "CurseForge API-Schlüssel eingeben...",
+        "hint": "Beantrage einen API-Key bei docs.curseforge.com"
       },
       "webmap": {
         "title": "Web-Karte",
