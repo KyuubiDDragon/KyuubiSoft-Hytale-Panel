@@ -11,6 +11,7 @@ import {
   modtaleApi,
   stackmartApi,
   curseforgeApi,
+  modupdatesApi,
   type ModInfo,
   type ConfigFile,
   type ModStoreEntry,
@@ -31,6 +32,9 @@ import {
   type CurseForgeStatus,
   type CurseForgeSortField,
   type CurseForgeInstalledInfo,
+  type TrackedMod,
+  type ModUpdateStatus,
+  type CFWidgetProject,
 } from '@/api/management'
 import { getLocale } from '@/i18n'
 
@@ -146,6 +150,18 @@ const curseforgeInstallSuccess = ref<number | null>(null)
 const curseforgeUninstallingId = ref<number | null>(null)
 const showCurseForgeSettings = ref(false)
 const curseforgeInstalled = ref<Record<string, CurseForgeInstalledInfo>>({})
+
+// Mod Tracking (CFWidget) state
+const modUpdateStatus = ref<ModUpdateStatus | null>(null)
+const trackedMods = ref<Record<string, TrackedMod>>({})
+const showTrackModModal = ref(false)
+const trackingMod = ref<ModInfo | null>(null)
+const trackModInput = ref('')
+const trackModVersion = ref('')
+const trackModLoading = ref(false)
+const trackModLookup = ref<CFWidgetProject | null>(null)
+const trackModError = ref('')
+const checkingUpdates = ref(false)
 
 async function loadData() {
   loading.value = true
@@ -851,7 +867,121 @@ watch(curseforgePage, () => {
   searchCurseForge()
 })
 
-onMounted(loadData)
+// ========== Mod Tracking (CFWidget) Functions ==========
+
+async function loadModUpdateStatus() {
+  try {
+    modUpdateStatus.value = await modupdatesApi.getStatus()
+    // Build a map of tracked mods by filename
+    trackedMods.value = {}
+    if (modUpdateStatus.value?.mods) {
+      for (const mod of modUpdateStatus.value.mods) {
+        trackedMods.value[mod.filename] = mod
+      }
+    }
+  } catch {
+    // Silently fail - tracking may not be configured
+  }
+}
+
+function isModTracked(filename: string): boolean {
+  return trackedMods.value[filename] !== undefined
+}
+
+function getTrackedMod(filename: string): TrackedMod | undefined {
+  return trackedMods.value[filename]
+}
+
+function openTrackModModal(mod: ModInfo) {
+  trackingMod.value = mod
+  trackModInput.value = ''
+  trackModVersion.value = ''
+  trackModLookup.value = null
+  trackModError.value = ''
+  showTrackModModal.value = true
+}
+
+async function lookupCurseForge() {
+  if (!trackModInput.value.trim()) return
+
+  trackModLoading.value = true
+  trackModError.value = ''
+  trackModLookup.value = null
+
+  try {
+    const result = await modupdatesApi.lookup(trackModInput.value.trim())
+    if (result.success && result.project) {
+      trackModLookup.value = result.project
+    } else {
+      trackModError.value = result.error || t('mods.modNotFound')
+    }
+  } catch (e: any) {
+    trackModError.value = e.response?.data?.error || t('mods.invalidUrl')
+  } finally {
+    trackModLoading.value = false
+  }
+}
+
+async function trackMod() {
+  if (!trackingMod.value || !trackModInput.value.trim()) return
+
+  trackModLoading.value = true
+  trackModError.value = ''
+
+  try {
+    const result = await modupdatesApi.track(
+      trackingMod.value.filename,
+      trackModInput.value.trim(),
+      trackModVersion.value.trim() || undefined
+    )
+    if (result.success) {
+      showTrackModModal.value = false
+      await loadModUpdateStatus()
+    } else {
+      trackModError.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    trackModError.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    trackModLoading.value = false
+  }
+}
+
+async function untrackMod(filename: string) {
+  if (!confirm(t('mods.confirmUntrack'))) return
+
+  try {
+    const result = await modupdatesApi.untrack(filename)
+    if (result.success) {
+      await loadModUpdateStatus()
+    }
+  } catch {
+    error.value = t('errors.serverError')
+  }
+}
+
+async function checkAllModUpdates() {
+  checkingUpdates.value = true
+  try {
+    modUpdateStatus.value = await modupdatesApi.checkAll()
+    // Rebuild tracked mods map
+    trackedMods.value = {}
+    if (modUpdateStatus.value?.mods) {
+      for (const mod of modUpdateStatus.value.mods) {
+        trackedMods.value[mod.filename] = mod
+      }
+    }
+  } catch {
+    error.value = t('errors.serverError')
+  } finally {
+    checkingUpdates.value = false
+  }
+}
+
+onMounted(() => {
+  loadData()
+  loadModUpdateStatus()
+})
 </script>
 
 <template>
@@ -872,6 +1002,21 @@ onMounted(loadData)
         <p class="text-gray-400 mt-1">{{ t('mods.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-3">
+        <!-- Check Updates Button -->
+        <button
+          v-if="modUpdateStatus && modUpdateStatus.totalTracked > 0"
+          @click="checkAllModUpdates"
+          :disabled="checkingUpdates"
+          class="px-3 py-2 bg-orange-500/20 text-orange-400 font-medium rounded-lg hover:bg-orange-500/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+          :title="t('mods.checkUpdates')"
+        >
+          <svg :class="['w-5 h-5', checkingUpdates ? 'animate-spin' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span v-if="modUpdateStatus.updatesAvailable > 0" class="px-1.5 py-0.5 bg-orange-500 text-white text-xs rounded-full">
+            {{ modUpdateStatus.updatesAvailable }}
+          </span>
+        </button>
         <button
           v-if="authStore.hasAnyPermission('mods.install', 'plugins.install')"
           @click="triggerUpload"
@@ -1083,7 +1228,7 @@ onMounted(loadData)
                 <span v-if="item.installedVersion" class="text-xs text-gray-400">
                   {{ item.installedVersion }}
                 </span>
-                <!-- Update badge -->
+                <!-- Update badge (from mod store) -->
                 <span
                   v-if="item.hasUpdate"
                   class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse cursor-pointer"
@@ -1092,12 +1237,60 @@ onMounted(loadData)
                 >
                   ↑ {{ item.latestVersion }}
                 </span>
+                <!-- CFWidget Tracking Info -->
+                <template v-if="activeTab === 'mods' && isModTracked(item.filename)">
+                  <span class="px-2 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400" :title="getTrackedMod(item.filename)?.projectTitle">
+                    {{ t('mods.tracked') }}
+                  </span>
+                  <span
+                    v-if="getTrackedMod(item.filename)?.hasUpdate"
+                    class="px-2 py-0.5 rounded text-xs bg-orange-500/30 text-orange-300 animate-pulse"
+                  >
+                    ↑ {{ getTrackedMod(item.filename)?.latestVersion }}
+                  </span>
+                </template>
               </div>
             </div>
           </div>
 
           <!-- Actions -->
           <div class="flex items-center gap-3">
+            <!-- CFWidget: Track Button (only for mods that aren't tracked) -->
+            <button
+              v-if="activeTab === 'mods' && !isModTracked(item.filename)"
+              @click="openTrackModModal(item)"
+              class="p-2 text-gray-400 hover:text-orange-400 transition-colors"
+              :title="t('mods.trackMod')"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+            <!-- CFWidget: Untrack Button (for tracked mods) -->
+            <button
+              v-if="activeTab === 'mods' && isModTracked(item.filename)"
+              @click="untrackMod(item.filename)"
+              class="p-2 text-orange-400 hover:text-orange-300 transition-colors"
+              :title="t('mods.untrackMod')"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+            </button>
+            <!-- CFWidget: View on CurseForge (for tracked mods with URL) -->
+            <a
+              v-if="activeTab === 'mods' && isModTracked(item.filename) && getTrackedMod(item.filename)?.projectUrl"
+              :href="getTrackedMod(item.filename)?.projectUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="p-2 text-orange-400 hover:text-orange-300 transition-colors"
+              :title="t('mods.viewOnCurseforge')"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
             <!-- Update Button -->
             <button
               v-if="item.hasUpdate && item.storeId && authStore.hasPermission('mods.install')"
@@ -2469,6 +2662,114 @@ onMounted(loadData)
                 spellcheck="false"
               />
             </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Track Mod Modal (CFWidget) -->
+    <div v-if="showTrackModModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-dark-200 rounded-xl w-full max-w-lg">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">{{ t('mods.trackMod') }}</h2>
+          <button @click="showTrackModModal = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <!-- Mod being tracked -->
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <p class="text-sm text-gray-400">{{ t('mods.trackingFile') }}:</p>
+            <p class="font-medium text-white">{{ trackingMod?.name }}</p>
+          </div>
+
+          <!-- CurseForge URL/Slug Input -->
+          <div>
+            <label class="block text-sm font-medium text-gray-400 mb-2">{{ t('mods.curseforgeUrl') }}</label>
+            <div class="flex gap-2">
+              <input
+                v-model="trackModInput"
+                type="text"
+                :placeholder="t('mods.curseforgeUrlHint')"
+                class="flex-1 px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                @keyup.enter="lookupCurseForge"
+              />
+              <button
+                @click="lookupCurseForge"
+                :disabled="trackModLoading || !trackModInput.trim()"
+                class="px-4 py-2 bg-orange-500/20 text-orange-400 font-medium rounded-lg hover:bg-orange-500/30 transition-colors disabled:opacity-50"
+              >
+                {{ trackModLoading ? '...' : t('mods.lookup') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Error message -->
+          <div v-if="trackModError" class="p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+            <p class="text-status-error text-sm">{{ trackModError }}</p>
+          </div>
+
+          <!-- Lookup Result Preview -->
+          <div v-if="trackModLookup" class="p-4 bg-dark-100 rounded-lg">
+            <div class="flex gap-4">
+              <img
+                v-if="trackModLookup.thumbnail"
+                :src="trackModLookup.thumbnail"
+                :alt="trackModLookup.title"
+                class="w-16 h-16 rounded-lg object-cover"
+              />
+              <div v-else class="w-16 h-16 rounded-lg bg-dark-200 flex items-center justify-center">
+                <svg class="w-8 h-8 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <div class="flex-1">
+                <h4 class="font-semibold text-white">{{ trackModLookup.title }}</h4>
+                <p class="text-sm text-gray-400 line-clamp-2">{{ trackModLookup.summary }}</p>
+                <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                  <span>{{ formatDownloads(trackModLookup.downloads.total) }} Downloads</span>
+                  <span v-if="trackModLookup.files?.length">{{ trackModLookup.files.length }} Versionen</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Latest Version -->
+            <div v-if="trackModLookup.files?.length" class="mt-3 pt-3 border-t border-dark-50/30">
+              <p class="text-sm text-gray-400">{{ t('mods.latestVersion') }}:</p>
+              <p class="font-medium text-orange-400">{{ trackModLookup.files[0].display }} ({{ trackModLookup.files[0].type }})</p>
+            </div>
+          </div>
+
+          <!-- Current Version Input (optional) -->
+          <div v-if="trackModLookup">
+            <label class="block text-sm font-medium text-gray-400 mb-2">{{ t('mods.currentVersion') }} ({{ t('mods.optional') }})</label>
+            <input
+              v-model="trackModVersion"
+              type="text"
+              :placeholder="trackModLookup.files?.[0]?.display || '1.0.0'"
+              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+            />
+            <p class="text-xs text-gray-500 mt-1">{{ t('mods.currentVersionHint') }}</p>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-3 pt-4">
+            <button
+              @click="showTrackModModal = false"
+              class="px-4 py-2 bg-dark-100 text-gray-400 font-medium rounded-lg hover:text-white transition-colors"
+            >
+              {{ t('common.cancel') }}
+            </button>
+            <button
+              @click="trackMod"
+              :disabled="trackModLoading || !trackModInput.trim()"
+              class="px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white font-medium rounded-lg hover:from-orange-500 hover:to-red-500 transition-colors disabled:opacity-50"
+            >
+              {{ trackModLoading ? t('common.loading') : t('mods.trackMod') }}
+            </button>
           </div>
         </div>
       </div>
