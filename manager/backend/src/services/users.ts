@@ -26,7 +26,7 @@ interface UsersData {
 }
 
 // Path to users file in the persistent data volume
-const DATA_DIR = process.env.DATA_PATH || '/app/data';
+const DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 // Ensure data directory exists

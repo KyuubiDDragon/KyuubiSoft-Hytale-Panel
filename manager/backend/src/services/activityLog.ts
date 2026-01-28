@@ -19,7 +19,7 @@ const activityLog: ActivityLogEntry[] = [];
 const MAX_LOG_ENTRIES = 500;
 
 // Path to persistent log file
-const DATA_DIR = process.env.DATA_PATH || '/app/data';
+const DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
 const LOG_FILE = path.join(DATA_DIR, 'activity-log.json');
 
 // Generate unique ID

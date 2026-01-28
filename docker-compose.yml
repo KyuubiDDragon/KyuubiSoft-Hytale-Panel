@@ -168,6 +168,8 @@ services:
       - BACKUPS_PATH=/opt/hytale/backups
       - DATA_PATH=/opt/hytale/data
       - ASSETS_PATH=/opt/hytale/assets
+      # Manager persistent data path (for users, roles, config, logs)
+      - MANAGER_DATA_PATH=/app/data
 
       # Settings
       - TZ=${TZ:-Europe/Berlin}

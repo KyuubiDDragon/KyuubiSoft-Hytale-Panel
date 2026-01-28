@@ -9,8 +9,8 @@ dotenv.config();
 // Config.json Integration
 // ============================================================
 
-// Path to config.json (same as in configService.ts)
-const DATA_PATH = process.env.DATA_PATH || '/opt/hytale/data';
+// Path to config.json (same as in configService.ts, persistent volume)
+const DATA_PATH = process.env.MANAGER_DATA_PATH || '/app/data';
 const CONFIG_FILE_PATH = path.join(DATA_PATH, 'config.json');
 
 // Interface for config.json (simplified for this module)
