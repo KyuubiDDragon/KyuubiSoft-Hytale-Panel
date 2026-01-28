@@ -86,6 +86,7 @@ import {
   isValidProjectId,
   isValidVersion,
   getInstalledModtaleInfo,
+  untrackInstalledMod as modtaleUntrack,
   type ModtaleSortOption,
   type ModtaleClassification,
 } from '../services/modtale.js';
@@ -101,6 +102,7 @@ import {
   clearStackMartCache,
   isValidResourceId,
   getInstalledStackMartInfo,
+  untrackInstalledResource as stackmartUntrack,
   type StackMartSortOption,
   type StackMartCategory,
 } from '../services/stackmart.js';
@@ -120,6 +122,7 @@ import {
   clearCurseForgeCache,
   isValidModId as isValidCurseForgeModId,
   getInstalledCurseForgeInfo,
+  untrackInstalledMod as curseforgeUntrack,
   type CurseForgeSortField,
   type CurseForgeSortOrder,
 } from '../services/curseforge.js';
@@ -191,6 +194,52 @@ const uploadPlugin = multer({
     }
   },
 });
+
+// Helper function to clean up all source tracking when a mod is deleted
+async function cleanupModTracking(filename: string): Promise<void> {
+  try {
+    // 1. Check and remove from CFWidget
+    const cfwidgetData = await cfwidgetStatus();
+    const cfwidgetMod = cfwidgetData.mods.find((m: { filename: string }) => m.filename === filename);
+    if (cfwidgetMod) {
+      await cfwidgetUntrackMod(filename);
+      console.log(`[Cleanup] Removed ${filename} from CFWidget tracking`);
+    }
+
+    // 2. Check and remove from Modtale
+    const modtaleInstalled = await getInstalledModtaleInfo();
+    for (const [projectId, info] of Object.entries(modtaleInstalled)) {
+      if (info.filename === filename) {
+        await modtaleUntrack(projectId);
+        console.log(`[Cleanup] Removed ${filename} from Modtale tracking (project: ${projectId})`);
+        break;
+      }
+    }
+
+    // 3. Check and remove from StackMart
+    const stackmartInstalled = await getInstalledStackMartInfo();
+    for (const [resourceId, info] of Object.entries(stackmartInstalled)) {
+      if (info.filename === filename) {
+        await stackmartUntrack(resourceId);
+        console.log(`[Cleanup] Removed ${filename} from StackMart tracking (resource: ${resourceId})`);
+        break;
+      }
+    }
+
+    // 4. Check and remove from CurseForge API
+    const curseforgeInstalled = await getInstalledCurseForgeInfo();
+    for (const [modIdStr, info] of Object.entries(curseforgeInstalled)) {
+      if (info.filename === filename) {
+        await curseforgeUntrack(parseInt(modIdStr));
+        console.log(`[Cleanup] Removed ${filename} from CurseForge tracking (mod: ${modIdStr})`);
+        break;
+      }
+    }
+  } catch (error) {
+    console.error(`[Cleanup] Error cleaning up tracking for ${filename}:`, error);
+    // Don't throw - deletion should still succeed even if cleanup fails
+  }
+}
 
 const router = Router();
 
@@ -1416,6 +1465,9 @@ router.delete('/mods/:filename', authMiddleware, requirePermission('mods.delete'
 
     await unlink(filePath);
 
+    // Clean up tracking from all sources (Modtale, StackMart, CurseForge, CFWidget)
+    await cleanupModTracking(safeFilename);
+
     await logActivity(
       req.user || 'unknown',
       'delete_mod',
@@ -1452,6 +1504,9 @@ router.delete('/plugins/:filename', authMiddleware, requirePermission('plugins.d
     }
 
     await unlink(filePath);
+
+    // Clean up tracking from all sources (Modtale, StackMart, CurseForge, CFWidget)
+    await cleanupModTracking(safeFilename);
 
     await logActivity(
       req.user || 'unknown',
