@@ -39,6 +39,16 @@ All notable changes to the Hytale Server Manager will be documented in this file
   - Events still broadcast to panel, just no console output
   - Location: `plugins/kyuubisoft-api/`
 
+- **Asset Extraction Failed**: Fixed `unzip exited with code 1` error
+  - `unzip` package was missing from Manager container
+  - Added `unzip` to Dockerfile dependencies
+  - Location: `manager/Dockerfile`
+
+- **Wrong UID in Permission Error Messages**: Fixed incorrect chown commands
+  - Error messages showed `1001:1001` or `1000:1000` instead of `9999:9999`
+  - Container runs as UID 9999, so permission fix commands must use that UID
+  - Location: `index.ts`, `systemCheck.ts`, `PermissionBanner.vue`
+
 ### Changed
 
 - **KyuubiAPI Plugin Version**: 1.2.1 → 1.2.2
