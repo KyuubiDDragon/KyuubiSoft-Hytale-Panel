@@ -74,7 +74,8 @@
     "assets": "Explorador de Assets",
     "chat": "Log de Chat",
     "roles": "Funções",
-    "help": "Ajuda de Comandos"
+    "help": "Ajuda de Comandos",
+    "avatarInventory": "Avatar e Inventário"
   },
   "dashboard": {
     "title": "Painel",
@@ -142,6 +143,22 @@
       "title": "Novos Recursos Disponíveis",
       "description": "Seu painel foi atualizado para a versão {version}. Novas configurações estão disponíveis:",
       "configure": "Configurar Agora"
+    },
+    "modUpdates": {
+      "title": "Atualizações de Mods",
+      "noUpdates": "Sem atualizações",
+      "updatesAvailable": "{count} atualização(ões) disponível(eis)",
+      "allUpToDate": "Tudo atualizado",
+      "noTracked": "Nenhum mod rastreado",
+      "checking": "Verificando...",
+      "checkNow": "Verificar",
+      "viewAll": "Ver todos"
+    },
+    "panelUpdate": {
+      "title": "Atualização do Painel Disponível",
+      "description": "Uma nova versão do painel está disponível: {current} → {latest}",
+      "viewRelease": "Ver Release",
+      "publishedAt": "Publicado"
     }
   },
   "console": {
@@ -402,6 +419,8 @@
     "updating": "Atualizando...",
     "updateAvailable": "Atualização disponível",
     "updateSuccess": "Atualizado!",
+    "changelog": "Registro de alterações",
+    "viewChangelog": "Ver alterações",
     "by": "por",
     "ports": "Portas",
     "modtaleDescription": "Navegue e instale mods diretamente do modtale.net - a plataforma oficial de mods Hytale.",
@@ -1610,6 +1629,50 @@
       "configured": "Configurado",
       "installed": "Instalado",
       "editStep": "Editar"
+    }
+  },
+  "avatarInventory": {
+    "title": "Avatar e Inventário",
+    "subtitle": "Ver avatar e inventário do jogador no estilo Hytale",
+    "searchPlayer": "Buscar jogador...",
+    "selectPrompt": "Selecione um Jogador",
+    "selectHint": "Use a busca acima para selecionar um jogador",
+    "noData": "Dados do jogador não disponíveis",
+    "stats": "Estatísticas",
+    "health": "Vida",
+    "stamina": "Vigor",
+    "mana": "Mana",
+    "defense": "Defesa",
+    "backpack": "Mochila",
+    "inventory": "Inventário",
+    "hotbar": "Barra Rápida",
+    "info": "Info",
+    "chat": "Chat",
+    "deaths": "Mortes",
+    "playerInfo": "Informações do Jogador",
+    "world": "Mundo",
+    "gamemode": "Modo de Jogo",
+    "position": "Posição",
+    "discoveredZones": "Zonas Descobertas",
+    "memories": "Memórias",
+    "uniqueItems": "Itens Únicos",
+    "noInfoData": "Nenhuma informação disponível",
+    "chatHistory": "Histórico de Chat",
+    "noChat": "Nenhuma mensagem de chat encontrada",
+    "messages": "mensagens",
+    "deathLocations": "Locais de Morte",
+    "noDeaths": "Nenhuma morte registrada",
+    "deathCount": "mortes registradas",
+    "day": "Dia",
+    "latest": "Mais Recente",
+    "teleport": "Teleportar",
+    "slots": {
+      "helmet": "Capacete",
+      "chest": "Peitoral",
+      "gloves": "Luvas",
+      "legs": "Calças",
+      "cosmetic": "Cosmético",
+      "tools": "Ferramentas"
     }
   }
 }

@@ -138,6 +138,16 @@ export interface NewFeaturesStatus {
   panelVersion: string
 }
 
+export interface PanelVersionInfo {
+  currentVersion: string
+  latestVersion: string
+  updateAvailable: boolean
+  releaseUrl: string
+  releaseNotes: string
+  publishedAt: string
+  lastChecked: string
+}
+
 export interface PatchlineResponse {
   patchline: string
   options: string[]
@@ -653,6 +663,13 @@ export const serverApi = {
 
   async dismissNewFeaturesBanner(): Promise<{ success: boolean }> {
     const response = await api.post<{ success: boolean }>('/server/new-features/dismiss')
+    return response.data
+  },
+
+  // Panel Version Check
+  async checkPanelVersion(forceRefresh = false): Promise<PanelVersionInfo> {
+    const url = forceRefresh ? '/server/panel-version?refresh=true' : '/server/panel-version'
+    const response = await api.get<PanelVersionInfo>(url)
     return response.data
   },
 }

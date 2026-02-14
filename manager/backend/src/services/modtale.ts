@@ -621,6 +621,36 @@ export async function installModFromModtale(
     await mkdir(targetPath, { recursive: true });
   }
 
+  // Check if this mod is already installed (for updates) and remove old file
+  const existingInstall = await isModtaleModInstalled(projectId);
+  if (existingInstall && existingInstall.filename) {
+    // Determine path based on classification
+    let oldBasePath: string;
+    switch (existingInstall.classification) {
+      case 'PLUGIN':
+        oldBasePath = config.modsPath;
+        break;
+      case 'DATA':
+      case 'ART':
+      case 'SAVE':
+        oldBasePath = config.dataPath;
+        break;
+      case 'MODPACK':
+        oldBasePath = config.modsPath;
+        break;
+      default:
+        oldBasePath = config.modsPath;
+    }
+    const oldFilePath = path.join(oldBasePath, existingInstall.filename);
+    try {
+      await unlink(oldFilePath);
+      console.log(`[Modtale] Removed old mod file: ${existingInstall.filename}`);
+    } catch (e) {
+      // File might not exist, that's ok
+      console.log(`[Modtale] Could not remove old file ${existingInstall.filename}:`, e);
+    }
+  }
+
   // Security: Construct destination path and verify it's within allowed directory
   const destPath = path.join(targetPath, validatedFilename);
   const resolvedDest = path.resolve(destPath);

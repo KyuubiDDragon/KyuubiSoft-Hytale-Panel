@@ -12,7 +12,7 @@ import { getUser, getAllUsers, invalidateUserTokens } from './users.js';
 import { isDemoMode } from './demoData.js';
 
 // Path to roles file in the persistent data volume
-const DATA_DIR = process.env.DATA_PATH || '/app/data';
+const DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
 const ROLES_FILE = path.join(DATA_DIR, 'roles.json');
 
 // Ensure data directory exists

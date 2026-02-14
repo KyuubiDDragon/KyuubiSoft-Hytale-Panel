@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import {
@@ -10,6 +11,8 @@ import {
   modStoreApi,
   modtaleApi,
   stackmartApi,
+  curseforgeApi,
+  modupdatesApi,
   type ModInfo,
   type ConfigFile,
   type ModStoreEntry,
@@ -26,10 +29,17 @@ import {
   type StackMartSortOption,
   type StackMartCategory,
   type StackMartInstalledInfo,
+  type CurseForgeMod,
+  type CurseForgeStatus,
+  type CurseForgeSortField,
+  type CurseForgeInstalledInfo,
+  type TrackedMod,
+  type ModUpdateStatus,
 } from '@/api/management'
 import { getLocale } from '@/i18n'
 
 const { t } = useI18n()
+const route = useRoute()
 const authStore = useAuthStore()
 
 // Helper to get localized string based on current locale
@@ -58,9 +68,11 @@ function getLocalizedText(text: string | LocalizedString | undefined | null): st
   return String(text)
 }
 
-type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart'
+type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge' | 'updates'
 
-const activeTab = ref<TabType>('mods')
+// Check for tab query parameter
+const initialTab = (route.query.tab as TabType) || 'mods'
+const activeTab = ref<TabType>(initialTab)
 const mods = ref<ModInfo[]>([])
 const plugins = ref<ModInfo[]>([])
 const modsPath = ref('')
@@ -126,6 +138,46 @@ const showStackMartDetail = ref(false)
 const stackmartDetailResource = ref<StackMartResourceDetails | null>(null)
 const stackmartDetailLoading = ref(false)
 const stackmartInstalled = ref<Record<string, StackMartInstalledInfo>>({})
+
+// CurseForge state
+const curseforgeStatus = ref<CurseForgeStatus | null>(null)
+const curseforgeMods = ref<CurseForgeMod[]>([])
+const curseforgeLoading = ref(false)
+const curseforgeSearch = ref('')
+const curseforgeSortField = ref<CurseForgeSortField>('Popularity')
+const curseforgePage = ref(0)
+const curseforgeTotalCount = ref(0)
+const curseforgePageSize = ref(20)
+const curseforgeInstallingId = ref<number | null>(null)
+const curseforgeInstallSuccess = ref<number | null>(null)
+const curseforgeUninstallingId = ref<number | null>(null)
+const showCurseForgeSettings = ref(false)
+const curseforgeInstalled = ref<Record<string, CurseForgeInstalledInfo>>({})
+
+// Mod Updates state (CFWidget)
+const updateStatus = ref<ModUpdateStatus | null>(null)
+const updatesLoading = ref(false)
+const updatesChecking = ref(false)
+
+// All updates from all sources (unified)
+const allUpdatesStatus = ref<ModUpdateStatus | null>(null)
+const allUpdatesLoading = ref(false)
+const showTrackDialog = ref(false)
+const trackFilename = ref('')
+const trackCurseforgeInput = ref('')
+const trackCurrentVersion = ref('')
+const tracking = ref(false)
+const trackError = ref('')
+const untrackingFilename = ref<string | null>(null)
+const trackAsWishlist = ref(false) // Track mod without installing (wishlist)
+const installingFilename = ref<string | null>(null) // Mod being installed/updated
+
+// Get mods that are not yet tracked
+const untrackedMods = computed(() => {
+  if (!updateStatus.value) return mods.value.filter(m => m.enabled)
+  const trackedFilenames = updateStatus.value.mods.map(m => m.filename)
+  return mods.value.filter(m => !trackedFilenames.includes(m.filename) && m.enabled)
+})
 
 async function loadData() {
   loading.value = true
@@ -248,7 +300,7 @@ async function updateInstalledMod(item: ModInfo) {
     const result = await modStoreApi.update(item.storeId)
     if (result.success) {
       updateSuccess.value = item.storeId
-      await loadData() // Reload mods list
+      await Promise.all([loadData(), loadAllUpdates()]) // Reload mods list and updates
       setTimeout(() => { updateSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -257,6 +309,83 @@ async function updateInstalledMod(item: ModInfo) {
     error.value = e.response?.data?.error || t('errors.serverError')
   } finally {
     updatingMod.value = null
+  }
+}
+
+// Universal update function for mods from any source
+async function updateModFromSource(item: any) {
+  const source = item.updateSource
+  const sourceId = item.updateSourceId
+  const modId = item.updateModId
+  const filename = item.filename
+
+  updatingModFilename.value = filename
+  error.value = ''
+
+  try {
+    let result: { success: boolean; error?: string }
+
+    switch (source) {
+      case 'modstore':
+        // Use existing store update
+        if (item.storeId) {
+          result = await modStoreApi.update(item.storeId)
+        } else {
+          error.value = 'No store ID found'
+          return
+        }
+        break
+
+      case 'cfwidget':
+        // Use CFWidget install (reinstall with latest)
+        result = await modupdatesApi.install(filename)
+        break
+
+      case 'curseforge':
+        // Reinstall from CurseForge API
+        if (modId) {
+          result = await curseforgeApi.install(modId)
+        } else {
+          error.value = 'No mod ID found'
+          return
+        }
+        break
+
+      case 'modtale':
+        // Reinstall from Modtale
+        if (sourceId) {
+          result = await modtaleApi.install(sourceId)
+        } else {
+          error.value = 'No project ID found'
+          return
+        }
+        break
+
+      case 'stackmart':
+        // Reinstall from StackMart
+        if (sourceId) {
+          result = await stackmartApi.install(sourceId)
+        } else {
+          error.value = 'No resource ID found'
+          return
+        }
+        break
+
+      default:
+        error.value = `Unknown source: ${source}`
+        return
+    }
+
+    if (result.success) {
+      // Reload all data
+      await Promise.all([loadData(), loadAllUpdates()])
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    updatingModFilename.value = null
   }
 }
 
@@ -408,6 +537,44 @@ const currentItems = computed(() => activeTab.value === 'mods' ? mods.value : pl
 const currentPath = computed(() => activeTab.value === 'mods' ? modsPath.value : pluginsPath.value)
 const enabledCount = computed(() => currentItems.value.filter(i => i.enabled).length)
 
+// Enrich mods/plugins with update info from all sources
+const enrichedItems = computed(() => {
+  return currentItems.value.map(item => {
+    // Check if update info already exists (from mod store)
+    if (item.hasUpdate !== undefined) return item
+
+    // Get update info from unified sources
+    const updateInfo = getModUpdateInfo(item.filename)
+    if (updateInfo) {
+      return {
+        ...item,
+        hasUpdate: updateInfo.hasUpdate,
+        latestVersion: updateInfo.latestVersion,
+        installedVersion: updateInfo.installedVersion || item.installedVersion,
+        updateSource: updateInfo.source,
+        updateSourceId: updateInfo.sourceId,
+        updateModId: updateInfo.modId,
+        updateChangelog: updateInfo.changelog,
+      }
+    }
+    return item
+  })
+})
+
+// State for updating mods from different sources
+const updatingModFilename = ref<string | null>(null)
+
+// State for changelog modal
+const showChangelogModal = ref(false)
+const changelogModalContent = ref('')
+const changelogModalTitle = ref('')
+
+function openChangelogModal(name: string, changelog: string) {
+  changelogModalTitle.value = name
+  changelogModalContent.value = changelog
+  showChangelogModal.value = true
+}
+
 function switchToStore() {
   activeTab.value = 'store'
   if (storeMods.value.length === 0) {
@@ -491,7 +658,7 @@ async function installFromModtale(project: ModtaleProject) {
     const result = await modtaleApi.install(project.id)
     if (result.success) {
       modtaleInstallSuccess.value = project.id
-      await Promise.all([loadData(), loadModtaleInstalled()])
+      await Promise.all([loadData(), loadModtaleInstalled(), loadAllUpdates()])
       setTimeout(() => { modtaleInstallSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -645,7 +812,7 @@ async function installFromStackMart(resource: StackMartResource) {
     const result = await stackmartApi.install(resource.id)
     if (result.success) {
       stackmartInstallSuccess.value = resource.id
-      await Promise.all([loadData(), loadStackMartInstalled()])
+      await Promise.all([loadData(), loadStackMartInstalled(), loadAllUpdates()])
       setTimeout(() => { stackmartInstallSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -718,7 +885,260 @@ watch(stackmartPage, () => {
   searchStackMart()
 })
 
-onMounted(loadData)
+// ========== CurseForge Functions ==========
+
+async function loadCurseForgeStatus() {
+  try {
+    curseforgeStatus.value = await curseforgeApi.getStatus()
+  } catch {
+    curseforgeStatus.value = { configured: false, hasApiKey: false, apiAvailable: false, gameId: 0 }
+  }
+}
+
+async function loadCurseForgeInstalled() {
+  try {
+    const result = await curseforgeApi.getInstalled()
+    curseforgeInstalled.value = result.mods || {}
+  } catch {
+    curseforgeInstalled.value = {}
+  }
+}
+
+async function searchCurseForge() {
+  if (!curseforgeStatus.value?.apiAvailable) return
+
+  curseforgeLoading.value = true
+  error.value = ''
+  try {
+    const result = await curseforgeApi.search({
+      search: curseforgeSearch.value || undefined,
+      sortField: curseforgeSortField.value,
+      pageSize: curseforgePageSize.value,
+      index: curseforgePage.value * curseforgePageSize.value,
+    })
+    curseforgeMods.value = result.data
+    curseforgeTotalCount.value = result.pagination.totalCount
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.connectionFailed')
+  } finally {
+    curseforgeLoading.value = false
+  }
+}
+
+async function switchToCurseForge() {
+  activeTab.value = 'curseforge'
+  if (!curseforgeStatus.value) {
+    await loadCurseForgeStatus()
+  }
+  loadCurseForgeInstalled()
+  if (curseforgeStatus.value?.apiAvailable && curseforgeMods.value.length === 0) {
+    await searchCurseForge()
+  }
+}
+
+async function installCurseForgeMod(mod: CurseForgeMod) {
+  curseforgeInstallingId.value = mod.id
+  curseforgeInstallSuccess.value = null
+  error.value = ''
+  try {
+    const result = await curseforgeApi.install(mod.id)
+    if (result.success) {
+      curseforgeInstallSuccess.value = mod.id
+      await Promise.all([loadCurseForgeInstalled(), loadData(), loadAllUpdates()])
+      setTimeout(() => { curseforgeInstallSuccess.value = null }, 3000)
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    curseforgeInstallingId.value = null
+  }
+}
+
+async function uninstallCurseForgeMod(modId: number) {
+  const modInfo = curseforgeInstalled.value[modId.toString()]
+  if (!confirm(t('mods.confirmUninstall', { name: modInfo?.modName || modId }))) return
+
+  curseforgeUninstallingId.value = modId
+  error.value = ''
+  try {
+    const result = await curseforgeApi.uninstall(modId)
+    if (result.success) {
+      await loadCurseForgeInstalled()
+      await loadData()
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    curseforgeUninstallingId.value = null
+  }
+}
+
+function isCurseForgeModInstalled(modId: number): boolean {
+  return curseforgeInstalled.value[modId.toString()] !== undefined
+}
+
+function getCurseForgeInstalledVersion(modId: number): string | undefined {
+  return curseforgeInstalled.value[modId.toString()]?.version
+}
+
+const curseforgeTotalPages = computed(() => Math.ceil(curseforgeTotalCount.value / curseforgePageSize.value))
+
+// Watch for CurseForge search/filter changes
+watch([curseforgeSearch, curseforgeSortField], () => {
+  curseforgePage.value = 0
+  searchCurseForge()
+})
+
+watch(curseforgePage, () => {
+  searchCurseForge()
+})
+
+// ==================== MOD UPDATES (CFWidget) ====================
+
+async function loadUpdateStatus() {
+  updatesLoading.value = true
+  try {
+    updateStatus.value = await modupdatesApi.getStatus()
+  } catch {
+    // Silently fail
+  } finally {
+    updatesLoading.value = false
+  }
+}
+
+// Load unified updates from all sources
+async function loadAllUpdates() {
+  allUpdatesLoading.value = true
+  try {
+    allUpdatesStatus.value = await modsApi.getAllUpdates()
+  } catch {
+    // Silently fail
+  } finally {
+    allUpdatesLoading.value = false
+  }
+}
+
+// Get update info for a specific mod by filename
+function getModUpdateInfo(filename: string): { hasUpdate: boolean; latestVersion: string; installedVersion: string; source: string; sourceId?: string; modId?: number; changelog?: string } | null {
+  if (!allUpdatesStatus.value) return null
+  const mod = allUpdatesStatus.value.mods.find(m => m.filename === filename)
+  if (!mod) return null
+  return {
+    hasUpdate: mod.hasUpdate,
+    latestVersion: mod.latestVersion || '-',
+    installedVersion: mod.installedVersion || '-',
+    source: mod.source || 'unknown',
+    sourceId: mod.sourceId,
+    modId: mod.modId,
+    changelog: mod.changelog,
+  }
+}
+
+async function checkAllUpdates() {
+  updatesChecking.value = true
+  try {
+    updateStatus.value = await modupdatesApi.checkAll()
+  } catch (e) {
+    error.value = t('errors.serverError')
+  } finally {
+    updatesChecking.value = false
+  }
+}
+
+function switchToUpdates() {
+  activeTab.value = 'updates'
+  // Always load status when switching to updates tab
+  loadUpdateStatus()
+}
+
+function openTrackDialog(mod?: ModInfo) {
+  trackFilename.value = mod?.filename || ''
+  trackCurseforgeInput.value = ''
+  trackCurrentVersion.value = ''
+  trackError.value = ''
+  trackAsWishlist.value = false
+  showTrackDialog.value = true
+}
+
+async function trackMod() {
+  // Require curseforgeInput always, filename only if not wishlist mode
+  if (!trackCurseforgeInput.value) {
+    trackError.value = t('modupdates.invalidUrl')
+    return
+  }
+  if (!trackAsWishlist.value && !trackFilename.value) {
+    trackError.value = t('modupdates.selectFile')
+    return
+  }
+
+  tracking.value = true
+  trackError.value = ''
+  try {
+    const result = await modupdatesApi.track(
+      trackAsWishlist.value ? '' : trackFilename.value,
+      trackCurseforgeInput.value,
+      trackCurrentVersion.value || undefined
+    )
+    if (result.success) {
+      showTrackDialog.value = false
+      await loadUpdateStatus()
+    } else {
+      trackError.value = result.error || t('modupdates.trackError')
+    }
+  } catch {
+    trackError.value = t('modupdates.trackError')
+  } finally {
+    tracking.value = false
+  }
+}
+
+async function untrackMod(filename: string) {
+  untrackingFilename.value = filename
+  try {
+    await modupdatesApi.untrack(filename)
+    await loadUpdateStatus()
+  } catch {
+    error.value = t('errors.serverError')
+  } finally {
+    untrackingFilename.value = null
+  }
+}
+
+async function installTrackedMod(filename: string) {
+  installingFilename.value = filename
+  try {
+    const result = await modupdatesApi.install(filename)
+    if (result.success) {
+      // Reload mods list, CFWidget status, and all updates
+      await Promise.all([loadData(), loadUpdateStatus(), loadAllUpdates()])
+    } else {
+      error.value = result.error || t('errors.serverError')
+    }
+  } catch {
+    error.value = t('errors.serverError')
+  } finally {
+    installingFilename.value = null
+  }
+}
+
+function formatUpdateDate(dateStr: string | null): string {
+  if (!dateStr) return t('modupdates.never')
+  return new Date(dateStr).toLocaleString()
+}
+
+onMounted(() => {
+  loadData()
+  // Always load unified updates to show update badges in mods/plugins tabs
+  loadAllUpdates()
+  // Load CFWidget status if navigating directly to updates tab
+  if (initialTab === 'updates') {
+    loadUpdateStatus()
+  }
+})
 </script>
 
 <template>
@@ -842,6 +1262,38 @@ onMounted(loadData)
         </svg>
         StackMart
       </button>
+      <button
+        @click="switchToCurseForge"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          activeTab === 'curseforge'
+            ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+        </svg>
+        CurseForge
+      </button>
+      <button
+        @click="switchToUpdates"
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          activeTab === 'updates'
+            ? (updateStatus && updateStatus.updatesAvailable > 0 ? 'bg-status-warning text-dark' : 'bg-status-success text-dark')
+            : 'bg-dark-100 text-gray-400 hover:text-white'
+        ]"
+      >
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        {{ t('modupdates.title') }}
+        <span v-if="updateStatus && updateStatus.updatesAvailable > 0" class="px-1.5 py-0.5 text-xs rounded-full bg-white/20">
+          {{ updateStatus.updatesAvailable }}
+        </span>
+      </button>
     </div>
 
     <!-- Info Card (Mods/Plugins tabs) -->
@@ -882,7 +1334,7 @@ onMounted(loadData)
         {{ t('common.loading') }}
       </div>
 
-      <div v-else-if="currentItems.length === 0" class="text-center text-gray-500 p-8">
+      <div v-else-if="enrichedItems.length === 0" class="text-center text-gray-500 p-8">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
         </svg>
@@ -891,7 +1343,7 @@ onMounted(loadData)
 
       <div v-else class="divide-y divide-dark-50/30">
         <div
-          v-for="item in currentItems"
+          v-for="item in enrichedItems"
           :key="item.filename"
           class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
@@ -938,11 +1390,22 @@ onMounted(loadData)
                 <!-- Update badge -->
                 <span
                   v-if="item.hasUpdate"
-                  class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse cursor-pointer"
-                  :title="`${t('mods.updateAvailable')}: ${item.latestVersion}`"
-                  @click.stop="updateInstalledMod(item)"
+                  class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse inline-flex items-center gap-1"
+                  :title="`${t('mods.updateAvailable')}: ${item.latestVersion}${item.updateSource ? ' (' + item.updateSource + ')' : ''}`"
                 >
                   ↑ {{ item.latestVersion }}
+                  <span v-if="item.updateSource" class="text-[10px] opacity-70">({{ item.updateSource }})</span>
+                  <!-- Changelog button -->
+                  <button
+                    v-if="item.updateChangelog"
+                    @click.stop="openChangelogModal(item.name, item.updateChangelog)"
+                    class="ml-1 hover:text-white transition-colors"
+                    :title="t('mods.viewChangelog')"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </button>
                 </span>
               </div>
             </div>
@@ -950,14 +1413,27 @@ onMounted(loadData)
 
           <!-- Actions -->
           <div class="flex items-center gap-3">
-            <!-- Update Button -->
+            <!-- Universal Update Button (all sources) -->
             <button
-              v-if="item.hasUpdate && item.storeId && authStore.hasPermission('mods.install')"
-              @click="updateInstalledMod(item)"
-              class="p-2 text-hytale-orange hover:text-hytale-orange-light transition-colors"
-              :title="t('mods.update')"
+              v-if="item.hasUpdate && authStore.hasPermission('mods.install')"
+              @click="updateModFromSource(item)"
+              :disabled="updatingModFilename === item.filename"
+              class="p-2 text-hytale-orange hover:text-hytale-orange-light transition-colors disabled:opacity-50"
+              :title="t('mods.update') + (item.updateSource ? ` (${item.updateSource})` : '')"
             >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg :class="['w-5 h-5', updatingModFilename === item.filename ? 'animate-spin' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <!-- Update Button (CFWidget tracked mods) -->
+            <button
+              v-if="item.hasUpdate && !item.storeId && item.updateSource === 'cfwidget' && authStore.hasPermission('mods.install')"
+              @click="installTrackedMod(item.filename)"
+              :disabled="installingFilename === item.filename"
+              class="p-2 text-hytale-orange hover:text-hytale-orange-light transition-colors disabled:opacity-50"
+              :title="t('mods.update') + ' (CFWidget)'"
+            >
+              <svg :class="['w-5 h-5', installingFilename === item.filename ? 'animate-spin' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
@@ -1801,6 +2277,280 @@ onMounted(loadData)
       </Card>
     </template>
 
+    <!-- ========== CurseForge Tab ========== -->
+    <template v-if="activeTab === 'curseforge'">
+      <!-- CurseForge Info Card with Settings Button -->
+      <Card>
+        <div class="flex items-start gap-4">
+          <div class="p-3 bg-gradient-to-r from-orange-600/20 to-red-600/20 rounded-lg">
+            <svg class="w-6 h-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+            </svg>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-3">
+              <h3 class="font-semibold text-white">CurseForge</h3>
+              <button
+                @click="showCurseForgeSettings = true"
+                class="p-1 text-gray-400 hover:text-white transition-colors"
+                title="API Settings"
+              >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-sm text-gray-400 mt-1">{{ t('mods.curseforgeDescription') }}</p>
+            <p class="text-sm text-gray-500 mt-2">{{ t('mods.restartNote') }}</p>
+          </div>
+        </div>
+      </Card>
+
+      <!-- CurseForge Unavailable Warning -->
+      <Card v-if="curseforgeStatus && !curseforgeStatus.apiAvailable">
+        <div class="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+          <h3 class="font-medium text-orange-400 mb-2 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            {{ t('mods.curseforgeUnavailable') }}
+          </h3>
+          <p class="text-sm text-gray-400 mb-3">
+            {{ t('mods.curseforgeApiKeyInstructions') }}
+          </p>
+          <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
+            <li>{{ t('mods.curseforgeApiKeyStep1') }} <a href="https://console.curseforge.com/" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:underline">console.curseforge.com</a></li>
+            <li>{{ t('mods.curseforgeApiKeyStep2') }}</li>
+            <li>{{ t('mods.curseforgeApiKeyStep3') }}</li>
+          </ol>
+          <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
+            CURSEFORGE_API_KEY=your_api_key_here
+          </code>
+        </div>
+      </Card>
+
+      <!-- CurseForge Search & Filters -->
+      <Card v-if="curseforgeStatus?.apiAvailable" :title="t('mods.curseforgeResults')" :padding="false">
+        <!-- Search Bar -->
+        <div class="p-4 border-b border-dark-50/30">
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <input
+                v-model="curseforgeSearch"
+                type="text"
+                :placeholder="t('mods.searchCurseForge')"
+                class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+              />
+            </div>
+            <select
+              v-model="curseforgeSortField"
+              class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-orange-500"
+            >
+              <option value="Popularity">{{ t('mods.sortPopular') }}</option>
+              <option value="TotalDownloads">{{ t('mods.sortDownloads') }}</option>
+              <option value="LastUpdated">{{ t('mods.sortUpdated') }}</option>
+              <option value="Name">{{ t('mods.sortName') }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="curseforgeLoading" class="text-center text-gray-500 p-8">
+          <svg class="w-8 h-8 mx-auto animate-spin text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </div>
+
+        <!-- No Results -->
+        <div v-else-if="curseforgeMods.length === 0" class="text-center text-gray-500 p-8">
+          <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {{ t('mods.noCurseForgeResults') }}
+        </div>
+
+        <!-- Mod Grid -->
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+          <div
+            v-for="mod in curseforgeMods"
+            :key="mod.id"
+            class="p-4 bg-dark-100 rounded-lg hover:bg-dark-50/50 transition-colors"
+          >
+            <div class="flex gap-4">
+              <!-- Mod Logo -->
+              <div class="w-16 h-16 rounded-lg overflow-hidden bg-dark-200 shrink-0">
+                <img
+                  v-if="mod.logo"
+                  :src="mod.logo.thumbnailUrl"
+                  :alt="mod.name"
+                  class="w-full h-full object-cover"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center text-gray-600">
+                  <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Mod Info -->
+              <div class="flex-1 min-w-0">
+                <h4 class="font-semibold text-white truncate">{{ mod.name }}</h4>
+                <p class="text-sm text-gray-400 line-clamp-2 mt-1">{{ mod.summary }}</p>
+                <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                  <span class="flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ formatDownloads(mod.downloadCount) }}
+                  </span>
+                  <span v-if="mod.authors?.length">{{ mod.authors[0].name }}</span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex flex-col gap-2 shrink-0">
+                <!-- Installed Badge -->
+                <span
+                  v-if="isCurseForgeModInstalled(mod.id)"
+                  class="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded"
+                >
+                  {{ t('mods.installed') }} v{{ getCurseForgeInstalledVersion(mod.id) }}
+                </span>
+
+                <!-- Uninstall Button (if installed) -->
+                <button
+                  v-if="isCurseForgeModInstalled(mod.id) && authStore.hasPermission('mods.delete')"
+                  @click.stop="uninstallCurseForgeMod(mod.id)"
+                  :disabled="curseforgeUninstallingId === mod.id"
+                  class="px-3 py-1 bg-red-500/20 text-red-400 text-xs rounded hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                >
+                  {{ curseforgeUninstallingId === mod.id ? t('mods.uninstalling') : t('mods.uninstall') }}
+                </button>
+
+                <!-- Install Button (if not installed) -->
+                <button
+                  v-if="!isCurseForgeModInstalled(mod.id) && authStore.hasPermission('mods.install')"
+                  @click.stop="installCurseForgeMod(mod)"
+                  :disabled="curseforgeInstallingId === mod.id"
+                  class="px-3 py-1 bg-gradient-to-r from-orange-600 to-red-600 text-white text-xs rounded hover:from-orange-500 hover:to-red-500 transition-colors disabled:opacity-50"
+                >
+                  <span v-if="curseforgeInstallingId === mod.id">{{ t('mods.installing') }}</span>
+                  <span v-else>{{ t('mods.install') }}</span>
+                </button>
+
+                <!-- Success Badge -->
+                <span
+                  v-if="curseforgeInstallSuccess === mod.id"
+                  class="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded flex items-center gap-1"
+                >
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  {{ t('mods.installed') }}
+                </span>
+
+                <!-- External Link -->
+                <a
+                  :href="mod.links.websiteUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-orange-400 hover:text-orange-300 text-xs flex items-center gap-1"
+                >
+                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  {{ t('mods.viewOnCurseforge') }}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="curseforgeTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-dark-50/30">
+          <button
+            @click="curseforgePage = Math.max(0, curseforgePage - 1)"
+            :disabled="curseforgePage === 0"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &larr;
+          </button>
+          <span class="text-gray-400">
+            {{ curseforgePage + 1 }} / {{ curseforgeTotalPages }}
+          </span>
+          <button
+            @click="curseforgePage = Math.min(curseforgeTotalPages - 1, curseforgePage + 1)"
+            :disabled="curseforgePage >= curseforgeTotalPages - 1"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
+          >
+            &rarr;
+          </button>
+        </div>
+      </Card>
+    </template>
+
+    <!-- CurseForge Settings Modal -->
+    <div v-if="showCurseForgeSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-dark-200 rounded-xl w-full max-w-md">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">{{ t('mods.curseforgeApiSettings') }}</h2>
+          <button @click="showCurseForgeSettings = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('mods.statusLabel') }}:</span>
+                <span :class="curseforgeStatus?.apiAvailable ? 'text-green-400' : 'text-red-400'">
+                  {{ curseforgeStatus?.apiAvailable ? t('mods.online') : t('mods.offline') }}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">{{ t('mods.apiKeyLabel') }}:</span>
+                <span :class="curseforgeStatus?.hasApiKey ? 'text-green-400' : 'text-yellow-400'">
+                  {{ curseforgeStatus?.hasApiKey ? t('mods.configured') : t('mods.notConfigured') }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+            <h3 class="font-medium text-orange-400 mb-2 flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {{ t('mods.setupApiKey') }}
+            </h3>
+            <p class="text-sm text-gray-400 mb-3">
+              {{ t('mods.curseforgeApiKeyInstructions') }}
+            </p>
+            <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
+              <li>{{ t('mods.curseforgeApiKeyStep1') }} <a href="https://console.curseforge.com/" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:underline">console.curseforge.com</a></li>
+              <li>{{ t('mods.curseforgeApiKeyStep2') }}</li>
+              <li>{{ t('mods.curseforgeApiKeyStep3') }}</li>
+            </ol>
+            <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
+              CURSEFORGE_API_KEY=your_api_key_here
+            </code>
+          </div>
+
+          <button
+            @click="showCurseForgeSettings = false"
+            class="w-full px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white font-medium rounded-lg hover:from-orange-500 hover:to-red-500 transition-colors"
+          >
+            {{ t('mods.close') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- StackMart Settings Modal -->
     <div v-if="showStackMartSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-dark-200 rounded-xl w-full max-w-md">
@@ -1967,6 +2717,330 @@ onMounted(loadData)
       </div>
     </div>
 
+    <!-- ==================== MOD UPDATES TAB ==================== -->
+    <template v-if="activeTab === 'updates'">
+      <!-- Updates Header Card -->
+      <Card>
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-white">{{ t('modupdates.status') }}</h2>
+            <p class="text-sm text-gray-400 mt-1">
+              {{ t('modupdates.lastChecked') }}: {{ formatUpdateDate(updateStatus?.lastChecked || null) }}
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              class="btn btn-secondary"
+              :disabled="updatesChecking"
+              @click="checkAllUpdates"
+            >
+              <svg v-if="updatesChecking" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <svg v-else class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ t('modupdates.checkAll') }}
+            </button>
+            <button
+              v-if="authStore.hasPermission('mods.edit')"
+              class="btn btn-primary"
+              @click="openTrackDialog()"
+            >
+              <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              {{ t('modupdates.trackMod') }}
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <!-- Status Summary -->
+      <div v-if="updateStatus" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-lg bg-hytale-orange/20 flex items-center justify-center">
+              <svg class="w-6 h-6 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.tracked') }}</p>
+              <p class="text-2xl font-bold text-white">{{ updateStatus.totalTracked }}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center" :class="updateStatus.updatesAvailable > 0 ? 'bg-status-warning/20' : 'bg-status-success/20'">
+              <svg class="w-6 h-6" :class="updateStatus.updatesAvailable > 0 ? 'text-status-warning' : 'text-status-success'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.available') }}</p>
+              <p class="text-2xl font-bold" :class="updateStatus.updatesAvailable > 0 ? 'text-status-warning' : 'text-status-success'">
+                {{ updateStatus.updatesAvailable }}
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
+              <svg class="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.autoCheck') }}</p>
+              <p class="text-lg font-medium text-white">1h</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="updatesLoading" class="flex items-center justify-center py-12">
+        <svg class="w-8 h-8 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+
+      <!-- Tracked Mods List -->
+      <Card v-else-if="updateStatus">
+        <template #header>
+          <h2 class="text-lg font-semibold text-white">{{ t('modupdates.tracked') }}</h2>
+        </template>
+
+        <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-gray-400">
+          {{ t('modupdates.noTrackedMods') }}
+        </div>
+
+        <div v-else class="divide-y divide-gray-700">
+          <div
+            v-for="mod in updateStatus.mods"
+            :key="mod.filename"
+            class="py-4 first:pt-0 last:pb-0"
+          >
+            <div class="flex items-center gap-4">
+              <!-- Thumbnail -->
+              <div class="flex-shrink-0">
+                <img
+                  v-if="mod.thumbnail"
+                  :src="mod.thumbnail"
+                  :alt="mod.projectTitle"
+                  class="w-12 h-12 rounded-lg object-cover"
+                />
+                <div v-else class="w-12 h-12 rounded-lg bg-gray-700 flex items-center justify-center">
+                  <svg class="w-6 h-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                  <!-- Wishlist item (not installed) -->
+                  <span
+                    v-if="mod.installed === false"
+                    class="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400"
+                  >
+                    {{ t('modupdates.wishlist') }}
+                  </span>
+                  <!-- Installed with update available -->
+                  <span
+                    v-else-if="mod.hasUpdate"
+                    class="px-2 py-0.5 text-xs rounded-full bg-status-warning/20 text-status-warning"
+                  >
+                    {{ t('modupdates.updateAvailable') }}
+                  </span>
+                  <!-- Installed and up to date -->
+                  <span
+                    v-else
+                    class="px-2 py-0.5 text-xs rounded-full bg-status-success/20 text-status-success"
+                  >
+                    {{ t('modupdates.noUpdate') }}
+                  </span>
+                </div>
+                <p v-if="mod.installed !== false" class="text-sm text-gray-400 truncate">{{ mod.filename }}</p>
+                <p v-else class="text-sm text-gray-400 truncate">{{ mod.curseforgeSlug }}</p>
+                <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                  <span v-if="mod.installed !== false">{{ t('modupdates.installedVersion') }}: {{ mod.installedVersion || '-' }}</span>
+                  <span v-else class="text-purple-400">{{ t('modupdates.notInstalled') }}</span>
+                  <span>{{ t('modupdates.latestVersion') }}: {{ mod.latestVersion || '-' }}</span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center gap-2">
+                <!-- Install button (for wishlist items) -->
+                <button
+                  v-if="mod.installed === false && authStore.hasPermission('mods.install')"
+                  class="btn btn-sm bg-purple-600 hover:bg-purple-700 text-white"
+                  :disabled="installingFilename === mod.filename"
+                  :title="t('modupdates.install')"
+                  @click="installTrackedMod(mod.filename)"
+                >
+                  <svg v-if="installingFilename === mod.filename" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span class="ml-1">{{ t('modupdates.install') }}</span>
+                </button>
+                <!-- Update button (for installed mods with updates) -->
+                <button
+                  v-else-if="mod.hasUpdate && authStore.hasPermission('mods.install')"
+                  class="btn btn-sm bg-status-warning hover:bg-yellow-600 text-dark"
+                  :disabled="installingFilename === mod.filename"
+                  :title="t('modupdates.update')"
+                  @click="installTrackedMod(mod.filename)"
+                >
+                  <svg v-if="installingFilename === mod.filename" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span class="ml-1">{{ t('modupdates.update') }}</span>
+                </button>
+                <a
+                  v-if="mod.projectUrl"
+                  :href="mod.projectUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn btn-sm btn-secondary"
+                  :title="t('modupdates.viewOnCurseforge')"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+                <button
+                  v-if="authStore.hasPermission('mods.edit')"
+                  class="btn btn-sm btn-danger"
+                  :disabled="untrackingFilename === mod.filename"
+                  :title="t('modupdates.untrack')"
+                  @click="untrackMod(mod.filename)"
+                >
+                  <svg v-if="untrackingFilename === mod.filename" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </template>
+
+    <!-- Track Mod Dialog -->
+    <div v-if="showTrackDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div class="bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
+        <div class="p-6">
+          <h3 class="text-lg font-semibold text-white mb-4">{{ t('modupdates.trackMod') }}</h3>
+
+          <!-- Error -->
+          <div v-if="trackError" class="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
+            {{ trackError }}
+          </div>
+
+          <!-- Form -->
+          <div class="space-y-4">
+            <!-- CurseForge URL/Slug (first, as it's required) -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.curseforgeUrl') }} *</label>
+              <input
+                v-model="trackCurseforgeInput"
+                type="text"
+                class="input w-full"
+                :placeholder="t('modupdates.curseforgeUrlHint')"
+              />
+            </div>
+
+            <!-- Wishlist checkbox -->
+            <div class="flex items-center gap-2">
+              <input
+                id="track-wishlist"
+                v-model="trackAsWishlist"
+                type="checkbox"
+                class="w-4 h-4 rounded border-gray-600 bg-dark-100 text-hytale-orange focus:ring-hytale-orange"
+              />
+              <label for="track-wishlist" class="text-sm text-gray-300">
+                {{ t('modupdates.trackAsWishlist') }}
+              </label>
+            </div>
+
+            <!-- Filename Select or Input (only if not wishlist) -->
+            <div v-if="!trackAsWishlist">
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.filename') }} *</label>
+              <select
+                v-if="untrackedMods.length > 0"
+                v-model="trackFilename"
+                class="input w-full"
+              >
+                <option value="">-- {{ t('common.search') }} --</option>
+                <option v-for="mod in untrackedMods" :key="mod.filename" :value="mod.filename">
+                  {{ mod.filename }}
+                </option>
+              </select>
+              <input
+                v-else
+                v-model="trackFilename"
+                type="text"
+                class="input w-full"
+                :placeholder="t('modupdates.filename')"
+              />
+            </div>
+
+            <!-- Current Version (optional, only if not wishlist) -->
+            <div v-if="!trackAsWishlist">
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.installedVersion') }} (optional)</label>
+              <input
+                v-model="trackCurrentVersion"
+                type="text"
+                class="input w-full"
+                placeholder="1.0.0"
+              />
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-2 mt-6">
+            <button class="btn btn-secondary" @click="showTrackDialog = false">
+              {{ t('common.cancel') }}
+            </button>
+            <button
+              class="btn btn-primary"
+              :disabled="tracking || !trackCurseforgeInput || (!trackAsWishlist && !trackFilename)"
+              @click="trackMod"
+            >
+              <svg v-if="tracking" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ t('modupdates.trackMod') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Config Editor Modal -->
     <div v-if="showConfigModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-dark-200 rounded-xl w-full max-w-7xl h-[85vh] flex flex-col">
@@ -2048,6 +3122,39 @@ onMounted(loadData)
               />
             </template>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Changelog Modal -->
+    <div v-if="showChangelogModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="showChangelogModal = false">
+      <div class="bg-dark-200 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <!-- Modal Header -->
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
+          <h2 class="text-xl font-bold text-white">{{ t('mods.changelog') }}: {{ changelogModalTitle }}</h2>
+          <button @click="showChangelogModal = false" class="text-gray-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Modal Content -->
+        <div class="flex-1 overflow-y-auto p-4">
+          <div
+            class="prose prose-invert prose-sm max-w-none text-gray-300"
+            v-html="changelogModalContent"
+          />
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-4 border-t border-dark-50/50 shrink-0">
+          <button
+            @click="showChangelogModal = false"
+            class="w-full px-4 py-2 bg-dark-100 hover:bg-dark-50 text-white rounded-lg transition-colors"
+          >
+            {{ t('common.close') }}
+          </button>
         </div>
       </div>
     </div>

@@ -208,6 +208,7 @@ export interface GitHubRelease {
   tag_name: string;
   name: string;
   published_at: string;
+  body?: string; // Release notes / changelog
   assets: {
     name: string;
     browser_download_url: string;
@@ -372,6 +373,40 @@ function compareVersions(v1: string, v2: string): number {
 }
 
 /**
+ * Check if a filename matches a mod (more precise matching to avoid false positives)
+ */
+function filenameMatchesMod(filename: string, modId: string, modName: string): boolean {
+  const lowerFile = filename.toLowerCase();
+  const lowerModId = modId.toLowerCase();
+  const lowerModName = modName.toLowerCase().replace(/\s+/g, '');
+
+  // Remove extension for comparison
+  const baseName = lowerFile.replace(/\.(jar|jar\.disabled)$/i, '');
+
+  // Check if filename starts with modId followed by a separator or version
+  // e.g., "easywebmap-1.0.0" matches "easywebmap" but "easystorenetwork" does not
+  const modIdPattern = new RegExp(`^${escapeRegex(lowerModId)}(-|_|\\.|\\s|$)`, 'i');
+  if (modIdPattern.test(baseName)) {
+    return true;
+  }
+
+  // Also check mod name (without spaces) followed by separator
+  const modNamePattern = new RegExp(`^${escapeRegex(lowerModName)}(-|_|\\.|\\s|$)`, 'i');
+  if (modNamePattern.test(baseName)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Escape regex special characters
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Check if a mod is installed
  */
 export async function isModInstalled(modId: string, registry?: ModStoreEntry[]): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
@@ -386,11 +421,10 @@ export async function isModInstalled(modId: string, registry?: ModStoreEntry[]):
   try {
     const files = await readdir(config.modsPath);
 
-    // Check for mod file (case-insensitive search)
+    // Check for mod file (precise matching to avoid false positives)
     for (const file of files) {
-      const lowerFile = file.toLowerCase();
-      if (lowerFile.includes(modId) || lowerFile.includes(mod.name.toLowerCase())) {
-        if (file.endsWith('.jar') || file.endsWith('.jar.disabled')) {
+      if (file.endsWith('.jar') || file.endsWith('.jar.disabled')) {
+        if (filenameMatchesMod(file, modId, mod.name)) {
           const version = extractVersionFromFilename(file);
           return { installed: true, filename: file, installedVersion: version || undefined };
         }

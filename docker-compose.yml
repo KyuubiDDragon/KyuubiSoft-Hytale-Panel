@@ -168,6 +168,8 @@ services:
       - BACKUPS_PATH=/opt/hytale/backups
       - DATA_PATH=/opt/hytale/data
       - ASSETS_PATH=/opt/hytale/assets
+      # Manager persistent data path (for users, roles, config, logs)
+      - MANAGER_DATA_PATH=/app/data
 
       # Settings
       - TZ=${TZ:-Europe/Berlin}
@@ -177,6 +179,9 @@ services:
 
       # StackMart API (optional)
       - STACKMART_API_KEY=${STACKMART_API_KEY:-}
+
+      # CurseForge API (optional - for CurseForge mod browser)
+      - CURSEFORGE_API_KEY=${CURSEFORGE_API_KEY:-}
 
       # Host data path (for error messages)
       - HOST_DATA_PATH=${HOST_DATA_PATH:-/opt/hytale}

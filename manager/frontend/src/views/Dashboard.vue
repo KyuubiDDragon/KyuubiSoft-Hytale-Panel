@@ -3,9 +3,10 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
-import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type PatchlineResponse, type DownloaderAuthStatus, type NewFeaturesStatus } from '@/api/server'
+import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type PatchlineResponse, type DownloaderAuthStatus, type NewFeaturesStatus, type PanelVersionInfo } from '@/api/server'
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import { schedulerApi, type SchedulerStatus } from '@/api/scheduler'
+import { modupdatesApi, modsApi, type ModUpdateStatus } from '@/api/management'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 import PluginBanner from '@/components/dashboard/PluginBanner.vue'
@@ -40,8 +41,17 @@ const showDownloaderAuthWarning = ref(false)
 const newFeaturesStatus = ref<NewFeaturesStatus | null>(null)
 const showNewFeaturesBanner = ref(false)
 
+// Panel Version Check (check for panel updates from GitHub)
+const panelVersionInfo = ref<PanelVersionInfo | null>(null)
+const checkingPanelVersion = ref(false)
+const showPanelUpdateBanner = ref(false)
+
 // Scheduler status
 const schedulerStatus = ref<SchedulerStatus | null>(null)
+
+// Mod update status (unified from all sources)
+const modUpdateStatus = ref<ModUpdateStatus | null>(null)
+const checkingModUpdates = ref(false)
 
 // Panel patchline setting (fallback when plugin not available)
 const panelPatchline = ref<string | null>(null)
@@ -199,6 +209,32 @@ async function fetchSchedulerStatus() {
   }
 }
 
+async function fetchModUpdateStatus() {
+  try {
+    // Use unified updates from all sources (not just CFWidget)
+    modUpdateStatus.value = await modsApi.getAllUpdates()
+  } catch {
+    // Silently fail
+  }
+}
+
+async function checkModUpdates() {
+  checkingModUpdates.value = true
+  try {
+    // Check all updates and then refresh
+    await modupdatesApi.checkAll()
+    await fetchModUpdateStatus()
+  } catch {
+    // Silently fail
+  } finally {
+    checkingModUpdates.value = false
+  }
+}
+
+function goToMods() {
+  router.push('/mods')
+}
+
 async function fetchPanelPatchline() {
   try {
     const response = await serverApi.getPatchline()
@@ -241,6 +277,24 @@ async function dismissNewFeaturesBanner() {
   }
 }
 
+async function checkPanelVersion(forceRefresh = false) {
+  checkingPanelVersion.value = true
+  try {
+    const info = await serverApi.checkPanelVersion(forceRefresh)
+    panelVersionInfo.value = info
+    showPanelUpdateBanner.value = info.updateAvailable
+  } catch {
+    // Silently fail - panel version check is non-critical
+    showPanelUpdateBanner.value = false
+  } finally {
+    checkingPanelVersion.value = false
+  }
+}
+
+function dismissPanelUpdateBanner() {
+  showPanelUpdateBanner.value = false
+}
+
 // Computed: Always use panel patchline setting (that's what the user configured)
 // The plugin patchline shows what's currently running, but panel setting is the source of truth
 const displayPatchline = computed(() => panelPatchline.value || patchline.value)
@@ -249,9 +303,12 @@ onMounted(() => {
   fetchServerMemory()
   checkHytaleAuth()
   fetchSchedulerStatus()
+  fetchModUpdateStatus()
   fetchPanelPatchline()
   checkDownloaderAuth()
   fetchNewFeatures()
+  fetchModUpdateStatus()
+  checkPanelVersion()
   memoryInterval = setInterval(() => {
     fetchServerMemory()
     checkHytaleAuth()
@@ -428,6 +485,68 @@ function refreshAll() {
         </div>
         <button
           @click="dismissNewFeaturesBanner"
+          class="flex-shrink-0 text-gray-400 hover:text-white"
+        >
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Panel Update Available Banner -->
+    <div
+      v-if="showPanelUpdateBanner && panelVersionInfo"
+      class="bg-gradient-to-r from-hytale-orange/20 to-status-success/20 border-2 border-hytale-orange rounded-lg p-4"
+    >
+      <div class="flex items-start gap-4">
+        <div class="flex-shrink-0">
+          <svg class="w-8 h-8 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-white mb-1">
+            {{ t('dashboard.panelUpdate.title') }}
+          </h3>
+          <p class="text-gray-300 text-sm mb-3">
+            {{ t('dashboard.panelUpdate.description', { current: panelVersionInfo.currentVersion, latest: panelVersionInfo.latestVersion }) }}
+          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <a
+              :href="panelVersionInfo.releaseUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="btn btn-primary inline-flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              {{ t('dashboard.panelUpdate.viewRelease') }}
+            </a>
+            <button
+              @click="checkPanelVersion(true)"
+              :disabled="checkingPanelVersion"
+              class="text-sm text-gray-400 hover:text-white transition-colors inline-flex items-center gap-1"
+            >
+              <svg class="w-4 h-4" :class="{ 'animate-spin': checkingPanelVersion }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ t('common.refresh') }}
+            </button>
+            <button
+              @click="dismissPanelUpdateBanner"
+              class="text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              {{ t('common.dismiss') }}
+            </button>
+          </div>
+          <p v-if="panelVersionInfo.publishedAt" class="text-xs text-gray-500 mt-2">
+            {{ t('dashboard.panelUpdate.publishedAt') }}: {{ new Date(panelVersionInfo.publishedAt).toLocaleDateString() }}
+          </p>
+        </div>
+        <button
+          @click="dismissPanelUpdateBanner"
           class="flex-shrink-0 text-gray-400 hover:text-white"
         >
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -705,6 +824,43 @@ function refreshAll() {
           </div>
         </div>
       </div>
+
+      <!-- Mod Updates Card -->
+      <router-link to="/mods?tab=updates" class="card hover:border-hytale-orange/50 transition-colors cursor-pointer">
+        <div class="card-body p-4">
+          <div class="flex items-center gap-3">
+            <div class="flex-shrink-0">
+              <svg
+                v-if="modUpdateStatus && modUpdateStatus.updatesAvailable > 0"
+                class="w-6 h-6 text-status-warning animate-pulse"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <svg
+                v-else
+                class="w-6 h-6 text-status-success"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs text-gray-400 mb-1">{{ t('dashboard.modUpdates.title') }}</p>
+              <p v-if="modUpdateStatus === null" class="text-sm text-gray-500">{{ t('dashboard.modUpdates.checking') }}</p>
+              <p v-else-if="modUpdateStatus.totalTracked === 0" class="text-sm text-gray-500">{{ t('dashboard.modUpdates.noTracked') }}</p>
+              <p v-else-if="modUpdateStatus.updatesAvailable > 0" class="text-sm font-semibold text-status-warning">
+                {{ t('dashboard.modUpdates.updatesAvailable', { count: modUpdateStatus.updatesAvailable }) }}
+              </p>
+              <p v-else class="text-sm font-semibold text-status-success">{{ t('dashboard.modUpdates.allUpToDate') }}</p>
+            </div>
+          </div>
+        </div>
+      </router-link>
     </div>
 
     <!-- Scheduler Status Cards -->

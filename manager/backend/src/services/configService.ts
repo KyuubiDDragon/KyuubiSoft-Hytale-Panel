@@ -77,8 +77,8 @@ export interface PanelConfig {
 // Constants
 // ============================================================
 
-// Config file location inside container
-const DATA_PATH = process.env.DATA_PATH || '/opt/hytale/data';
+// Config file location inside container (persistent volume)
+const DATA_PATH = process.env.MANAGER_DATA_PATH || '/app/data';
 const CONFIG_FILENAME = 'config.json';
 const CONFIG_TEMP_SUFFIX = '.tmp';
 

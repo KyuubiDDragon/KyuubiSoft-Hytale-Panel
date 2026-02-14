@@ -2,6 +2,119 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [2.1.3] - 2026-01-27 - CurseForge Integration & Unified Mod Updates
+
+### Added
+
+- **CurseForge Integration**: Full CurseForge API support for Hytale mods
+  - Browse and search CurseForge mods directly from the panel
+  - Install mods with one click via CurseForge API
+  - Game ID 70216 for Hytale-specific mods
+  - Sort by popularity, downloads, name, or release date
+  - View mod details, descriptions, and download counts
+  - Location: `manager/backend/src/services/curseforge.ts`
+
+- **CFWidget Integration**: Alternative CurseForge access via CFWidget proxy
+  - Free API access without CurseForge API key
+  - Manual mod tracking via CurseForge URL or slug
+  - Wishlist feature to track mods before installing
+  - Automatic update checking for tracked mods
+  - CDN download URL construction for reliable downloads
+  - Location: `manager/backend/src/services/cfwidget.ts`
+
+- **Unified Mod Update System**: Centralized update tracking from all sources
+  - Aggregates updates from: CFWidget, CurseForge API, Modtale, StackMart, ModStore
+  - New endpoint `/api/management/mods/all-updates` for unified status
+  - Dashboard shows all available updates with source badges
+  - Mods tab displays update badges inline with each mod
+  - Color-coded source indicators (orange for CurseForge, cyan for Modtale, etc.)
+  - Location: `manager/backend/src/services/unifiedUpdates.ts`
+
+- **CurseForge Tab**: New tab in Mods & Plugins page
+  - API status indicator (online/offline)
+  - API key configuration via settings dialog
+  - Search with debounced input
+  - Pagination support for large result sets
+  - Install/uninstall buttons with progress indicators
+  - Installed version tracking
+  - Location: `manager/frontend/src/views/Mods.vue`
+
+- **Updates Tab**: Manual mod tracking via CFWidget
+  - Track any CurseForge mod by URL or slug
+  - Wishlist mode for mods not yet installed
+  - Check for updates manually or automatically
+  - Install updates directly from the panel
+  - Untrack mods when no longer needed
+  - Location: `manager/frontend/src/views/Mods.vue`
+
+- **New API Endpoints**:
+  - `GET /api/management/curseforge/status` - CurseForge API status and configuration
+  - `GET /api/management/curseforge/search` - Search CurseForge mods
+  - `POST /api/management/curseforge/install/:modId` - Install mod from CurseForge
+  - `DELETE /api/management/curseforge/uninstall/:modId` - Uninstall CurseForge mod
+  - `GET /api/management/curseforge/installed` - List installed CurseForge mods
+  - `PUT /api/management/curseforge/apikey` - Configure CurseForge API key
+  - `GET /api/management/modupdates/status` - CFWidget tracked mods status
+  - `POST /api/management/modupdates/track` - Track a mod via CFWidget
+  - `DELETE /api/management/modupdates/untrack/:filename` - Untrack a mod
+  - `POST /api/management/modupdates/check` - Check all tracked mods for updates
+  - `POST /api/management/modupdates/install/:filename` - Install/update tracked mod
+  - `GET /api/management/mods/all-updates` - Unified updates from all sources
+  - Location: `manager/backend/src/routes/management.ts`
+
+- **Translations**: Full localization for CurseForge and update features
+  - English, German, and Brazilian Portuguese
+  - CurseForge tab labels, buttons, and status messages
+  - Update tracking dialogs and error messages
+  - Source badges and update notifications
+  - Location: `manager/frontend/src/i18n/{en,de,pt_br}.json`
+
+### Changed
+
+- **Dashboard Mod Updates**: Now shows updates from all sources (not just CFWidget)
+  - Unified update display with source indicators
+  - Click redirects to Mods tab for updating
+  - Shows update count badge in sidebar
+
+- **Sidebar**: Removed standalone "Mod Updates" menu item
+  - Updates are now integrated into "Mods & Plugins" tab
+  - Cleaner navigation with fewer menu items
+
+### Fixed
+
+- **CFWidget Download URLs**: Fixed download failures due to website URLs
+  - CFWidget returns website URLs, not CDN download URLs
+  - Added `constructDownloadUrl()` to build proper CurseForge CDN URLs
+  - Format: `https://mediafilez.forgecdn.net/files/{first4}/{remaining}/{filename}`
+  - Location: `manager/backend/src/services/cfwidget.ts`
+
+- **CurseForge Game ID**: Fixed showing Minecraft mods instead of Hytale
+  - Changed from game ID 432 (Minecraft) to 70216 (Hytale)
+  - Location: `manager/backend/src/services/curseforge.ts`
+
+### Technical Details
+
+The CurseForge integration supports two access methods:
+
+1. **CurseForge API** (requires API key):
+   - Full search and browse capabilities
+   - Direct mod installation
+   - File version selection
+   - Higher rate limits
+
+2. **CFWidget** (free, no API key):
+   - Manual tracking by URL or slug
+   - Update checking for tracked mods
+   - Wishlist feature for future installs
+   - Lower rate limits but no registration required
+
+Unified update tracking aggregates from:
+- CFWidget (manually tracked mods)
+- CurseForge API (installed via API)
+- Modtale (community mod platform)
+- StackMart (resource marketplace)
+- ModStore (built-in mod repository)
+
 ## [2.1.2] - 2026-01-25 - HTTP Support & Console Spam Fixes
 
 ### Added

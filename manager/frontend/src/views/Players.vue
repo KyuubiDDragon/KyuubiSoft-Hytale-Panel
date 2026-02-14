@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { playersApi, type UnifiedPlayerEntry, type DeathPosition } from '@/api/players'
 import { serverApi, type PluginPlayer } from '@/api/server'
@@ -8,10 +9,10 @@ import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
 import ItemAutocomplete from '@/components/ui/ItemAutocomplete.vue'
-import PlayerDetailModal from '@/components/players/PlayerDetailModal.vue'
 import { formatItemPath } from '@/utils/formatItemPath'
 
 const { t } = useI18n()
+const router = useRouter()
 const authStore = useAuthStore()
 
 // Tab state
@@ -46,7 +47,6 @@ const showClearInventoryModal = ref(false)
 const showTeleportModal = ref(false)
 const showGamemodeModal = ref(false)
 const showGiveModal = ref(false)
-const showPlayerDetailModal = ref(false)
 
 // Teleport form
 const teleportMode = ref<'player' | 'coords' | 'death'>('player')
@@ -256,10 +256,9 @@ function openGiveModal(name: string) {
   closeDropdown()
 }
 
-function openPlayerDetailModal(name: string, uuid?: string) {
-  selectedPlayer.value = name
-  selectedPlayerUuid.value = uuid || null
-  showPlayerDetailModal.value = true
+function openPlayerDetailModal(name: string, _uuid?: string) {
+  // Navigate to Avatar & Inventory page
+  router.push({ path: '/avatar-inventory', query: { player: name } })
 }
 
 async function handleWhitelist(name: string) {
@@ -1012,12 +1011,5 @@ onUnmounted(() => {
       </template>
     </Modal>
 
-    <!-- Player Detail Modal -->
-    <PlayerDetailModal
-      :open="showPlayerDetailModal"
-      :player-name="selectedPlayer || ''"
-      :player-uuid="selectedPlayerUuid || undefined"
-      @close="showPlayerDetailModal = false"
-    />
   </div>
 </template>

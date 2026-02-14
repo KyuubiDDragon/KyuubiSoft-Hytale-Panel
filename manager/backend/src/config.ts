@@ -9,8 +9,8 @@ dotenv.config();
 // Config.json Integration
 // ============================================================
 
-// Path to config.json (same as in configService.ts)
-const DATA_PATH = process.env.DATA_PATH || '/opt/hytale/data';
+// Path to config.json (same as in configService.ts, persistent volume)
+const DATA_PATH = process.env.MANAGER_DATA_PATH || '/app/data';
 const CONFIG_FILE_PATH = path.join(DATA_PATH, 'config.json');
 
 // Interface for config.json (simplified for this module)
@@ -26,6 +26,8 @@ interface ConfigJson {
   integrations?: {
     modtaleApiKey?: string;
     stackmartApiKey?: string;
+    curseforgeApiKey?: string;
+    curseforgeGameId?: number;
     webmap?: boolean;
   };
   automation?: {
@@ -118,6 +120,17 @@ const modtaleApiKeyFromConfig = configJson?.integrations?.modtaleApiKey;
 const modtaleApiKeyFromEnv = process.env.MODTALE_API_KEY || '';
 const effectiveModtaleApiKey = modtaleApiKeyFromConfig || modtaleApiKeyFromEnv;
 
+// Determine CurseForge API key: prefer config.json, then env
+const curseforgeApiKeyFromConfig = configJson?.integrations?.curseforgeApiKey;
+const curseforgeApiKeyFromEnv = process.env.CURSEFORGE_API_KEY || '';
+const effectiveCurseforgeApiKey = curseforgeApiKeyFromConfig || curseforgeApiKeyFromEnv;
+
+// Determine CurseForge game ID: prefer config.json, then env
+// Default is 70216 (Hytale) - see https://www.curseforge.com/hytale
+const curseforgeGameIdFromConfig = configJson?.integrations?.curseforgeGameId;
+const curseforgeGameIdFromEnv = process.env.CURSEFORGE_GAME_ID ? parseInt(process.env.CURSEFORGE_GAME_ID, 10) : undefined;
+const effectiveCurseforgeGameId = curseforgeGameIdFromConfig || curseforgeGameIdFromEnv || 70216;
+
 export const config = {
   // ============================================================
   // Values that can come from config.json (after setup)
@@ -137,6 +150,10 @@ export const config = {
 
   // Modtale Integration - from config.json if available, otherwise from env
   modtaleApiKey: effectiveModtaleApiKey,
+
+  // CurseForge Integration - from config.json if available, otherwise from env
+  curseforgeApiKey: effectiveCurseforgeApiKey,
+  curseforgeGameId: effectiveCurseforgeGameId,
 
   // WebMap enabled - from config.json after setup
   webmapEnabled: configJson?.integrations?.webmap ?? false,
@@ -236,6 +253,12 @@ export function reloadConfigFromFile(): void {
       }
       if (newConfigJson.integrations?.modtaleApiKey !== undefined) {
         (config as { modtaleApiKey: string }).modtaleApiKey = newConfigJson.integrations.modtaleApiKey;
+      }
+      if (newConfigJson.integrations?.curseforgeApiKey !== undefined) {
+        (config as { curseforgeApiKey: string }).curseforgeApiKey = newConfigJson.integrations.curseforgeApiKey;
+      }
+      if (newConfigJson.integrations?.curseforgeGameId !== undefined) {
+        (config as { curseforgeGameId: number }).curseforgeGameId = newConfigJson.integrations.curseforgeGameId;
       }
       if (newConfigJson.integrations?.webmap !== undefined) {
         (config as { webmapEnabled: boolean }).webmapEnabled = newConfigJson.integrations.webmap;

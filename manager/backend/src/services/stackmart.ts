@@ -517,6 +517,33 @@ export async function installResourceFromStackMart(
     await mkdir(targetPath, { recursive: true });
   }
 
+  // Check if this resource is already installed (for updates) and remove old file
+  const existingInstall = await isStackMartResourceInstalled(resourceId);
+  if (existingInstall && existingInstall.filename) {
+    // Determine path based on category
+    let oldBasePath: string;
+    switch (existingInstall.category?.toLowerCase()) {
+      case 'plugins':
+        oldBasePath = config.pluginsPath;
+        break;
+      case 'mods':
+        oldBasePath = config.modsPath;
+        break;
+      case 'scripts':
+      case 'tools':
+      default:
+        oldBasePath = config.dataPath;
+    }
+    const oldFilePath = path.join(oldBasePath, existingInstall.filename);
+    try {
+      await unlink(oldFilePath);
+      console.log(`[StackMart] Removed old resource file: ${existingInstall.filename}`);
+    } catch (e) {
+      // File might not exist, that's ok
+      console.log(`[StackMart] Could not remove old file ${existingInstall.filename}:`, e);
+    }
+  }
+
   // Security: Construct destination path and verify it's within allowed directory
   const destPath = path.join(targetPath, validatedFilename);
   const resolvedDest = path.resolve(destPath);

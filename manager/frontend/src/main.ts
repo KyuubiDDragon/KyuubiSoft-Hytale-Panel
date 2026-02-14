@@ -28,6 +28,7 @@ import WebMap from './views/WebMap.vue'
 import Assets from './views/Assets.vue'
 import Chat from './views/Chat.vue'
 import Help from './views/Help.vue'
+import AvatarInventory from './views/AvatarInventory.vue'
 
 // Import stores
 import { useAuthStore } from './stores/auth'
@@ -155,6 +156,12 @@ const router = createRouter({
       path: '/chat',
       name: 'chat',
       component: Chat,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/avatar-inventory',
+      name: 'avatarInventory',
+      component: AvatarInventory,
       meta: { requiresAuth: true },
     },
     {

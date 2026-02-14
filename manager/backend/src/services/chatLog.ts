@@ -38,7 +38,7 @@ const playerDeathPositions: Map<string, DeathPosition[]> = new Map();
 const MAX_DEATH_POSITIONS = 10; // Keep last 10 death positions per player
 
 // Data directory paths
-const DATA_DIR = process.env.DATA_PATH || '/app/data';
+const DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
 const CHAT_DIR = path.join(DATA_DIR, 'chat');
 const GLOBAL_CHAT_DIR = path.join(CHAT_DIR, 'global');
 const PLAYER_CHAT_DIR = path.join(CHAT_DIR, 'players');
