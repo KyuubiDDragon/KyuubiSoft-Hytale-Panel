@@ -274,6 +274,10 @@ app.use(helmet({
       // Note: upgradeInsecureRequests removed - only use if running behind HTTPS proxy
     },
   },
+  // HSTS: Only enable when behind a reverse proxy with HTTPS (TRUST_PROXY=true)
+  // Without this, browsers over HTTP will cache the HSTS header and force-upgrade
+  // all subsequent requests to HTTPS, causing ERR_SSL_PROTOCOL_ERROR (white page)
+  hsts: config.trustProxy ? { maxAge: 31536000, includeSubDomains: true } : false,
   // Additional security headers
   crossOriginEmbedderPolicy: false, // Disable for compatibility with external resources
   crossOriginOpenerPolicy: false, // Disable for HTTP compatibility

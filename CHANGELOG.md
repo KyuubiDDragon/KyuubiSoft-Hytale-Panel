@@ -126,6 +126,12 @@ Unified update tracking aggregates from:
 
 ### Fixed
 
+- **White Page / ERR_SSL_PROTOCOL_ERROR on HTTP**: Fixed HSTS header breaking plain HTTP deployments
+  - Helmet sent `Strict-Transport-Security` by default, even over HTTP
+  - Browser cached HSTS and force-upgraded all asset requests to HTTPS → white page
+  - HSTS now only enabled when `TRUST_PROXY=true` (behind HTTPS reverse proxy)
+  - Location: `manager/backend/src/index.ts`
+
 - **HTTP Connection Support**: Panel now clearly supports both HTTP and HTTPS deployments
   - Updated CORS_ORIGINS error messages to show HTTP examples (e.g., `http://your-ip:18080`)
   - Users no longer confused that HTTPS is required
