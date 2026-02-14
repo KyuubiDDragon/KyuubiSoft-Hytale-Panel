@@ -271,7 +271,10 @@ app.use(helmet({
       baseUri: ["'self'"],
       formAction: ["'self'"],
       frameAncestors: ["'none'"], // Prevent clickjacking
-      // Note: upgradeInsecureRequests removed - only use if running behind HTTPS proxy
+      // CRITICAL: Disable upgrade-insecure-requests for HTTP deployments
+      // This directive forces browsers to upgrade all HTTP requests to HTTPS
+      // Only enable when behind HTTPS proxy, otherwise causes ERR_SSL_PROTOCOL_ERROR
+      upgradeInsecureRequests: config.trustProxy ? [] : null,
     },
   },
   // HSTS: Only enable when behind a reverse proxy with HTTPS (TRUST_PROXY=true)
