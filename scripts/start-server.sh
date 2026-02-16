@@ -107,6 +107,21 @@ if [ "$ALLOW_OP" = "true" ]; then
     SERVER_ARGS+=("--allow-op")
 fi
 
+# Custom server arguments (for alternative launchers or advanced config)
+if [ -n "${EXTRA_SERVER_ARGS}" ]; then
+    echo "[INFO] Custom server arguments: ${EXTRA_SERVER_ARGS}"
+    # Split EXTRA_SERVER_ARGS by spaces into array
+    read -ra CUSTOM_ARGS <<< "${EXTRA_SERVER_ARGS}"
+    SERVER_ARGS+=("${CUSTOM_ARGS[@]}")
+fi
+
+# Custom Java arguments (for advanced JVM tuning)
+if [ -n "${EXTRA_JAVA_ARGS}" ]; then
+    echo "[INFO] Custom Java arguments: ${EXTRA_JAVA_ARGS}"
+    read -ra CUSTOM_JAVA <<< "${EXTRA_JAVA_ARGS}"
+    JAVA_ARGS+=("${CUSTOM_JAVA[@]}")
+fi
+
 echo "============================================================"
 echo "Starting with: java ${JAVA_ARGS[*]} -jar ${SERVER_JAR} ${SERVER_ARGS[*]}"
 echo "============================================================"
