@@ -45,8 +45,8 @@ FROM node:20-alpine
 LABEL maintainer="Hytale Server Manager"
 LABEL description="Web-based management tool for Hytale servers"
 
-# Install wget for healthcheck, dumb-init for signal handling, gosu for user switching
-RUN apk add --no-cache wget dumb-init gosu shadow
+# Install wget for healthcheck, dumb-init for signal handling, gosu for user switching, unzip for asset extraction
+RUN apk add --no-cache wget dumb-init gosu shadow unzip
 
 # Create non-root user for security
 # Using same UID/GID 9999 as hytale container for shared volume access

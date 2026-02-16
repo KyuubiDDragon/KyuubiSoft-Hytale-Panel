@@ -81,7 +81,7 @@ onMounted(() => {
         <div class="mt-3 p-2 bg-dark-400/50 rounded-md">
           <p class="text-xs text-gray-400 mb-1">{{ t('health.fixCommand') }}:</p>
           <code class="text-sm text-hytale-orange font-mono select-all">
-            sudo chown -R 1001:1001 /opt/hytale
+            sudo chown -R 9999:9999 /opt/hytale
           </code>
         </div>
       </div>

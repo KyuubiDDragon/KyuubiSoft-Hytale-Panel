@@ -124,6 +124,18 @@ Unified update tracking aggregates from:
   - Manager: read-only access for asset browsing
   - Location: `docker-compose.yml`
 
+- **Configurable Server JAR**: Support for alternative launchers like Hyinit
+  - New env variable `SERVER_JAR` (default: `HytaleServer.jar`)
+  - Example: `SERVER_JAR=Hyinit-0.1.0-pre1.jar`
+  - Startup validation with clear error if JAR not found
+  - AOT cache only used with default HytaleServer.jar
+  - Location: `scripts/start-server.sh`, `docker-compose.yml`, `.env.example`
+
+- **Custom Start Parameters**: Flexible server and JVM configuration
+  - `EXTRA_SERVER_ARGS`: Additional arguments passed to server JAR
+  - `EXTRA_JAVA_ARGS`: Additional JVM arguments for advanced tuning
+  - Location: `scripts/start-server.sh`, `docker-compose.yml`, `.env.example`
+
 ### Fixed
 
 - **White Page / ERR_SSL_PROTOCOL_ERROR on HTTP**: Fixed HSTS header breaking plain HTTP deployments
@@ -151,6 +163,16 @@ Unified update tracking aggregates from:
   - Removed player connect/disconnect logging
   - Events still broadcast to panel, just no console output
   - Location: `plugins/kyuubisoft-api/`
+
+- **Asset Extraction Failed**: Fixed `unzip exited with code 1` error
+  - `unzip` package was missing from Manager container
+  - Added `unzip` to Dockerfile dependencies
+  - Location: `manager/Dockerfile`
+
+- **Wrong UID in Permission Error Messages**: Fixed incorrect chown commands
+  - Error messages showed `1001:1001` or `1000:1000` instead of `9999:9999`
+  - Container runs as UID 9999, so permission fix commands must use that UID
+  - Location: `index.ts`, `systemCheck.ts`, `PermissionBanner.vue`
 
 ### Changed
 

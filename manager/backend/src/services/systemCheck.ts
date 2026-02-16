@@ -389,7 +389,7 @@ async function checkWritePermissions(): Promise<SystemCheck> {
     if (err.code === 'EACCES') {
       check.status = 'error';
       check.message = 'Permission denied';
-      check.details = `Cannot write to ${hostDataPath}/data. Run: sudo mkdir -p ${hostDataPath}/data && sudo chown -R 1000:1000 ${hostDataPath}`;
+      check.details = `Cannot write to ${hostDataPath}/data. Run: sudo mkdir -p ${hostDataPath}/data && sudo chown -R 9999:9999 ${hostDataPath}`;
     } else if (err.code === 'ENOENT') {
       check.status = 'error';
       check.message = 'Directory not found';
