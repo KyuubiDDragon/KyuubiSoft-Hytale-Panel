@@ -131,6 +131,11 @@ Unified update tracking aggregates from:
   - AOT cache only used with default HytaleServer.jar
   - Location: `scripts/start-server.sh`, `docker-compose.yml`, `.env.example`
 
+- **Custom Start Parameters**: Flexible server and JVM configuration
+  - `EXTRA_SERVER_ARGS`: Additional arguments passed to server JAR
+  - `EXTRA_JAVA_ARGS`: Additional JVM arguments for advanced tuning
+  - Location: `scripts/start-server.sh`, `docker-compose.yml`, `.env.example`
+
 ### Fixed
 
 - **White Page / ERR_SSL_PROTOCOL_ERROR on HTTP**: Fixed HSTS header breaking plain HTTP deployments

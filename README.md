@@ -239,6 +239,9 @@ Rollen können im Panel unter "Roles" angepasst werden. Du kannst auch eigene Ro
 | `JAVA_MIN_RAM` | 3G | Minimaler RAM |
 | `JAVA_MAX_RAM` | 4G | Maximaler RAM |
 | `SERVER_PORT` | 5520 | UDP Port |
+| `SERVER_JAR` | HytaleServer.jar | Server JAR-Datei (z.B. `Hyinit-0.1.0-pre1.jar`) |
+| `EXTRA_SERVER_ARGS` | - | Zusätzliche Server-Argumente |
+| `EXTRA_JAVA_ARGS` | - | Zusätzliche JVM-Argumente |
 | `AUTH_MODE` | authenticated | `offline` für LAN-only |
 | `TZ` | Europe/Berlin | Zeitzone |
 
@@ -522,6 +525,9 @@ Roles can be customized in the panel under "Roles". You can also create custom r
 | `JAVA_MIN_RAM` | 3G | Minimum RAM |
 | `JAVA_MAX_RAM` | 4G | Maximum RAM |
 | `SERVER_PORT` | 5520 | UDP Port |
+| `SERVER_JAR` | HytaleServer.jar | Server JAR file (e.g., `Hyinit-0.1.0-pre1.jar`) |
+| `EXTRA_SERVER_ARGS` | - | Additional server arguments |
+| `EXTRA_JAVA_ARGS` | - | Additional JVM arguments |
 | `AUTH_MODE` | authenticated | `offline` for LAN-only |
 | `TZ` | Europe/Berlin | Timezone |
 
