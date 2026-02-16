@@ -5,9 +5,18 @@
 
 cd /opt/hytale/server
 
-# Check for AOT cache
+# Server JAR (configurable for alternative launchers like Hyinit)
+SERVER_JAR="${SERVER_JAR:-HytaleServer.jar}"
+
+if [ ! -f "$SERVER_JAR" ]; then
+    echo "[ERROR] Server JAR not found: $SERVER_JAR"
+    echo "[ERROR] Make sure the file exists in /opt/hytale/server/"
+    exit 1
+fi
+
+# Check for AOT cache (only for default HytaleServer.jar)
 AOT_FLAG=""
-if [ -f "HytaleServer.aot" ]; then
+if [ "$SERVER_JAR" = "HytaleServer.jar" ] && [ -f "HytaleServer.aot" ]; then
     echo "[INFO] AOT cache found - enabling fast startup"
     AOT_FLAG="-XX:AOTCache=HytaleServer.aot"
 fi
@@ -99,7 +108,7 @@ if [ "$ALLOW_OP" = "true" ]; then
 fi
 
 echo "============================================================"
-echo "Starting with: java ${JAVA_ARGS[*]} -jar HytaleServer.jar ${SERVER_ARGS[*]}"
+echo "Starting with: java ${JAVA_ARGS[*]} -jar ${SERVER_JAR} ${SERVER_ARGS[*]}"
 echo "============================================================"
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
@@ -119,7 +128,7 @@ echo ""
 # On restart, updates are applied automatically by the launcher
 
 while true; do
-    java "${JAVA_ARGS[@]}" -jar HytaleServer.jar "${SERVER_ARGS[@]}"
+    java "${JAVA_ARGS[@]}" -jar "${SERVER_JAR}" "${SERVER_ARGS[@]}"
     EXIT_CODE=$?
 
     echo ""

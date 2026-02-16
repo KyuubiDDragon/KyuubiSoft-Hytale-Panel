@@ -124,6 +124,13 @@ Unified update tracking aggregates from:
   - Manager: read-only access for asset browsing
   - Location: `docker-compose.yml`
 
+- **Configurable Server JAR**: Support for alternative launchers like Hyinit
+  - New env variable `SERVER_JAR` (default: `HytaleServer.jar`)
+  - Example: `SERVER_JAR=Hyinit-0.1.0-pre1.jar`
+  - Startup validation with clear error if JAR not found
+  - AOT cache only used with default HytaleServer.jar
+  - Location: `scripts/start-server.sh`, `docker-compose.yml`, `.env.example`
+
 ### Fixed
 
 - **White Page / ERR_SSL_PROTOCOL_ERROR on HTTP**: Fixed HSTS header breaking plain HTTP deployments

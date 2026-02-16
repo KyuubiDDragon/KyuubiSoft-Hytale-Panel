@@ -41,6 +41,7 @@ services:
       # Server
       - SERVER_PORT=${SERVER_PORT:-5520}
       - SERVER_BIND=${SERVER_BIND:-0.0.0.0}
+      - SERVER_JAR=${SERVER_JAR:-HytaleServer.jar}
       - TZ=${TZ:-Europe/Berlin}
       
       # Backups (built-in backup disabled by default - creates empty files)
