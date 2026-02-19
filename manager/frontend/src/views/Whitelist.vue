@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -26,6 +27,12 @@ const error = ref('')
 
 // Active tab
 const activeTab = ref<'whitelist' | 'bans'>('whitelist')
+
+// Confirm dialogs
+const showRemoveConfirm = ref(false)
+const showUnbanConfirm = ref(false)
+const pendingRemovePlayer = ref<string | null>(null)
+const pendingUnbanPlayer = ref<string | null>(null)
 
 // Filtered lists based on search
 const whitelistSearch = ref('')
@@ -84,10 +91,18 @@ async function addToWhitelist() {
   }
 }
 
-async function removeFromWhitelist(player: string) {
+function confirmRemoveFromWhitelist(player: string) {
+  pendingRemovePlayer.value = player
+  showRemoveConfirm.value = true
+}
+
+async function removeFromWhitelist() {
+  if (!pendingRemovePlayer.value) return
   try {
-    const result = await whitelistApi.removePlayer(player)
+    const result = await whitelistApi.removePlayer(pendingRemovePlayer.value)
     whitelistPlayers.value = result.list
+    showRemoveConfirm.value = false
+    pendingRemovePlayer.value = null
   } catch (e) {
     error.value = t('errors.serverError')
   }
@@ -105,10 +120,18 @@ async function addBan() {
   }
 }
 
-async function removeBan(player: string) {
+function confirmUnban(player: string) {
+  pendingUnbanPlayer.value = player
+  showUnbanConfirm.value = true
+}
+
+async function removeBan() {
+  if (!pendingUnbanPlayer.value) return
   try {
-    const result = await bansApi.remove(player)
+    const result = await bansApi.remove(pendingUnbanPlayer.value)
     bans.value = result.bans
+    showUnbanConfirm.value = false
+    pendingUnbanPlayer.value = null
   } catch (e) {
     error.value = t('errors.serverError')
   }
@@ -253,7 +276,7 @@ onMounted(loadData)
             </div>
             <button
               v-if="authStore.hasPermission('players.whitelist')"
-              @click="removeFromWhitelist(player)"
+              @click="confirmRemoveFromWhitelist(player)"
               class="p-2 text-gray-400 hover:text-status-error transition-colors"
               :aria-label="t('common.remove')"
             >
@@ -336,7 +359,7 @@ onMounted(loadData)
             </div>
             <button
               v-if="authStore.hasPermission('players.unban')"
-              @click="removeBan(ban.player)"
+              @click="confirmUnban(ban.player)"
               class="px-3 py-1.5 bg-dark-50 text-gray-300 text-sm rounded-lg hover:bg-hytale-orange hover:text-dark transition-colors"
             >
               {{ t('whitelist.unban') }}
@@ -345,5 +368,29 @@ onMounted(loadData)
         </TransitionGroup>
       </Card>
     </div>
+
+    <!-- Confirm Remove from Whitelist -->
+    <ConfirmDialog
+      :show="showRemoveConfirm"
+      :title="t('common.remove')"
+      :message="pendingRemovePlayer ? t('whitelist.confirmRemove', { player: pendingRemovePlayer }) : ''"
+      :confirm-text="t('common.remove')"
+      :cancel-text="t('common.cancel')"
+      variant="danger"
+      @confirm="removeFromWhitelist"
+      @cancel="showRemoveConfirm = false"
+    />
+
+    <!-- Confirm Unban -->
+    <ConfirmDialog
+      :show="showUnbanConfirm"
+      :title="t('whitelist.unban')"
+      :message="pendingUnbanPlayer ? t('whitelist.confirmUnban', { player: pendingUnbanPlayer }) : ''"
+      :confirm-text="t('whitelist.unban')"
+      :cancel-text="t('common.cancel')"
+      variant="primary"
+      @confirm="removeBan"
+      @cancel="showUnbanConfirm = false"
+    />
   </div>
 </template>

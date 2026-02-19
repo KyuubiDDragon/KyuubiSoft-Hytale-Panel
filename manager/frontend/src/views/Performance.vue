@@ -28,6 +28,8 @@ const maxLocalHistory = 60 // 60 data points
 
 // Refresh interval
 let refreshInterval: ReturnType<typeof setInterval> | null = null
+const paused = ref(false)
+let isMounted = false
 
 async function loadHistory() {
   try {
@@ -195,7 +197,12 @@ function generateAreaPath(data: number[], maxValue: number): string {
   return `M 0,100 L ${points.join(' L ')} L 100,100 Z`
 }
 
+function togglePause() {
+  paused.value = !paused.value
+}
+
 onMounted(async () => {
+  isMounted = true
   await loadHistory()
   await refresh()
   await fetchPluginMemory()
@@ -205,6 +212,7 @@ onMounted(async () => {
 
   // Update every 5 seconds
   refreshInterval = setInterval(async () => {
+    if (!isMounted || paused.value) return
     await refresh()
     await fetchPluginMemory()
     await fetchTpsMetrics()
@@ -214,6 +222,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  isMounted = false
   if (refreshInterval) {
     clearInterval(refreshInterval)
   }
@@ -225,14 +234,29 @@ onUnmounted(() => {
     <!-- Page Title -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold text-white">{{ t('performance.title') }}</h1>
-      <div class="flex items-center gap-2 text-sm text-gray-400">
-        <span class="w-2 h-2 bg-status-success rounded-full animate-pulse"></span>
-        {{ t('performance.liveUpdates') }}
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 text-sm text-gray-400">
+          <span :class="['w-2 h-2 rounded-full', paused ? 'bg-gray-500' : 'bg-status-success animate-pulse']"></span>
+          {{ t('performance.liveUpdates') }}
+        </div>
+        <button
+          @click="togglePause"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          :class="paused ? 'bg-status-success/20 text-status-success hover:bg-status-success/30' : 'bg-dark-100 text-gray-400 hover:text-white hover:bg-dark-50'"
+        >
+          <svg v-if="paused" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <svg v-else class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+          </svg>
+          {{ paused ? t('performance.resume') : t('performance.pause') }}
+        </button>
       </div>
     </div>
 
     <!-- Current Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <!-- CPU Card -->
       <Card>
         <div class="flex items-center gap-4">

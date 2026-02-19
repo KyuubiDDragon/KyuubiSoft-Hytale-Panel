@@ -2,6 +2,7 @@
 import { ref, onMounted, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
+import Modal from '@/components/ui/Modal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { schedulerApi, type ScheduleConfig, type QuickCommand, type SchedulerStatus } from '@/api/scheduler'
 
@@ -116,7 +117,7 @@ function addRestartTime() {
 }
 
 function removeRestartTime(time: string) {
-  config.scheduledRestarts.times = config.scheduledRestarts.times.filter(t => t !== time)
+  config.scheduledRestarts.times = config.scheduledRestarts.times.filter(entry => entry !== time)
 }
 
 async function saveRestartsConfig() {
@@ -638,7 +639,7 @@ onMounted(() => {
           <p class="text-sm text-gray-400">{{ t('scheduler.quickCommandsDesc') }}</p>
 
           <div v-for="(commands, category) in commandsByCategory" :key="category" class="space-y-2">
-            <h4 class="text-sm font-medium text-gray-400 uppercase tracking-wider">{{ category }}</h4>
+            <h4 class="text-sm font-medium text-gray-400 uppercase tracking-wider">{{ t('scheduler.categories.' + category) || category }}</h4>
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
               <div
                 v-for="cmd in commands"
@@ -682,57 +683,56 @@ onMounted(() => {
     </template>
 
     <!-- Command Form Modal -->
-    <div v-if="showCommandForm" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-dark-200 rounded-xl p-6 w-full max-w-md">
-        <h3 class="text-lg font-bold text-white mb-4">
-          {{ editingCommand ? t('scheduler.editCommand') : t('scheduler.addCommand') }}
-        </h3>
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.commandName') }}</label>
-            <input
-              v-model="commandForm.name"
-              type="text"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.command') }}</label>
-            <input
-              v-model="commandForm.command"
-              type="text"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none font-mono"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.category') }}</label>
-            <select
-              v-model="commandForm.category"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
-            >
-              <option value="server">Server</option>
-              <option value="players">Players</option>
-              <option value="world">World</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
+    <Modal
+      :open="showCommandForm"
+      :title="editingCommand ? t('scheduler.editCommand') : t('scheduler.addCommand')"
+      @close="showCommandForm = false"
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.commandName') }}</label>
+          <input
+            v-model="commandForm.name"
+            type="text"
+            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+          />
         </div>
-        <div class="flex justify-end gap-3 mt-6">
-          <button
-            @click="showCommandForm = false"
-            class="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.command') }}</label>
+          <input
+            v-model="commandForm.command"
+            type="text"
+            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none font-mono"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('scheduler.category') }}</label>
+          <select
+            v-model="commandForm.category"
+            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
           >
-            {{ t('common.cancel') }}
-          </button>
-          <button
-            @click="saveCommand"
-            :disabled="!commandForm.name || !commandForm.command || saving"
-            class="px-4 py-2 bg-hytale-orange text-dark rounded-lg font-medium hover:bg-hytale-yellow transition-colors disabled:opacity-50"
-          >
-            {{ t('common.save') }}
-          </button>
+            <option value="server">{{ t('scheduler.categories.server') }}</option>
+            <option value="players">{{ t('scheduler.categories.players') }}</option>
+            <option value="world">{{ t('scheduler.categories.world') }}</option>
+            <option value="custom">{{ t('scheduler.categories.custom') }}</option>
+          </select>
         </div>
       </div>
-    </div>
+      <template #footer>
+        <button
+          @click="showCommandForm = false"
+          class="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+        >
+          {{ t('common.cancel') }}
+        </button>
+        <button
+          @click="saveCommand"
+          :disabled="!commandForm.name || !commandForm.command || saving"
+          class="px-4 py-2 bg-hytale-orange text-dark rounded-lg font-medium hover:bg-hytale-yellow transition-colors disabled:opacity-50"
+        >
+          {{ t('common.save') }}
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>

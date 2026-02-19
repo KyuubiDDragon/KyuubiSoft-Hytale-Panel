@@ -35,8 +35,10 @@
     "next": "Next",
     "back": "Back",
     "skip": "Skip",
+    "copied": "Copied to clipboard",
     "copy": "Copy",
     "noPermission": "You don't have permission to perform this action",
+    "online": "Online",
     "dismiss": "Dismiss"
   },
   "health": {
@@ -56,6 +58,7 @@
     "subtitle": "Hytale Server Management"
   },
   "nav": {
+    "admin": "Admin",
     "dashboard": "Dashboard",
     "console": "Console",
     "backups": "Backups",
@@ -198,6 +201,8 @@
       "backup": "Backup created successfully"
     },
     "actionError": {
+      "authExpired": "Authentication expired. Please try again.",
+      "authTimeout": "Authentication timed out. Please try again.",
       "start": "Failed to start server",
       "stop": "Failed to stop server",
       "restart": "Failed to restart server",
@@ -213,6 +218,7 @@
     }
   },
   "console": {
+    "confirmClear": "Clear all console logs from the current view?",
     "title": "Server Console",
     "sendCommand": "Send Command",
     "commandPlaceholder": "Enter command...",
@@ -286,6 +292,7 @@
     "op": "OP",
     "deop": "Remove OP",
     "teleport": "Teleport",
+    "teleportTitle": "Teleport: {player}",
     "teleportTo": "To Player",
     "teleportCoords": "To Coords",
     "teleportDeath": "To Death",
@@ -411,9 +418,13 @@
     "ban": "Ban",
     "unban": "Unban",
     "bannedPlayers": "Banned Players",
+    "confirmRemove": "Remove \"{player}\" from the whitelist?",
+    "confirmUnban": "Unban player \"{player}\"?",
     "noBans": "No players banned"
   },
   "permissions": {
+    "confirmDeleteGroup": "Delete permission group \"{name}\"?",
+    "confirmDeleteUser": "Delete permission user \"{name}\"?",
     "title": "Permissions",
     "users": "Users",
     "groups": "Groups",
@@ -435,6 +446,7 @@
     "more": "more"
   },
   "worlds": {
+    "defaultPlaceholder": "Default",
     "title": "Worlds",
     "infoTitle": "Worlds Overview",
     "infoDescription": "Here you can see all worlds available on the server. Worlds are automatically detected.",
@@ -744,7 +756,9 @@
     "memoryPools": "Memory Pools",
     "garbageCollection": "Garbage Collection",
     "collections": "collections",
-    "playersPerWorld": "Players per World"
+    "pause": "Pause",
+    "playersPerWorld": "Players per World",
+    "resume": "Resume"
   },
   "settings": {
     "title": "Settings",
@@ -752,7 +766,10 @@
     "german": "Deutsch",
     "english": "English",
     "theme": "Theme",
+    "aboutDescription": "Web-based management tool for Hytale dedicated servers. Provides server control, live console, backup management, and player administration.",
     "about": "About",
+    "confirmResetAuth": "Reset Hytale authentication? You will need to re-authenticate the server.",
+    "resetAuthTitle": "Reset Authentication",
     "version": "Version",
     "serverConfig": "Server Configuration",
     "selectConfigFile": "Select a configuration file to edit:",
@@ -1002,6 +1019,12 @@
     "editCommand": "Edit Command",
     "commandName": "Command Name",
     "command": "Command",
+    "categories": {
+      "custom": "Custom",
+      "players": "Players",
+      "server": "Server",
+      "world": "World"
+    },
     "category": "Category",
     "commandExecuted": "Command executed"
   },
@@ -1947,6 +1970,10 @@
       "legs": "Leggings",
       "cosmetic": "Cosmetic",
       "tools": "Tools"
+    },
+    "tooltip": {
+      "amount": "Amount",
+      "durability": "Durability"
     }
   }
 }

@@ -104,9 +104,9 @@ onMounted(() => {
     v-if="showBanner && !loading"
     class="mb-4 rounded-lg p-4 border"
     :class="{
-      'bg-yellow-900/20 border-yellow-700/50 text-yellow-200': bannerType === 'warning',
+      'bg-status-warning/10 border-status-warning/30 text-status-warning': bannerType === 'warning',
       'bg-blue-900/20 border-blue-700/50 text-blue-200': bannerType === 'info',
-      'bg-green-900/20 border-green-700/50 text-green-200': bannerType === 'success',
+      'bg-status-success/10 border-status-success/30 text-status-success': bannerType === 'success',
     }"
   >
     <div class="flex items-start gap-3">
@@ -140,12 +140,12 @@ onMounted(() => {
         </p>
 
         <!-- Error message -->
-        <p v-if="error" class="text-sm text-red-400 mt-2">
+        <p v-if="error" class="text-sm text-status-error mt-2">
           {{ error }}
         </p>
 
         <!-- Success message -->
-        <p v-if="successMessage" class="text-sm text-green-400 mt-2">
+        <p v-if="successMessage" class="text-sm text-status-success mt-2">
           {{ successMessage }}
         </p>
 

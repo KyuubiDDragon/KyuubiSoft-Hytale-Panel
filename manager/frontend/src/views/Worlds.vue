@@ -457,7 +457,7 @@ onMounted(loadWorlds)
                   type="text"
                   v-model="form.gameplayConfig"
                   class="w-full px-3 py-2 bg-dark-100 border border-dark-50 rounded-lg text-gray-300 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                  placeholder="Default"
+                  :placeholder="t('worlds.defaultPlaceholder')"
                 />
               </div>
             </div>

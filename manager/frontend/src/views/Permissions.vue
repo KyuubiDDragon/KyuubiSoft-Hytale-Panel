@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { permissionsApi, type PermissionUser, type PermissionGroup } from '@/api/management'
 import Card from '@/components/ui/Card.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
@@ -27,6 +28,12 @@ const newGroupName = ref('')
 const newGroupPermissions = ref('')
 const newGroupInherits = ref<string[]>([])
 const editingGroup = ref<string | null>(null)
+
+// Confirm dialogs
+const showDeleteUserConfirm = ref(false)
+const showDeleteGroupConfirm = ref(false)
+const pendingDeleteUser = ref<string | null>(null)
+const pendingDeleteGroup = ref<string | null>(null)
 
 // Search
 const userSearch = ref('')
@@ -71,10 +78,18 @@ async function saveUser() {
   }
 }
 
-async function removeUser(name: string) {
+function confirmDeleteUser(name: string) {
+  pendingDeleteUser.value = name
+  showDeleteUserConfirm.value = true
+}
+
+async function removeUser() {
+  if (!pendingDeleteUser.value) return
   try {
-    const result = await permissionsApi.removeUser(name)
+    const result = await permissionsApi.removeUser(pendingDeleteUser.value)
     users.value = result.users
+    showDeleteUserConfirm.value = false
+    pendingDeleteUser.value = null
   } catch (e) {
     error.value = t('errors.serverError')
   }
@@ -114,10 +129,18 @@ async function saveGroup() {
   }
 }
 
-async function removeGroup(name: string) {
+function confirmDeleteGroup(name: string) {
+  pendingDeleteGroup.value = name
+  showDeleteGroupConfirm.value = true
+}
+
+async function removeGroup() {
+  if (!pendingDeleteGroup.value) return
   try {
-    const result = await permissionsApi.removeGroup(name)
+    const result = await permissionsApi.removeGroup(pendingDeleteGroup.value)
     groups.value = result.groups
+    showDeleteGroupConfirm.value = false
+    pendingDeleteGroup.value = null
   } catch (e) {
     error.value = t('errors.serverError')
   }
@@ -321,7 +344,7 @@ onMounted(loadData)
                 </svg>
               </button>
               <button
-                @click="removeUser(user.name)"
+                @click="confirmDeleteUser(user.name)"
                 class="p-2 text-gray-400 hover:text-status-error transition-colors"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -447,7 +470,7 @@ onMounted(loadData)
                   </svg>
                 </button>
                 <button
-                  @click="removeGroup(group.name)"
+                  @click="confirmDeleteGroup(group.name)"
                   class="p-2 text-gray-400 hover:text-status-error transition-colors"
                 >
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -490,5 +513,29 @@ onMounted(loadData)
         </div>
       </Card>
     </div>
+
+    <!-- Confirm Delete User -->
+    <ConfirmDialog
+      :show="showDeleteUserConfirm"
+      :title="t('common.delete')"
+      :message="pendingDeleteUser ? t('permissions.confirmDeleteUser', { name: pendingDeleteUser }) : ''"
+      :confirm-text="t('common.delete')"
+      :cancel-text="t('common.cancel')"
+      variant="danger"
+      @confirm="removeUser"
+      @cancel="showDeleteUserConfirm = false"
+    />
+
+    <!-- Confirm Delete Group -->
+    <ConfirmDialog
+      :show="showDeleteGroupConfirm"
+      :title="t('common.delete')"
+      :message="pendingDeleteGroup ? t('permissions.confirmDeleteGroup', { name: pendingDeleteGroup }) : ''"
+      :confirm-text="t('common.delete')"
+      :cancel-text="t('common.cancel')"
+      variant="danger"
+      @confirm="removeGroup"
+      @cancel="showDeleteGroupConfirm = false"
+    />
   </div>
 </template>

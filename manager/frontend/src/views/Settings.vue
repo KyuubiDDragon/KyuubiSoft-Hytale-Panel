@@ -4,11 +4,14 @@ import { useI18n } from 'vue-i18n'
 import { setLocale, getLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse } from '@/api/server'
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
+import { useToast } from '@/composables/useToast'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const toast = useToast()
 
 const currentLocale = ref(getLocale())
 const configFiles = ref<ConfigFile[]>([])
@@ -27,6 +30,7 @@ const hytaleAuthError = ref<string | null>(null)
 const hytaleAuthSuccess = ref<string | null>(null)
 const deviceCodeData = ref<HytaleDeviceCodeResponse | null>(null)
 const checkingInterval = ref<number | null>(null)
+const showResetAuthConfirm = ref(false)
 
 // Patchline Settings
 const patchlineData = ref<PatchlineResponse | null>(null)
@@ -429,6 +433,7 @@ async function resetHytaleAuth() {
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text)
+  toast.success(t('common.copied'))
 }
 
 function openAuthUrl() {
@@ -599,7 +604,7 @@ onUnmounted(() => {
 
             <button
               v-if="hytaleAuthStatus.authenticated && authStore.hasPermission('hytale_auth.manage')"
-              @click="resetHytaleAuth"
+              @click="showResetAuthConfirm = true"
               :disabled="hytaleAuthLoading"
               class="btn btn-secondary"
             >
@@ -661,7 +666,7 @@ onUnmounted(() => {
 
                 <button
                   v-if="authStore.hasPermission('hytale_auth.manage')"
-                  @click="resetHytaleAuth"
+                  @click="showResetAuthConfirm = true"
                   class="btn btn-secondary"
                 >
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1127,8 +1132,7 @@ onUnmounted(() => {
 
         <div class="pt-4 border-t border-dark-50">
           <p class="text-gray-400 text-sm">
-            Web-based management tool for Hytale dedicated servers.
-            Provides server control, live console, backup management, and player administration.
+            {{ t('settings.aboutDescription') }}
           </p>
         </div>
 
@@ -1146,5 +1150,17 @@ onUnmounted(() => {
         </div>
       </div>
     </Card>
+
+    <!-- Confirm Reset Auth -->
+    <ConfirmDialog
+      :show="showResetAuthConfirm"
+      :title="t('settings.resetAuthTitle')"
+      :message="t('settings.confirmResetAuth')"
+      :confirm-text="t('settings.resetAuth')"
+      :cancel-text="t('common.cancel')"
+      variant="danger"
+      @confirm="resetHytaleAuth(); showResetAuthConfirm = false"
+      @cancel="showResetAuthConfirm = false"
+    />
   </div>
 </template>

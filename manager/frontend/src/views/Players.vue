@@ -553,7 +553,7 @@ onUnmounted(() => {
                 <span v-if="player.playTime">{{ t('players.totalPlayTime') }}: {{ formatPlayTime(player.playTime) }}</span>
                 <!-- Plugin/File-provided details -->
                 <span v-if="player.health !== undefined">
-                  <span class="text-gray-600">HP:</span>
+                  <span class="text-gray-600">{{ t('players.details.health') }}:</span>
                   <span :class="player.health > 15 ? 'text-green-400' : player.health > 8 ? 'text-yellow-400' : 'text-red-400'">
                     {{ player.health.toFixed(0) }}<span v-if="player.maxHealth">/{{ player.maxHealth }}</span>
                   </span>
@@ -853,7 +853,7 @@ onUnmounted(() => {
     </Modal>
 
     <!-- Teleport Modal -->
-    <Modal :open="showTeleportModal" :title="t('players.teleport') + ': ' + selectedPlayer" @close="showTeleportModal = false">
+    <Modal :open="showTeleportModal" :title="t('players.teleportTitle', { player: selectedPlayer })" @close="showTeleportModal = false">
       <div class="space-y-4">
         <!-- Mode Toggle -->
         <div class="flex gap-2">

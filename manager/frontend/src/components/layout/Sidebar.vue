@@ -60,7 +60,7 @@ const navSections = computed(() => [
   { key: 'main', label: t('nav.server'), items: navItems.value.filter(i => i.group === 'main' && hasPermission(i.permission)) },
   { key: 'management', label: t('nav.management'), items: navItems.value.filter(i => i.group === 'management' && hasPermission(i.permission)) },
   { key: 'data', label: t('nav.data'), items: navItems.value.filter(i => i.group === 'data' && hasPermission(i.permission)) },
-  { key: 'admin', label: 'Admin', items: navItems.value.filter(i => i.group === 'admin' && hasPermission(i.permission)) },
+  { key: 'admin', label: t('nav.admin'), items: navItems.value.filter(i => i.group === 'admin' && hasPermission(i.permission)) },
 ])
 
 function isActive(path: string): boolean {

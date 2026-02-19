@@ -116,7 +116,7 @@ async function pollDownloaderAuth() {
         return
       }
       if (result.expired) {
-        updateCheckError.value = 'Authentication expired. Please try again.'
+        updateCheckError.value = t('dashboard.actionError.authExpired')
         reAuthenticating.value = false
         reAuthUrl.value = null
         reAuthCode.value = null
@@ -127,7 +127,7 @@ async function pollDownloaderAuth() {
       if (attempts < maxAttempts) {
         setTimeout(poll, 5000) // Poll every 5 seconds
       } else {
-        updateCheckError.value = 'Authentication timed out. Please try again.'
+        updateCheckError.value = t('dashboard.actionError.authTimeout')
         reAuthenticating.value = false
         reAuthUrl.value = null
         reAuthCode.value = null
@@ -422,7 +422,11 @@ function handleAction(type: string, success: boolean) {
     setTimeout(() => {
       refresh()
       fetchServerMemory()
-    }, 2000)
+    }, 500)
+    setTimeout(() => {
+      refresh()
+      fetchServerMemory()
+    }, 3000)
   }
 }
 

@@ -426,7 +426,7 @@ function handleSearchBlur() {
             >
               <div :class="['w-2 h-2 rounded-full', player.online ? 'bg-green-500' : 'bg-gray-500']" />
               <span class="text-white">{{ player.name }}</span>
-              <span v-if="player.online" class="text-xs text-green-400 ml-auto">Online</span>
+              <span v-if="player.online" class="text-xs text-green-400 ml-auto">{{ t('common.online') }}</span>
             </button>
           </div>
         </div>
@@ -1176,13 +1176,13 @@ function handleSearchBlur() {
 
           <div class="space-y-1.5 text-sm border-t border-inv-border/30 pt-2">
             <div class="flex justify-between">
-              <span class="text-gray-400">{{ t('players.tooltip.amount') }}:</span>
+              <span class="text-gray-400">{{ t('avatarInventory.tooltip.amount') }}:</span>
               <span class="text-gray-100 font-medium">{{ hoveredItem.amount }}x</span>
             </div>
 
             <div v-if="hoveredItem.maxDurability > 0">
               <div class="flex justify-between mb-1">
-                <span class="text-gray-400">{{ t('players.tooltip.durability') }}:</span>
+                <span class="text-gray-400">{{ t('avatarInventory.tooltip.durability') }}:</span>
                 <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-gray-100' : 'text-red-400'" class="font-medium">
                   {{ Math.round(hoveredItem.durability) }} / {{ Math.round(hoveredItem.maxDurability) }}
                 </span>
