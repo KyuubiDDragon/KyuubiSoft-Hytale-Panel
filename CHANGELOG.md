@@ -2,6 +2,52 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [2.1.4] - 2026-02-19 - Design Overhaul & UX Improvements
+
+### Added
+
+- **Icon Component**: Reusable SVG icon system extracted from Sidebar, supports all panel icons with consistent sizing and styling
+  - Location: `manager/frontend/src/components/ui/Icon.vue`
+
+- **ConfirmDialog Component**: Reusable confirmation dialog for destructive actions with danger/primary variants
+  - Applied to: Whitelist remove/unban, Permissions delete, Backup restore, Settings auth reset, Console clear
+  - Location: `manager/frontend/src/components/ui/ConfirmDialog.vue`
+
+- **Toast Notification System**: Non-blocking success/error/info feedback
+  - Composable: `manager/frontend/src/composables/useToast.ts`
+  - Component: `manager/frontend/src/components/ui/ToastContainer.vue`
+
+- **Dashboard Banner**: New dashboard banner component for announcements
+  - Location: `manager/frontend/src/components/dashboard/DashboardBanner.vue`
+
+- **Performance Pause/Resume**: Live metrics polling can now be paused and resumed
+
+### Changed
+
+- **Dashboard**: Major layout redesign with improved status cards, quick actions, and cleaner structure
+- **AvatarInventory**: Complete Hytale-style inventory redesign with neutral dark theme colors
+- **Sidebar**: Consolidated and refactored with hover effects and extracted Icon component
+- **Header**: Updated design with improved layout
+- **Design Consistency**: Unified styling across all 16 views (ActivityLog, Assets, Backups, Configuration, Dashboard, Login, Mods, Performance, Permissions, Players, Scheduler, Settings, Statistics, Users, Whitelist, Worlds)
+- **PluginBanner**: Replaced hardcoded Tailwind colors with design token classes (status-error, status-success, etc.)
+- **Scheduler**: Replaced custom modal implementation with reusable Modal component, translated category labels
+- **Performance**: Improved grid layout (5-col → 4-col) for better card distribution
+
+### Fixed
+
+- **Users.vue**: ConfirmDialog now uses `:show` instead of `v-model:open`
+- **Player Name Updates**: Fixed backend player name tracking in `players.ts`
+- **Scheduler**: Fixed `t` variable shadowing i18n function in filter callback
+- **Performance**: Added `isMounted` guard to prevent state updates after component unmount
+- **Dashboard**: Optimized initial refresh timing (2000ms → 500ms + 3000ms follow-up)
+
+### Internationalization
+
+- **Complete i18n Coverage**: Replaced all hardcoded strings across all views
+- **~22 new translation keys** added to English, German, and Brazilian Portuguese
+- New keys include: confirm dialogs, tooltips, categories, status messages, accessibility labels
+- Location: `manager/frontend/src/i18n/{en,de,pt_br}.json`
+
 ## [2.1.3] - 2026-01-27 - CurseForge Integration & Unified Mod Updates
 
 ### Added
