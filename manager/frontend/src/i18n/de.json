@@ -155,6 +155,50 @@
       "checkNow": "Prüfen",
       "viewAll": "Alle anzeigen"
     },
+    "tps": "TPS",
+    "serverInfo": {
+      "title": "Server Info",
+      "pluginApi": "Plugin API",
+      "version": "Version",
+      "worlds": "Welten",
+      "container": "Container",
+      "containerId": "Container ID",
+      "status": "Status",
+      "patchline": "Patchline",
+      "release": "Release",
+      "preRelease": "Pre-Release"
+    },
+    "hytaleUpdates": {
+      "title": "Hytale Updates",
+      "checking": "Prüfe...",
+      "checkForUpdates": "Auf Updates prüfen",
+      "clickToCheck": "Klicke auf \"Auf Updates prüfen\", um zu sehen, ob eine neue Version verfügbar ist.",
+      "installedVersion": "Installierte Version",
+      "release": "Release",
+      "preRelease": "Pre-Release",
+      "updateAvailable": "Update verfügbar!",
+      "active": "aktiv",
+      "authReauthRequired": "Der Hytale Downloader muss erneut authentifiziert werden, um nach Updates zu suchen.",
+      "enterCode": "Gib diesen Code auf der Hytale-Authentifizierungsseite ein:",
+      "openAuthPage": "Authentifizierungsseite öffnen",
+      "waitingForAuth": "Warte auf Authentifizierung...",
+      "reAuthenticate": "Downloader erneut authentifizieren",
+      "restartToUpdate": "Starte den Server mit AUTO_UPDATE=true neu, um das Update anzuwenden."
+    },
+    "confirmStop": "Bist du sicher, dass du den Server stoppen möchtest?",
+    "confirmRestart": "Bist du sicher, dass du den Server neustarten möchtest?",
+    "actionSuccess": {
+      "start": "Server wird gestartet...",
+      "stop": "Server wird gestoppt...",
+      "restart": "Server wird neugestartet...",
+      "backup": "Backup erfolgreich erstellt"
+    },
+    "actionError": {
+      "start": "Server konnte nicht gestartet werden",
+      "stop": "Server konnte nicht gestoppt werden",
+      "restart": "Server konnte nicht neugestartet werden",
+      "backup": "Backup konnte nicht erstellt werden"
+    },
     "panelUpdate": {
       "title": "Panel-Update verfügbar",
       "description": "Eine neue Version des Panels ist verfügbar: {current} → {latest}",

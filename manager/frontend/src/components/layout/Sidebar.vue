@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { computed } from 'vue'
+import { computed, inject, watch, type Ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
+
+// Close sidebar on mobile after navigation
+const sidebarOpen = inject<Ref<boolean>>('sidebarOpen')
+watch(() => route.path, () => {
+  if (sidebarOpen) sidebarOpen.value = false
+})
 
 type Permission = string | 'all'
 

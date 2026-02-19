@@ -155,6 +155,50 @@
       "checkNow": "Check",
       "viewAll": "View all"
     },
+    "tps": "TPS",
+    "serverInfo": {
+      "title": "Server Info",
+      "pluginApi": "Plugin API",
+      "version": "Version",
+      "worlds": "Worlds",
+      "container": "Container",
+      "containerId": "Container ID",
+      "status": "Status",
+      "patchline": "Patchline",
+      "release": "Release",
+      "preRelease": "Pre-Release"
+    },
+    "hytaleUpdates": {
+      "title": "Hytale Updates",
+      "checking": "Checking...",
+      "checkForUpdates": "Check for Updates",
+      "clickToCheck": "Click \"Check for Updates\" to see if a new version is available.",
+      "installedVersion": "Installed Version",
+      "release": "Release",
+      "preRelease": "Pre-Release",
+      "updateAvailable": "Update available!",
+      "active": "active",
+      "authReauthRequired": "The Hytale downloader needs to be re-authenticated to check for updates.",
+      "enterCode": "Enter this code on the Hytale authentication page:",
+      "openAuthPage": "Open authentication page",
+      "waitingForAuth": "Waiting for authentication...",
+      "reAuthenticate": "Re-authenticate Downloader",
+      "restartToUpdate": "Restart the server with AUTO_UPDATE=true to apply the update."
+    },
+    "confirmStop": "Are you sure you want to stop the server?",
+    "confirmRestart": "Are you sure you want to restart the server?",
+    "actionSuccess": {
+      "start": "Server is starting...",
+      "stop": "Server is stopping...",
+      "restart": "Server is restarting...",
+      "backup": "Backup created successfully"
+    },
+    "actionError": {
+      "start": "Failed to start server",
+      "stop": "Failed to stop server",
+      "restart": "Failed to restart server",
+      "backup": "Failed to create backup"
+    },
     "panelUpdate": {
       "title": "Panel Update Available",
       "description": "A new version of the panel is available: {current} → {latest}",

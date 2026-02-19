@@ -73,7 +73,12 @@
 
   /* Cards */
   .card {
-    @apply bg-dark-200 rounded-xl border border-dark-50/50;
+    @apply bg-dark-200 rounded-xl border border-dark-50/50 transition-all duration-200;
+  }
+
+  .card-hover:hover {
+    @apply border-dark-50 shadow-lg shadow-black/20;
+    transform: translateY(-1px);
   }
 
   .card-header {
@@ -193,4 +198,15 @@
   .text-gradient {
     @apply bg-gradient-to-r from-hytale-orange to-hytale-yellow bg-clip-text text-transparent;
   }
+}
+
+/* Route transitions */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
 }

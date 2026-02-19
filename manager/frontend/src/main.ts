@@ -6,174 +6,150 @@ import App from './App.vue'
 
 import './assets/styles/main.css'
 
-// Import views
-import Login from './views/Login.vue'
-import Dashboard from './views/Dashboard.vue'
-import SetupWizard from './views/SetupWizard.vue'
-import Console from './views/Console.vue'
-import Backups from './views/Backups.vue'
-import Players from './views/Players.vue'
-import Settings from './views/Settings.vue'
-import Whitelist from './views/Whitelist.vue'
-import Permissions from './views/Permissions.vue'
-import Worlds from './views/Worlds.vue'
-import Performance from './views/Performance.vue'
-import Configuration from './views/Configuration.vue'
-import Mods from './views/Mods.vue'
-import Users from './views/Users.vue'
-import ActivityLog from './views/ActivityLog.vue'
-import Scheduler from './views/Scheduler.vue'
-import Statistics from './views/Statistics.vue'
-import WebMap from './views/WebMap.vue'
-import Assets from './views/Assets.vue'
-import Chat from './views/Chat.vue'
-import Help from './views/Help.vue'
-import AvatarInventory from './views/AvatarInventory.vue'
-
 // Import stores
 import { useAuthStore } from './stores/auth'
 import { useSetupStore } from './stores/setup'
 
-// Create router
+// Create router with lazy-loaded views
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
       path: '/setup',
       name: 'setup',
-      component: SetupWizard,
+      component: () => import('./views/SetupWizard.vue'),
       meta: { requiresAuth: false, isSetup: true },
     },
     {
       path: '/login',
       name: 'login',
-      component: Login,
+      component: () => import('./views/Login.vue'),
       meta: { requiresAuth: false },
     },
     {
       path: '/',
       name: 'dashboard',
-      component: Dashboard,
+      component: () => import('./views/Dashboard.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/console',
       name: 'console',
-      component: Console,
+      component: () => import('./views/Console.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/performance',
       name: 'performance',
-      component: Performance,
+      component: () => import('./views/Performance.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/backups',
       name: 'backups',
-      component: Backups,
+      component: () => import('./views/Backups.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/players',
       name: 'players',
-      component: Players,
+      component: () => import('./views/Players.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/whitelist',
       name: 'whitelist',
-      component: Whitelist,
+      component: () => import('./views/Whitelist.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/permissions',
       name: 'permissions',
-      component: Permissions,
+      component: () => import('./views/Permissions.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/worlds',
       name: 'worlds',
-      component: Worlds,
+      component: () => import('./views/Worlds.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/mods',
       name: 'mods',
-      component: Mods,
+      component: () => import('./views/Mods.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/assets',
       name: 'assets',
-      component: Assets,
+      component: () => import('./views/Assets.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/configuration',
       name: 'configuration',
-      component: Configuration,
+      component: () => import('./views/Configuration.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/settings',
       name: 'settings',
-      component: Settings,
+      component: () => import('./views/Settings.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/users',
       name: 'users',
-      component: Users,
+      component: () => import('./views/Users.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: '/activity',
       name: 'activity',
-      component: ActivityLog,
+      component: () => import('./views/ActivityLog.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: '/scheduler',
       name: 'scheduler',
-      component: Scheduler,
+      component: () => import('./views/Scheduler.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/statistics',
       name: 'statistics',
-      component: Statistics,
+      component: () => import('./views/Statistics.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/webmap',
       name: 'webmap',
-      component: WebMap,
+      component: () => import('./views/WebMap.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/chat',
       name: 'chat',
-      component: Chat,
+      component: () => import('./views/Chat.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/avatar-inventory',
       name: 'avatarInventory',
-      component: AvatarInventory,
+      component: () => import('./views/AvatarInventory.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/help',
       name: 'help',
-      component: Help,
+      component: () => import('./views/Help.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/roles',
       name: 'roles',
-      component: () => import('@/views/Roles.vue'),
+      component: () => import('./views/Roles.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {

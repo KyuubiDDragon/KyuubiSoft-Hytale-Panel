@@ -48,8 +48,14 @@ onMounted(async () => {
   checkingDemo.value = false
 })
 
+// Locale cycling: de → en → pt_br → de
+const locales = ['de', 'en', 'pt_br'] as const
+const localeNames: Record<string, string> = { de: 'Deutsch', en: 'English', pt_br: 'Portugues (BR)' }
+
 function toggleLocale() {
-  const newLocale = currentLocale.value === 'de' ? 'en' : 'de'
+  const currentIndex = locales.indexOf(currentLocale.value as typeof locales[number])
+  const nextIndex = (currentIndex + 1) % locales.length
+  const newLocale = locales[nextIndex]
   setLocale(newLocale)
   currentLocale.value = newLocale
 }
@@ -223,7 +229,7 @@ async function handleDemoLogin(type: 'demo' | 'admin') {
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
-            {{ currentLocale === 'de' ? 'Deutsch' : 'English' }}
+            {{ localeNames[currentLocale] || currentLocale }}
           </button>
         </div>
       </div>

@@ -154,6 +154,50 @@
       "checkNow": "Verificar",
       "viewAll": "Ver todos"
     },
+    "tps": "TPS",
+    "serverInfo": {
+      "title": "Informações do Servidor",
+      "pluginApi": "Plugin API",
+      "version": "Versão",
+      "worlds": "Mundos",
+      "container": "Container",
+      "containerId": "ID do Container",
+      "status": "Status",
+      "patchline": "Patchline",
+      "release": "Release",
+      "preRelease": "Pre-Release"
+    },
+    "hytaleUpdates": {
+      "title": "Atualizações do Hytale",
+      "checking": "Verificando...",
+      "checkForUpdates": "Verificar Atualizações",
+      "clickToCheck": "Clique em \"Verificar Atualizações\" para ver se uma nova versão está disponível.",
+      "installedVersion": "Versão Instalada",
+      "release": "Release",
+      "preRelease": "Pre-Release",
+      "updateAvailable": "Atualização disponível!",
+      "active": "ativo",
+      "authReauthRequired": "O downloader do Hytale precisa ser reautenticado para verificar atualizações.",
+      "enterCode": "Digite este código na página de autenticação do Hytale:",
+      "openAuthPage": "Abrir página de autenticação",
+      "waitingForAuth": "Aguardando autenticação...",
+      "reAuthenticate": "Reautenticar Downloader",
+      "restartToUpdate": "Reinicie o servidor com AUTO_UPDATE=true para aplicar a atualização."
+    },
+    "confirmStop": "Tem certeza de que deseja parar o servidor?",
+    "confirmRestart": "Tem certeza de que deseja reiniciar o servidor?",
+    "actionSuccess": {
+      "start": "Servidor está iniciando...",
+      "stop": "Servidor está parando...",
+      "restart": "Servidor está reiniciando...",
+      "backup": "Backup criado com sucesso"
+    },
+    "actionError": {
+      "start": "Falha ao iniciar servidor",
+      "stop": "Falha ao parar servidor",
+      "restart": "Falha ao reiniciar servidor",
+      "backup": "Falha ao criar backup"
+    },
     "panelUpdate": {
       "title": "Atualização do Painel Disponível",
       "description": "Uma nova versão do painel está disponível: {current} → {latest}",

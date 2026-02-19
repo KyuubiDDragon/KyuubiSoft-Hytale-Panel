@@ -4,10 +4,13 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { serverApi } from '@/api/server'
 import { backupApi } from '@/api/backup'
+import { useToast } from '@/composables/useToast'
 import Button from '@/components/ui/Button.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const toast = useToast()
 
 const loading = ref({
   start: false,
@@ -15,6 +18,8 @@ const loading = ref({
   restart: false,
   backup: false,
 })
+
+const confirmAction = ref<'stop' | 'restart' | null>(null)
 
 const emit = defineEmits<{
   action: [type: string, success: boolean]
@@ -24,8 +29,10 @@ async function handleStart() {
   loading.value.start = true
   try {
     await serverApi.start()
+    toast.success(t('dashboard.actionSuccess.start'))
     emit('action', 'start', true)
   } catch (error) {
+    toast.error(t('dashboard.actionError.start'))
     emit('action', 'start', false)
   } finally {
     loading.value.start = false
@@ -36,11 +43,14 @@ async function handleStop() {
   loading.value.stop = true
   try {
     await serverApi.stop()
+    toast.success(t('dashboard.actionSuccess.stop'))
     emit('action', 'stop', true)
   } catch (error) {
+    toast.error(t('dashboard.actionError.stop'))
     emit('action', 'stop', false)
   } finally {
     loading.value.stop = false
+    confirmAction.value = null
   }
 }
 
@@ -48,11 +58,14 @@ async function handleRestart() {
   loading.value.restart = true
   try {
     await serverApi.restart()
+    toast.success(t('dashboard.actionSuccess.restart'))
     emit('action', 'restart', true)
   } catch (error) {
+    toast.error(t('dashboard.actionError.restart'))
     emit('action', 'restart', false)
   } finally {
     loading.value.restart = false
+    confirmAction.value = null
   }
 }
 
@@ -60,12 +73,19 @@ async function handleBackup() {
   loading.value.backup = true
   try {
     await backupApi.create()
+    toast.success(t('dashboard.actionSuccess.backup'))
     emit('action', 'backup', true)
   } catch (error) {
+    toast.error(t('dashboard.actionError.backup'))
     emit('action', 'backup', false)
   } finally {
     loading.value.backup = false
   }
+}
+
+function onConfirm() {
+  if (confirmAction.value === 'stop') handleStop()
+  else if (confirmAction.value === 'restart') handleRestart()
 }
 </script>
 
@@ -94,7 +114,7 @@ async function handleBackup() {
           v-if="authStore.hasPermission('server.stop')"
           variant="danger"
           :loading="loading.stop"
-          @click="handleStop"
+          @click="confirmAction = 'stop'"
           class="w-full"
         >
           <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -108,7 +128,7 @@ async function handleBackup() {
           v-if="authStore.hasPermission('server.restart')"
           variant="secondary"
           :loading="loading.restart"
-          @click="handleRestart"
+          @click="confirmAction = 'restart'"
           class="w-full"
         >
           <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,4 +152,17 @@ async function handleBackup() {
       </div>
     </div>
   </div>
+
+  <!-- Confirmation Dialog for Stop/Restart -->
+  <ConfirmDialog
+    :show="confirmAction !== null"
+    :title="confirmAction === 'stop' ? t('dashboard.stop') : t('dashboard.restart')"
+    :message="confirmAction === 'stop' ? t('dashboard.confirmStop') : t('dashboard.confirmRestart')"
+    :confirm-text="confirmAction === 'stop' ? t('dashboard.stop') : t('dashboard.restart')"
+    :cancel-text="t('common.cancel')"
+    :variant="confirmAction === 'stop' ? 'danger' : 'primary'"
+    :loading="confirmAction === 'stop' ? loading.stop : loading.restart"
+    @confirm="onConfirm"
+    @cancel="confirmAction = null"
+  />
 </template>

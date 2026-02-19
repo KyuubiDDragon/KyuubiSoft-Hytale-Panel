@@ -10,6 +10,7 @@ import { modupdatesApi, modsApi, type ModUpdateStatus } from '@/api/management'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 import PluginBanner from '@/components/dashboard/PluginBanner.vue'
+import DashboardBanner from '@/components/dashboard/DashboardBanner.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -307,7 +308,6 @@ onMounted(() => {
   fetchPanelPatchline()
   checkDownloaderAuth()
   fetchNewFeatures()
-  fetchModUpdateStatus()
   checkPanelVersion()
   memoryInterval = setInterval(() => {
     fetchServerMemory()
@@ -435,300 +435,157 @@ function refreshAll() {
 <template>
   <div class="space-y-6">
     <!-- New Features Banner (shown after panel updates) -->
-    <div
+    <DashboardBanner
       v-if="showNewFeaturesBanner && newFeaturesStatus"
-      class="bg-gradient-to-r from-hytale-orange/20 to-hytale-yellow/20 border-2 border-hytale-orange rounded-lg p-4"
+      :title="t('dashboard.newFeatures.title')"
+      :description="t('dashboard.newFeatures.description', { version: newFeaturesStatus.panelVersion })"
+      icon-path="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+      gradient-from="from-hytale-orange/20"
+      gradient-to="to-hytale-yellow/20"
+      border-color="border-hytale-orange"
+      @dismiss="dismissNewFeaturesBanner"
     >
-      <div class="flex items-start gap-4">
-        <div class="flex-shrink-0">
-          <svg class="w-8 h-8 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+      <ul class="space-y-1 mb-3">
+        <li v-for="(feature, index) in newFeaturesStatus.features" :key="index" class="flex items-center gap-2 text-sm text-gray-200">
+          <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-semibold text-white mb-1">
-            {{ t('dashboard.newFeatures.title') }}
-          </h3>
-          <p class="text-gray-300 text-sm mb-3">
-            {{ t('dashboard.newFeatures.description', { version: newFeaturesStatus.panelVersion }) }}
-          </p>
-          <ul class="space-y-1 mb-3">
-            <li
-              v-for="(feature, index) in newFeaturesStatus.features"
-              :key="index"
-              class="flex items-center gap-2 text-sm text-gray-200"
-            >
-              <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {{ feature }}
-            </li>
-          </ul>
-          <div class="flex items-center gap-3">
-            <router-link
-              to="/configuration"
-              class="btn btn-primary inline-flex items-center gap-2"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              {{ t('dashboard.newFeatures.configure') }}
-            </router-link>
-            <button
-              @click="dismissNewFeaturesBanner"
-              class="text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              {{ t('common.dismiss') }}
-            </button>
-          </div>
-        </div>
-        <button
-          @click="dismissNewFeaturesBanner"
-          class="flex-shrink-0 text-gray-400 hover:text-white"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          {{ feature }}
+        </li>
+      </ul>
+      <div class="flex items-center gap-3">
+        <router-link to="/configuration" class="btn btn-primary inline-flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
+          {{ t('dashboard.newFeatures.configure') }}
+        </router-link>
+        <button @click="dismissNewFeaturesBanner" class="text-sm text-gray-400 hover:text-white transition-colors">
+          {{ t('common.dismiss') }}
         </button>
       </div>
-    </div>
+    </DashboardBanner>
 
     <!-- Panel Update Available Banner -->
-    <div
+    <DashboardBanner
       v-if="showPanelUpdateBanner && panelVersionInfo"
-      class="bg-gradient-to-r from-hytale-orange/20 to-status-success/20 border-2 border-hytale-orange rounded-lg p-4"
+      :title="t('dashboard.panelUpdate.title')"
+      :description="t('dashboard.panelUpdate.description', { current: panelVersionInfo.currentVersion, latest: panelVersionInfo.latestVersion })"
+      icon-path="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+      gradient-from="from-hytale-orange/20"
+      gradient-to="to-status-success/20"
+      border-color="border-hytale-orange"
+      @dismiss="dismissPanelUpdateBanner"
     >
-      <div class="flex items-start gap-4">
-        <div class="flex-shrink-0">
-          <svg class="w-8 h-8 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      <div class="flex items-center gap-3 flex-wrap">
+        <a :href="panelVersionInfo.releaseUrl" target="_blank" rel="noopener noreferrer" class="btn btn-primary inline-flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
           </svg>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-semibold text-white mb-1">
-            {{ t('dashboard.panelUpdate.title') }}
-          </h3>
-          <p class="text-gray-300 text-sm mb-3">
-            {{ t('dashboard.panelUpdate.description', { current: panelVersionInfo.currentVersion, latest: panelVersionInfo.latestVersion }) }}
-          </p>
-          <div class="flex items-center gap-3 flex-wrap">
-            <a
-              :href="panelVersionInfo.releaseUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="btn btn-primary inline-flex items-center gap-2"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-              {{ t('dashboard.panelUpdate.viewRelease') }}
-            </a>
-            <button
-              @click="checkPanelVersion(true)"
-              :disabled="checkingPanelVersion"
-              class="text-sm text-gray-400 hover:text-white transition-colors inline-flex items-center gap-1"
-            >
-              <svg class="w-4 h-4" :class="{ 'animate-spin': checkingPanelVersion }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {{ t('common.refresh') }}
-            </button>
-            <button
-              @click="dismissPanelUpdateBanner"
-              class="text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              {{ t('common.dismiss') }}
-            </button>
-          </div>
-          <p v-if="panelVersionInfo.publishedAt" class="text-xs text-gray-500 mt-2">
-            {{ t('dashboard.panelUpdate.publishedAt') }}: {{ new Date(panelVersionInfo.publishedAt).toLocaleDateString() }}
-          </p>
-        </div>
-        <button
-          @click="dismissPanelUpdateBanner"
-          class="flex-shrink-0 text-gray-400 hover:text-white"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          {{ t('dashboard.panelUpdate.viewRelease') }}
+        </a>
+        <button @click="checkPanelVersion(true)" :disabled="checkingPanelVersion" class="text-sm text-gray-400 hover:text-white transition-colors inline-flex items-center gap-1">
+          <svg class="w-4 h-4" :class="{ 'animate-spin': checkingPanelVersion }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
+          {{ t('common.refresh') }}
+        </button>
+        <button @click="dismissPanelUpdateBanner" class="text-sm text-gray-400 hover:text-white transition-colors">
+          {{ t('common.dismiss') }}
         </button>
       </div>
-    </div>
+      <p v-if="panelVersionInfo.publishedAt" class="text-xs text-gray-500 mt-2">
+        {{ t('dashboard.panelUpdate.publishedAt') }}: {{ new Date(panelVersionInfo.publishedAt).toLocaleDateString() }}
+      </p>
+    </DashboardBanner>
 
     <!-- Downloader Auth Warning Banner (for auto-updates) -->
-    <div
+    <DashboardBanner
       v-if="showDownloaderAuthWarning"
-      class="bg-gradient-to-r from-status-error/20 to-status-warning/20 border-2 border-status-error rounded-lg p-4"
+      :title="t('dashboard.downloaderAuthExpired')"
+      :description="t('dashboard.downloaderAuthExpiredDesc')"
+      icon-path="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      icon-color="text-status-error"
+      gradient-from="from-status-error/20"
+      gradient-to="to-status-warning/20"
+      border-color="border-status-error"
+      @dismiss="showDownloaderAuthWarning = false"
     >
-      <div class="flex items-start gap-4">
-        <div class="flex-shrink-0">
-          <svg class="w-8 h-8 text-status-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-semibold text-white mb-1">
-            {{ t('dashboard.downloaderAuthExpired') }}
-          </h3>
-          <p class="text-gray-300 text-sm mb-3">
-            {{ t('dashboard.downloaderAuthExpiredDesc') }}
-          </p>
-
-          <!-- Show auth code when authenticating -->
-          <div v-if="reAuthenticating && reAuthCode" class="mb-3 p-3 bg-dark-300 rounded-lg border border-dark-50">
-            <p class="text-xs text-gray-400 mb-1">{{ t('dashboard.enterCodeOnHytale') }}:</p>
-            <p class="text-xl font-mono text-white tracking-wider">{{ reAuthCode }}</p>
-            <a
-              v-if="reAuthUrl"
-              :href="reAuthUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-sm text-hytale-orange hover:underline mt-2 inline-block"
-            >
-              {{ t('dashboard.openAuthPage') }} →
-            </a>
-          </div>
-
-          <button
-            @click="initiateDownloaderReAuth"
-            :disabled="reAuthenticating"
-            class="btn btn-primary inline-flex items-center gap-2"
-          >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {{ reAuthenticating ? t('dashboard.waitingForAuth') : t('dashboard.reAuthenticateDownloader') }}
-          </button>
-        </div>
-        <button
-          @click="showDownloaderAuthWarning = false"
-          class="flex-shrink-0 text-gray-400 hover:text-white"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+      <div v-if="reAuthenticating && reAuthCode" class="mb-3 p-3 bg-dark-300 rounded-lg border border-dark-50">
+        <p class="text-xs text-gray-400 mb-1">{{ t('dashboard.enterCodeOnHytale') }}:</p>
+        <p class="text-xl font-mono text-white tracking-wider">{{ reAuthCode }}</p>
+        <a v-if="reAuthUrl" :href="reAuthUrl" target="_blank" rel="noopener noreferrer" class="text-sm text-hytale-orange hover:underline mt-2 inline-block">
+          {{ t('dashboard.openAuthPage') }} →
+        </a>
       </div>
-    </div>
+      <button @click="initiateDownloaderReAuth" :disabled="reAuthenticating" class="btn btn-primary inline-flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        {{ reAuthenticating ? t('dashboard.waitingForAuth') : t('dashboard.reAuthenticateDownloader') }}
+      </button>
+    </DashboardBanner>
 
     <!-- Server Authentication Required Banner (after download complete) -->
-    <div
+    <DashboardBanner
       v-if="showAuthBanner && status?.running && hytaleAuthStatus.serverAuthRequired && hytaleAuthStatus.authType === 'downloader'"
-      class="bg-gradient-to-r from-hytale-orange/30 to-status-success/20 border-2 border-hytale-orange rounded-lg p-4"
+      :title="t('dashboard.downloadComplete')"
+      :description="t('dashboard.downloadCompleteDesc')"
+      icon-path="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+      :icon-animate="true"
+      gradient-from="from-hytale-orange/30"
+      gradient-to="to-status-success/20"
+      border-color="border-hytale-orange"
+      @dismiss="showAuthBanner = false"
     >
-      <div class="flex items-start gap-4">
-        <div class="flex-shrink-0">
-          <svg class="w-8 h-8 text-hytale-orange animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-semibold text-white mb-1">
-            {{ t('dashboard.downloadComplete') }}
-          </h3>
-          <p class="text-gray-300 text-sm mb-3">
-            {{ t('dashboard.downloadCompleteDesc') }}
-          </p>
-          <button
-            @click="goToSettings"
-            class="btn btn-primary inline-flex items-center gap-2"
-          >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            {{ t('dashboard.authenticateServer') }}
-          </button>
-        </div>
-        <button
-          @click="showAuthBanner = false"
-          class="flex-shrink-0 text-gray-400 hover:text-white"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
+      <button @click="goToSettings" class="btn btn-primary inline-flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        {{ t('dashboard.authenticateServer') }}
+      </button>
+    </DashboardBanner>
 
     <!-- General Authentication Banner -->
-    <div
+    <DashboardBanner
       v-else-if="showAuthBanner && status?.running"
-      class="bg-gradient-to-r from-status-warning/20 to-hytale-orange/20 border-2 border-status-warning rounded-lg p-4"
+      :title="hytaleAuthStatus.authenticated ? t('dashboard.authExpired') : t('dashboard.authRequired')"
+      :description="hytaleAuthStatus.authenticated ? t('dashboard.authExpiredDesc') : t('dashboard.authRequiredDesc')"
+      icon-path="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+      icon-color="text-status-warning"
+      :icon-animate="true"
+      gradient-from="from-status-warning/20"
+      gradient-to="to-hytale-orange/20"
+      border-color="border-status-warning"
+      @dismiss="showAuthBanner = false"
     >
-      <div class="flex items-start gap-4">
-        <div class="flex-shrink-0">
-          <svg class="w-8 h-8 text-status-warning animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-semibold text-white mb-1">
-            {{ hytaleAuthStatus.authenticated ? t('dashboard.authExpired') : t('dashboard.authRequired') }}
-          </h3>
-          <p class="text-gray-300 text-sm mb-3">
-            {{ hytaleAuthStatus.authenticated ? t('dashboard.authExpiredDesc') : t('dashboard.authRequiredDesc') }}
-          </p>
-          <button
-            @click="goToSettings"
-            class="btn btn-primary inline-flex items-center gap-2"
-          >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            {{ t('dashboard.authenticateNow') }}
-          </button>
-        </div>
-        <button
-          @click="showAuthBanner = false"
-          class="flex-shrink-0 text-gray-400 hover:text-white"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
+      <button @click="goToSettings" class="btn btn-primary inline-flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        {{ t('dashboard.authenticateNow') }}
+      </button>
+    </DashboardBanner>
 
     <!-- Memory-Only Auth Warning Banner -->
-    <div
+    <DashboardBanner
       v-if="showMemoryOnlyWarning && status?.running"
-      class="bg-gradient-to-r from-hytale-orange/20 to-status-warning/20 border-2 border-hytale-orange rounded-lg p-4"
+      :title="t('dashboard.authMemoryOnly')"
+      :description="t('dashboard.authMemoryOnlyDesc')"
+      icon-path="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      gradient-from="from-hytale-orange/20"
+      gradient-to="to-status-warning/20"
+      border-color="border-hytale-orange"
+      @dismiss="showMemoryOnlyWarning = false"
     >
-      <div class="flex items-start gap-4">
-        <div class="flex-shrink-0">
-          <svg class="w-8 h-8 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div class="flex-1">
-          <h3 class="text-lg font-semibold text-white mb-1">
-            {{ t('dashboard.authMemoryOnly') }}
-          </h3>
-          <p class="text-gray-300 text-sm mb-3">
-            {{ t('dashboard.authMemoryOnlyDesc') }}
-          </p>
-          <button
-            @click="enablePersistence"
-            :disabled="enablingPersistence"
-            class="btn btn-primary inline-flex items-center gap-2"
-          >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-            </svg>
-            {{ enablingPersistence ? t('dashboard.enablingPersistence') : t('dashboard.enablePersistence') }}
-          </button>
-        </div>
-        <button
-          @click="showMemoryOnlyWarning = false"
-          class="flex-shrink-0 text-gray-400 hover:text-white"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
+      <button @click="enablePersistence" :disabled="enablingPersistence" class="btn btn-primary inline-flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+        </svg>
+        {{ enablingPersistence ? t('dashboard.enablingPersistence') : t('dashboard.enablePersistence') }}
+      </button>
+    </DashboardBanner>
 
     <!-- Page Title -->
     <div class="flex items-center justify-between">
@@ -785,10 +642,10 @@ function refreshAll() {
       <!-- TPS Card (only when plugin is available) -->
       <StatusCard
         v-if="pluginAvailable && tpsValue"
-        title="TPS"
+        :title="t('dashboard.tps')"
         :value="tpsValue"
         :status="tpsStatus"
-        icon="cpu"
+        icon="tps"
       />
 
       <!-- Auth Status Card -->
@@ -972,12 +829,12 @@ function refreshAll() {
       <!-- Server Info Card -->
       <div class="card">
         <div class="card-header flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-white">Server Info</h3>
+          <h3 class="text-lg font-semibold text-white">{{ t('dashboard.serverInfo.title') }}</h3>
           <span
             v-if="pluginAvailable"
             class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30"
           >
-            Plugin API
+            {{ t('dashboard.serverInfo.pluginApi') }}
           </span>
         </div>
         <div class="card-body">
@@ -985,32 +842,32 @@ function refreshAll() {
             <!-- Plugin data (when available) -->
             <template v-if="pluginAvailable">
               <div class="flex justify-between">
-                <span class="text-gray-400">Version</span>
+                <span class="text-gray-400">{{ t('dashboard.serverInfo.version') }}</span>
                 <span class="text-white font-mono">{{ serverVersion || '-' }}</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-400">Worlds</span>
+                <span class="text-gray-400">{{ t('dashboard.serverInfo.worlds') }}</span>
                 <span class="text-white">{{ worldCount ?? '-' }}</span>
               </div>
             </template>
             <!-- Container info -->
             <div class="flex justify-between">
-              <span class="text-gray-400">Container</span>
+              <span class="text-gray-400">{{ t('dashboard.serverInfo.container') }}</span>
               <span class="text-white font-mono">{{ status?.name || '-' }}</span>
             </div>
             <div v-if="!pluginAvailable" class="flex justify-between">
-              <span class="text-gray-400">Container ID</span>
+              <span class="text-gray-400">{{ t('dashboard.serverInfo.containerId') }}</span>
               <span class="text-white font-mono text-xs">{{ status?.id || '-' }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">Status</span>
+              <span class="text-gray-400">{{ t('dashboard.serverInfo.status') }}</span>
               <span :class="status?.running ? 'text-status-success' : 'text-status-error'">
                 {{ status?.status || '-' }}
               </span>
             </div>
             <!-- Patchline (always visible) -->
             <div class="flex justify-between items-center">
-              <span class="text-gray-400">Patchline</span>
+              <span class="text-gray-400">{{ t('dashboard.serverInfo.patchline') }}</span>
               <span
                 v-if="displayPatchline"
                 :class="[
@@ -1020,7 +877,7 @@ function refreshAll() {
                     : 'bg-status-warning/20 text-status-warning'
                 ]"
               >
-                {{ displayPatchline === 'release' ? 'Release' : 'Pre-Release' }}
+                {{ displayPatchline === 'release' ? t('dashboard.serverInfo.release') : t('dashboard.serverInfo.preRelease') }}
               </span>
               <span v-else class="text-white font-mono">-</span>
             </div>
@@ -1032,7 +889,7 @@ function refreshAll() {
     <!-- Update Check Card -->
     <div class="card">
       <div class="card-header flex items-center justify-between">
-        <h3 class="text-lg font-semibold text-white">Hytale Updates</h3>
+        <h3 class="text-lg font-semibold text-white">{{ t('dashboard.hytaleUpdates.title') }}</h3>
         <button
           @click="checkForUpdates"
           :disabled="checkingUpdate"
@@ -1047,7 +904,7 @@ function refreshAll() {
           >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          {{ checkingUpdate ? 'Checking...' : 'Check for Updates' }}
+          {{ checkingUpdate ? t('dashboard.hytaleUpdates.checking') : t('dashboard.hytaleUpdates.checkForUpdates') }}
         </button>
       </div>
       <div class="card-body">
@@ -1058,14 +915,14 @@ function refreshAll() {
 
         <!-- No check yet -->
         <div v-else-if="!updateInfo" class="text-gray-400 text-sm">
-          Click "Check for Updates" to see if a new version is available.
+          {{ t('dashboard.hytaleUpdates.clickToCheck') }}
         </div>
 
         <!-- Update info -->
         <div v-else class="space-y-4">
           <!-- Installed Version -->
           <div class="flex justify-between items-center">
-            <span class="text-gray-400">Installed Version</span>
+            <span class="text-gray-400">{{ t('dashboard.hytaleUpdates.installedVersion') }}</span>
             <span class="text-white font-mono">{{ updateInfo.installedVersion }}</span>
           </div>
 
@@ -1074,24 +931,24 @@ function refreshAll() {
             <!-- Release Version -->
             <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'release' ? 'border-status-success bg-status-success/10' : 'border-dark-50 bg-dark-300'">
               <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-success/20 text-status-success">Release</span>
-                <span v-if="updateInfo.patchline === 'release'" class="text-xs text-gray-400">(active)</span>
+                <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-success/20 text-status-success">{{ t('dashboard.hytaleUpdates.release') }}</span>
+                <span v-if="updateInfo.patchline === 'release'" class="text-xs text-gray-400">({{ t('dashboard.hytaleUpdates.active') }})</span>
               </div>
               <span class="text-white font-mono text-lg">{{ updateInfo.versions.release || '-' }}</span>
               <div v-if="updateInfo.patchline === 'release' && updateInfo.installedVersion !== updateInfo.versions.release && updateInfo.versions.release !== 'unknown'" class="mt-1 text-xs text-hytale-orange">
-                Update available!
+                {{ t('dashboard.hytaleUpdates.updateAvailable') }}
               </div>
             </div>
 
             <!-- Pre-Release Version -->
             <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'pre-release' ? 'border-status-warning bg-status-warning/10' : 'border-dark-50 bg-dark-300'">
               <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-warning/20 text-status-warning">Pre-Release</span>
-                <span v-if="updateInfo.patchline === 'pre-release'" class="text-xs text-gray-400">(active)</span>
+                <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-warning/20 text-status-warning">{{ t('dashboard.hytaleUpdates.preRelease') }}</span>
+                <span v-if="updateInfo.patchline === 'pre-release'" class="text-xs text-gray-400">({{ t('dashboard.hytaleUpdates.active') }})</span>
               </div>
               <span class="text-white font-mono text-lg">{{ updateInfo.versions.preRelease || '-' }}</span>
               <div v-if="updateInfo.patchline === 'pre-release' && updateInfo.installedVersion !== updateInfo.versions.preRelease && updateInfo.versions.preRelease !== 'unknown'" class="mt-1 text-xs text-hytale-orange">
-                Update available!
+                {{ t('dashboard.hytaleUpdates.updateAvailable') }}
               </div>
             </div>
           </div>
@@ -1105,12 +962,12 @@ function refreshAll() {
               <span>{{ updateInfo.message }}</span>
             </div>
             <p class="mt-2 text-xs opacity-80">
-              The Hytale downloader needs to be re-authenticated to check for updates.
+              {{ t('dashboard.hytaleUpdates.authReauthRequired') }}
             </p>
 
             <!-- Show auth code when authenticating -->
             <div v-if="reAuthenticating && reAuthCode" class="mt-3 p-2 bg-dark-300 rounded border border-dark-50">
-              <p class="text-xs text-gray-400 mb-1">Enter this code on the Hytale authentication page:</p>
+              <p class="text-xs text-gray-400 mb-1">{{ t('dashboard.hytaleUpdates.enterCode') }}</p>
               <p class="text-lg font-mono text-white tracking-wider">{{ reAuthCode }}</p>
               <a
                 v-if="reAuthUrl"
@@ -1119,7 +976,7 @@ function refreshAll() {
                 rel="noopener noreferrer"
                 class="text-xs text-hytale-orange hover:underline mt-1 inline-block"
               >
-                Open authentication page →
+                {{ t('dashboard.hytaleUpdates.openAuthPage') }} →
               </a>
             </div>
 
@@ -1128,7 +985,7 @@ function refreshAll() {
               :disabled="reAuthenticating"
               class="mt-3 px-3 py-1.5 bg-status-warning hover:bg-status-warning/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-dark-400 text-xs font-medium rounded transition-colors"
             >
-              {{ reAuthenticating ? 'Waiting for authentication...' : 'Re-authenticate Downloader' }}
+              {{ reAuthenticating ? t('dashboard.hytaleUpdates.waitingForAuth') : t('dashboard.hytaleUpdates.reAuthenticate') }}
             </button>
           </div>
 
@@ -1150,7 +1007,7 @@ function refreshAll() {
               {{ updateInfo.message }}
             </div>
             <p v-if="updateInfo.updateAvailable" class="mt-2 text-xs opacity-80">
-              Restart the server with AUTO_UPDATE=true to apply the update.
+              {{ t('dashboard.hytaleUpdates.restartToUpdate') }}
             </p>
           </div>
         </div>
