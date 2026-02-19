@@ -387,11 +387,14 @@ onMounted(() => {
 
     <!-- Delete Confirm Dialog -->
     <ConfirmDialog
-      v-model:open="showDeleteConfirm"
+      :show="showDeleteConfirm"
       :title="t('common.delete')"
       :message="deletingUser ? t('users.confirmDelete', { username: deletingUser.username }) : ''"
+      :confirm-text="t('common.delete')"
+      :cancel-text="t('common.cancel')"
       variant="danger"
       @confirm="confirmDeleteUser"
+      @cancel="showDeleteConfirm = false"
     />
   </div>
 </template>
