@@ -28,6 +28,8 @@ const maxLocalHistory = 60 // 60 data points
 
 // Refresh interval
 let refreshInterval: ReturnType<typeof setInterval> | null = null
+const paused = ref(false)
+let isMounted = false
 
 async function loadHistory() {
   try {
@@ -195,7 +197,12 @@ function generateAreaPath(data: number[], maxValue: number): string {
   return `M 0,100 L ${points.join(' L ')} L 100,100 Z`
 }
 
+function togglePause() {
+  paused.value = !paused.value
+}
+
 onMounted(async () => {
+  isMounted = true
   await loadHistory()
   await refresh()
   await fetchPluginMemory()
@@ -205,6 +212,7 @@ onMounted(async () => {
 
   // Update every 5 seconds
   refreshInterval = setInterval(async () => {
+    if (!isMounted || paused.value) return
     await refresh()
     await fetchPluginMemory()
     await fetchTpsMetrics()
@@ -214,6 +222,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  isMounted = false
   if (refreshInterval) {
     clearInterval(refreshInterval)
   }
@@ -225,14 +234,29 @@ onUnmounted(() => {
     <!-- Page Title -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold text-white">{{ t('performance.title') }}</h1>
-      <div class="flex items-center gap-2 text-sm text-gray-400">
-        <span class="w-2 h-2 bg-status-success rounded-full animate-pulse"></span>
-        {{ t('performance.liveUpdates') }}
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 text-sm text-gray-400">
+          <span :class="['w-2 h-2 rounded-full', paused ? 'bg-gray-500' : 'bg-status-success animate-pulse']"></span>
+          {{ t('performance.liveUpdates') }}
+        </div>
+        <button
+          @click="togglePause"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
+          :class="paused ? 'bg-status-success/20 text-status-success hover:bg-status-success/30' : 'bg-dark-100 text-gray-400 hover:text-white hover:bg-dark-50'"
+        >
+          <svg v-if="paused" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          <svg v-else class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+          </svg>
+          {{ paused ? t('performance.resume') : t('performance.pause') }}
+        </button>
       </div>
     </div>
 
     <!-- Current Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <!-- CPU Card -->
       <Card>
         <div class="flex items-center gap-4">
@@ -258,7 +282,7 @@ onUnmounted(() => {
           </div>
           <div>
             <p class="text-sm text-gray-400">
-              {{ hasValidJvmHeap ? 'JVM Heap' : t('performance.memory') }}
+              {{ hasValidJvmHeap ? t('performance.jvmHeap') : t('performance.memory') }}
             </p>
             <template v-if="hasValidJvmHeap">
               <p class="text-2xl font-bold text-white">{{ heapUsed?.toFixed(0) }} MB</p>
@@ -290,7 +314,7 @@ onUnmounted(() => {
             <div class="flex items-center gap-2">
               <p class="text-sm text-gray-400">TPS</p>
               <span v-if="tpsMetrics" class="px-1.5 py-0.5 text-[10px] rounded bg-green-500/20 text-green-400 border border-green-500/30">
-                Prometheus
+                {{ t('performance.prometheus') }}
               </span>
             </div>
             <p :class="[
@@ -302,7 +326,7 @@ onUnmounted(() => {
             <div class="flex items-center gap-2 text-xs text-gray-500">
               <span v-if="mspt !== null">{{ mspt.toFixed(1) }} ms/tick</span>
               <span v-if="displayTpsMin !== null" class="text-gray-600">|</span>
-              <span v-if="displayTpsMin !== null" class="text-yellow-500">Min: {{ displayTpsMin.toFixed(1) }}</span>
+              <span v-if="displayTpsMin !== null" class="text-yellow-500">{{ t('performance.min') }}: {{ displayTpsMin.toFixed(1) }}</span>
             </div>
           </div>
         </div>
@@ -502,17 +526,17 @@ onUnmounted(() => {
       <Card v-if="pluginAvailable" class="lg:col-span-2">
         <div class="mb-4 flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <h3 class="font-semibold text-white">TPS History</h3>
+            <h3 class="font-semibold text-white">{{ t('performance.tpsHistory') }}</h3>
             <span class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
-              Prometheus
+              {{ t('performance.prometheus') }}
             </span>
           </div>
           <div class="flex items-center gap-4 text-sm flex-wrap">
             <span class="text-gray-400">{{ t('performance.current') }}: <span :class="tpsStatus === 'green' ? 'text-green-400' : tpsStatus === 'yellow' ? 'text-yellow-400' : 'text-red-400'">{{ tps?.toFixed(1) ?? '-' }}</span></span>
             <span class="text-gray-400">{{ t('performance.avg') }}: <span class="text-green-400">{{ displayTpsAvg?.toFixed(1) ?? '-' }}</span></span>
-            <span class="text-gray-400">Min: <span class="text-yellow-400">{{ displayTpsMin?.toFixed(1) ?? '-' }}</span></span>
-            <span class="text-gray-400">Max: <span class="text-blue-400">{{ displayTpsMax?.toFixed(1) ?? '-' }}</span></span>
-            <span v-if="serverMsptAvg !== null" class="text-gray-400">MSPT Avg: <span class="text-purple-400">{{ serverMsptAvg.toFixed(1) }}ms</span></span>
+            <span class="text-gray-400">{{ t('performance.min') }}: <span class="text-yellow-400">{{ displayTpsMin?.toFixed(1) ?? '-' }}</span></span>
+            <span class="text-gray-400">{{ t('performance.max') }}: <span class="text-blue-400">{{ displayTpsMax?.toFixed(1) ?? '-' }}</span></span>
+            <span v-if="serverMsptAvg !== null" class="text-gray-400">{{ t('performance.msptAvg') }}: <span class="text-purple-400">{{ serverMsptAvg.toFixed(1) }}ms</span></span>
           </div>
         </div>
         <div class="relative h-48 bg-dark-100 rounded-lg overflow-hidden">
@@ -583,26 +607,26 @@ onUnmounted(() => {
 
       <!-- TPS Metrics Summary (when Prometheus available) -->
       <div v-if="tpsMetrics" class="mt-4 pt-4 border-t border-dark-100">
-        <h4 class="text-sm font-medium text-gray-400 mb-3">Prometheus TPS Metrics (60s Window)</h4>
+        <h4 class="text-sm font-medium text-gray-400 mb-3">{{ t('performance.prometheusTpsMetrics') }}</h4>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div class="p-3 bg-dark-100 rounded-lg text-center">
-            <p class="text-xs text-gray-500 mb-1">Current</p>
+            <p class="text-xs text-gray-500 mb-1">{{ t('performance.current') }}</p>
             <p class="text-lg font-bold text-green-400">{{ tpsMetrics.current.toFixed(1) }}</p>
           </div>
           <div class="p-3 bg-dark-100 rounded-lg text-center">
-            <p class="text-xs text-gray-500 mb-1">Average</p>
+            <p class="text-xs text-gray-500 mb-1">{{ t('performance.avg') }}</p>
             <p class="text-lg font-bold text-blue-400">{{ tpsMetrics.average.toFixed(1) }}</p>
           </div>
           <div class="p-3 bg-dark-100 rounded-lg text-center">
-            <p class="text-xs text-gray-500 mb-1">Minimum</p>
+            <p class="text-xs text-gray-500 mb-1">{{ t('performance.min') }}</p>
             <p class="text-lg font-bold text-yellow-400">{{ tpsMetrics.min.toFixed(1) }}</p>
           </div>
           <div class="p-3 bg-dark-100 rounded-lg text-center">
-            <p class="text-xs text-gray-500 mb-1">Maximum</p>
+            <p class="text-xs text-gray-500 mb-1">{{ t('performance.max') }}</p>
             <p class="text-lg font-bold text-purple-400">{{ tpsMetrics.max.toFixed(1) }}</p>
           </div>
           <div class="p-3 bg-dark-100 rounded-lg text-center">
-            <p class="text-xs text-gray-500 mb-1">MSPT Avg</p>
+            <p class="text-xs text-gray-500 mb-1">{{ t('performance.msptAvg') }}</p>
             <p class="text-lg font-bold text-orange-400">{{ tpsMetrics.msptAverage.toFixed(1) }}ms</p>
           </div>
         </div>
@@ -612,9 +636,9 @@ onUnmounted(() => {
     <!-- JVM Details (when Prometheus available) -->
     <Card v-if="prometheusData">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="font-semibold text-white">JVM Details</h3>
+        <h3 class="font-semibold text-white">{{ t('performance.jvmDetails') }}</h3>
         <span class="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
-          Prometheus
+          {{ t('performance.prometheus') }}
         </span>
       </div>
 
@@ -622,7 +646,7 @@ onUnmounted(() => {
       <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
         <!-- Heap Memory -->
         <div class="p-4 bg-dark-100 rounded-lg">
-          <p class="text-xs text-gray-500 mb-1">Heap Memory</p>
+          <p class="text-xs text-gray-500 mb-1">{{ t('performance.heapMemoryLabel') }}</p>
           <p class="text-lg font-bold text-purple-400">{{ formatBytes(prometheusData.memory.heapUsed) }}</p>
           <p class="text-xs text-gray-500">/ {{ formatBytes(prometheusData.memory.heapMax) }}</p>
           <div class="mt-2 h-1.5 bg-dark-200 rounded-full overflow-hidden">
@@ -632,49 +656,49 @@ onUnmounted(() => {
 
         <!-- Non-Heap Memory -->
         <div class="p-4 bg-dark-100 rounded-lg">
-          <p class="text-xs text-gray-500 mb-1">Non-Heap Memory</p>
+          <p class="text-xs text-gray-500 mb-1">{{ t('performance.nonHeapMemory') }}</p>
           <p class="text-lg font-bold text-cyan-400">{{ formatBytes(prometheusData.memory.nonHeapUsed) }}</p>
-          <p class="text-xs text-gray-500">committed: {{ formatBytes(prometheusData.memory.nonHeapCommitted) }}</p>
+          <p class="text-xs text-gray-500">{{ t('performance.committed') }}: {{ formatBytes(prometheusData.memory.nonHeapCommitted) }}</p>
         </div>
 
         <!-- Threads -->
         <div class="p-4 bg-dark-100 rounded-lg">
-          <p class="text-xs text-gray-500 mb-1">Threads</p>
+          <p class="text-xs text-gray-500 mb-1">{{ t('performance.threads') }}</p>
           <p class="text-lg font-bold text-green-400">{{ prometheusData.threads.current }}</p>
-          <p class="text-xs text-gray-500">{{ prometheusData.threads.daemon }} daemon / {{ prometheusData.threads.peak }} peak</p>
+          <p class="text-xs text-gray-500">{{ prometheusData.threads.daemon }} {{ t('performance.daemon') }} / {{ prometheusData.threads.peak }} {{ t('performance.peak') }}</p>
         </div>
 
         <!-- CPU -->
         <div class="p-4 bg-dark-100 rounded-lg">
-          <p class="text-xs text-gray-500 mb-1">CPU Usage</p>
+          <p class="text-xs text-gray-500 mb-1">{{ t('performance.cpuUsageLabel') }}</p>
           <p class="text-lg font-bold text-blue-400">{{ prometheusData.cpu.process.toFixed(1) }}%</p>
-          <p class="text-xs text-gray-500">System: {{ prometheusData.cpu.system.toFixed(1) }}%</p>
+          <p class="text-xs text-gray-500">{{ t('performance.system') }}: {{ prometheusData.cpu.system.toFixed(1) }}%</p>
         </div>
 
         <!-- Session Stats -->
         <div class="p-4 bg-dark-100 rounded-lg">
-          <p class="text-xs text-gray-500 mb-1">Session Stats</p>
+          <p class="text-xs text-gray-500 mb-1">{{ t('performance.sessionStats') }}</p>
           <div class="flex items-center gap-2">
             <span class="text-lg font-bold text-green-400">+{{ prometheusData.players.joins }}</span>
             <span class="text-gray-500">/</span>
             <span class="text-lg font-bold text-red-400">-{{ prometheusData.players.leaves }}</span>
           </div>
-          <p class="text-xs text-gray-500">joins / leaves</p>
+          <p class="text-xs text-gray-500">{{ t('performance.joinsLeaves') }}</p>
         </div>
 
         <!-- Worlds -->
         <div class="p-4 bg-dark-100 rounded-lg">
-          <p class="text-xs text-gray-500 mb-1">Worlds Loaded</p>
+          <p class="text-xs text-gray-500 mb-1">{{ t('performance.worldsLoaded') }}</p>
           <p class="text-lg font-bold text-orange-400">{{ prometheusData.worlds }}</p>
-          <p class="text-xs text-gray-500">active worlds</p>
+          <p class="text-xs text-gray-500">{{ t('performance.activeWorlds') }}</p>
         </div>
       </div>
 
       <!-- Memory Pools -->
       <div v-if="prometheusData.memory.pools.length > 0" class="mb-6">
-        <h4 class="text-sm font-medium text-gray-400 mb-3">Memory Pools</h4>
+        <h4 class="text-sm font-medium text-gray-400 mb-3">{{ t('performance.memoryPools') }}</h4>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <div v-for="pool in prometheusData.memory.pools" :key="pool.name" class="p-3 bg-dark-100 rounded-lg">
+          <div v-for="pool in prometheusData.memory.pools" :key="pool.name" class="p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors">
             <p class="text-xs text-gray-500 mb-1 truncate" :title="pool.name">{{ pool.name }}</p>
             <p class="text-sm font-bold text-white">{{ formatBytes(pool.used) }}</p>
             <div class="mt-1.5 h-1 bg-dark-200 rounded-full overflow-hidden">
@@ -691,13 +715,13 @@ onUnmounted(() => {
 
       <!-- GC Stats -->
       <div v-if="prometheusData.gc.length > 0">
-        <h4 class="text-sm font-medium text-gray-400 mb-3">Garbage Collection</h4>
+        <h4 class="text-sm font-medium text-gray-400 mb-3">{{ t('performance.garbageCollection') }}</h4>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <div v-for="gc in prometheusData.gc" :key="gc.name" class="p-3 bg-dark-100 rounded-lg">
+          <div v-for="gc in prometheusData.gc" :key="gc.name" class="p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors">
             <p class="text-xs text-gray-500 mb-1 truncate" :title="gc.name">{{ gc.name }}</p>
             <div class="flex items-baseline gap-2">
               <p class="text-lg font-bold text-yellow-400">{{ gc.count }}</p>
-              <p class="text-xs text-gray-500">collections</p>
+              <p class="text-xs text-gray-500">{{ t('performance.collections') }}</p>
             </div>
             <p class="text-xs text-gray-500">{{ (gc.timeSeconds * 1000).toFixed(0) }}ms total</p>
           </div>
@@ -706,9 +730,9 @@ onUnmounted(() => {
 
       <!-- Players per World -->
       <div v-if="Object.keys(prometheusData.players.perWorld).length > 0" class="mt-6">
-        <h4 class="text-sm font-medium text-gray-400 mb-3">Players per World</h4>
+        <h4 class="text-sm font-medium text-gray-400 mb-3">{{ t('performance.playersPerWorld') }}</h4>
         <div class="flex flex-wrap gap-2">
-          <div v-for="(count, world) in prometheusData.players.perWorld" :key="world" class="px-3 py-2 bg-dark-100 rounded-lg flex items-center gap-2">
+          <div v-for="(count, world) in prometheusData.players.perWorld" :key="world" class="px-3 py-2 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors flex items-center gap-2">
             <span class="text-sm text-gray-400">{{ world }}:</span>
             <span class="text-sm font-bold text-hytale-orange">{{ count }}</span>
           </div>

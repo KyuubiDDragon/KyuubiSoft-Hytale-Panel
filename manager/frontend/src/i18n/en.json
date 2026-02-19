@@ -28,13 +28,17 @@
     "add": "Add",
     "edit": "Edit",
     "remove": "Remove",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
     "clear": "Clear",
     "previous": "Previous",
     "next": "Next",
     "back": "Back",
     "skip": "Skip",
+    "copied": "Copied to clipboard",
     "copy": "Copy",
     "noPermission": "You don't have permission to perform this action",
+    "online": "Online",
     "dismiss": "Dismiss"
   },
   "health": {
@@ -50,9 +54,11 @@
     "loginTitle": "Server Manager",
     "loginSubtitle": "Sign in to continue",
     "invalidCredentials": "Invalid credentials",
-    "sessionExpired": "Session expired. Please login again."
+    "sessionExpired": "Session expired. Please login again.",
+    "subtitle": "Hytale Server Management"
   },
   "nav": {
+    "admin": "Admin",
     "dashboard": "Dashboard",
     "console": "Console",
     "backups": "Backups",
@@ -80,6 +86,7 @@
   },
   "dashboard": {
     "title": "Dashboard",
+    "subtitle": "Server overview and quick actions",
     "serverStatus": "Server Status",
     "online": "Online",
     "offline": "Offline",
@@ -155,6 +162,54 @@
       "checkNow": "Check",
       "viewAll": "View all"
     },
+    "tps": "TPS",
+    "serverInfo": {
+      "title": "Server Info",
+      "pluginApi": "Plugin API",
+      "version": "Version",
+      "worlds": "Worlds",
+      "container": "Container",
+      "containerId": "Container ID",
+      "status": "Status",
+      "patchline": "Patchline",
+      "release": "Release",
+      "preRelease": "Pre-Release"
+    },
+    "hytaleUpdates": {
+      "title": "Hytale Updates",
+      "checking": "Checking...",
+      "checkForUpdates": "Check for Updates",
+      "clickToCheck": "Click \"Check for Updates\" to see if a new version is available.",
+      "installedVersion": "Installed Version",
+      "release": "Release",
+      "preRelease": "Pre-Release",
+      "updateAvailable": "Update available!",
+      "active": "active",
+      "authReauthRequired": "The Hytale downloader needs to be re-authenticated to check for updates.",
+      "enterCode": "Enter this code on the Hytale authentication page:",
+      "openAuthPage": "Open authentication page",
+      "waitingForAuth": "Waiting for authentication...",
+      "reAuthenticate": "Re-authenticate Downloader",
+      "restartToUpdate": "Restart the server with AUTO_UPDATE=true to apply the update."
+    },
+    "confirmStop": "Are you sure you want to stop the server?",
+    "confirmRestart": "Are you sure you want to restart the server?",
+    "actionSuccess": {
+      "start": "Server is starting...",
+      "stop": "Server is stopping...",
+      "restart": "Server is restarting...",
+      "backup": "Backup created successfully"
+    },
+    "actionError": {
+      "authExpired": "Authentication expired. Please try again.",
+      "authTimeout": "Authentication timed out. Please try again.",
+      "start": "Failed to start server",
+      "stop": "Failed to stop server",
+      "restart": "Failed to restart server",
+      "backup": "Failed to create backup",
+      "checkUpdates": "Failed to check for updates",
+      "auth": "Failed to initiate authentication"
+    },
     "panelUpdate": {
       "title": "Panel Update Available",
       "description": "A new version of the panel is available: {current} → {latest}",
@@ -163,6 +218,7 @@
     }
   },
   "console": {
+    "confirmClear": "Clear all console logs from the current view?",
     "title": "Server Console",
     "sendCommand": "Send Command",
     "commandPlaceholder": "Enter command...",
@@ -180,10 +236,12 @@
     "showErrors": "Errors",
     "showWarnings": "Warnings",
     "showInfo": "Info",
-    "bypassWarning": "Warning: Console access allows executing all server commands, bypassing UI permission restrictions."
+    "bypassWarning": "Warning: Console access allows executing all server commands, bypassing UI permission restrictions.",
+    "filtered": "(filtered)"
   },
   "backups": {
     "title": "Backup Management",
+    "subtitle": "Create and manage server backups",
     "create": "Create Backup",
     "restore": "Restore",
     "delete": "Delete",
@@ -223,6 +281,8 @@
     "confirmKick": "Really kick this player?",
     "confirmBan": "Really ban this player?",
     "banReason": "Ban reason (optional)",
+    "noReason": "No reason",
+    "actionSuccess": "{action}: {player}",
     "noPlayers": "No players online",
     "noOfflinePlayers": "No offline players in history",
     "playerCount": "{count} players online",
@@ -232,6 +292,7 @@
     "op": "OP",
     "deop": "Remove OP",
     "teleport": "Teleport",
+    "teleportTitle": "Teleport: {player}",
     "teleportTo": "To Player",
     "teleportCoords": "To Coords",
     "teleportDeath": "To Death",
@@ -343,6 +404,7 @@
   },
   "whitelist": {
     "title": "Whitelist & Bans",
+    "subtitle": "Manage server whitelist and player bans",
     "whitelist": "Whitelist",
     "bans": "Bans",
     "enabled": "Whitelist Enabled",
@@ -356,9 +418,13 @@
     "ban": "Ban",
     "unban": "Unban",
     "bannedPlayers": "Banned Players",
+    "confirmRemove": "Remove \"{player}\" from the whitelist?",
+    "confirmUnban": "Unban player \"{player}\"?",
     "noBans": "No players banned"
   },
   "permissions": {
+    "confirmDeleteGroup": "Delete permission group \"{name}\"?",
+    "confirmDeleteUser": "Delete permission user \"{name}\"?",
     "title": "Permissions",
     "users": "Users",
     "groups": "Groups",
@@ -380,13 +446,54 @@
     "more": "more"
   },
   "worlds": {
+    "defaultPlaceholder": "Default",
     "title": "Worlds",
     "infoTitle": "Worlds Overview",
     "infoDescription": "Here you can see all worlds available on the server. Worlds are automatically detected.",
     "noWorlds": "No worlds found",
     "files": "Files",
+    "subtitle": "View and edit world configurations",
+    "worldInfo": "World Info",
+    "seed": "Seed",
+    "gameTime": "Game Time",
+    "gameplay": "Gameplay",
+    "pvpEnabled": "PvP Enabled",
+    "fallDamage": "Fall Damage",
+    "npcSpawning": "NPC Spawning",
+    "freezeNpcs": "Freeze All NPCs",
+    "compassUpdating": "Compass Updating",
+    "gameplayConfig": "Gameplay Config",
+    "worldTicking": "World Ticking",
+    "blockTicking": "Block Ticking",
+    "storageSaving": "Storage & Saving",
+    "savePlayers": "Save Players",
+    "saveChunks": "Save Chunks",
+    "saveNewChunks": "Save New Chunks",
+    "unloadChunks": "Unload Chunks",
+    "rawConfigJson": "Raw Config JSON",
+    "jsonEditor": "JSON Editor",
+    "rawEditor": "config.json (Raw Editor)",
+    "editMode": "Edit mode",
+    "formMode": "Form",
+    "jsonTextMode": "JSON Text",
+    "rawEditorHint": "Edit the raw JSON and click Save Changes to apply.",
+    "jsonEditorHint": "Edit the JSON content above and click Save Changes to apply.",
+    "saved": "Saved",
+    "saveChanges": "Save Changes",
+    "saving": "Saving...",
+    "selectFile": "Select a file from the tree to view and edit its contents.",
+    "invalidJson": "Invalid JSON syntax",
+    "saveFailed": "Failed to save file",
+    "loadFailed": "Failed to load {file}",
+    "fileCount": "files",
     "dangerZone": {
       "confirm": "Yes, enable",
+      "title": "Danger Zone",
+      "description": "These settings can cause data loss. Use with caution.",
+      "deleteOnUniverseStart": "Delete on Universe Start",
+      "deleteOnUniverseStartDesc": "World will be deleted when the universe starts",
+      "deleteOnRemove": "Delete on Remove",
+      "deleteOnRemoveDesc": "World will be permanently deleted when removed",
       "confirmDeleteOnUniverseStart": {
         "title": "Delete world on universe start?",
         "message": "WARNING: When this option is enabled, this world will be PERMANENTLY DELETED when the universe (server) starts. This action cannot be undone. Are you sure you want to enable this dangerous option?"
@@ -404,6 +511,11 @@
     "noFiles": "No configuration files found",
     "formMode": "Form",
     "textEditor": "Text Editor",
+    "jsonEditor": "JSON Editor",
+    "release": "Release",
+    "preRelease": "Pre-Release",
+    "noProperties": "No configuration properties found",
+    "invalidJson": "Invalid JSON format",
     "saved": "Configuration saved successfully",
     "unsaved": "Unsaved changes",
     "warning": "Warning: Invalid configuration may break the server. A server restart is required after saving changes.",
@@ -622,7 +734,31 @@
     "free": "Free",
     "total": "Total",
     "init": "Init",
-    "committed": "Committed"
+    "committed": "Committed",
+    "jvmHeap": "JVM Heap",
+    "tpsHistory": "TPS History",
+    "prometheus": "Prometheus",
+    "min": "Minimum",
+    "msptAvg": "MSPT Avg",
+    "prometheusTpsMetrics": "Prometheus TPS Metrics (60s Window)",
+    "jvmDetails": "JVM Details",
+    "heapMemoryLabel": "Heap Memory",
+    "nonHeapMemory": "Non-Heap Memory",
+    "threads": "Threads",
+    "daemon": "daemon",
+    "peak": "peak",
+    "cpuUsageLabel": "CPU Usage",
+    "system": "System",
+    "sessionStats": "Session Stats",
+    "joinsLeaves": "joins / leaves",
+    "worldsLoaded": "Worlds Loaded",
+    "activeWorlds": "active worlds",
+    "memoryPools": "Memory Pools",
+    "garbageCollection": "Garbage Collection",
+    "collections": "collections",
+    "pause": "Pause",
+    "playersPerWorld": "Players per World",
+    "resume": "Resume"
   },
   "settings": {
     "title": "Settings",
@@ -630,7 +766,10 @@
     "german": "Deutsch",
     "english": "English",
     "theme": "Theme",
+    "aboutDescription": "Web-based management tool for Hytale dedicated servers. Provides server control, live console, backup management, and player administration.",
     "about": "About",
+    "confirmResetAuth": "Reset Hytale authentication? You will need to re-authenticate the server.",
+    "resetAuthTitle": "Reset Authentication",
     "version": "Version",
     "serverConfig": "Server Configuration",
     "selectConfigFile": "Select a configuration file to edit:",
@@ -696,7 +835,19 @@
     "pluginPrometheusDesc": "Exposes detailed server and JVM metrics for monitoring",
     "recommendedPluginsNote": "These plugins are not included in the panel. Visit CurseForge or official sources to download them.",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "errors": {
+      "loadConfigFailed": "Failed to load config files",
+      "loadFileFailed": "Failed to load {filename}",
+      "saveConfigFailed": "Failed to save config",
+      "loadSettingFailed": "Failed to load setting",
+      "updateSettingFailed": "Failed to update setting",
+      "restartFailed": "Failed to restart server",
+      "initAuthFailed": "Failed to initiate authentication",
+      "authError": "An error occurred while initiating authentication",
+      "verifyAuthFailed": "Failed to verify authentication",
+      "resetAuthFailed": "Failed to reset authentication"
+    }
   },
   "users": {
     "title": "User Management",
@@ -868,6 +1019,12 @@
     "editCommand": "Edit Command",
     "commandName": "Command Name",
     "command": "Command",
+    "categories": {
+      "custom": "Custom",
+      "players": "Players",
+      "server": "Server",
+      "world": "World"
+    },
     "category": "Category",
     "commandExecuted": "Command executed"
   },
@@ -1813,6 +1970,10 @@
       "legs": "Leggings",
       "cosmetic": "Cosmetic",
       "tools": "Tools"
+    },
+    "tooltip": {
+      "amount": "Amount",
+      "durability": "Durability"
     }
   }
 }

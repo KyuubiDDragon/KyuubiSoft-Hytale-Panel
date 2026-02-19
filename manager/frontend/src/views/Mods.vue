@@ -1999,7 +1999,7 @@ onMounted(() => {
                 <div
                   v-for="version in modtaleDetailProject.versions.slice(0, 5)"
                   :key="version.id"
-                  class="flex items-center justify-between p-3 bg-dark-100 rounded-lg"
+                  class="flex items-center justify-between p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
                 >
                   <div>
                     <span class="text-white font-medium">{{ version.versionNumber }}</span>

@@ -265,7 +265,7 @@ async function handleWhitelist(name: string) {
   closeDropdown()
   try {
     await playersApi.addToWhitelist(name)
-    showSuccess(t('players.addToWhitelist') + ': ' + name)
+    showSuccess(t('players.actionSuccess', { action: t('players.addToWhitelist'), player: name }))
   } catch (err) {
     error.value = t('errors.serverError')
   }
@@ -275,7 +275,7 @@ async function handleOp(name: string) {
   closeDropdown()
   try {
     await playersApi.op(name)
-    showSuccess(t('players.op') + ': ' + name)
+    showSuccess(t('players.actionSuccess', { action: t('players.op'), player: name }))
   } catch (err) {
     error.value = t('errors.serverError')
   }
@@ -285,7 +285,7 @@ async function handleDeop(name: string) {
   closeDropdown()
   try {
     await playersApi.deop(name)
-    showSuccess(t('players.deop') + ': ' + name)
+    showSuccess(t('players.actionSuccess', { action: t('players.deop'), player: name }))
   } catch (err) {
     error.value = t('errors.serverError')
   }
@@ -295,7 +295,7 @@ async function handleHeal(name: string) {
   closeDropdown()
   try {
     await playersApi.heal(name)
-    showSuccess(t('players.heal') + ': ' + name)
+    showSuccess(t('players.actionSuccess', { action: t('players.heal'), player: name }))
   } catch (err) {
     error.value = t('errors.serverError')
   }
@@ -305,7 +305,7 @@ async function handleRespawn(name: string) {
   closeDropdown()
   try {
     await playersApi.respawn(name)
-    showSuccess(t('players.respawn') + ': ' + name)
+    showSuccess(t('players.actionSuccess', { action: t('players.respawn'), player: name }))
   } catch (err) {
     error.value = t('errors.serverError')
   }
@@ -315,7 +315,7 @@ async function handleClearEffects(name: string) {
   closeDropdown()
   try {
     await playersApi.clearEffects(name)
-    showSuccess(t('players.clearEffects') + ': ' + name)
+    showSuccess(t('players.actionSuccess', { action: t('players.clearEffects'), player: name }))
   } catch (err) {
     error.value = t('errors.serverError')
   }
@@ -328,7 +328,7 @@ async function confirmKick() {
   try {
     await playersApi.kick(selectedPlayer.value)
     showKickModal.value = false
-    showSuccess(t('players.kick') + ': ' + selectedPlayer.value)
+    showSuccess(t('players.actionSuccess', { action: t('players.kick'), player: selectedPlayer.value }))
     await fetchPlayers()
   } catch (err) {
     error.value = t('errors.serverError')
@@ -343,7 +343,7 @@ async function confirmBan() {
   try {
     await playersApi.ban(selectedPlayer.value, banReason.value || undefined)
     showBanModal.value = false
-    showSuccess(t('players.ban') + ': ' + selectedPlayer.value)
+    showSuccess(t('players.actionSuccess', { action: t('players.ban'), player: selectedPlayer.value }))
     banReason.value = ''
     await fetchPlayers()
   } catch (err) {
@@ -359,7 +359,7 @@ async function confirmKill() {
   try {
     await playersApi.kill(selectedPlayer.value)
     showKillModal.value = false
-    showSuccess(t('players.kill') + ': ' + selectedPlayer.value)
+    showSuccess(t('players.actionSuccess', { action: t('players.kill'), player: selectedPlayer.value }))
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -373,7 +373,7 @@ async function confirmClearInventory() {
   try {
     await playersApi.clearInventory(selectedPlayer.value)
     showClearInventoryModal.value = false
-    showSuccess(t('players.clearInventory') + ': ' + selectedPlayer.value)
+    showSuccess(t('players.actionSuccess', { action: t('players.clearInventory'), player: selectedPlayer.value }))
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -389,15 +389,15 @@ async function confirmTeleport() {
       // Teleport to death location
       await playersApi.teleportToDeath(selectedPlayer.value)
       showTeleportModal.value = false
-      showSuccess(t('players.teleportToDeath') + ': ' + selectedPlayer.value)
+      showSuccess(t('players.actionSuccess', { action: t('players.teleportToDeath'), player: selectedPlayer.value }))
     } else if (teleportMode.value === 'player' && teleportTarget.value) {
       await playersApi.teleport(selectedPlayer.value, { target: teleportTarget.value })
       showTeleportModal.value = false
-      showSuccess(t('players.teleport') + ': ' + selectedPlayer.value)
+      showSuccess(t('players.actionSuccess', { action: t('players.teleport'), player: selectedPlayer.value }))
     } else {
       await playersApi.teleport(selectedPlayer.value, { x: teleportX.value, y: teleportY.value, z: teleportZ.value })
       showTeleportModal.value = false
-      showSuccess(t('players.teleport') + ': ' + selectedPlayer.value)
+      showSuccess(t('players.actionSuccess', { action: t('players.teleport'), player: selectedPlayer.value }))
     }
   } catch (err) {
     error.value = t('errors.serverError')
@@ -412,7 +412,7 @@ async function setGamemode(gamemode: string) {
   try {
     await playersApi.gamemode(selectedPlayer.value, gamemode)
     showGamemodeModal.value = false
-    showSuccess(t('players.gamemode') + ' ' + gamemode + ': ' + selectedPlayer.value)
+    showSuccess(t('players.actionSuccess', { action: t('players.gamemode') + ' ' + gamemode, player: selectedPlayer.value }))
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -426,7 +426,7 @@ async function confirmGive() {
   try {
     await playersApi.give(selectedPlayer.value, giveItem.value, giveAmount.value)
     showGiveModal.value = false
-    showSuccess(t('players.give') + ': ' + giveAmount.value + 'x ' + formatItemPath(giveItem.value))
+    showSuccess(t('players.actionSuccess', { action: t('players.give'), player: giveAmount.value + 'x ' + formatItemPath(giveItem.value) }))
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -510,8 +510,11 @@ onUnmounted(() => {
 
     <!-- Online Players -->
     <Card v-if="activeTab === 'online'" :padding="false">
-      <div v-if="loading" class="text-center text-gray-500 p-8">
-        {{ t('common.loading') }}
+      <div v-if="loading" class="flex items-center justify-center p-8">
+        <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
       </div>
 
       <div v-else-if="onlinePlayers.length === 0" class="text-center text-gray-500 p-8">
@@ -550,7 +553,7 @@ onUnmounted(() => {
                 <span v-if="player.playTime">{{ t('players.totalPlayTime') }}: {{ formatPlayTime(player.playTime) }}</span>
                 <!-- Plugin/File-provided details -->
                 <span v-if="player.health !== undefined">
-                  <span class="text-gray-600">HP:</span>
+                  <span class="text-gray-600">{{ t('players.details.health') }}:</span>
                   <span :class="player.health > 15 ? 'text-green-400' : player.health > 8 ? 'text-yellow-400' : 'text-red-400'">
                     {{ player.health.toFixed(0) }}<span v-if="player.maxHealth">/{{ player.maxHealth }}</span>
                   </span>
@@ -705,8 +708,11 @@ onUnmounted(() => {
 
     <!-- Offline Players -->
     <Card v-if="activeTab === 'offline'" :padding="false">
-      <div v-if="loading" class="text-center text-gray-500 p-8">
-        {{ t('common.loading') }}
+      <div v-if="loading" class="flex items-center justify-center p-8">
+        <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
       </div>
 
       <div v-else-if="offlinePlayers.length === 0" class="text-center text-gray-500 p-8">
@@ -811,7 +817,7 @@ onUnmounted(() => {
           <input
             v-model="banReason"
             type="text"
-            placeholder="No reason"
+            :placeholder="t('players.noReason')"
             class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
           />
         </div>
@@ -847,7 +853,7 @@ onUnmounted(() => {
     </Modal>
 
     <!-- Teleport Modal -->
-    <Modal :open="showTeleportModal" :title="t('players.teleport') + ': ' + selectedPlayer" @close="showTeleportModal = false">
+    <Modal :open="showTeleportModal" :title="t('players.teleportTitle', { player: selectedPlayer })" @close="showTeleportModal = false">
       <div class="space-y-4">
         <!-- Mode Toggle -->
         <div class="flex gap-2">

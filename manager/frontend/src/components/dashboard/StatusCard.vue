@@ -6,7 +6,7 @@ const props = defineProps<{
   value: string | number
   subtitle?: string
   status?: 'success' | 'warning' | 'error' | 'info'
-  icon?: 'server' | 'cpu' | 'memory' | 'players' | 'clock'
+  icon?: 'server' | 'cpu' | 'memory' | 'players' | 'clock' | 'tps'
 }>()
 
 const statusColor = computed(() => {
@@ -31,7 +31,7 @@ const iconBgColor = computed(() => {
 </script>
 
 <template>
-  <div class="card">
+  <div class="card card-hover">
     <div class="card-body">
       <div class="flex items-start justify-between">
         <div>
@@ -63,6 +63,11 @@ const iconBgColor = computed(() => {
           <!-- Clock Icon -->
           <svg v-else-if="icon === 'clock'" class="w-6 h-6" :class="statusColor" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+
+          <!-- TPS / Performance Icon (Lightning bolt) -->
+          <svg v-else-if="icon === 'tps'" class="w-6 h-6" :class="statusColor" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
       </div>

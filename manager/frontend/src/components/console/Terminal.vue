@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useConsoleStore } from '@/stores/console'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { formatLogMessage } from '@/utils/formatItemPath'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -16,6 +17,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const commandInput = ref('')
 const searchFilter = ref('')
 const levelFilter = ref<'all' | 'error' | 'warn' | 'info' | 'debug'>('all')
+const showClearConfirm = ref(false)
 
 // Command auto-complete
 const showSuggestions = ref(false)
@@ -417,7 +419,7 @@ watch(
       style="max-height: calc(100vh - 340px);"
     >
       <div v-if="filteredLogs.length === 0" class="text-gray-500 text-center py-8">
-        {{ searchFilter || levelFilter !== 'all' ? t('console.noLogs') + ' (filtered)' : t('console.noLogs') }}
+        {{ searchFilter || levelFilter !== 'all' ? t('console.noLogs') + ' ' + t('console.filtered') : t('console.noLogs') }}
       </div>
       <div
         v-for="log in filteredLogs"
@@ -504,7 +506,7 @@ watch(
       <div class="flex items-center justify-between mt-3">
         <div class="flex items-center gap-4">
           <button
-            @click="clearLogs"
+            @click="showClearConfirm = true"
             class="text-sm text-gray-400 hover:text-white flex items-center gap-1"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -573,5 +575,17 @@ watch(
         </div>
       </div>
     </div>
+
+    <!-- Confirm Clear Logs -->
+    <ConfirmDialog
+      :show="showClearConfirm"
+      :title="t('console.clear')"
+      :message="t('console.confirmClear')"
+      :confirm-text="t('console.clear')"
+      :cancel-text="t('common.cancel')"
+      variant="primary"
+      @confirm="clearLogs(); showClearConfirm = false"
+      @cancel="showClearConfirm = false"
+    />
   </div>
 </template>

@@ -29,6 +29,18 @@ export default {
           800: '#060707',
           900: '#000000',
         },
+        // Inventory UI Colors (neutral dark, matching panel theme)
+        inv: {
+          bg: '#15171C',
+          panel: '#242830',
+          'panel-light': '#282D36',
+          slot: '#1A1D23',
+          'slot-fill': '#1F232A',
+          border: '#2D323C',
+          'border-light': '#3D4350',
+          accent: '#FF6B35',
+          header: '#282D36',
+        },
         // Status Colors
         status: {
           success: '#4ADE80',

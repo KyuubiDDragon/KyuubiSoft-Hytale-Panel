@@ -28,13 +28,17 @@
     "add": "Hinzufügen",
     "edit": "Bearbeiten",
     "remove": "Entfernen",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
     "clear": "Leeren",
     "previous": "Zurück",
     "next": "Weiter",
     "back": "Zurück",
     "skip": "Überspringen",
+    "copied": "In Zwischenablage kopiert",
     "copy": "Kopieren",
     "noPermission": "Du hast keine Berechtigung für diese Aktion",
+    "online": "Online",
     "dismiss": "Schließen"
   },
   "health": {
@@ -50,9 +54,11 @@
     "loginTitle": "Server Manager",
     "loginSubtitle": "Melde dich an, um fortzufahren",
     "invalidCredentials": "Ungültige Anmeldedaten",
-    "sessionExpired": "Sitzung abgelaufen. Bitte erneut anmelden."
+    "sessionExpired": "Sitzung abgelaufen. Bitte erneut anmelden.",
+    "subtitle": "Hytale Server-Verwaltung"
   },
   "nav": {
+    "admin": "Admin",
     "dashboard": "Dashboard",
     "console": "Konsole",
     "backups": "Backups",
@@ -80,6 +86,7 @@
   },
   "dashboard": {
     "title": "Dashboard",
+    "subtitle": "Server-Übersicht und Schnellaktionen",
     "serverStatus": "Server Status",
     "online": "Online",
     "offline": "Offline",
@@ -155,6 +162,54 @@
       "checkNow": "Prüfen",
       "viewAll": "Alle anzeigen"
     },
+    "tps": "TPS",
+    "serverInfo": {
+      "title": "Server Info",
+      "pluginApi": "Plugin API",
+      "version": "Version",
+      "worlds": "Welten",
+      "container": "Container",
+      "containerId": "Container ID",
+      "status": "Status",
+      "patchline": "Patchline",
+      "release": "Release",
+      "preRelease": "Pre-Release"
+    },
+    "hytaleUpdates": {
+      "title": "Hytale Updates",
+      "checking": "Prüfe...",
+      "checkForUpdates": "Auf Updates prüfen",
+      "clickToCheck": "Klicke auf \"Auf Updates prüfen\", um zu sehen, ob eine neue Version verfügbar ist.",
+      "installedVersion": "Installierte Version",
+      "release": "Release",
+      "preRelease": "Pre-Release",
+      "updateAvailable": "Update verfügbar!",
+      "active": "aktiv",
+      "authReauthRequired": "Der Hytale Downloader muss erneut authentifiziert werden, um nach Updates zu suchen.",
+      "enterCode": "Gib diesen Code auf der Hytale-Authentifizierungsseite ein:",
+      "openAuthPage": "Authentifizierungsseite öffnen",
+      "waitingForAuth": "Warte auf Authentifizierung...",
+      "reAuthenticate": "Downloader erneut authentifizieren",
+      "restartToUpdate": "Starte den Server mit AUTO_UPDATE=true neu, um das Update anzuwenden."
+    },
+    "confirmStop": "Bist du sicher, dass du den Server stoppen möchtest?",
+    "confirmRestart": "Bist du sicher, dass du den Server neustarten möchtest?",
+    "actionSuccess": {
+      "start": "Server wird gestartet...",
+      "stop": "Server wird gestoppt...",
+      "restart": "Server wird neugestartet...",
+      "backup": "Backup erfolgreich erstellt"
+    },
+    "actionError": {
+      "authExpired": "Authentifizierung abgelaufen. Bitte erneut versuchen.",
+      "authTimeout": "Authentifizierung Zeitüberschreitung. Bitte erneut versuchen.",
+      "start": "Server konnte nicht gestartet werden",
+      "stop": "Server konnte nicht gestoppt werden",
+      "restart": "Server konnte nicht neugestartet werden",
+      "backup": "Backup konnte nicht erstellt werden",
+      "checkUpdates": "Update-Prüfung fehlgeschlagen",
+      "auth": "Authentifizierung konnte nicht gestartet werden"
+    },
     "panelUpdate": {
       "title": "Panel-Update verfügbar",
       "description": "Eine neue Version des Panels ist verfügbar: {current} → {latest}",
@@ -163,6 +218,7 @@
     }
   },
   "console": {
+    "confirmClear": "Alle Konsolen-Logs aus der aktuellen Ansicht löschen?",
     "title": "Server Konsole",
     "sendCommand": "Befehl senden",
     "commandPlaceholder": "Befehl eingeben...",
@@ -180,10 +236,12 @@
     "showErrors": "Fehler",
     "showWarnings": "Warnungen",
     "showInfo": "Info",
-    "bypassWarning": "Warnung: Konsolenzugriff ermöglicht das Ausführen aller Server-Befehle und umgeht UI-Berechtigungseinschränkungen."
+    "bypassWarning": "Warnung: Konsolenzugriff ermöglicht das Ausführen aller Server-Befehle und umgeht UI-Berechtigungseinschränkungen.",
+    "filtered": "(gefiltert)"
   },
   "backups": {
     "title": "Backup Verwaltung",
+    "subtitle": "Server-Backups erstellen und verwalten",
     "create": "Backup erstellen",
     "restore": "Wiederherstellen",
     "delete": "Löschen",
@@ -223,6 +281,8 @@
     "confirmKick": "Spieler wirklich kicken?",
     "confirmBan": "Spieler wirklich bannen?",
     "banReason": "Bangrund (optional)",
+    "noReason": "Kein Grund",
+    "actionSuccess": "{action}: {player}",
     "noPlayers": "Keine Spieler online",
     "noOfflinePlayers": "Keine Offline-Spieler im Verlauf",
     "playerCount": "{count} Spieler online",
@@ -232,6 +292,7 @@
     "op": "OP",
     "deop": "OP entfernen",
     "teleport": "Teleportieren",
+    "teleportTitle": "Teleportieren: {player}",
     "teleportTo": "Zu Spieler",
     "teleportCoords": "Zu Koordinaten",
     "teleportDeath": "Zum Tod",
@@ -343,6 +404,7 @@
   },
   "whitelist": {
     "title": "Whitelist & Bans",
+    "subtitle": "Server-Whitelist und Spieler-Bans verwalten",
     "whitelist": "Whitelist",
     "bans": "Bans",
     "enabled": "Whitelist aktiviert",
@@ -356,9 +418,13 @@
     "ban": "Bannen",
     "unban": "Entbannen",
     "bannedPlayers": "Gebannte Spieler",
+    "confirmRemove": "\"{player}\" von der Whitelist entfernen?",
+    "confirmUnban": "Spieler \"{player}\" entbannen?",
     "noBans": "Keine Spieler gebannt"
   },
   "permissions": {
+    "confirmDeleteUser": "Berechtigungs-Benutzer \"{name}\" löschen?",
+    "confirmDeleteGroup": "Berechtigungs-Gruppe \"{name}\" löschen?",
     "title": "Berechtigungen",
     "users": "Benutzer",
     "groups": "Gruppen",
@@ -380,13 +446,54 @@
     "more": "weitere"
   },
   "worlds": {
+    "defaultPlaceholder": "Standard",
     "title": "Welten",
     "infoTitle": "Welten Übersicht",
     "infoDescription": "Hier siehst du alle auf dem Server verfügbaren Welten. Welten werden automatisch erkannt.",
     "noWorlds": "Keine Welten gefunden",
     "files": "Dateien",
+    "subtitle": "Weltkonfigurationen anzeigen und bearbeiten",
+    "worldInfo": "Welt-Info",
+    "seed": "Seed",
+    "gameTime": "Spielzeit",
+    "gameplay": "Gameplay",
+    "pvpEnabled": "PvP aktiviert",
+    "fallDamage": "Fallschaden",
+    "npcSpawning": "NPC-Spawning",
+    "freezeNpcs": "Alle NPCs einfrieren",
+    "compassUpdating": "Kompass-Aktualisierung",
+    "gameplayConfig": "Gameplay-Konfiguration",
+    "worldTicking": "Welt-Ticking",
+    "blockTicking": "Block-Ticking",
+    "storageSaving": "Speicherung",
+    "savePlayers": "Spieler speichern",
+    "saveChunks": "Chunks speichern",
+    "saveNewChunks": "Neue Chunks speichern",
+    "unloadChunks": "Chunks entladen",
+    "rawConfigJson": "Rohe Config JSON",
+    "jsonEditor": "JSON Editor",
+    "rawEditor": "config.json (Roh-Editor)",
+    "editMode": "Bearbeitungsmodus",
+    "formMode": "Formular",
+    "jsonTextMode": "JSON Text",
+    "rawEditorHint": "Bearbeite die rohe JSON und klicke auf Änderungen speichern.",
+    "jsonEditorHint": "Bearbeite den JSON-Inhalt oben und klicke auf Änderungen speichern.",
+    "saved": "Gespeichert",
+    "saveChanges": "Änderungen speichern",
+    "saving": "Speichern...",
+    "selectFile": "Wähle eine Datei aus dem Baum, um ihren Inhalt anzuzeigen und zu bearbeiten.",
+    "invalidJson": "Ungültige JSON-Syntax",
+    "saveFailed": "Datei konnte nicht gespeichert werden",
+    "loadFailed": "{file} konnte nicht geladen werden",
+    "fileCount": "Dateien",
     "dangerZone": {
       "confirm": "Ja, aktivieren",
+      "title": "Gefahrenzone",
+      "description": "Diese Einstellungen können zu Datenverlust führen. Mit Vorsicht verwenden.",
+      "deleteOnUniverseStart": "Beim Universe-Start löschen",
+      "deleteOnUniverseStartDesc": "Welt wird beim Start des Universe gelöscht",
+      "deleteOnRemove": "Beim Entfernen löschen",
+      "deleteOnRemoveDesc": "Welt wird beim Entfernen permanent gelöscht",
       "confirmDeleteOnUniverseStart": {
         "title": "Welt beim Universe-Start löschen?",
         "message": "WARNUNG: Wenn diese Option aktiviert ist, wird diese Welt PERMANENT GELÖSCHT, sobald das Universe (Server) startet. Diese Aktion kann nicht rückgängig gemacht werden. Bist du sicher, dass du diese gefährliche Option aktivieren möchtest?"
@@ -404,6 +511,11 @@
     "noFiles": "Keine Konfigurationsdateien gefunden",
     "formMode": "Formular",
     "textEditor": "Text Editor",
+    "jsonEditor": "JSON-Editor",
+    "release": "Release",
+    "preRelease": "Pre-Release",
+    "noProperties": "Keine Konfigurationseigenschaften gefunden",
+    "invalidJson": "Ungültiges JSON-Format",
     "saved": "Konfiguration erfolgreich gespeichert",
     "unsaved": "Ungespeicherte Änderungen",
     "warning": "Achtung: Fehlerhafte Konfiguration kann den Server beschädigen. Nach dem Speichern ist ein Server-Neustart erforderlich.",
@@ -622,7 +734,31 @@
     "free": "Frei",
     "total": "Gesamt",
     "init": "Init",
-    "committed": "Reserviert"
+    "committed": "Reserviert",
+    "jvmHeap": "JVM Heap",
+    "tpsHistory": "TPS-Verlauf",
+    "prometheus": "Prometheus",
+    "min": "Minimum",
+    "msptAvg": "MSPT Durchschn.",
+    "prometheusTpsMetrics": "Prometheus TPS-Metriken (60s Fenster)",
+    "jvmDetails": "JVM-Details",
+    "heapMemoryLabel": "Heap-Speicher",
+    "nonHeapMemory": "Non-Heap-Speicher",
+    "threads": "Threads",
+    "daemon": "Daemon",
+    "peak": "Spitze",
+    "cpuUsageLabel": "CPU-Auslastung",
+    "system": "System",
+    "sessionStats": "Sitzungsstatistiken",
+    "joinsLeaves": "Beitritte / Abgänge",
+    "worldsLoaded": "Geladene Welten",
+    "activeWorlds": "aktive Welten",
+    "memoryPools": "Speicher-Pools",
+    "garbageCollection": "Garbage Collection",
+    "collections": "Sammlungen",
+    "pause": "Pausieren",
+    "playersPerWorld": "Spieler pro Welt",
+    "resume": "Fortsetzen"
   },
   "settings": {
     "title": "Einstellungen",
@@ -630,7 +766,10 @@
     "german": "Deutsch",
     "english": "English",
     "theme": "Design",
+    "aboutDescription": "Webbasiertes Verwaltungstool für Hytale Dedicated Server. Bietet Serversteuerung, Live-Konsole, Backup-Verwaltung und Spieler-Administration.",
     "about": "Über",
+    "confirmResetAuth": "Hytale-Authentifizierung zurücksetzen? Der Server muss erneut authentifiziert werden.",
+    "resetAuthTitle": "Authentifizierung zurücksetzen",
     "version": "Version",
     "serverConfig": "Server Konfiguration",
     "selectConfigFile": "Wähle eine Konfigurationsdatei zum Bearbeiten:",
@@ -696,7 +835,19 @@
     "pluginPrometheusDesc": "Detaillierte Server- und JVM-Metriken für Monitoring",
     "recommendedPluginsNote": "Diese Plugins sind nicht im Panel enthalten. Besuche CurseForge oder die offiziellen Quellen, um sie herunterzuladen.",
     "enabled": "Aktiviert",
-    "disabled": "Deaktiviert"
+    "disabled": "Deaktiviert",
+    "errors": {
+      "loadConfigFailed": "Konfigurationsdateien konnten nicht geladen werden",
+      "loadFileFailed": "Datei {filename} konnte nicht geladen werden",
+      "saveConfigFailed": "Konfiguration konnte nicht gespeichert werden",
+      "loadSettingFailed": "Einstellung konnte nicht geladen werden",
+      "updateSettingFailed": "Einstellung konnte nicht aktualisiert werden",
+      "restartFailed": "Server konnte nicht neu gestartet werden",
+      "initAuthFailed": "Authentifizierung konnte nicht gestartet werden",
+      "authError": "Fehler beim Starten der Authentifizierung",
+      "verifyAuthFailed": "Authentifizierung konnte nicht überprüft werden",
+      "resetAuthFailed": "Authentifizierung konnte nicht zurückgesetzt werden"
+    }
   },
   "users": {
     "title": "Benutzerverwaltung",
@@ -918,6 +1069,12 @@
     "commandName": "Befehlsname",
     "command": "Befehl",
     "category": "Kategorie",
+    "categories": {
+      "server": "Server",
+      "players": "Spieler",
+      "world": "Welt",
+      "custom": "Benutzerdefiniert"
+    },
     "commandExecuted": "Befehl ausgeführt"
   },
   "statistics": {
@@ -1813,6 +1970,10 @@
       "legs": "Beinschutz",
       "cosmetic": "Kosmetik",
       "tools": "Werkzeuge"
+    },
+    "tooltip": {
+      "amount": "Anzahl",
+      "durability": "Haltbarkeit"
     }
   }
 }

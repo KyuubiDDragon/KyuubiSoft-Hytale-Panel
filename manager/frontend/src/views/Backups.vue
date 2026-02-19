@@ -3,13 +3,16 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { backupApi, type BackupInfo, type StorageInfo } from '@/api/backup'
+import { useToast } from '@/composables/useToast'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import BackupTable from '@/components/backup/BackupTable.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const toast = useToast()
 
 const backups = ref<BackupInfo[]>([])
 const storage = ref<StorageInfo | null>(null)
@@ -42,6 +45,7 @@ async function createBackup() {
   try {
     await backupApi.create()
     await fetchBackups()
+    toast.success(t('backups.createSuccess'))
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -86,6 +90,7 @@ async function confirmRestore() {
     await backupApi.restore(selectedBackup.value)
     showRestoreModal.value = false
     await fetchBackups()
+    toast.success(t('backups.restoreSuccess'))
   } catch (err) {
     error.value = t('errors.serverError')
   } finally {
@@ -114,7 +119,10 @@ onMounted(fetchBackups)
   <div class="space-y-6">
     <!-- Page Header -->
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-white">{{ t('backups.title') }}</h1>
+      <div>
+        <h1 class="text-2xl font-bold text-white">{{ t('backups.title') }}</h1>
+        <p class="text-gray-400 mt-1">{{ t('backups.subtitle') }}</p>
+      </div>
       <Button v-if="authStore.hasPermission('backups.create')" :loading="creating" @click="createBackup">
         <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -178,21 +186,17 @@ onMounted(fetchBackups)
       </template>
     </Modal>
 
-    <!-- Restore Modal -->
-    <Modal
-      :open="showRestoreModal"
+    <!-- Restore Confirm Dialog -->
+    <ConfirmDialog
+      :show="showRestoreModal"
       :title="t('backups.restore')"
-      @close="showRestoreModal = false"
-    >
-      <p class="text-gray-300">{{ t('backups.confirmRestore') }}</p>
-      <template #footer>
-        <Button variant="secondary" @click="showRestoreModal = false">
-          {{ t('common.cancel') }}
-        </Button>
-        <Button :loading="actionLoading" @click="confirmRestore">
-          {{ t('backups.restore') }}
-        </Button>
-      </template>
-    </Modal>
+      :message="t('backups.confirmRestore')"
+      :confirm-text="t('backups.restore')"
+      :cancel-text="t('common.cancel')"
+      variant="danger"
+      :loading="actionLoading"
+      @confirm="confirmRestore"
+      @cancel="showRestoreModal = false"
+    />
   </div>
 </template>

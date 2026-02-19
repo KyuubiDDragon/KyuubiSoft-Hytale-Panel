@@ -35,7 +35,7 @@ watch(() => props.open, (isOpen) => {
         />
 
         <!-- Modal -->
-        <div class="relative bg-dark-200 rounded-xl border border-dark-50 shadow-2xl w-full max-w-md">
+        <div role="dialog" aria-modal="true" class="relative bg-dark-200 rounded-xl border border-dark-50 shadow-2xl w-full max-w-md">
           <!-- Header -->
           <div v-if="title" class="flex items-center justify-between px-6 py-4 border-b border-dark-50">
             <h3 class="text-lg font-semibold text-white">{{ title }}</h3>

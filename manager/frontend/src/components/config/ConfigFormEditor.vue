@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: string
@@ -24,7 +27,7 @@ watch(() => props.modelValue, (newValue) => {
     // Initialize array editors
     initArrayEditors(parsedConfig.value, '')
   } catch (e) {
-    parseError.value = 'Invalid JSON format'
+    parseError.value = t('config.invalidJson')
     parsedConfig.value = {}
   }
 }, { immediate: true })
@@ -113,7 +116,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
 
     <!-- Empty State -->
     <div v-else-if="topLevelKeys.length === 0" class="text-center py-8 text-gray-500">
-      No configuration properties found
+      {{ t('config.noProperties') }}
     </div>
 
     <!-- Form Fields -->

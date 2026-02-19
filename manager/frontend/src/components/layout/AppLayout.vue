@@ -1,17 +1,49 @@
 <script setup lang="ts">
+import { ref, provide } from 'vue'
 import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
 import PermissionBanner from './PermissionBanner.vue'
 import DemoBanner from './DemoBanner.vue'
+import ToastContainer from '@/components/ui/ToastContainer.vue'
+
+const sidebarOpen = ref(false)
+
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+}
+
+provide('sidebarOpen', sidebarOpen)
+provide('toggleSidebar', toggleSidebar)
 </script>
 
 <template>
   <div class="flex h-screen bg-dark overflow-hidden">
+    <!-- Mobile overlay -->
+    <Transition
+      enter-active-class="transition-opacity ease-out duration-200"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition-opacity ease-in duration-150"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="sidebarOpen"
+        class="fixed inset-0 bg-black/50 z-30 lg:hidden"
+        @click="sidebarOpen = false"
+      />
+    </Transition>
+
     <!-- Sidebar -->
-    <Sidebar />
+    <Sidebar
+      :class="[
+        'fixed lg:static inset-y-0 left-0 z-40 transform transition-transform duration-200 ease-in-out lg:translate-x-0',
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      ]"
+    />
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex-1 flex flex-col overflow-hidden w-0">
       <!-- Demo Mode Banner (only shows if in demo mode) -->
       <DemoBanner />
 
@@ -22,9 +54,12 @@ import DemoBanner from './DemoBanner.vue'
       <Header />
 
       <!-- Page Content -->
-      <main class="flex-1 overflow-auto p-6">
+      <main class="flex-1 overflow-auto p-4 sm:p-6">
         <slot />
       </main>
     </div>
+
+    <!-- Global Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>

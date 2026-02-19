@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { statisticsApi, type PlayerStatistics, type DailyActivity } from '@/api/scheduler'
 
 const { t } = useI18n()
@@ -63,11 +64,9 @@ onMounted(() => {
       <button
         @click="loadData"
         class="p-2 text-gray-400 hover:text-white transition-colors"
-        :class="{ 'animate-spin': loading }"
+        :aria-label="t('common.refresh')"
       >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
+        <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
       </button>
     </div>
 
@@ -76,8 +75,11 @@ onMounted(() => {
       <p class="text-status-error">{{ error }}</p>
     </div>
 
-    <div v-if="loading" class="text-center py-12 text-gray-400">
-      {{ t('common.loading') }}
+    <div v-if="loading" class="flex items-center justify-center py-12">
+      <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      </svg>
     </div>
 
     <template v-else-if="stats">
@@ -148,7 +150,8 @@ onMounted(() => {
       <!-- Top Players -->
       <Card :title="t('statistics.topPlayers')">
         <div v-if="stats.topPlayers.length === 0" class="text-center py-8 text-gray-500">
-          {{ t('statistics.noPlayers') }}
+          <Icon name="players" class="w-10 h-10 mx-auto mb-2 opacity-50" />
+          <p>{{ t('statistics.noPlayers') }}</p>
         </div>
         <div v-else class="overflow-x-auto">
           <table class="w-full">
@@ -182,9 +185,7 @@ onMounted(() => {
                 <td class="py-3">
                   <div class="flex items-center gap-3">
                     <div class="w-8 h-8 bg-dark-50 rounded-lg flex items-center justify-center">
-                      <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
+                      <Icon name="players" class="w-4 h-4 text-gray-400" />
                     </div>
                     <span class="font-medium text-white">{{ player.name }}</span>
                   </div>
