@@ -29,17 +29,17 @@ export default {
           800: '#060707',
           900: '#000000',
         },
-        // Inventory UI Colors (Hytale-style blue theme)
+        // Inventory UI Colors (neutral dark, matching panel theme)
         inv: {
-          bg: '#0c1220',
-          panel: '#131d33',
-          'panel-light': '#1a2744',
-          slot: '#0a1020',
-          'slot-fill': '#141f38',
-          border: '#253660',
-          'border-light': '#3050a0',
-          accent: '#4080ff',
-          header: '#1a2540',
+          bg: '#15171C',
+          panel: '#242830',
+          'panel-light': '#282D36',
+          slot: '#1A1D23',
+          'slot-fill': '#1F232A',
+          border: '#2D323C',
+          'border-light': '#3D4350',
+          accent: '#FF6B35',
+          header: '#282D36',
         },
         // Status Colors
         status: {
