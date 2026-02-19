@@ -52,7 +52,8 @@
     "loginTitle": "Server Manager",
     "loginSubtitle": "Melde dich an, um fortzufahren",
     "invalidCredentials": "Ungültige Anmeldedaten",
-    "sessionExpired": "Sitzung abgelaufen. Bitte erneut anmelden."
+    "sessionExpired": "Sitzung abgelaufen. Bitte erneut anmelden.",
+    "subtitle": "Hytale Server-Verwaltung"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -200,7 +201,9 @@
       "start": "Server konnte nicht gestartet werden",
       "stop": "Server konnte nicht gestoppt werden",
       "restart": "Server konnte nicht neugestartet werden",
-      "backup": "Backup konnte nicht erstellt werden"
+      "backup": "Backup konnte nicht erstellt werden",
+      "checkUpdates": "Update-Prüfung fehlgeschlagen",
+      "auth": "Authentifizierung konnte nicht gestartet werden"
     },
     "panelUpdate": {
       "title": "Panel-Update verfügbar",
@@ -227,7 +230,8 @@
     "showErrors": "Fehler",
     "showWarnings": "Warnungen",
     "showInfo": "Info",
-    "bypassWarning": "Warnung: Konsolenzugriff ermöglicht das Ausführen aller Server-Befehle und umgeht UI-Berechtigungseinschränkungen."
+    "bypassWarning": "Warnung: Konsolenzugriff ermöglicht das Ausführen aller Server-Befehle und umgeht UI-Berechtigungseinschränkungen.",
+    "filtered": "(gefiltert)"
   },
   "backups": {
     "title": "Backup Verwaltung",
@@ -271,6 +275,8 @@
     "confirmKick": "Spieler wirklich kicken?",
     "confirmBan": "Spieler wirklich bannen?",
     "banReason": "Bangrund (optional)",
+    "noReason": "Kein Grund",
+    "actionSuccess": "{action}: {player}",
     "noPlayers": "Keine Spieler online",
     "noOfflinePlayers": "Keine Offline-Spieler im Verlauf",
     "playerCount": "{count} Spieler online",
@@ -493,6 +499,11 @@
     "noFiles": "Keine Konfigurationsdateien gefunden",
     "formMode": "Formular",
     "textEditor": "Text Editor",
+    "jsonEditor": "JSON-Editor",
+    "release": "Release",
+    "preRelease": "Pre-Release",
+    "noProperties": "Keine Konfigurationseigenschaften gefunden",
+    "invalidJson": "Ungültiges JSON-Format",
     "saved": "Konfiguration erfolgreich gespeichert",
     "unsaved": "Ungespeicherte Änderungen",
     "warning": "Achtung: Fehlerhafte Konfiguration kann den Server beschädigen. Nach dem Speichern ist ein Server-Neustart erforderlich.",
@@ -711,7 +722,29 @@
     "free": "Frei",
     "total": "Gesamt",
     "init": "Init",
-    "committed": "Reserviert"
+    "committed": "Reserviert",
+    "jvmHeap": "JVM Heap",
+    "tpsHistory": "TPS-Verlauf",
+    "prometheus": "Prometheus",
+    "min": "Minimum",
+    "msptAvg": "MSPT Durchschn.",
+    "prometheusTpsMetrics": "Prometheus TPS-Metriken (60s Fenster)",
+    "jvmDetails": "JVM-Details",
+    "heapMemoryLabel": "Heap-Speicher",
+    "nonHeapMemory": "Non-Heap-Speicher",
+    "threads": "Threads",
+    "daemon": "Daemon",
+    "peak": "Spitze",
+    "cpuUsageLabel": "CPU-Auslastung",
+    "system": "System",
+    "sessionStats": "Sitzungsstatistiken",
+    "joinsLeaves": "Beitritte / Abgänge",
+    "worldsLoaded": "Geladene Welten",
+    "activeWorlds": "aktive Welten",
+    "memoryPools": "Speicher-Pools",
+    "garbageCollection": "Garbage Collection",
+    "collections": "Sammlungen",
+    "playersPerWorld": "Spieler pro Welt"
   },
   "settings": {
     "title": "Einstellungen",
@@ -785,7 +818,19 @@
     "pluginPrometheusDesc": "Detaillierte Server- und JVM-Metriken für Monitoring",
     "recommendedPluginsNote": "Diese Plugins sind nicht im Panel enthalten. Besuche CurseForge oder die offiziellen Quellen, um sie herunterzuladen.",
     "enabled": "Aktiviert",
-    "disabled": "Deaktiviert"
+    "disabled": "Deaktiviert",
+    "errors": {
+      "loadConfigFailed": "Konfigurationsdateien konnten nicht geladen werden",
+      "loadFileFailed": "Datei {filename} konnte nicht geladen werden",
+      "saveConfigFailed": "Konfiguration konnte nicht gespeichert werden",
+      "loadSettingFailed": "Einstellung konnte nicht geladen werden",
+      "updateSettingFailed": "Einstellung konnte nicht aktualisiert werden",
+      "restartFailed": "Server konnte nicht neu gestartet werden",
+      "initAuthFailed": "Authentifizierung konnte nicht gestartet werden",
+      "authError": "Fehler beim Starten der Authentifizierung",
+      "verifyAuthFailed": "Authentifizierung konnte nicht überprüft werden",
+      "resetAuthFailed": "Authentifizierung konnte nicht zurückgesetzt werden"
+    }
   },
   "users": {
     "title": "Benutzerverwaltung",

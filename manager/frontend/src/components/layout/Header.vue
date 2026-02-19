@@ -155,7 +155,7 @@ onMounted(() => {
                   ? 'bg-hytale-orange/20 text-hytale-orange'
                   : 'bg-status-info/20 text-status-info'"
               >
-                {{ authStore.isAdmin ? 'Admin' : (authStore.role || 'User') }}
+                {{ t(`users.roles.${authStore.role || 'viewer'}`) }}
               </span>
             </div>
 

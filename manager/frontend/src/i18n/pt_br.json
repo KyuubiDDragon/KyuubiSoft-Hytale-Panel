@@ -52,7 +52,8 @@
     "loginTitle": "Gerenciador do Servidor",
     "loginSubtitle": "Faça login para continuar",
     "invalidCredentials": "Credenciais inválidas",
-    "sessionExpired": "Sessão expirada. Por favor, faça login novamente."
+    "sessionExpired": "Sessão expirada. Por favor, faça login novamente.",
+    "subtitle": "Gerenciamento de Servidor Hytale"
   },
   "nav": {
     "dashboard": "Painel",
@@ -199,7 +200,9 @@
       "start": "Falha ao iniciar servidor",
       "stop": "Falha ao parar servidor",
       "restart": "Falha ao reiniciar servidor",
-      "backup": "Falha ao criar backup"
+      "backup": "Falha ao criar backup",
+      "checkUpdates": "Failed to check for updates",
+      "auth": "Failed to initiate authentication"
     },
     "panelUpdate": {
       "title": "Atualização do Painel Disponível",
@@ -226,7 +229,8 @@
     "showErrors": "Erros",
     "showWarnings": "Avisos",
     "showInfo": "Informações",
-    "bypassWarning": "Aviso: O acesso ao console permite executar todos os comandos do servidor, ignorando as restrições de permissão da UI."
+    "bypassWarning": "Aviso: O acesso ao console permite executar todos os comandos do servidor, ignorando as restrições de permissão da UI.",
+    "filtered": "(filtrado)"
   },
   "backups": {
     "title": "Gerenciamento de Backups",
@@ -270,6 +274,8 @@
     "confirmKick": "Realmente deseja expulsar este jogador?",
     "confirmBan": "Realmente deseja banir este jogador?",
     "banReason": "Motivo do banimento (opcional)",
+    "noReason": "Sem motivo",
+    "actionSuccess": "{action}: {player}",
     "noPlayers": "Nenhum jogador online",
     "noOfflinePlayers": "Nenhum jogador offline no histórico",
     "playerCount": "{count} jogadores online",
@@ -426,6 +432,11 @@
     "noFiles": "Nenhum arquivo de configuração encontrado",
     "formMode": "Formulário",
     "textEditor": "Editor de Texto",
+    "jsonEditor": "Editor JSON",
+    "release": "Release",
+    "preRelease": "Pre-Release",
+    "noProperties": "Nenhuma propriedade de configuração encontrada",
+    "invalidJson": "Formato JSON inválido",
     "saved": "Configuração salva com sucesso",
     "unsaved": "Alterações não salvas",
     "warning": "Aviso: Configuração inválida pode quebrar o servidor. Uma reinicialização do servidor é necessária após salvar as alterações.",
@@ -586,7 +597,29 @@
     "free": "Livre",
     "total": "Total",
     "init": "Inicial",
-    "committed": "Comprometido"
+    "committed": "Comprometido",
+    "jvmHeap": "JVM Heap",
+    "tpsHistory": "Histórico TPS",
+    "prometheus": "Prometheus",
+    "min": "Mínimo",
+    "msptAvg": "MSPT Méd.",
+    "prometheusTpsMetrics": "Métricas TPS Prometheus (Janela 60s)",
+    "jvmDetails": "Detalhes JVM",
+    "heapMemoryLabel": "Memória Heap",
+    "nonHeapMemory": "Memória Non-Heap",
+    "threads": "Threads",
+    "daemon": "daemon",
+    "peak": "pico",
+    "cpuUsageLabel": "Uso de CPU",
+    "system": "Sistema",
+    "sessionStats": "Estatísticas da Sessão",
+    "joinsLeaves": "entradas / saídas",
+    "worldsLoaded": "Mundos Carregados",
+    "activeWorlds": "mundos ativos",
+    "memoryPools": "Pools de Memória",
+    "garbageCollection": "Coleta de Lixo",
+    "collections": "coleções",
+    "playersPerWorld": "Jogadores por Mundo"
   },
   "settings": {
     "title": "Configurações",
@@ -660,7 +693,19 @@
     "pluginPrometheusDesc": "Expõe métricas detalhadas do servidor e JVM para monitoramento",
     "recommendedPluginsNote": "Esses plugins não estão incluídos no painel. Visite o CurseForge ou fontes oficiais para baixá-los.",
     "enabled": "Ativado",
-    "disabled": "Desativado"
+    "disabled": "Desativado",
+    "errors": {
+      "loadConfigFailed": "Failed to load config files",
+      "loadFileFailed": "Failed to load {filename}",
+      "saveConfigFailed": "Failed to save config",
+      "loadSettingFailed": "Failed to load setting",
+      "updateSettingFailed": "Failed to update setting",
+      "restartFailed": "Failed to restart server",
+      "initAuthFailed": "Failed to initiate authentication",
+      "authError": "An error occurred while initiating authentication",
+      "verifyAuthFailed": "Failed to verify authentication",
+      "resetAuthFailed": "Failed to reset authentication"
+    }
   },
   "users": {
     "title": "Gerenciamento de Usuários",

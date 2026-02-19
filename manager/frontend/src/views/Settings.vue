@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { setLocale, getLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -68,7 +68,7 @@ async function loadConfigFiles() {
     const response = await serverApi.getConfigFiles()
     configFiles.value = response.files
   } catch (e) {
-    error.value = 'Failed to load config files'
+    error.value = t('settings.errors.loadConfigFailed')
     configFiles.value = []
   } finally {
     loading.value = false
@@ -85,7 +85,7 @@ async function selectFile(filename: string) {
     fileContent.value = response.content
     originalContent.value = response.content
   } catch (e) {
-    error.value = `Failed to load ${filename}`
+    error.value = t('settings.errors.loadFileFailed', { filename })
   } finally {
     loading.value = false
   }
@@ -103,7 +103,7 @@ async function saveFile() {
     successMessage.value = t('settings.configSaved')
     setTimeout(() => { successMessage.value = null }, 3000)
   } catch (e) {
-    error.value = 'Failed to save config'
+    error.value = t('settings.errors.saveConfigFailed')
   } finally {
     saving.value = false
   }
@@ -115,7 +115,7 @@ function closeEditor() {
   originalContent.value = ''
 }
 
-const hasChanges = () => fileContent.value !== originalContent.value
+const hasChanges = computed(() => fileContent.value !== originalContent.value)
 
 // Patchline Functions
 async function loadPatchline() {
@@ -125,7 +125,7 @@ async function loadPatchline() {
     const response = await serverApi.getPatchline()
     patchlineData.value = response
   } catch (e) {
-    patchlineError.value = 'Failed to load patchline setting'
+    patchlineError.value = t('settings.errors.loadSettingFailed')
   } finally {
     patchlineLoading.value = false
   }
@@ -149,7 +149,7 @@ async function setPatchline(patchline: string) {
       }
     }
   } catch (e) {
-    patchlineError.value = 'Failed to update patchline setting'
+    patchlineError.value = t('settings.errors.updateSettingFailed')
   } finally {
     patchlineLoading.value = false
   }
@@ -162,7 +162,7 @@ async function restartForPatchline() {
     patchlineNeedsRestart.value = false
     patchlineSuccess.value = t('settings.patchlineRestarting')
   } catch (e) {
-    patchlineError.value = 'Failed to restart server'
+    patchlineError.value = t('settings.errors.restartFailed')
   } finally {
     patchlineLoading.value = false
   }
@@ -176,7 +176,7 @@ async function loadAcceptEarlyPlugins() {
     const response = await serverApi.getAcceptEarlyPlugins()
     acceptEarlyPluginsData.value = response
   } catch (e) {
-    acceptEarlyPluginsError.value = 'Failed to load accept early plugins setting'
+    acceptEarlyPluginsError.value = t('settings.errors.loadSettingFailed')
   } finally {
     acceptEarlyPluginsLoading.value = false
   }
@@ -200,7 +200,7 @@ async function setAcceptEarlyPlugins(enabled: boolean) {
       }
     }
   } catch (e) {
-    acceptEarlyPluginsError.value = 'Failed to update accept early plugins setting'
+    acceptEarlyPluginsError.value = t('settings.errors.updateSettingFailed')
   } finally {
     acceptEarlyPluginsLoading.value = false
   }
@@ -213,7 +213,7 @@ async function restartForAcceptEarlyPlugins() {
     acceptEarlyPluginsNeedsRestart.value = false
     acceptEarlyPluginsSuccess.value = t('settings.acceptEarlyPluginsRestarting')
   } catch (e) {
-    acceptEarlyPluginsError.value = 'Failed to restart server'
+    acceptEarlyPluginsError.value = t('settings.errors.restartFailed')
   } finally {
     acceptEarlyPluginsLoading.value = false
   }
@@ -227,7 +227,7 @@ async function loadDisableSentry() {
     const response = await serverApi.getDisableSentry()
     disableSentryData.value = response
   } catch (e) {
-    disableSentryError.value = 'Failed to load disable sentry setting'
+    disableSentryError.value = t('settings.errors.loadSettingFailed')
   } finally {
     disableSentryLoading.value = false
   }
@@ -250,7 +250,7 @@ async function setDisableSentry(enabled: boolean) {
       }
     }
   } catch (e) {
-    disableSentryError.value = 'Failed to update disable sentry setting'
+    disableSentryError.value = t('settings.errors.updateSettingFailed')
   } finally {
     disableSentryLoading.value = false
   }
@@ -263,7 +263,7 @@ async function restartForDisableSentry() {
     disableSentryNeedsRestart.value = false
     disableSentrySuccess.value = t('settings.disableSentryRestarting')
   } catch (e) {
-    disableSentryError.value = 'Failed to restart server'
+    disableSentryError.value = t('settings.errors.restartFailed')
   } finally {
     disableSentryLoading.value = false
   }
@@ -277,7 +277,7 @@ async function loadAllowOp() {
     const response = await serverApi.getAllowOp()
     allowOpData.value = response
   } catch (e) {
-    allowOpError.value = 'Failed to load allow op setting'
+    allowOpError.value = t('settings.errors.loadSettingFailed')
   } finally {
     allowOpLoading.value = false
   }
@@ -300,7 +300,7 @@ async function setAllowOp(enabled: boolean) {
       }
     }
   } catch (e) {
-    allowOpError.value = 'Failed to update allow op setting'
+    allowOpError.value = t('settings.errors.updateSettingFailed')
   } finally {
     allowOpLoading.value = false
   }
@@ -313,7 +313,7 @@ async function restartForAllowOp() {
     allowOpNeedsRestart.value = false
     allowOpSuccess.value = t('settings.allowOpRestarting')
   } catch (e) {
-    allowOpError.value = 'Failed to restart server'
+    allowOpError.value = t('settings.errors.restartFailed')
   } finally {
     allowOpLoading.value = false
   }
@@ -342,7 +342,7 @@ async function initiateHytaleAuth() {
     const result = await authApi.initiateHytaleLogin()
 
     if (!result.success) {
-      hytaleAuthError.value = result.error || 'Failed to initiate authentication'
+      hytaleAuthError.value = result.error || t('settings.errors.initAuthFailed')
       return
     }
 
@@ -351,7 +351,7 @@ async function initiateHytaleAuth() {
     // Start polling for completion
     startAuthPolling()
   } catch (e) {
-    hytaleAuthError.value = 'An error occurred while initiating authentication'
+    hytaleAuthError.value = t('settings.errors.authError')
   } finally {
     hytaleAuthLoading.value = false
   }
@@ -404,7 +404,7 @@ async function verifyAuth() {
       hytaleAuthError.value = result.error || t('settings.authPending')
     }
   } catch (e) {
-    hytaleAuthError.value = 'Failed to verify authentication'
+    hytaleAuthError.value = t('settings.errors.verifyAuthFailed')
   } finally {
     hytaleAuthLoading.value = false
   }
@@ -421,7 +421,7 @@ async function resetHytaleAuth() {
     stopAuthPolling()
     await loadHytaleAuthStatus()
   } catch (e) {
-    hytaleAuthError.value = 'Failed to reset authentication'
+    hytaleAuthError.value = t('settings.errors.resetAuthFailed')
   } finally {
     hytaleAuthLoading.value = false
   }
@@ -711,7 +711,7 @@ onUnmounted(() => {
             ]"
           >
             <div class="text-center">
-              <p class="font-medium text-white">Release</p>
+              <p class="font-medium text-white">{{ t('config.release') }}</p>
               <p class="text-xs text-gray-400">{{ t('settings.patchlineReleaseDesc') }}</p>
             </div>
             <svg
@@ -736,7 +736,7 @@ onUnmounted(() => {
             ]"
           >
             <div class="text-center">
-              <p class="font-medium text-white">Pre-Release</p>
+              <p class="font-medium text-white">{{ t('config.preRelease') }}</p>
               <p class="text-xs text-gray-400">{{ t('settings.patchlinePreReleaseDesc') }}</p>
             </div>
             <svg
@@ -1080,15 +1080,15 @@ onUnmounted(() => {
                 </svg>
               </button>
               <span class="text-white font-mono">{{ selectedFile }}</span>
-              <span v-if="hasChanges()" class="text-status-warning text-xs">({{ t('settings.unsavedChanges') }})</span>
+              <span v-if="hasChanges" class="text-status-warning text-xs">({{ t('settings.unsavedChanges') }})</span>
             </div>
             <button
               v-if="authStore.hasPermission('settings.edit')"
               @click="saveFile"
-              :disabled="saving || !hasChanges()"
+              :disabled="saving || !hasChanges"
               :class="[
                 'btn btn-sm',
-                hasChanges() ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed'
+                hasChanges ? 'btn-primary' : 'btn-secondary opacity-50 cursor-not-allowed'
               ]"
             >
               <svg v-if="saving" class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">

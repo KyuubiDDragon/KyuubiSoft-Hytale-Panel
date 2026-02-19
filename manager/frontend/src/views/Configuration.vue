@@ -410,7 +410,7 @@ onMounted(() => {
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-sm font-medium text-white">Release</span>
+                  <span class="text-sm font-medium text-white">{{ t('config.release') }}</span>
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-success/20 text-status-success">{{ t('config.updateConfig.stable') }}</span>
                 </div>
                 <p class="text-xs text-gray-500">{{ t('config.updateConfig.releaseHint') }}</p>
@@ -425,7 +425,7 @@ onMounted(() => {
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-sm font-medium text-white">Pre-Release</span>
+                  <span class="text-sm font-medium text-white">{{ t('config.preRelease') }}</span>
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-warning/20 text-status-warning">{{ t('config.updateConfig.beta') }}</span>
                 </div>
                 <p class="text-xs text-gray-500">{{ t('config.updateConfig.preReleaseHint') }}</p>
@@ -652,7 +652,7 @@ onMounted(() => {
       </Card>
 
       <!-- JSON/Text Editor -->
-      <Card v-else :title="editorMode === 'json' ? 'JSON Editor' : t('config.textEditor')">
+      <Card v-else :title="editorMode === 'json' ? t('config.jsonEditor') : t('config.textEditor')">
         <textarea
           v-model="fileContent"
           class="w-full h-[500px] bg-dark-400 text-gray-300 font-mono text-sm p-4 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none resize-y"

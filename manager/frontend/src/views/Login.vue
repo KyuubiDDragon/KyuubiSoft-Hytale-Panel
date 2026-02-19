@@ -50,7 +50,7 @@ onMounted(async () => {
 
 // Locale cycling: de → en → pt_br → de
 const locales = ['de', 'en', 'pt_br'] as const
-const localeNames: Record<string, string> = { de: 'Deutsch', en: 'English', pt_br: 'Portugues (BR)' }
+const localeNames: Record<string, string> = { de: 'Deutsch', en: 'English', pt_br: 'Português (BR)' }
 
 function toggleLocale() {
   const currentIndex = locales.indexOf(currentLocale.value as typeof locales[number])
@@ -113,7 +113,7 @@ async function handleDemoLogin(type: 'demo' | 'admin') {
             <img src="/logo.png" alt="KyuubiSoft Panel" class="w-full h-full object-cover" />
           </div>
           <h1 class="text-2xl font-bold text-white">KyuubiSoft Panel</h1>
-          <p class="text-gray-400 mt-1 text-sm">Hytale Server Management</p>
+          <p class="text-gray-400 mt-1 text-sm">{{ t('auth.subtitle') }}</p>
         </div>
 
         <!-- Info Message (e.g., forced logout) -->

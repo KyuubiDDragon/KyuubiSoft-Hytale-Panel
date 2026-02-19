@@ -71,7 +71,7 @@ async function checkForUpdates() {
   try {
     updateInfo.value = await serverApi.checkForUpdates()
   } catch (err) {
-    updateCheckError.value = err instanceof Error ? err.message : 'Failed to check for updates'
+    updateCheckError.value = err instanceof Error ? err.message : t('dashboard.actionError.checkUpdates')
   } finally {
     checkingUpdate.value = false
   }
@@ -95,7 +95,7 @@ async function initiateDownloaderReAuth() {
       pollDownloaderAuth()
     }
   } catch (err) {
-    updateCheckError.value = err instanceof Error ? err.message : 'Failed to initiate authentication'
+    updateCheckError.value = err instanceof Error ? err.message : t('dashboard.actionError.auth')
     reAuthenticating.value = false
   }
 }

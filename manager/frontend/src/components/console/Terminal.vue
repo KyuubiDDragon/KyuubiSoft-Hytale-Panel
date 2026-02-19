@@ -417,7 +417,7 @@ watch(
       style="max-height: calc(100vh - 340px);"
     >
       <div v-if="filteredLogs.length === 0" class="text-gray-500 text-center py-8">
-        {{ searchFilter || levelFilter !== 'all' ? t('console.noLogs') + ' (filtered)' : t('console.noLogs') }}
+        {{ searchFilter || levelFilter !== 'all' ? t('console.noLogs') + ' ' + t('console.filtered') : t('console.noLogs') }}
       </div>
       <div
         v-for="log in filteredLogs"

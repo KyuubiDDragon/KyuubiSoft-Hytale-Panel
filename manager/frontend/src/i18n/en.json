@@ -52,7 +52,8 @@
     "loginTitle": "Server Manager",
     "loginSubtitle": "Sign in to continue",
     "invalidCredentials": "Invalid credentials",
-    "sessionExpired": "Session expired. Please login again."
+    "sessionExpired": "Session expired. Please login again.",
+    "subtitle": "Hytale Server Management"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -200,7 +201,9 @@
       "start": "Failed to start server",
       "stop": "Failed to stop server",
       "restart": "Failed to restart server",
-      "backup": "Failed to create backup"
+      "backup": "Failed to create backup",
+      "checkUpdates": "Failed to check for updates",
+      "auth": "Failed to initiate authentication"
     },
     "panelUpdate": {
       "title": "Panel Update Available",
@@ -227,7 +230,8 @@
     "showErrors": "Errors",
     "showWarnings": "Warnings",
     "showInfo": "Info",
-    "bypassWarning": "Warning: Console access allows executing all server commands, bypassing UI permission restrictions."
+    "bypassWarning": "Warning: Console access allows executing all server commands, bypassing UI permission restrictions.",
+    "filtered": "(filtered)"
   },
   "backups": {
     "title": "Backup Management",
@@ -271,6 +275,8 @@
     "confirmKick": "Really kick this player?",
     "confirmBan": "Really ban this player?",
     "banReason": "Ban reason (optional)",
+    "noReason": "No reason",
+    "actionSuccess": "{action}: {player}",
     "noPlayers": "No players online",
     "noOfflinePlayers": "No offline players in history",
     "playerCount": "{count} players online",
@@ -493,6 +499,11 @@
     "noFiles": "No configuration files found",
     "formMode": "Form",
     "textEditor": "Text Editor",
+    "jsonEditor": "JSON Editor",
+    "release": "Release",
+    "preRelease": "Pre-Release",
+    "noProperties": "No configuration properties found",
+    "invalidJson": "Invalid JSON format",
     "saved": "Configuration saved successfully",
     "unsaved": "Unsaved changes",
     "warning": "Warning: Invalid configuration may break the server. A server restart is required after saving changes.",
@@ -711,7 +722,29 @@
     "free": "Free",
     "total": "Total",
     "init": "Init",
-    "committed": "Committed"
+    "committed": "Committed",
+    "jvmHeap": "JVM Heap",
+    "tpsHistory": "TPS History",
+    "prometheus": "Prometheus",
+    "min": "Minimum",
+    "msptAvg": "MSPT Avg",
+    "prometheusTpsMetrics": "Prometheus TPS Metrics (60s Window)",
+    "jvmDetails": "JVM Details",
+    "heapMemoryLabel": "Heap Memory",
+    "nonHeapMemory": "Non-Heap Memory",
+    "threads": "Threads",
+    "daemon": "daemon",
+    "peak": "peak",
+    "cpuUsageLabel": "CPU Usage",
+    "system": "System",
+    "sessionStats": "Session Stats",
+    "joinsLeaves": "joins / leaves",
+    "worldsLoaded": "Worlds Loaded",
+    "activeWorlds": "active worlds",
+    "memoryPools": "Memory Pools",
+    "garbageCollection": "Garbage Collection",
+    "collections": "collections",
+    "playersPerWorld": "Players per World"
   },
   "settings": {
     "title": "Settings",
@@ -785,7 +818,19 @@
     "pluginPrometheusDesc": "Exposes detailed server and JVM metrics for monitoring",
     "recommendedPluginsNote": "These plugins are not included in the panel. Visit CurseForge or official sources to download them.",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "errors": {
+      "loadConfigFailed": "Failed to load config files",
+      "loadFileFailed": "Failed to load {filename}",
+      "saveConfigFailed": "Failed to save config",
+      "loadSettingFailed": "Failed to load setting",
+      "updateSettingFailed": "Failed to update setting",
+      "restartFailed": "Failed to restart server",
+      "initAuthFailed": "Failed to initiate authentication",
+      "authError": "An error occurred while initiating authentication",
+      "verifyAuthFailed": "Failed to verify authentication",
+      "resetAuthFailed": "Failed to reset authentication"
+    }
   },
   "users": {
     "title": "User Management",
