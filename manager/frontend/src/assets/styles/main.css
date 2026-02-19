@@ -191,6 +191,35 @@
   .table tr:hover {
     @apply bg-dark-50/30;
   }
+
+  /* Inventory Slots (Hytale-style) */
+  .inv-slot {
+    @apply w-14 h-14 border rounded-md flex items-center justify-center relative cursor-pointer transition-all;
+    @apply border-inv-border/50 bg-inv-slot;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), inset 0 -1px 2px rgba(37, 54, 96, 0.3);
+  }
+
+  .inv-slot:hover {
+    @apply border-inv-border-light/60;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 8px rgba(64, 128, 255, 0.15);
+  }
+
+  .inv-slot-filled {
+    @apply bg-inv-slot-fill border-inv-border/70;
+  }
+
+  .inv-slot-active {
+    @apply ring-2 ring-inv-accent/60 ring-offset-1 ring-offset-inv-bg;
+  }
+
+  .inv-panel {
+    @apply bg-inv-panel rounded-lg border border-inv-border/30;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .inv-panel-header {
+    @apply bg-inv-header rounded-t-lg border border-inv-border/40 px-4 py-2;
+  }
 }
 
 /* Utilities */

@@ -29,6 +29,18 @@ export default {
           800: '#060707',
           900: '#000000',
         },
+        // Inventory UI Colors (Hytale-style blue theme)
+        inv: {
+          bg: '#0c1220',
+          panel: '#131d33',
+          'panel-light': '#1a2744',
+          slot: '#0a1020',
+          'slot-fill': '#141f38',
+          border: '#253660',
+          'border-light': '#3050a0',
+          accent: '#4080ff',
+          header: '#1a2540',
+        },
         // Status Colors
         status: {
           success: '#4ADE80',

@@ -426,7 +426,7 @@ function setPlayerOnline(name: string, extraInfo: { uuid?: string; ip?: string; 
     existing.lastSeen = now;
     existing.currentSessionStart = now;
     existing.sessionCount++;
-    if (extraInfo.uuid && !existing.uuid) existing.uuid = extraInfo.uuid;
+    if (extraInfo.uuid) existing.uuid = extraInfo.uuid;
     if (extraInfo.ip) existing.ip = extraInfo.ip;
     if (extraInfo.world) existing.world = extraInfo.world;
   } else {
@@ -1151,7 +1151,26 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
         const isOnline = onlinePlayerNames.has(displayName.toLowerCase());
 
         // Get session tracking data if available
-        const sessionData = players.get(displayName);
+        // First try exact name match, then fall back to UUID match
+        // This handles player name changes: the file has the new name,
+        // but players.json still has the old name as key
+        let sessionData = players.get(displayName);
+        if (!sessionData) {
+          for (const entry of players.values()) {
+            if (entry.uuid === uuid) {
+              // Found by UUID - player changed their name
+              // Update the Map: remove old key, add new key with updated name
+              const oldName = entry.name;
+              entry.name = displayName;
+              players.delete(oldName);
+              players.set(displayName, entry);
+              sessionData = entry;
+              console.log(`[Players] Name change detected: "${oldName}" -> "${displayName}" (UUID: ${uuid})`);
+              debouncedSavePlayers();
+              break;
+            }
+          }
+        }
 
         // Extract data from player file
         const transform = data.Components?.Transform;
