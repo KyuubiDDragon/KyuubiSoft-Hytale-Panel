@@ -40,7 +40,7 @@ defineEmits<{
           leave-from-class="transform scale-100 opacity-100"
           leave-to-class="transform scale-95 opacity-0"
         >
-          <div v-if="show" class="relative bg-dark-100 border border-dark-50 rounded-xl shadow-2xl w-full max-w-md p-6">
+          <div v-if="show" role="dialog" aria-modal="true" class="relative bg-dark-100 border border-dark-50 rounded-xl shadow-2xl w-full max-w-md p-6">
             <!-- Icon -->
             <div class="flex items-center gap-3 mb-4">
               <div

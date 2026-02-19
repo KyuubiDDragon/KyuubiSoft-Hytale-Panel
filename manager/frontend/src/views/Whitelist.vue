@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { whitelistApi, bansApi, type BanEntry } from '@/api/management'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
+import Button from '@/components/ui/Button.vue'
+import Icon from '@/components/ui/Icon.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -123,15 +125,16 @@ onMounted(loadData)
   <div class="space-y-6">
     <!-- Page Title -->
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-white">{{ t('whitelist.title') }}</h1>
+      <div>
+        <h1 class="text-2xl font-bold text-white">{{ t('whitelist.title') }}</h1>
+        <p class="text-gray-400 mt-1">{{ t('whitelist.subtitle') }}</p>
+      </div>
       <button
         @click="loadData"
-        class="text-gray-400 hover:text-white transition-colors"
-        :class="{ 'animate-spin': loading }"
+        class="p-2 text-gray-400 hover:text-white transition-colors"
+        :aria-label="t('common.refresh')"
       >
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
+        <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
       </button>
     </div>
 
@@ -178,6 +181,8 @@ onMounted(loadData)
           <button
             v-if="authStore.hasPermission('players.whitelist')"
             @click="toggleWhitelist"
+            role="switch"
+            :aria-checked="whitelistEnabled"
             :class="[
               'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
               whitelistEnabled ? 'bg-hytale-orange' : 'bg-dark-50'
@@ -206,13 +211,9 @@ onMounted(loadData)
             :placeholder="t('whitelist.playerName')"
             class="flex-1 px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
           />
-          <button
-            type="submit"
-            :disabled="!newWhitelistPlayer.trim()"
-            class="px-6 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button type="submit" :disabled="!newWhitelistPlayer.trim()">
             {{ t('common.save') }}
-          </button>
+          </Button>
         </form>
       </Card>
 
@@ -228,13 +229,17 @@ onMounted(loadData)
           />
         </div>
 
-        <div v-if="loading" class="text-center py-8 text-gray-400">
-          {{ t('common.loading') }}
+        <div v-if="loading" class="flex items-center justify-center py-8">
+          <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
         </div>
-        <div v-else-if="filteredWhitelist.length === 0" class="text-center py-8 text-gray-400">
-          {{ t('whitelist.noPlayers') }}
+        <div v-else-if="filteredWhitelist.length === 0" class="text-center py-8 text-gray-500">
+          <Icon name="players" class="w-10 h-10 mx-auto mb-2 opacity-50" />
+          <p>{{ t('whitelist.noPlayers') }}</p>
         </div>
-        <div v-else class="space-y-2">
+        <TransitionGroup v-else name="list" tag="div" class="space-y-2">
           <div
             v-for="player in filteredWhitelist"
             :key="player"
@@ -250,13 +255,12 @@ onMounted(loadData)
               v-if="authStore.hasPermission('players.whitelist')"
               @click="removeFromWhitelist(player)"
               class="p-2 text-gray-400 hover:text-status-error transition-colors"
+              :aria-label="t('common.remove')"
             >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
+              <Icon name="trash" class="w-5 h-5" />
             </button>
           </div>
-        </div>
+        </TransitionGroup>
       </Card>
     </div>
 
@@ -281,13 +285,9 @@ onMounted(loadData)
               :placeholder="t('whitelist.banReason')"
               class="flex-1 px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
             />
-            <button
-              type="submit"
-              :disabled="!newBanPlayer.trim()"
-              class="px-6 py-2 bg-status-error text-white font-medium rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button type="submit" variant="danger" :disabled="!newBanPlayer.trim()">
               {{ t('whitelist.ban') }}
-            </button>
+            </Button>
           </div>
         </form>
       </Card>
@@ -304,13 +304,19 @@ onMounted(loadData)
           />
         </div>
 
-        <div v-if="loading" class="text-center py-8 text-gray-400">
-          {{ t('common.loading') }}
+        <div v-if="loading" class="flex items-center justify-center py-8">
+          <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
         </div>
-        <div v-else-if="filteredBans.length === 0" class="text-center py-8 text-gray-400">
-          {{ t('whitelist.noBans') }}
+        <div v-else-if="filteredBans.length === 0" class="text-center py-8 text-gray-500">
+          <svg class="w-10 h-10 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+          <p>{{ t('whitelist.noBans') }}</p>
         </div>
-        <div v-else class="space-y-2">
+        <TransitionGroup v-else name="list" tag="div" class="space-y-2">
           <div
             v-for="ban in filteredBans"
             :key="ban.player"
@@ -336,7 +342,7 @@ onMounted(loadData)
               {{ t('whitelist.unban') }}
             </button>
           </div>
-        </div>
+        </TransitionGroup>
       </Card>
     </div>
   </div>

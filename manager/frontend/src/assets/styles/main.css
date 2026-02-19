@@ -210,3 +210,19 @@
 .page-leave-to {
   opacity: 0;
 }
+
+/* List item transitions */
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.2s ease;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
+}

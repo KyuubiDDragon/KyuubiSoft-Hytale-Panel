@@ -5,6 +5,9 @@ import { useAuthStore } from '@/stores/auth'
 import { usersApi, type User } from '@/api/users'
 import { rolesApi, type Role } from '@/api/roles'
 import Card from '@/components/ui/Card.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import Button from '@/components/ui/Button.vue'
+import Icon from '@/components/ui/Icon.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -17,7 +20,9 @@ const error = ref('')
 // Form state
 const showAddModal = ref(false)
 const showEditModal = ref(false)
+const showDeleteConfirm = ref(false)
 const editingUser = ref<User | null>(null)
+const deletingUser = ref<User | null>(null)
 const formUsername = ref('')
 const formPassword = ref('')
 const formRoleId = ref<string>('')
@@ -134,13 +139,21 @@ async function updateUser() {
   }
 }
 
-async function deleteUser(user: User) {
-  if (!confirm(t('users.confirmDelete', { username: user.username }))) return
+function deleteUser(user: User) {
+  deletingUser.value = user
+  showDeleteConfirm.value = true
+}
+
+async function confirmDeleteUser() {
+  if (!deletingUser.value) return
   try {
-    await usersApi.delete(user.username)
+    await usersApi.delete(deletingUser.value.username)
     await loadUsers()
   } catch (e: any) {
     error.value = e.response?.data?.error || t('errors.serverError')
+  } finally {
+    showDeleteConfirm.value = false
+    deletingUser.value = null
   }
 }
 
@@ -163,25 +176,13 @@ onMounted(() => {
         <p class="text-gray-400 mt-1">{{ t('users.subtitle') }}</p>
       </div>
       <div class="flex gap-2">
-        <button
-          @click="loadUsers"
-          class="text-gray-400 hover:text-white transition-colors"
-          :class="{ 'animate-spin': loading }"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+        <button @click="loadUsers" class="p-2 text-gray-400 hover:text-white transition-colors" :aria-label="t('common.refresh')">
+          <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
         </button>
-        <button
-          v-if="authStore.hasPermission('users.create')"
-          @click="openAddModal"
-          class="px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors flex items-center gap-2"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-          </svg>
+        <Button v-if="authStore.hasPermission('users.create')" @click="openAddModal" class="flex items-center gap-2">
+          <Icon name="users" class="w-4 h-4" />
           {{ t('users.addUser') }}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -213,8 +214,11 @@ onMounted(() => {
 
     <!-- Users List -->
     <Card :title="t('users.usersList') + ` (${users.length})`" :padding="false">
-      <div v-if="loading" class="text-center text-gray-500 p-8">
-        {{ t('common.loading') }}
+      <div v-if="loading" class="flex items-center justify-center p-8">
+        <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
       </div>
 
       <div v-else-if="users.length === 0" class="text-center text-gray-500 p-8">
@@ -268,6 +272,7 @@ onMounted(() => {
               @click="openEditModal(user)"
               class="p-2 text-gray-400 hover:text-hytale-orange transition-colors"
               :title="t('common.edit')"
+              :aria-label="t('common.edit')"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -278,6 +283,7 @@ onMounted(() => {
               @click="deleteUser(user)"
               class="p-2 text-gray-400 hover:text-status-error transition-colors"
               :title="t('common.delete')"
+              :aria-label="t('common.delete')"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -331,20 +337,8 @@ onMounted(() => {
           </div>
 
           <div class="flex gap-3 pt-2">
-            <button
-              type="button"
-              @click="showAddModal = false"
-              class="flex-1 px-4 py-2 bg-dark-100 text-gray-300 rounded-lg hover:bg-dark-50 transition-colors"
-            >
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              v-if="authStore.hasPermission('users.create')"
-              type="submit"
-              class="flex-1 px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors"
-            >
-              {{ t('common.add') }}
-            </button>
+            <Button variant="secondary" type="button" @click="showAddModal = false" class="flex-1">{{ t('common.cancel') }}</Button>
+            <Button type="submit" class="flex-1">{{ t('common.add') }}</Button>
           </div>
         </form>
       </div>
@@ -384,23 +378,20 @@ onMounted(() => {
           </div>
 
           <div class="flex gap-3 pt-2">
-            <button
-              type="button"
-              @click="showEditModal = false"
-              class="flex-1 px-4 py-2 bg-dark-100 text-gray-300 rounded-lg hover:bg-dark-50 transition-colors"
-            >
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              v-if="authStore.hasPermission('users.edit')"
-              type="submit"
-              class="flex-1 px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors"
-            >
-              {{ t('common.save') }}
-            </button>
+            <Button variant="secondary" type="button" @click="showEditModal = false" class="flex-1">{{ t('common.cancel') }}</Button>
+            <Button type="submit" class="flex-1">{{ t('common.save') }}</Button>
           </div>
         </form>
       </div>
     </div>
+
+    <!-- Delete Confirm Dialog -->
+    <ConfirmDialog
+      v-model:open="showDeleteConfirm"
+      :title="t('common.delete')"
+      :message="deletingUser ? t('users.confirmDelete', { username: deletingUser.username }) : ''"
+      variant="danger"
+      @confirm="confirmDeleteUser"
+    />
   </div>
 </template>
