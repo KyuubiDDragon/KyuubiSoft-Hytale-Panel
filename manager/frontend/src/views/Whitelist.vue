@@ -191,7 +191,7 @@ onMounted(loadData)
             />
           </button>
           <span v-else :class="['text-sm', whitelistEnabled ? 'text-hytale-orange' : 'text-gray-500']">
-            {{ whitelistEnabled ? 'Enabled' : 'Disabled' }}
+            {{ whitelistEnabled ? t('common.enabled') : t('common.disabled') }}
           </span>
         </div>
       </Card>
@@ -238,7 +238,7 @@ onMounted(loadData)
           <div
             v-for="player in filteredWhitelist"
             :key="player"
-            class="flex items-center justify-between p-3 bg-dark-100 rounded-lg"
+            class="flex items-center justify-between p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
           >
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 bg-hytale-orange/20 rounded-full flex items-center justify-center">
@@ -314,7 +314,7 @@ onMounted(loadData)
           <div
             v-for="ban in filteredBans"
             :key="ban.player"
-            class="flex items-center justify-between p-3 bg-dark-100 rounded-lg"
+            class="flex items-center justify-between p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
           >
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 bg-status-error/20 rounded-full flex items-center justify-center">

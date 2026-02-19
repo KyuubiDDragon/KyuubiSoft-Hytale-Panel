@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { computed, inject, watch, type Ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import Icon from '@/components/ui/Icon.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -54,10 +55,13 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'activity', path: '/activity', icon: 'activity', label: t('nav.activityLog'), group: 'admin', permission: 'activity.view' },
 ])
 
-const mainItems = computed(() => navItems.value.filter(i => i.group === 'main' && hasPermission(i.permission)))
-const managementItems = computed(() => navItems.value.filter(i => i.group === 'management' && hasPermission(i.permission)))
-const dataItems = computed(() => navItems.value.filter(i => i.group === 'data' && hasPermission(i.permission)))
-const adminItems = computed(() => navItems.value.filter(i => i.group === 'admin' && hasPermission(i.permission)))
+// Navigation sections
+const navSections = computed(() => [
+  { key: 'main', label: t('nav.server'), items: navItems.value.filter(i => i.group === 'main' && hasPermission(i.permission)) },
+  { key: 'management', label: t('nav.management'), items: navItems.value.filter(i => i.group === 'management' && hasPermission(i.permission)) },
+  { key: 'data', label: t('nav.data'), items: navItems.value.filter(i => i.group === 'data' && hasPermission(i.permission)) },
+  { key: 'admin', label: 'Admin', items: navItems.value.filter(i => i.group === 'admin' && hasPermission(i.permission)) },
+])
 
 function isActive(path: string): boolean {
   return route.path === path
@@ -81,178 +85,21 @@ function isActive(path: string): boolean {
 
     <!-- Navigation -->
     <nav class="flex-1 py-4 px-3 space-y-6 overflow-y-auto">
-      <!-- Main Section -->
-      <div v-if="mainItems.length > 0">
-        <p class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ t('nav.server') }}</p>
-        <div class="space-y-1">
-          <router-link
-            v-for="item in mainItems"
-            :key="item.name"
-            :to="item.path"
-            :class="[
-              'sidebar-link',
-              isActive(item.path) ? 'active' : ''
-            ]"
-          >
-            <!-- Dashboard Icon -->
-            <svg v-if="item.icon === 'dashboard'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-            </svg>
-
-            <!-- Console Icon -->
-            <svg v-else-if="item.icon === 'console'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-
-            <!-- Performance Icon -->
-            <svg v-else-if="item.icon === 'performance'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-
-            <!-- Statistics Icon -->
-            <svg v-else-if="item.icon === 'statistics'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-
-            <!-- Help Icon -->
-            <svg v-else-if="item.icon === 'help'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-
-            <span>{{ item.label }}</span>
-          </router-link>
-        </div>
-      </div>
-
-      <!-- Management Section -->
-      <div v-if="managementItems.length > 0">
-        <p class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ t('nav.management') }}</p>
-        <div class="space-y-1">
-          <router-link
-            v-for="item in managementItems"
-            :key="item.name"
-            :to="item.path"
-            :class="[
-              'sidebar-link',
-              isActive(item.path) ? 'active' : ''
-            ]"
-          >
-            <!-- Players Icon -->
-            <svg v-if="item.icon === 'players'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-
-            <!-- Avatar Inventory Icon -->
-            <svg v-else-if="item.icon === 'avatarInventory'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-
-            <!-- Chat Icon -->
-            <svg v-else-if="item.icon === 'chat'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-
-            <!-- Whitelist Icon -->
-            <svg v-else-if="item.icon === 'whitelist'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-
-            <!-- Permissions Icon -->
-            <svg v-else-if="item.icon === 'permissions'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-            </svg>
-
-            <!-- Worlds Icon -->
-            <svg v-else-if="item.icon === 'worlds'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-
-            <!-- Mods Icon -->
-            <svg v-else-if="item.icon === 'mods'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-
-            <!-- Assets Icon -->
-            <svg v-else-if="item.icon === 'assets'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-            </svg>
-
-            <span>{{ item.label }}</span>
-          </router-link>
-        </div>
-      </div>
-
-      <!-- Data Section -->
-      <div v-if="dataItems.length > 0">
-        <p class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ t('nav.data') }}</p>
-        <div class="space-y-1">
-          <router-link
-            v-for="item in dataItems"
-            :key="item.name"
-            :to="item.path"
-            :class="[
-              'sidebar-link',
-              isActive(item.path) ? 'active' : ''
-            ]"
-          >
-            <!-- Backup Icon -->
-            <svg v-if="item.icon === 'backup'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-            </svg>
-
-            <!-- Scheduler Icon -->
-            <svg v-else-if="item.icon === 'scheduler'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-
-            <!-- Configuration Icon -->
-            <svg v-else-if="item.icon === 'configuration'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-
-            <!-- Settings Icon -->
-            <svg v-else-if="item.icon === 'settings'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-
-            <span>{{ item.label }}</span>
-          </router-link>
-        </div>
-      </div>
-
-      <!-- Admin Section (only visible to admins) -->
-      <div v-if="adminItems.length > 0">
-        <p class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Admin</p>
-        <div class="space-y-1">
-          <router-link
-            v-for="item in adminItems"
-            :key="item.name"
-            :to="item.path"
-            :class="[
-              'sidebar-link',
-              isActive(item.path) ? 'active' : ''
-            ]"
-          >
-            <!-- Users Icon -->
-            <svg v-if="item.icon === 'users'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-
-            <!-- Roles Icon -->
-            <svg v-else-if="item.icon === 'roles'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-
-            <!-- Activity Log Icon -->
-            <svg v-else-if="item.icon === 'activity'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-            </svg>
-
-            <span>{{ item.label }}</span>
-          </router-link>
-        </div>
+      <div v-for="section in navSections" :key="section.key">
+        <template v-if="section.items.length > 0">
+          <p class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ section.label }}</p>
+          <div class="space-y-1">
+            <router-link
+              v-for="item in section.items"
+              :key="item.name"
+              :to="item.path"
+              :class="['sidebar-link', isActive(item.path) ? 'active' : '']"
+            >
+              <Icon :name="item.icon" class="w-5 h-5" />
+              <span>{{ item.label }}</span>
+            </router-link>
+          </div>
+        </template>
       </div>
     </nav>
 

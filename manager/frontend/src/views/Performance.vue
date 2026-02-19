@@ -674,7 +674,7 @@ onUnmounted(() => {
       <div v-if="prometheusData.memory.pools.length > 0" class="mb-6">
         <h4 class="text-sm font-medium text-gray-400 mb-3">Memory Pools</h4>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <div v-for="pool in prometheusData.memory.pools" :key="pool.name" class="p-3 bg-dark-100 rounded-lg">
+          <div v-for="pool in prometheusData.memory.pools" :key="pool.name" class="p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors">
             <p class="text-xs text-gray-500 mb-1 truncate" :title="pool.name">{{ pool.name }}</p>
             <p class="text-sm font-bold text-white">{{ formatBytes(pool.used) }}</p>
             <div class="mt-1.5 h-1 bg-dark-200 rounded-full overflow-hidden">
@@ -693,7 +693,7 @@ onUnmounted(() => {
       <div v-if="prometheusData.gc.length > 0">
         <h4 class="text-sm font-medium text-gray-400 mb-3">Garbage Collection</h4>
         <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <div v-for="gc in prometheusData.gc" :key="gc.name" class="p-3 bg-dark-100 rounded-lg">
+          <div v-for="gc in prometheusData.gc" :key="gc.name" class="p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors">
             <p class="text-xs text-gray-500 mb-1 truncate" :title="gc.name">{{ gc.name }}</p>
             <div class="flex items-baseline gap-2">
               <p class="text-lg font-bold text-yellow-400">{{ gc.count }}</p>
@@ -708,7 +708,7 @@ onUnmounted(() => {
       <div v-if="Object.keys(prometheusData.players.perWorld).length > 0" class="mt-6">
         <h4 class="text-sm font-medium text-gray-400 mb-3">Players per World</h4>
         <div class="flex flex-wrap gap-2">
-          <div v-for="(count, world) in prometheusData.players.perWorld" :key="world" class="px-3 py-2 bg-dark-100 rounded-lg flex items-center gap-2">
+          <div v-for="(count, world) in prometheusData.players.perWorld" :key="world" class="px-3 py-2 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors flex items-center gap-2">
             <span class="text-sm text-gray-400">{{ world }}:</span>
             <span class="text-sm font-bold text-hytale-orange">{{ count }}</span>
           </div>

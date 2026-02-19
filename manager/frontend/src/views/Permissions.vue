@@ -288,7 +288,7 @@ onMounted(loadData)
           <div
             v-for="user in filteredUsers"
             :key="user.name"
-            class="flex items-center justify-between p-3 bg-dark-100 rounded-lg"
+            class="flex items-center justify-between p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
           >
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 bg-hytale-orange/20 rounded-full flex items-center justify-center">
@@ -426,7 +426,7 @@ onMounted(loadData)
           <div
             v-for="group in filteredGroups"
             :key="group.name"
-            class="p-4 bg-dark-100 rounded-lg"
+            class="p-4 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
           >
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-3">

@@ -28,6 +28,8 @@
     "add": "Adicionar",
     "edit": "Editar",
     "remove": "Remover",
+    "enabled": "Ativado",
+    "disabled": "Desativado",
     "clear": "Limpar",
     "previous": "Anterior",
     "next": "Próximo",
