@@ -38,6 +38,15 @@ const enablingPersistence = ref(false)
 const downloaderAuthStatus = ref<DownloaderAuthStatus | null>(null)
 const showDownloaderAuthWarning = ref(false)
 
+// Restart grace period — suppresses auth banners for 120 s after a restart
+const RESTART_GRACE_MS = 120_000
+const restartGraceStartedAt = ref<number | null>(null)
+const lastKnownStartedAt = ref<string | null>(null)
+const isInRestartGrace = computed(() =>
+  restartGraceStartedAt.value !== null &&
+  Date.now() - restartGraceStartedAt.value < RESTART_GRACE_MS
+)
+
 // New Features Banner (shown after panel updates)
 const newFeaturesStatus = ref<NewFeaturesStatus | null>(null)
 const showNewFeaturesBanner = ref(false)
@@ -147,6 +156,7 @@ async function pollDownloaderAuth() {
 }
 
 async function checkHytaleAuth() {
+  if (isInRestartGrace.value) return
   try {
     // Check if server is running
     if (status.value?.running) {
@@ -246,6 +256,7 @@ async function fetchPanelPatchline() {
 }
 
 async function checkDownloaderAuth() {
+  if (isInRestartGrace.value) return
   try {
     const status = await serverApi.getDownloaderAuthStatus()
     downloaderAuthStatus.value = status
@@ -255,6 +266,16 @@ async function checkDownloaderAuth() {
     // Silently fail - don't show warning if we can't check
     showDownloaderAuthWarning.value = false
   }
+}
+
+function startRestartGrace() {
+  restartGraceStartedAt.value = Date.now()
+  showDownloaderAuthWarning.value = false
+  showAuthBanner.value = false
+}
+
+function clearRestartGrace() {
+  restartGraceStartedAt.value = null
 }
 
 async function fetchNewFeatures() {
@@ -309,11 +330,11 @@ onMounted(() => {
   checkDownloaderAuth()
   fetchNewFeatures()
   checkPanelVersion()
-  memoryInterval = setInterval(() => {
-    fetchServerMemory()
-    checkHytaleAuth()
-    fetchSchedulerStatus()
-  }, 10000) // Every 10 seconds
+  // Capture initial started_at after first status poll has settled
+  setTimeout(() => {
+    lastKnownStartedAt.value = status.value?.started_at ?? null
+  }, 1000)
+  memoryInterval = setInterval(tickDashboard, 10000) // Every 10 seconds
 })
 
 onUnmounted(() => {
@@ -324,11 +345,13 @@ onUnmounted(() => {
 
 const serverStatusText = computed(() => {
   if (!status.value) return t('common.loading')
+  if (status.value.status === 'restarting' || isInRestartGrace.value) return t('dashboard.restarting')
   if (status.value.running) return t('dashboard.online')
   return t('dashboard.offline')
 })
 
-const serverStatusType = computed((): 'success' | 'error' => {
+const serverStatusType = computed((): 'success' | 'warning' | 'error' => {
+  if (status.value?.status === 'restarting' || isInRestartGrace.value) return 'warning'
   return status.value?.running ? 'success' : 'error'
 })
 
@@ -418,6 +441,9 @@ const playerCountDisplay = computed(() => {
 
 function handleAction(type: string, success: boolean) {
   if (success) {
+    if (type === 'restart') {
+      startRestartGrace()
+    }
     // Refresh stats after action
     setTimeout(() => {
       refresh()
@@ -433,6 +459,36 @@ function handleAction(type: string, success: boolean) {
 function refreshAll() {
   refresh()
   fetchServerMemory()
+}
+
+async function tickDashboard() {
+  const currentStartedAt = status.value?.started_at ?? null
+
+  // Detect external restart (e.g. scheduler, docker CLI) by watching started_at change
+  if (
+    currentStartedAt !== null &&
+    lastKnownStartedAt.value !== null &&
+    currentStartedAt !== lastKnownStartedAt.value &&
+    !isInRestartGrace.value
+  ) {
+    startRestartGrace()
+  }
+
+  if (currentStartedAt) {
+    lastKnownStartedAt.value = currentStartedAt
+  }
+
+  // Grace period just expired → run auth checks once, then resume normal cycle
+  if (restartGraceStartedAt.value !== null && !isInRestartGrace.value) {
+    clearRestartGrace()
+    await checkHytaleAuth()
+    await checkDownloaderAuth()
+    return
+  }
+
+  fetchServerMemory()
+  checkHytaleAuth()
+  fetchSchedulerStatus()
 }
 </script>
 
@@ -506,7 +562,7 @@ function refreshAll() {
 
     <!-- Downloader Auth Warning Banner (for auto-updates) -->
     <DashboardBanner
-      v-if="showDownloaderAuthWarning"
+      v-if="showDownloaderAuthWarning && !isInRestartGrace"
       :title="t('dashboard.downloaderAuthExpired')"
       :description="t('dashboard.downloaderAuthExpiredDesc')"
       icon-path="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
@@ -533,7 +589,7 @@ function refreshAll() {
 
     <!-- Server Authentication Required Banner (after download complete) -->
     <DashboardBanner
-      v-if="showAuthBanner && status?.running && hytaleAuthStatus.serverAuthRequired && hytaleAuthStatus.authType === 'downloader'"
+      v-if="showAuthBanner && !isInRestartGrace && status?.running && hytaleAuthStatus.serverAuthRequired && hytaleAuthStatus.authType === 'downloader'"
       :title="t('dashboard.downloadComplete')"
       :description="t('dashboard.downloadCompleteDesc')"
       icon-path="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
@@ -553,7 +609,7 @@ function refreshAll() {
 
     <!-- General Authentication Banner -->
     <DashboardBanner
-      v-else-if="showAuthBanner && status?.running"
+      v-else-if="showAuthBanner && !isInRestartGrace && status?.running"
       :title="hytaleAuthStatus.authenticated ? t('dashboard.authExpired') : t('dashboard.authRequired')"
       :description="hytaleAuthStatus.authenticated ? t('dashboard.authExpiredDesc') : t('dashboard.authRequiredDesc')"
       icon-path="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"

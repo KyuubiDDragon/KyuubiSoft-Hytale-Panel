@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir, access, constants } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { config, reloadConfigFromFile } from '../config.js';
+import { config, reloadConfigFromFile, getConfigFilePath } from '../config.js';
 import { isDemoMode } from './demoData.js';
 import * as dockerService from './docker.js';
 import { runSystemChecks as runSystemChecksFromService, type SystemCheck, type SystemCheckResult } from './systemCheck.js';
@@ -205,7 +205,23 @@ export async function isSetupComplete(): Promise<boolean> {
 
   try {
     const setupConfig = await readSetupConfig();
-    return setupConfig.setupComplete === true;
+    if (setupConfig.setupComplete !== true) {
+      return false;
+    }
+
+    // Cross-check: config.json in the named volume must also exist.
+    // If it is missing the named volume was deleted/recreated (new stack) while
+    // the bind-mounted setup-config.json was left behind from a previous installation.
+    // In that case reset the setup state so the wizard runs again.
+    try {
+      await access(getConfigFilePath(), constants.F_OK);
+    } catch {
+      console.log('[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.');
+      await saveSetupConfig({ ...setupConfig, setupComplete: false });
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }
