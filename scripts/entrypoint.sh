@@ -31,6 +31,9 @@ echo ""
 echo "[INFO] Setting up directories..."
 # Set umask 002 so all new files are group-writable (for manager container access)
 umask 002
+# Ensure updater directory exists with correct permissions.
+# It is bind-mounted from the host and may be created as root by Docker on first run.
+mkdir -p /opt/hytale/server/updater
 chown -R hytale:hytale /opt/hytale
 # Make existing files group-writable for manager container
 chmod -R g+rw /opt/hytale 2>/dev/null || true

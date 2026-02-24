@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN groupadd -g 9999 hytale \
     && useradd -u 9999 -g hytale -m -s /bin/bash hytale \
     && mkdir -p /opt/hytale/server \
+                /opt/hytale/server/updater \
                 /opt/hytale/data \
                 /opt/hytale/backups \
                 /opt/hytale/plugins \
