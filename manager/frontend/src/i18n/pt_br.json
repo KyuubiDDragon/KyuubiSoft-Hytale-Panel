@@ -89,6 +89,7 @@
     "serverStatus": "Status do Servidor",
     "online": "Online",
     "offline": "Offline",
+    "restarting": "Reiniciando...",
     "starting": "Iniciando...",
     "stopping": "Parando...",
     "resources": "Recursos",

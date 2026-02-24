@@ -90,6 +90,7 @@
     "serverStatus": "Server Status",
     "online": "Online",
     "offline": "Offline",
+    "restarting": "Restarting...",
     "starting": "Starting...",
     "stopping": "Stopping...",
     "resources": "Resources",
