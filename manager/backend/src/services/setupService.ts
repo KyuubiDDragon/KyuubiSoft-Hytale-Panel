@@ -217,7 +217,7 @@ export async function isSetupComplete(): Promise<boolean> {
       await access(getConfigFilePath(), constants.F_OK);
     } catch {
       console.log('[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.');
-      await saveSetupConfig({ ...setupConfig, setupComplete: false });
+      await writeSetupConfig({ ...setupConfig, setupComplete: false });
       return false;
     }
 
