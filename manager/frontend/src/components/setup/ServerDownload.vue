@@ -19,8 +19,18 @@ type Patchline = 'release' | 'pre-release'
 const patchline = ref<Patchline>('release')
 
 // Download method selection
-type DownloadMethod = 'official' | 'custom' | 'manual'
+type DownloadMethod = 'official' | 'custom' | 'manual' | 'existing'
 const downloadMethod = ref<DownloadMethod>('official')
+
+// Existing-install detection — populated on mount via /api/setup/detect-existing.
+// When the panel is added to a host that already has a Hytale server (with
+// or without worlds), we show a "use what's already here" banner instead
+// of forcing the user through OAuth + a multi-GB download.
+const existingInstall = ref<{
+  canUseExisting: boolean
+  worldCount: number
+  version: string | null
+} | null>(null)
 
 // Custom URLs (for custom method)
 const customServerUrl = ref('')
@@ -84,6 +94,7 @@ const canProceedFromSelect = computed(() => {
     return customServerUrl.value.trim() !== '' && customAssetsUrl.value.trim() !== ''
   }
   if (downloadMethod.value === 'manual') return true
+  if (downloadMethod.value === 'existing') return existingInstall.value?.canUseExisting === true
   return false
 })
 
@@ -122,8 +133,12 @@ function selectMethod(method: DownloadMethod) {
 
 // Proceed from method selection
 async function proceedFromSelect() {
-  if (downloadMethod.value === 'manual') {
-    // Skip download, go directly to verification
+  // 'existing' and 'manual' both skip the download and go straight to
+  // verification — the difference is intent: 'existing' says "I'm adopting
+  // a working install (possibly with worlds)", 'manual' says "I'll drop
+  // files in via docker cp". The backend treats 'existing' specially in
+  // finalizeSetup so it doesn't overwrite the existing config.json.
+  if (downloadMethod.value === 'manual' || downloadMethod.value === 'existing') {
     currentDownloadStep.value = 'verifying'
     await verifyDownload()
     return
@@ -137,6 +152,30 @@ async function proceedFromSelect() {
     // Start download with custom URLs
     currentDownloadStep.value = 'downloading'
     await startDownload()
+  }
+}
+
+async function detectExistingInstall() {
+  try {
+    const res = await fetch('/api/setup/detect-existing', { credentials: 'include' })
+    if (!res.ok) return
+    const data = await res.json() as {
+      canUseExisting: boolean
+      worlds: string[]
+      serverFiles: { version: string | null }
+    }
+    existingInstall.value = {
+      canUseExisting: data.canUseExisting,
+      worldCount: data.worlds?.length ?? 0,
+      version: data.serverFiles?.version ?? null,
+    }
+    if (data.canUseExisting && downloadMethod.value === 'official') {
+      // Default to existing when we find a viable install — operator can
+      // still pick another method by clicking one of the other cards.
+      downloadMethod.value = 'existing'
+    }
+  } catch {
+    // Detection is best-effort; fall back to normal wizard flow.
   }
 }
 
@@ -426,6 +465,7 @@ onMounted(() => {
     if (savedData.method) downloadMethod.value = savedData.method as DownloadMethod
     if (savedData.autoUpdate !== undefined) autoUpdateEnabled.value = savedData.autoUpdate
   }
+  detectExistingInstall()
 })
 
 // Cleanup on unmount
@@ -479,8 +519,28 @@ watch(deviceCodeState, () => {
     <!-- Step 3.1: Download Method Selection -->
     <template v-if="currentDownloadStep === 'select'">
       <div class="space-y-4">
+        <!-- Existing install detected — operator adopting a running Hytale -->
+        <div
+          v-if="existingInstall?.canUseExisting"
+          class="p-4 rounded-xl border border-status-success/40 bg-status-success/10 flex items-start gap-3"
+        >
+          <svg class="w-5 h-5 text-status-success mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <div class="flex-1">
+            <p class="text-white font-semibold">Existing Hytale installation detected</p>
+            <p class="text-sm text-gray-300 mt-1">
+              Server files found{{ existingInstall.version ? ` (v${existingInstall.version})` : '' }}<span v-if="existingInstall.worldCount > 0">, {{ existingInstall.worldCount }} world{{ existingInstall.worldCount === 1 ? '' : 's' }} on disk</span>. Skip the download &amp; keep your existing <code class="text-xs">config.json</code> and worlds.
+            </p>
+            <button
+              type="button"
+              @click="selectMethod('existing')"
+              class="mt-3 text-sm font-medium px-3 py-1.5 rounded-md bg-status-success/20 hover:bg-status-success/30 text-status-success transition-colors"
+              :class="downloadMethod === 'existing' ? 'ring-2 ring-status-success' : ''"
+            >{{ downloadMethod === 'existing' ? '✓ Using existing install' : 'Use existing install' }}</button>
+          </div>
+        </div>
+
         <!-- Patchline Selection -->
-        <div class="mb-6">
+        <div v-if="downloadMethod !== 'existing'" class="mb-6">
           <label class="label mb-3">{{ t('setup.patchlineLabel') }}</label>
           <div class="grid grid-cols-2 gap-3">
             <!-- Release -->

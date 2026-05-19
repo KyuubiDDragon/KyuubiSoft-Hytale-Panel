@@ -68,7 +68,7 @@ export interface SetupConfig {
     kyuubiApiInstalled: boolean;
     version?: string;
   };
-  downloadMethod?: 'official' | 'custom' | 'manual';
+  downloadMethod?: 'official' | 'custom' | 'manual' | 'existing';
   autoUpdate?: boolean;
   patchline?: 'release' | 'pre-release';
   acceptEarlyPlugins?: boolean;
@@ -330,10 +330,10 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         break;
 
       case 'download-method':
-        if (!data.method || !['official', 'custom', 'manual'].includes(data.method as string)) {
+        if (!data.method || !['official', 'custom', 'manual', 'existing'].includes(data.method as string)) {
           return { success: false, nextStep: stepId, error: 'Invalid download method' };
         }
-        setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual';
+        setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual' | 'existing';
         setupConfig.autoUpdate = data.autoUpdate === true;
         if (data.customUrls) {
           (setupConfig as any)._customUrls = data.customUrls;
@@ -430,9 +430,11 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         break;
 
       case 'server-download':
-        // Server download step - stores download method, patchline and auto-update preference
+        // Server download step - stores download method, patchline and auto-update preference.
+        // method='existing' means: don't download anything, the user already has
+        // a server install (and possibly worlds) at /opt/hytale/server.
         if (data.method) {
-          setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual';
+          setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual' | 'existing';
         }
         if (data.patchline) {
           setupConfig.patchline = data.patchline as 'release' | 'pre-release';
@@ -605,7 +607,13 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
     await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
     console.log('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
 
-    // Write server config.json if server path exists
+    // Write server config.json if server path exists.
+    // When downloadMethod === 'existing' we treat the on-disk config as the
+    // source of truth: any setting the wizard collected that the existing
+    // config already specifies is left alone, so people adopting an existing
+    // Hytale install with worlds don't lose their server name, MOTD,
+    // gamemode or whitelist on first panel boot.
+    const isExisting = setupConfig.downloadMethod === 'existing';
     if (setupConfig.server) {
       const serverConfigPath = path.join(config.serverPath, 'config.json');
       try {
@@ -614,26 +622,45 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
 
         // Read existing config or create new
         let serverConfig: any = {};
+        let hadExistingConfig = false;
         try {
           const existing = await readFile(serverConfigPath, 'utf-8');
           serverConfig = JSON.parse(existing);
+          hadExistingConfig = true;
         } catch {
           // File doesn't exist, start fresh
         }
 
-        // Update with setup values
-        serverConfig.ServerName = setupConfig.server.name;
-        serverConfig.MOTD = setupConfig.server.motd;
-        serverConfig.MaxPlayers = setupConfig.server.maxPlayers;
-        serverConfig.Password = setupConfig.server.password;
-        serverConfig.Whitelist = setupConfig.server.whitelist ?? false;
-        serverConfig.AllowOp = setupConfig.server.allowOp ?? true;
+        // Helper: write field only if we don't already have a value, or if
+        // we're doing a fresh install (no existing config).
+        const preserveExisting = isExisting && hadExistingConfig;
+        const setIfMissing = <T,>(key: string, value: T | undefined): void => {
+          if (value === undefined) return;
+          if (preserveExisting && serverConfig[key] !== undefined && serverConfig[key] !== '') return;
+          serverConfig[key] = value;
+        };
+
+        setIfMissing('ServerName', setupConfig.server.name);
+        setIfMissing('MOTD', setupConfig.server.motd);
+        setIfMissing('MaxPlayers', setupConfig.server.maxPlayers);
+        // Password is special: even on 'existing' we honor an explicit
+        // value the operator typed in the wizard (they may want to rotate
+        // it). Empty strings still defer to the existing config.
+        if (setupConfig.server.password) {
+          serverConfig.Password = setupConfig.server.password;
+        } else if (!preserveExisting) {
+          serverConfig.Password = '';
+        }
+        setIfMissing('Whitelist', setupConfig.server.whitelist ?? false);
+        setIfMissing('AllowOp', setupConfig.server.allowOp ?? true);
         if (!serverConfig.Defaults) serverConfig.Defaults = {};
-        serverConfig.Defaults.GameMode = setupConfig.server.gameMode;
+        if (!(preserveExisting && serverConfig.Defaults.GameMode)) {
+          serverConfig.Defaults.GameMode = setupConfig.server.gameMode;
+        }
 
         // Performance settings
         if (setupConfig.performance?.viewRadius) {
-          serverConfig.ViewRadius = setupConfig.performance.viewRadius;
+          setIfMissing('ViewRadius', setupConfig.performance.viewRadius);
         }
 
         // Add UpdateConfig for native update system (Hytale 24.01.2026+)

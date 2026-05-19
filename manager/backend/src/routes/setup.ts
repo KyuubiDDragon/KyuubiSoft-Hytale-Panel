@@ -35,6 +35,83 @@ const setupLimiter = rateLimit({
 router.use(setupLimiter);
 
 /**
+ * GET /api/setup/detect-existing
+ * Inspect /opt/hytale/server and the data path for an existing installation
+ * so the wizard can offer "use what's already here" instead of forcing a
+ * fresh download. Detects: server JAR, Assets.zip, server config.json,
+ * existing worlds under universe/, prior users.json, .hytale-version.
+ *
+ * Public — runs before the admin account exists.
+ */
+router.get('/detect-existing', async (_req: Request, res: Response) => {
+  try {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const stat = async (p: string) => {
+      try { return await fs.stat(p); } catch { return null; }
+    };
+
+    const serverJar = path.join(config.serverPath, 'HytaleServer.jar');
+    const assets = path.join(config.serverPath, 'Assets.zip');
+    const serverConfig = path.join(config.serverPath, 'config.json');
+    const versionFile = path.join(config.serverPath, '.hytale-version');
+    const universeDir = path.join(config.dataPath, 'universe');
+    const worldsDir = path.join(config.dataPath, 'worlds');
+    const managerData = process.env.MANAGER_DATA_PATH || '/app/data';
+    const usersFile = path.join(managerData, 'users.json');
+    const panelConfig = path.join(managerData, 'config.json');
+
+    const [jarStat, assetsStat, cfgStat, usersStat, panelStat] = await Promise.all([
+      stat(serverJar), stat(assets), stat(serverConfig), stat(usersFile), stat(panelConfig),
+    ]);
+
+    let version: string | null = null;
+    try {
+      version = (await fs.readFile(versionFile, 'utf-8')).trim() || null;
+    } catch { /* no version file */ }
+
+    // Enumerate worlds: universe/worlds/<name>/config.json is Hytale's layout.
+    const worlds: string[] = [];
+    for (const base of [universeDir, worldsDir, path.join(universeDir, 'worlds')]) {
+      try {
+        const entries = await fs.readdir(base, { withFileTypes: true });
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          const wcfg = path.join(base, e.name, 'config.json');
+          if (await stat(wcfg)) {
+            worlds.push(e.name);
+          }
+        }
+      } catch { /* directory absent */ }
+    }
+
+    res.json({
+      serverFiles: {
+        jar: !!jarStat,
+        jarSize: jarStat?.size ?? 0,
+        assets: !!assetsStat,
+        assetsSize: assetsStat?.size ?? 0,
+        config: !!cfgStat,
+        version,
+      },
+      worlds: Array.from(new Set(worlds)),
+      panel: {
+        hasUsersJson: !!usersStat,
+        hasConfigJson: !!panelStat,
+      },
+      // Convenient: the wizard can show "use existing" when both the JAR
+      // and the assets are present.
+      canUseExisting: !!(jarStat && assetsStat),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to detect existing installation',
+      detail: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
  * GET /api/setup/status
  * Check if setup is complete and get current setup state
  *

@@ -4,6 +4,12 @@ All notable changes to the Hytale Server Manager will be documented in this file
 
 ## [2.2.0] - 2026-05-19 - Security, Robustness & Hytale Early Access Alignment
 
+### Existing-installation support
+
+- **Adopt a running Hytale server**: a new `existing` download method skips the OAuth + multi-GB download when a server JAR, Assets.zip and (optionally) worlds are already present at `/opt/hytale/server`. The setup wizard auto-detects this via `GET /api/setup/detect-existing` and shows a banner offering to keep the on-disk install.
+- **Non-destructive finalize**: when `downloadMethod === 'existing'`, `finalizeSetup()` treats the existing `config.json` as the source of truth — `ServerName`, `MOTD`, `MaxPlayers`, `Whitelist`, `AllowOp`, `Defaults.GameMode` and `ViewRadius` are only filled from wizard input when the existing config doesn't already have them. The `Password` field still honors an explicit value entered in the wizard (e.g. rotate during onboarding) but defers to the existing one when left blank. Worlds under `universe/` are never touched.
+
+
 ### Security
 
 - **bcrypt** replaces `bcryptjs` (native binding, no longer blocks the event loop under password hashing load)
