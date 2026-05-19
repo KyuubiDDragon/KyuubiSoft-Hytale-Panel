@@ -311,23 +311,13 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
           return { success: false, nextStep: stepId, error: 'Username must be 3-32 characters, alphanumeric with _ or -' };
         }
         {
-          const pw = data.password as string;
-          if (pw.length < 12) {
-            return { success: false, nextStep: stepId, error: 'Password must be at least 12 characters' };
-          }
-          // Defense in depth: also require a mix of character classes and
-          // refuse passwords that match the username. This is the only
-          // chance to enforce policy before the admin account exists.
-          const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(pw)).length;
-          if (classes < 3) {
-            return { success: false, nextStep: stepId, error: 'Password must include at least three of: lowercase, uppercase, digit, symbol' };
-          }
-          if (pw.toLowerCase().includes((data.username as string).toLowerCase())) {
-            return { success: false, nextStep: stepId, error: 'Password must not contain the username' };
-          }
-          const common = ['password', 'changeme', '123456789012', 'qwertyuiop', 'administrator'];
-          if (common.some(c => pw.toLowerCase().includes(c))) {
-            return { success: false, nextStep: stepId, error: 'Password contains a well-known sequence; pick something less guessable' };
+          // Shared policy (length + character classes + username/common
+          // sequence checks). Same helper runs in users.createUser /
+          // users.updateUser so all entry points are aligned.
+          const { validatePasswordPolicy } = await import('./users.js');
+          const policyError = validatePasswordPolicy(data.password as string, data.username as string);
+          if (policyError) {
+            return { success: false, nextStep: stepId, error: policyError };
           }
         }
 

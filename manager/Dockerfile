@@ -83,6 +83,18 @@ RUN mkdir -p /app/data && \
 # Copy entrypoint script
 COPY --chmod=755 entrypoint.sh /app/entrypoint.sh
 
+# Off-host backup hook. The manager container runs `tar` itself in
+# createBackup() (execSync on the shared /opt/hytale/backups bind mount),
+# so the hook has to be reachable from the manager container too — not
+# just from the hytale container's scripts/backup.sh path.
+#
+# The file lives next to this Dockerfile (manager/backup-hook.sh) because
+# the build context is `./manager` and Docker won't read outside it.
+# It is a byte-for-byte duplicate of scripts/backup-hook.sh; if you edit
+# one, edit both. Operators normally replace the file in a derived image
+# to plug in restic / rclone / borg / s3 rather than editing in place.
+COPY --chmod=755 backup-hook.sh /app/backup-hook.sh
+
 # Environment variables
 ENV NODE_ENV=production
 ENV MANAGER_PORT=18080

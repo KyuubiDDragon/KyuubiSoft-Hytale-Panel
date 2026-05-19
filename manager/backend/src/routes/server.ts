@@ -197,10 +197,23 @@ router.get('/config', authMiddleware, requirePermission('config.view'), async (_
   }
 });
 
+// Serialize concurrent config writes. Two parallel PUTs would otherwise
+// race the read→snapshot→write sequence and leave config.json.bak holding
+// the wrong predecessor.
+let configWriteLock: Promise<unknown> | null = null;
+async function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+  while (configWriteLock) {
+    try { await configWriteLock; } catch { /* prior op failed, continue */ }
+  }
+  const op = fn();
+  configWriteLock = op.finally(() => { if (configWriteLock === op) configWriteLock = null; });
+  return op;
+}
+
 // PUT /api/server/config - Replace the server config.json. Body must match
 // HytaleConfigSchema (extra fields are kept via .passthrough()). A snapshot
 // of the previous file is written next to it as config.json.bak so a bad
-// edit is one rename away from recovery.
+// edit is one rename away from recovery. Concurrent writes are serialized.
 router.put('/config', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Server config saved (simulated)' });
@@ -217,16 +230,18 @@ router.put('/config', authMiddleware, requirePermission('config.edit'), async (r
   }
 
   try {
-    const configPath = path.join(config.serverPath, 'config.json');
-    // Snapshot before overwrite so an admin can roll back without restoring
-    // a full server backup.
-    try {
-      const previous = await readFile(configPath, 'utf-8');
-      await writeFile(`${configPath}.bak`, previous, 'utf-8');
-    } catch {
-      // No previous config — first write, nothing to back up.
-    }
-    await writeFile(configPath, JSON.stringify(parsed.data, null, 2), 'utf-8');
+    await withConfigLock(async () => {
+      const configPath = path.join(config.serverPath, 'config.json');
+      // Snapshot before overwrite so an admin can roll back without restoring
+      // a full server backup.
+      try {
+        const previous = await readFile(configPath, 'utf-8');
+        await writeFile(`${configPath}.bak`, previous, 'utf-8');
+      } catch {
+        // No previous config — first write, nothing to back up.
+      }
+      await writeFile(configPath, JSON.stringify(parsed.data, null, 2), 'utf-8');
+    });
     res.json({ success: true, message: 'Server config saved' });
   } catch (error) {
     res.status(500).json({

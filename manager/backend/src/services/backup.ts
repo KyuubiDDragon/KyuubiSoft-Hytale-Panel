@@ -6,11 +6,13 @@ import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js'
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe } from '../utils/pathSecurity.js';
 
-// Path to the off-host backup hook inside the hytale container. The manager
-// container can't exec it directly because they're separate containers, so
-// the hook is invoked through the in-container backup.sh path on the host.
-// The path is well-known; the script ships from scripts/backup-hook.sh.
-const BACKUP_HOOK_PATH = process.env.BACKUP_HOOK_PATH || '/opt/hytale/backup-hook.sh';
+// Path to the off-host backup hook **inside the manager container**.
+// createBackup() runs tar itself (execSync), so the resulting tarball is
+// already visible to the manager process — invoking a sibling container's
+// /opt/hytale/backup-hook.sh would require a `docker exec`, which we don't
+// want to take a dependency on. The hook ships from manager/backup-hook.sh
+// (kept in sync with scripts/backup-hook.sh) at /app/backup-hook.sh.
+const BACKUP_HOOK_PATH = process.env.BACKUP_HOOK_PATH || '/app/backup-hook.sh';
 
 function runBackupHookAsync(absolutePath: string): void {
   if (!fs.existsSync(BACKUP_HOOK_PATH)) return;
