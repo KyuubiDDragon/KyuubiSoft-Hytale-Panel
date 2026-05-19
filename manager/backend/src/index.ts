@@ -26,6 +26,7 @@ import schedulerRoutes from './routes/scheduler.js';
 import assetsRoutes from './routes/assets.js';
 import rolesRouter from './routes/roles.js';
 import setupRoutes from './routes/setup.js';
+import filesRoutes from './routes/files.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
@@ -261,7 +262,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'"], // Vue.js needs unsafe-eval for template compilation
+      scriptSrc: ["'self'", "'unsafe-eval'", "blob:"], // Vue.js needs unsafe-eval; Monaco loads workers from blob:
+      workerSrc: ["'self'", "blob:"], // Monaco editor uses Web Workers via blob URLs
+      childSrc: ["'self'", "blob:"], // Fallback for older browsers that don't honour workerSrc
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Vue/CSS-in-JS + Google Fonts
       imgSrc: ["'self'", "data:", "blob:", "https://cdn.modtale.net", "https://stackmart.org", "https://hyvatar.io", "https://media.forgecdn.net"], // Allow data URIs, Modtale CDN, StackMart, Hyvatar and CurseForge CDN
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"], // Google Fonts
@@ -427,6 +430,7 @@ app.use('/api/management', managementRoutes);
 app.use('/api/scheduler', schedulerRoutes);
 app.use('/api/assets', assetsRoutes);
 app.use('/api/roles', rolesRouter);
+app.use('/api/files', filesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
