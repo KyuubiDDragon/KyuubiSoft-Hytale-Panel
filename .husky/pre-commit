@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Backend: type-check only changed scope; tests are cheap so we run them.
+# Frontend: vite build is too slow for a pre-commit hook — leave that to CI.
+set -e
+
+if git diff --cached --name-only | grep -q '^manager/backend/'; then
+  echo "[pre-commit] backend: tsc --noEmit"
+  (cd manager/backend && npx --no-install tsc --noEmit) || {
+    echo "[pre-commit] aborting: TypeScript errors in backend"
+    exit 1
+  }
+  echo "[pre-commit] backend: vitest"
+  (cd manager/backend && npx --no-install vitest run --reporter=dot --passWithNoTests) || {
+    echo "[pre-commit] aborting: failing tests in backend"
+    exit 1
+  }
+fi
+
+# Hook script sync: scripts/backup-hook.sh and manager/backup-hook.sh
+# must be byte-identical because each container ships its own copy.
+if git diff --cached --name-only | grep -qE '^(scripts/backup-hook\.sh|manager/backup-hook\.sh)$'; then
+  if ! diff -q scripts/backup-hook.sh manager/backup-hook.sh > /dev/null; then
+    echo "[pre-commit] aborting: scripts/backup-hook.sh and manager/backup-hook.sh diverged"
+    exit 1
+  fi
+fi

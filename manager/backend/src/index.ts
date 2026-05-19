@@ -15,6 +15,8 @@ import httpProxy from 'http-proxy';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
+import { requestLogger } from './middleware/requestLogger.js';
+import { logger } from './utils/logger.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -293,6 +295,10 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow loading cross-origin resources
 }));
 app.use(compression());
+// Structured request logging with correlation IDs. Mount BEFORE any router
+// so every log line in a handler carries req.id automatically. Health
+// checks are filtered out to keep the stream readable.
+app.use(requestLogger);
 // Parse refresh-token cookie (HttpOnly, set by /api/auth/login & /refresh).
 // Body-based refresh tokens still work for backward compat — see auth route.
 app.use(cookieParser());
