@@ -39,7 +39,18 @@
     "copy": "Copiar",
     "noPermission": "Você não tem permissão para realizar esta ação",
     "online": "Online",
-    "dismiss": "Dispensar"
+    "dismiss": "Dispensar",
+    "retry": "Tentar novamente",
+    "errorOccurred": "Algo deu errado",
+    "errorLoading": "Falha ao carregar os dados",
+    "noResults": "Nenhum resultado encontrado",
+    "empty": "Nada por aqui ainda",
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu",
+    "toggleTheme": "Alternar tema",
+    "lightMode": "Tema claro",
+    "darkMode": "Tema escuro",
+    "userMenu": "Menu do usuário"
   },
   "health": {
     "permissionIssue": "Problema de Permissão de Arquivo Detectado",

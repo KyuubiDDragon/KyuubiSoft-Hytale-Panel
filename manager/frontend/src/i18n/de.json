@@ -39,7 +39,18 @@
     "copy": "Kopieren",
     "noPermission": "Du hast keine Berechtigung für diese Aktion",
     "online": "Online",
-    "dismiss": "Schließen"
+    "dismiss": "Schließen",
+    "retry": "Erneut versuchen",
+    "errorOccurred": "Etwas ist schiefgelaufen",
+    "errorLoading": "Daten konnten nicht geladen werden",
+    "noResults": "Keine Ergebnisse gefunden",
+    "empty": "Hier ist noch nichts",
+    "openMenu": "Menü öffnen",
+    "closeMenu": "Menü schließen",
+    "toggleTheme": "Theme umschalten",
+    "lightMode": "Helles Theme",
+    "darkMode": "Dunkles Theme",
+    "userMenu": "Benutzermenü"
   },
   "health": {
     "permissionIssue": "Dateiberechtigungs-Problem erkannt",

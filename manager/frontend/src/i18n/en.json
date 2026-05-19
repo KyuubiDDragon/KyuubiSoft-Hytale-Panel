@@ -39,7 +39,18 @@
     "copy": "Copy",
     "noPermission": "You don't have permission to perform this action",
     "online": "Online",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "retry": "Retry",
+    "errorOccurred": "Something went wrong",
+    "errorLoading": "Failed to load data",
+    "noResults": "No results found",
+    "empty": "Nothing here yet",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "toggleTheme": "Toggle theme",
+    "lightMode": "Light mode",
+    "darkMode": "Dark mode",
+    "userMenu": "User menu"
   },
   "health": {
     "permissionIssue": "File Permission Issue Detected",
