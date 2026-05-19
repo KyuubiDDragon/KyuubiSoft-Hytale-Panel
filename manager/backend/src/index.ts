@@ -38,6 +38,8 @@ import filesRoutes from './routes/files.js';
 import playerLocationsRoutes from './routes/playerLocations.js';
 import replayRoutes from './routes/replay.js';
 import wikiRoutes from './routes/wiki.js';
+import metricsRoutes from './routes/metrics.js';
+import { metricsMiddleware } from './services/metrics.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
@@ -333,6 +335,8 @@ app.use(compression());
 // so every log line in a handler carries req.id automatically. Health
 // checks are filtered out to keep the stream readable.
 app.use(requestLogger);
+// Prometheus per-request metrics. Pure timing + counter, no route filter.
+app.use(metricsMiddleware);
 // Parse refresh-token cookie (HttpOnly, set by /api/auth/login & /refresh).
 // Body-based refresh tokens still work for backward compat — see auth route.
 app.use(cookieParser());
@@ -503,6 +507,7 @@ app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/me/notifications', notificationsRoutes);
 app.use('/api/audit-log', auditRoutes);
 app.use('/api/files', filesRoutes);
+app.use('/api/metrics', metricsRoutes);
 app.use('/api/replay', replayRoutes);
 app.use('/api/wiki', wikiRoutes);
 
