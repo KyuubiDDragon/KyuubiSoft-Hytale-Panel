@@ -78,6 +78,29 @@ const refreshLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Per-username TOTP failure counter. The loginLimiter is already IP-based,
+// but distributed attackers could rotate IPs; this adds an account-level
+// brake that locks 2FA for 15 min after 10 wrong codes. Mounted as a tiny
+// in-process counter — sufficient for a single-process panel.
+const totpFailures = new Map<string, { count: number; lockedUntil: number }>();
+const TOTP_MAX_ATTEMPTS = 10;
+const TOTP_LOCK_MS = 15 * 60_000;
+function totpLockState(username: string): { locked: boolean; retryInSec: number } {
+  const now = Date.now();
+  const e = totpFailures.get(username);
+  if (!e) return { locked: false, retryInSec: 0 };
+  if (e.lockedUntil > now) return { locked: true, retryInSec: Math.ceil((e.lockedUntil - now) / 1000) };
+  if (e.lockedUntil > 0) { totpFailures.delete(username); return { locked: false, retryInSec: 0 }; }
+  return { locked: false, retryInSec: 0 };
+}
+function recordTotpFailure(username: string): void {
+  const e = totpFailures.get(username) ?? { count: 0, lockedUntil: 0 };
+  e.count += 1;
+  if (e.count >= TOTP_MAX_ATTEMPTS) e.lockedUntil = Date.now() + TOTP_LOCK_MS;
+  totpFailures.set(username, e);
+}
+function clearTotpFailures(username: string): void { totpFailures.delete(username); }
+
 // POST /api/auth/login
 router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   const { username, password } = req.body as LoginRequest;
@@ -130,6 +153,13 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   // or a single-use backup code) BEFORE issuing any tokens. Browsers will
   // typically submit a second login request with the code field populated.
   if (await isTotpEnabled(username)) {
+    // Per-account lockout on top of the IP-based loginLimiter.
+    const lock = totpLockState(username);
+    if (lock.locked) {
+      audit(req, 'auth.2fa_locked', { actor: username, success: false });
+      res.status(429).json({ detail: 'Too many 2FA failures, account temporarily locked', code: '2FA_LOCKED', retryAfter: lock.retryInSec });
+      return;
+    }
     const totpCode = (req.body as { totpCode?: string }).totpCode;
     if (!totpCode) {
       res.status(401).json({ detail: '2FA code required', code: '2FA_REQUIRED' });
@@ -137,12 +167,14 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     }
     const ok = await verifyTotpOrBackup(username, totpCode);
     if (!ok) {
+      recordTotpFailure(username);
       audit(req, 'auth.2fa_failed', { actor: username, success: false });
       publish('auth.2fa_failed', { username });
       authLogins.inc({ result: '2fa_failed' });
       res.status(401).json({ detail: 'Invalid 2FA code', code: '2FA_INVALID' });
       return;
     }
+    clearTotpFailures(username);
   }
 
   const accessToken = await createAccessToken(username);

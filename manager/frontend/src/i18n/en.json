@@ -117,7 +117,9 @@
     },
     "confirm": {
       "delete": "Delete \"{path}\"? This cannot be undone.",
-      "discardChanges": "You have unsaved changes. Discard them?"
+      "deleteTitle": "Delete file?",
+      "discardChanges": "You have unsaved changes. Discard them?",
+      "discardTitle": "Discard changes?"
     },
     "prompt": {
       "move": "Enter the new path (relative to the root):"

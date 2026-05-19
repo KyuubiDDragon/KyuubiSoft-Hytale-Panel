@@ -116,7 +116,9 @@
     },
     "confirm": {
       "delete": "Excluir \"{path}\"? Esta ação não pode ser desfeita.",
-      "discardChanges": "Há alterações não salvas. Descartar?"
+      "deleteTitle": "Excluir arquivo?",
+      "discardChanges": "Há alterações não salvas. Descartar?",
+      "discardTitle": "Descartar alterações?"
     },
     "prompt": {
       "move": "Digite o novo caminho (relativo ao root):"

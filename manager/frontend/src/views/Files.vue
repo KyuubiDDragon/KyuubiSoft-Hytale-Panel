@@ -9,6 +9,7 @@ import {
   type FileEntry,
 } from '@/api/files'
 import TreeItem, { type TreeNode } from '@/components/files/TreeItem.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 // Monaco is imported dynamically (large bundle)
 type MonacoModule = typeof import('monaco-editor')
@@ -159,14 +160,46 @@ async function toggleNode(node: TreeNode) {
   node.expanded = true
 }
 
+// Reactive confirm-state machine to replace the two window.confirm calls.
+// Each entry stores a callback to invoke when the user clicks Confirm; the
+// dialog template at the end of the file binds to this state.
+type PendingConfirm = { title: string; message: string; variant: 'danger' | 'primary'; onConfirm: () => Promise<void> | void }
+const pendingConfirm = ref<PendingConfirm | null>(null)
+
+function askConfirm(opts: PendingConfirm): void { pendingConfirm.value = opts }
+async function runConfirm(): Promise<void> {
+  const cb = pendingConfirm.value?.onConfirm
+  pendingConfirm.value = null
+  if (cb) await cb()
+}
+
+// Pending node selection holds the file we wanted to switch to so we can
+// resume it after the user confirms discarding unsaved edits.
+let pendingFileSwitch: TreeNode | null = null
+
 async function selectFile(node: TreeNode) {
   if (node.type !== 'file') {
     toggleNode(node)
     return
   }
   if (isModified.value) {
-    if (!confirm(t('files.confirm.discardChanges'))) return
+    pendingFileSwitch = node
+    askConfirm({
+      title: t('files.confirm.discardTitle'),
+      message: t('files.confirm.discardChanges'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const next = pendingFileSwitch
+        pendingFileSwitch = null
+        if (next) await loadFileContent(next)
+      },
+    })
+    return
   }
+  await loadFileContent(node)
+}
+
+async function loadFileContent(node: TreeNode) {
   loadingFile.value = true
   errorMsg.value = ''
   selectedPath.value = node.path
@@ -313,18 +346,25 @@ function onDragLeave() {
   dragActive.value = false
 }
 
-async function deleteSelected() {
+function deleteSelected() {
   if (!selectedPath.value || isReadOnly.value) return
-  if (!confirm(t('files.confirm.delete', { path: selectedPath.value }))) return
-  try {
-    await filesApi.remove(activeRootId.value, selectedPath.value, 'confirmed')
-    successMsg.value = t('files.success.deleted')
-    setTimeout(() => (successMsg.value = ''), 3000)
-    resetEditor()
-    await loadRootTree()
-  } catch (e: unknown) {
-    errorMsg.value = errorFromUnknown(e, t('files.error.delete'))
-  }
+  const target = selectedPath.value
+  askConfirm({
+    title: t('files.confirm.deleteTitle'),
+    message: t('files.confirm.delete', { path: target }),
+    variant: 'danger',
+    onConfirm: async () => {
+      try {
+        await filesApi.remove(activeRootId.value, target, 'confirmed')
+        successMsg.value = t('files.success.deleted')
+        setTimeout(() => (successMsg.value = ''), 3000)
+        resetEditor()
+        await loadRootTree()
+      } catch (e: unknown) {
+        errorMsg.value = errorFromUnknown(e, t('files.error.delete'))
+      }
+    },
+  })
 }
 
 async function moveSelected() {
@@ -570,5 +610,15 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- Confirm dialog (replaces window.confirm for discard + delete). -->
+    <ConfirmDialog
+      :show="!!pendingConfirm"
+      :title="pendingConfirm?.title ?? ''"
+      :message="pendingConfirm?.message ?? ''"
+      :variant="pendingConfirm?.variant ?? 'primary'"
+      @confirm="runConfirm"
+      @cancel="pendingConfirm = null"
+    />
   </div>
 </template>

@@ -117,7 +117,9 @@
     },
     "confirm": {
       "delete": "\"{path}\" wirklich löschen? Das kann nicht rückgängig gemacht werden.",
-      "discardChanges": "Ungespeicherte Änderungen verwerfen?"
+      "deleteTitle": "Datei löschen?",
+      "discardChanges": "Ungespeicherte Änderungen verwerfen?",
+      "discardTitle": "Änderungen verwerfen?"
     },
     "prompt": {
       "move": "Neuen Pfad eingeben (relativ zum Root):"
