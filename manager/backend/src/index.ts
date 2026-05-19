@@ -35,12 +35,18 @@ import auditRoutes from './routes/audit.js';
 import serversRoutes from './routes/servers.js';
 import ssoRoutes from './routes/sso.js';
 import filesRoutes from './routes/files.js';
+import playerLocationsRoutes from './routes/playerLocations.js';
+import replayRoutes from './routes/replay.js';
+import wikiRoutes from './routes/wiki.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
 import { initializePlayerTracking } from './services/players.js';
 import { initializePluginEvents, disconnectFromPluginWebSocket } from './services/pluginEvents.js';
+import { initializePlayerLocations } from './services/playerLocations.js';
+import { initializeReplay, shutdownReplay } from './services/replay.js';
 import { initializeRoles } from './services/roles.js';
+import * as playerLocations from './services/playerLocations.js';
 import { isSetupComplete } from './services/setupService.js';
 import { checkAndRunMigration, migrateUpdateConfig, checkPanelVersionAndFeatures } from './services/migration.js';
 import { startAutoUpdateCheck } from './services/cfwidget.js';
@@ -61,6 +67,22 @@ if (config.trustProxy) {
 // WebSocket server - use noServer mode so we can handle multiple WebSocket paths
 const wss = new WebSocketServer({ noServer: true });
 setupWebSocket(wss);
+
+// Secondary WSS for live player-location broadcasts. Kept separate so the
+// console WS handler stays untouched.
+const locationsWss = new WebSocketServer({ noServer: true });
+locationsWss.on('connection', (socket) => {
+  // Send initial snapshot, then stream subsequent updates.
+  try {
+    socket.send(JSON.stringify({ type: 'snapshot', samples: playerLocations.getLatestSnapshot() }));
+  } catch { /* socket may already be closed */ }
+  const unsubscribe = playerLocations.addListener((s) => {
+    try { socket.send(JSON.stringify({ type: 'sample', sample: s })); }
+    catch { /* ignore - will be cleaned up by close */ }
+  });
+  socket.on('close', () => unsubscribe());
+  socket.on('error', () => unsubscribe());
+});
 
 // WebMap Proxy - MUST be mounted BEFORE helmet so our CSP doesn't affect WebMap content
 // The WebMap loads Leaflet from unpkg.com CDN which would be blocked by our CSP
@@ -246,6 +268,15 @@ server.on('upgrade', (request, socket, head) => {
     console.log(`[Console WS] Handling console WebSocket upgrade`);
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
+    });
+    return;
+  }
+
+  // Handle /api/players/locations/ws - live position broadcasts
+  if (pathname.startsWith('/api/players/locations/ws')) {
+    console.log(`[Locations WS] Handling player-locations WebSocket upgrade`);
+    locationsWss.handleUpgrade(request, socket, head, (ws) => {
+      locationsWss.emit('connection', ws, request);
     });
     return;
   }
@@ -461,6 +492,8 @@ app.use('/api/auth/sso', ssoRoutes);
 app.use('/api/server', serverRoutes);
 app.use('/api/console', consoleRoutes);
 app.use('/api/backups', backupRoutes);
+// IMPORTANT: more specific player routes must come before /api/players.
+app.use('/api/players/locations', playerLocationsRoutes);
 app.use('/api/players', playersRoutes);
 app.use('/api/management', managementRoutes);
 app.use('/api/scheduler', schedulerRoutes);
@@ -470,6 +503,8 @@ app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/me/notifications', notificationsRoutes);
 app.use('/api/audit-log', auditRoutes);
 app.use('/api/files', filesRoutes);
+app.use('/api/replay', replayRoutes);
+app.use('/api/wiki', wikiRoutes);
 
 // v3 multi-server registry.
 //
@@ -683,6 +718,13 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Initialize plugin events connection (chat, deaths)
   initializePluginEvents();
 
+  // Initialize live player locations (simulated in demo mode / when plugin
+  // does not yet emit positions)
+  initializePlayerLocations();
+
+  // Start replay recorder if enabled in config.json
+  initializeReplay().catch((err) => console.error('[replay] init failed:', err));
+
   // Start schedulers
   startSchedulers();
 
@@ -700,6 +742,7 @@ server.listen(config.port, '0.0.0.0', async () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down...');
   disconnectFromPluginWebSocket();
+  shutdownReplay().catch((err) => console.error('[replay] shutdown failed:', err));
   server.close(() => {
     process.exit(0);
   });
@@ -708,6 +751,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down...');
   disconnectFromPluginWebSocket();
+  shutdownReplay().catch((err) => console.error('[replay] shutdown failed:', err));
   server.close(() => {
     process.exit(0);
   });

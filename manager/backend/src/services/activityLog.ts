@@ -10,7 +10,7 @@ export interface ActivityLogEntry {
   action: string;
   target?: string;
   details?: string;
-  category: 'player' | 'server' | 'backup' | 'config' | 'mod' | 'user' | 'system';
+  category: 'player' | 'server' | 'backup' | 'config' | 'mod' | 'user' | 'system' | 'replay' | 'wiki';
   success: boolean;
 }
 

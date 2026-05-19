@@ -171,6 +171,24 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/live-map',
+      name: 'liveMap',
+      component: () => import('./views/LiveMap.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/replay',
+      name: 'replay',
+      component: () => import('./views/Replay.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/wiki',
+      name: 'wiki',
+      component: () => import('./views/Wiki.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/roles',
       name: 'roles',
       component: () => import('./views/Roles.vue'),

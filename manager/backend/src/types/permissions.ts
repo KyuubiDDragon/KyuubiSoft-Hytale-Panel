@@ -138,6 +138,8 @@ export const PERMISSIONS = {
   'updates.apply': 'Apply updates (restart server)',
   'updates.config': 'Configure auto-update settings',
 
+  // Auto-wiki (replay.view/manage + wiki.manage already declared above; only wiki.view is new)
+  'wiki.view': 'View mod/plugin wiki',
 } as const;
 
 // Permission type derived from the keys
@@ -200,6 +202,8 @@ export const PERMISSION_CATEGORIES = [
   'settings',
   'updates',
   'files',
+  'replay',
+  'wiki',
 ] as const;
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number];

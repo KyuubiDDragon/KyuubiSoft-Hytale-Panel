@@ -32,6 +32,9 @@ export default defineConfig({
         // network-first because mutations must reach the backend.
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        // Monaco-Editor's editor.api chunk is ~2.6 MB; raise the default
+        // 2 MiB cap so precache doesn't fail. We accept the larger SW.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^\/api\//,
