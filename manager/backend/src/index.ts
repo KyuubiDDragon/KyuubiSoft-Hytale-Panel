@@ -17,7 +17,7 @@ import { setupWebSocket } from './websocket.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
-import serverRoutes from './routes/server.js';
+import serverRoutes from './routes/server/index.js';
 import consoleRoutes from './routes/console.js';
 import backupRoutes from './routes/backup.js';
 import playersRoutes from './routes/players.js';

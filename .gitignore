@@ -10,7 +10,7 @@
 data/
 backups/
 logs/
-server/
+/server/
 
 # Environment (enthält evtl. URLs/Secrets)
 .env
