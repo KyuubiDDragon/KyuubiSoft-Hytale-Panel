@@ -56,6 +56,46 @@ export type ServersFile = z.infer<typeof ServersFileSchema>;
 
 let cache: ServersFile | null = null;
 
+// Lightweight lifecycle hooks so cross-cutting services (pluginEvents,
+// scheduler, websocket log streams, …) can react to add/delete of a server
+// without servers.ts importing them and creating a cycle. Subscribers are
+// fire-and-forget — failures are caught and logged.
+type ServerLifecycleHook = (server: ServerInstance) => void | Promise<void>;
+const addHooks: ServerLifecycleHook[] = [];
+const deleteHooks: Array<(serverId: string) => void | Promise<void>> = [];
+
+export function onServerAdded(hook: ServerLifecycleHook): () => void {
+  addHooks.push(hook);
+  return () => {
+    const i = addHooks.indexOf(hook);
+    if (i >= 0) addHooks.splice(i, 1);
+  };
+}
+
+export function onServerDeleted(hook: (serverId: string) => void | Promise<void>): () => void {
+  deleteHooks.push(hook);
+  return () => {
+    const i = deleteHooks.indexOf(hook);
+    if (i >= 0) deleteHooks.splice(i, 1);
+  };
+}
+
+async function fireAddHooks(server: ServerInstance): Promise<void> {
+  for (const h of addHooks) {
+    try { await h(server); } catch (err) {
+      console.error('[servers] onServerAdded hook threw:', err);
+    }
+  }
+}
+
+async function fireDeleteHooks(serverId: string): Promise<void> {
+  for (const h of deleteHooks) {
+    try { await h(serverId); } catch (err) {
+      console.error('[servers] onServerDeleted hook threw:', err);
+    }
+  }
+}
+
 async function readFileOrNull(): Promise<ServersFile | null> {
   try {
     const raw = await readFile(SERVERS_FILE, 'utf-8');
@@ -198,6 +238,7 @@ export async function createServerInstance(input: CreateServerInput): Promise<Se
   };
   file.servers.push(instance);
   await writeFileAtomic(file);
+  await fireAddHooks(instance);
   return instance;
 }
 
@@ -222,5 +263,6 @@ export async function deleteServerInstance(id: string): Promise<boolean> {
   file.servers = file.servers.filter(s => s.id !== id);
   if (file.servers.length === before) return false;
   await writeFileAtomic(file);
+  await fireDeleteHooks(id);
   return true;
 }

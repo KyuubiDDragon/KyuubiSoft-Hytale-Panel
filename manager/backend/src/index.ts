@@ -265,9 +265,13 @@ server.on('upgrade', (request, socket, head) => {
   const pathname = request.url || '';
   console.log(`[WebSocket Upgrade] Path: ${pathname}`);
 
-  // Handle /api/console/ws - our panel's console WebSocket
-  if (pathname.startsWith('/api/console/ws')) {
-    console.log(`[Console WS] Handling console WebSocket upgrade`);
+  // Handle /api/console/ws - our panel's console WebSocket (legacy, default server)
+  // and /api/servers/:serverId/console/ws (per-server console stream).
+  if (
+    pathname.startsWith('/api/console/ws') ||
+    /^\/api\/servers\/[^/?]+\/console\/ws/.test(pathname)
+  ) {
+    console.log(`[Console WS] Handling console WebSocket upgrade for ${pathname}`);
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });
@@ -731,7 +735,7 @@ server.listen(config.port, '0.0.0.0', async () => {
   initializeReplay().catch((err) => console.error('[replay] init failed:', err));
 
   // Start schedulers
-  startSchedulers();
+  startSchedulers().catch(err => console.error('[Startup] Scheduler init failed:', err));
 
   // Start CFWidget mod update checker (checks hourly for CurseForge mod updates)
   startAutoUpdateCheck();

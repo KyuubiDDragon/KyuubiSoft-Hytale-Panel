@@ -597,7 +597,7 @@ router.post('/:name/teleport', authMiddleware, requirePermission('players.telepo
 
   // Try plugin API first (more reliable)
   try {
-    const pluginResult = await kyuubiApi.teleportPlayerViaPlugin(playerName, teleportOptions);
+    const pluginResult = await kyuubiApi.teleportPlayerViaPlugin(playerName, teleportOptions, req.serverId);
     if (pluginResult.success) {
       await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
       res.json({
@@ -652,7 +652,7 @@ router.post('/:name/kill', authMiddleware, requirePermission('players.kill'), as
 
   // Try plugin API first (more reliable)
   try {
-    const pluginResult = await kyuubiApi.killPlayerViaPlugin(playerName);
+    const pluginResult = await kyuubiApi.killPlayerViaPlugin(playerName, req.serverId);
     if (pluginResult.success) {
       await logActivity(username, 'kill', 'player', true, playerName);
       res.json({
@@ -701,7 +701,7 @@ router.post('/:name/respawn', authMiddleware, requirePermission('players.respawn
 
   // Try plugin API first (more reliable)
   try {
-    const pluginResult = await kyuubiApi.respawnPlayerViaPlugin(playerName);
+    const pluginResult = await kyuubiApi.respawnPlayerViaPlugin(playerName, req.serverId);
     if (pluginResult.success) {
       res.json({
         success: true,
@@ -767,7 +767,7 @@ router.post('/:name/gamemode', authMiddleware, requirePermission('players.gamemo
 
   // Try plugin API first (more reliable)
   try {
-    const pluginResult = await kyuubiApi.setGamemodeViaPlugin(playerName, gamemode);
+    const pluginResult = await kyuubiApi.setGamemodeViaPlugin(playerName, gamemode, req.serverId);
     if (pluginResult.success) {
       await logActivity(username, 'gamemode', 'player', true, playerName, `Changed to ${gamemode}`);
       res.json({
@@ -887,7 +887,7 @@ router.post('/:name/heal', authMiddleware, requirePermission('players.heal'), as
 
   // Try plugin API first
   try {
-    const pluginResult = await kyuubiApi.healPlayerViaPlugin(playerName);
+    const pluginResult = await kyuubiApi.healPlayerViaPlugin(playerName, req.serverId);
     if (pluginResult.success) {
       res.json({
         success: true,
@@ -994,7 +994,7 @@ router.post('/:name/inventory/clear', authMiddleware, requirePermission('players
 
   // Try plugin API first
   try {
-    const pluginResult = await kyuubiApi.clearInventoryViaPlugin(playerName);
+    const pluginResult = await kyuubiApi.clearInventoryViaPlugin(playerName, req.serverId);
     if (pluginResult.success) {
       await logActivity(username, 'inventory_clear', 'player', true, playerName);
       res.json({
