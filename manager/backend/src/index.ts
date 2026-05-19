@@ -357,7 +357,14 @@ app.use((req, res, next) => {
 });
 
 // SECURITY: Limit JSON body size to prevent memory exhaustion attacks
-app.use(express.json({ limit: '100kb' }));
+// The file-manager /api/files/write route has its own parser with a larger
+// limit (~15 MB) because file content payloads can legitimately exceed 100kb.
+app.use((req, res, next) => {
+  if (req.path === '/api/files/write') {
+    return next();
+  }
+  express.json({ limit: '100kb' })(req, res, next);
+});
 
 // ============================================================
 // Setup Routes - MUST be BEFORE auth middleware and other routes
