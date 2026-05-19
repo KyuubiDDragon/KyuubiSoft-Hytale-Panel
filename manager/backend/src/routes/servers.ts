@@ -2,10 +2,9 @@
  * /api/servers — multi-server registry endpoints.
  *
  * Pure CRUD over the servers.json registry plus a default-server pointer
- * used by the legacy /api/server/* backward-compat proxy. Container creation
- * via dockerode is intentionally NOT done here yet — adding a server in v3.0
- * registers the instance; the actual Docker create/start is a follow-up
- * behind a feature flag because it touches host networking.
+ * used by the legacy /api/server/* backward-compat proxy. POST /api/servers
+ * now also creates (and optionally starts) the matching Docker container
+ * via services/dockerImageManager.ts; DELETE removes it.
  */
 import { Router, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
@@ -15,6 +14,7 @@ import {
   listServers, getServer, createServerInstance, updateServerInstance,
   deleteServerInstance, getDefaultId, setDefaultId,
 } from '../services/servers.js';
+import { createInstanceContainer, deleteInstanceContainer } from '../services/dockerImageManager.js';
 import { audit } from '../services/audit.js';
 import { z } from 'zod';
 
@@ -53,6 +53,8 @@ const createSchema = z.object({
   webMapPort: z.number().int().min(1024).max(65535).optional(),
   webMapWsPort: z.number().int().min(1024).max(65535).optional(),
   pluginPort: z.number().int().min(1024).max(65535).optional(),
+  autoStart: z.boolean().optional(),
+  image: z.string().min(1).optional(),
 });
 
 router.post('/', authMiddleware, requirePermission('servers.create'), async (req: AuthenticatedRequest, res: Response) => {
@@ -61,9 +63,33 @@ router.post('/', authMiddleware, requirePermission('servers.create'), async (req
     res.status(400).json({ error: 'invalid_body', issues: parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`) });
     return;
   }
-  const instance = await createServerInstance({ ...parsed.data, createdBy: req.user! });
-  audit(req, 'server.instance_created', { target: `server:${instance.id}`, metadata: { name: instance.name } });
-  res.json({ server: instance });
+  const { autoStart, image, ...registryInput } = parsed.data;
+  const instance = await createServerInstance({ ...registryInput, createdBy: req.user! });
+
+  // Best-effort container creation. We always 200 on the registry write —
+  // container errors are surfaced via the `container` field so the UI can
+  // show the registry entry even if Docker barked.
+  const containerResult = await createInstanceContainer(instance, { autoStart, image });
+  if (containerResult.ok) {
+    audit(req, 'server.container_created', {
+      target: `server:${instance.id}`,
+      metadata: { name: instance.name, containerId: containerResult.containerId, started: containerResult.started },
+    });
+    res.json({
+      server: { ...instance, status: 'ready' as const },
+      container: { id: containerResult.containerId, started: containerResult.started },
+    });
+  } else {
+    audit(req, 'server.container_created', {
+      target: `server:${instance.id}`,
+      metadata: { name: instance.name, error: containerResult.error },
+      success: false,
+    });
+    res.status(201).json({
+      server: { ...instance, status: 'broken' as const },
+      container: { error: containerResult.error },
+    });
+  }
 });
 
 router.put('/:id', authMiddleware, requirePermission('servers.create'), async (req: AuthenticatedRequest, res: Response) => {
@@ -75,13 +101,24 @@ router.put('/:id', authMiddleware, requirePermission('servers.create'), async (r
 });
 
 router.delete('/:id', authMiddleware, requirePermission('servers.delete'), async (req: AuthenticatedRequest, res: Response) => {
+  const removeData = req.query.removeData === 'true' || req.query.removeData === '1';
+  const instance = await getServer(req.params.id);
+  if (!instance) { res.status(404).json({ detail: 'Server not found' }); return; }
+
+  // Tear down the container first so we don't leave an orphan running with
+  // ports bound when the registry entry has already disappeared.
+  const containerResult = await deleteInstanceContainer(instance, { removeData });
   const ok = await deleteServerInstance(req.params.id);
   if (!ok) {
     res.status(409).json({ detail: 'Cannot delete server (last remaining or not found)' });
     return;
   }
-  audit(req, 'server.instance_deleted', { target: `server:${req.params.id}` });
-  res.json({ success: true });
+  audit(req, 'server.container_deleted', {
+    target: `server:${req.params.id}`,
+    metadata: { containerOk: containerResult.ok, error: containerResult.ok ? undefined : containerResult.error },
+    success: containerResult.ok,
+  });
+  res.json({ success: true, container: containerResult });
 });
 
 export default router;
