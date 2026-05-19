@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, access, constants } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile, getConfigFilePath } from '../config.js';
 import { isDemoMode } from './demoData.js';
 import * as dockerService from './docker.js';

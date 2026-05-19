@@ -2,6 +2,11 @@
 # ============================================================
 # Hytale Server - Start Script
 # ============================================================
+# pipefail catches mid-pipeline failures; we intentionally don't set -e
+# because the restart loop checks java's exit code (8 == native update restart)
+# and we don't set -u because several env vars are optional (AUTH_MODE,
+# EXTRA_SERVER_ARGS, EXTRA_JAVA_ARGS) and -n "${VAR:-}" idioms add noise.
+set -o pipefail
 
 cd /opt/hytale/server
 

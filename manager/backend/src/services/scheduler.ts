@@ -179,20 +179,20 @@ function getNextBackupTime(): Date | null {
 async function runAutoBackup(): Promise<void> {
   console.log('[Scheduler] Running automatic backup...');
 
-  const result = createBackup('auto');
+  const result = await createBackup('auto');
 
   if (result.success) {
     console.log(`[Scheduler] Backup created: ${result.backup?.filename}`);
 
     // Clean old backups
-    cleanOldBackups();
+    await cleanOldBackups();
   } else {
     console.error('[Scheduler] Backup failed:', result.error);
   }
 }
 
 // Clean old backups based on retention
-function cleanOldBackups(): void {
+async function cleanOldBackups(): Promise<void> {
   const backups = listBackups();
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - schedulerConfig.backups.retentionDays);
@@ -200,7 +200,7 @@ function cleanOldBackups(): void {
   let deleted = 0;
   for (const backup of backups) {
     if (backup.type === 'auto' && new Date(backup.created_at) < cutoffDate) {
-      const result = deleteBackup(backup.id);
+      const result = await deleteBackup(backup.id);
       if (result.success) {
         deleted++;
       }
@@ -271,7 +271,7 @@ async function executeScheduledRestart(): Promise<void> {
   // Create backup if enabled
   if (schedulerConfig.scheduledRestarts.createBackup) {
     console.log('[Scheduler] Creating pre-restart backup...');
-    const result = createBackup('scheduled_restart');
+    const result = await createBackup('scheduled_restart');
     if (result.success) {
       console.log(`[Scheduler] Pre-restart backup created: ${result.backup?.filename}`);
     } else {
@@ -474,7 +474,7 @@ export async function backupBeforeRestart(): Promise<boolean> {
   }
 
   console.log('[Scheduler] Creating pre-restart backup...');
-  const result = createBackup('pre_restart');
+  const result = await createBackup('pre_restart');
   return result.success;
 }
 

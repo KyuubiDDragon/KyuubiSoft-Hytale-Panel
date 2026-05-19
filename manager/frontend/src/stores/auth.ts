@@ -31,6 +31,10 @@ export const useAuthStore = defineStore('auth', () => {
   const username = ref<string | null>(getStorageItem('username'))
   const role = ref<UserRole | null>((getStorageItem('role') as UserRole) || null)
   const permissions = ref<string[]>(JSON.parse(getStorageItem('permissions') || '[]'))
+  // One-shot message displayed on the login screen after a forced logout
+  // (account deleted, refresh-token invalidated, role changed, ...). The
+  // Login view consumes it via `consumeLogoutMessage()`.
+  const logoutMessage = ref<string | null>(null)
 
   // Getters
   const isAuthenticated = computed(() => !!accessToken.value)
@@ -92,17 +96,26 @@ export const useAuthStore = defineStore('auth', () => {
     return response
   }
 
-  function logout() {
+  function logout(message?: string | null) {
     accessToken.value = null
     refreshToken.value = null
     username.value = null
     role.value = null
     permissions.value = []
+    if (message) {
+      logoutMessage.value = message
+    }
     removeStorageItem('accessToken')
     removeStorageItem('refreshToken')
     removeStorageItem('username')
     removeStorageItem('role')
     removeStorageItem('permissions')
+  }
+
+  function consumeLogoutMessage(): string | null {
+    const m = logoutMessage.value
+    logoutMessage.value = null
+    return m
   }
 
   return {
@@ -122,6 +135,9 @@ export const useAuthStore = defineStore('auth', () => {
     canManagePlayers,
     canManageBackups,
     canManageConfig,
+    // Logout message
+    logoutMessage,
+    consumeLogoutMessage,
     // Actions
     setTokens,
     setUser,

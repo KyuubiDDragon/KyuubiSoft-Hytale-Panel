@@ -1,6 +1,6 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { config } from '../config.js';
 import { isDemoMode } from './demoData.js';
 

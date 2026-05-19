@@ -6,6 +6,22 @@ import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js'
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe } from '../utils/pathSecurity.js';
 
+// In-process lock to prevent concurrent backup/restore operations.
+// Two parallel HTTP requests can otherwise corrupt each other's tarball or
+// race the retention cleanup.
+let backupOperationLock: Promise<unknown> | null = null;
+
+async function withBackupLock<T>(fn: () => T | Promise<T>): Promise<T> {
+  while (backupOperationLock) {
+    try { await backupOperationLock; } catch { /* prior op failed, that's fine */ }
+  }
+  const op = (async () => fn())();
+  backupOperationLock = op.finally(() => {
+    if (backupOperationLock === op) backupOperationLock = null;
+  });
+  return op;
+}
+
 // SECURITY: Validate backup ID to prevent path traversal
 function validateBackupId(backupId: string): boolean {
   if (!backupId || typeof backupId !== 'string') return false;
@@ -110,130 +126,148 @@ export function getBackupPath(backupId: string): string | null {
   return null;
 }
 
-export function createBackup(name?: string): ActionResponse & { backup?: BackupInfo } {
-  if (!fs.existsSync(config.dataPath)) {
-    return { success: false, error: 'Data directory not found' };
-  }
+export function createBackup(name?: string): Promise<ActionResponse & { backup?: BackupInfo }> {
+  return withBackupLock(() => {
+    if (!fs.existsSync(config.dataPath)) {
+      return { success: false, error: 'Data directory not found' };
+    }
 
-  // SECURITY: Validate name if provided
-  if (name && !isValidBackupName(name)) {
-    return { success: false, error: 'Invalid backup name. Use only letters, numbers, underscores and hyphens.' };
-  }
+    // SECURITY: Validate name if provided
+    if (name && !isValidBackupName(name)) {
+      return { success: false, error: 'Invalid backup name. Use only letters, numbers, underscores and hyphens.' };
+    }
 
-  // Ensure backups directory exists
-  if (!fs.existsSync(config.backupsPath)) {
-    fs.mkdirSync(config.backupsPath, { recursive: true });
-  }
+    // Ensure backups directory exists
+    if (!fs.existsSync(config.backupsPath)) {
+      fs.mkdirSync(config.backupsPath, { recursive: true });
+    }
 
-  // Generate backup name
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
-  const backupName = name ? `manual_${name}_${timestamp}` : `manual_${timestamp}`;
-  const backupFile = path.join(config.backupsPath, `${backupName}.tar.gz`);
+    // Generate backup name
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
+    const backupName = name ? `manual_${name}_${timestamp}` : `manual_${timestamp}`;
+    const backupFile = path.join(config.backupsPath, `${backupName}.tar.gz`);
 
-  // SECURITY: Double-check path is safe
-  if (!isPathSafe(backupFile, [config.backupsPath])) {
-    return { success: false, error: 'Invalid backup path' };
-  }
+    // SECURITY: Double-check path is safe
+    if (!isPathSafe(backupFile, [config.backupsPath])) {
+      return { success: false, error: 'Invalid backup path' };
+    }
 
-  try {
-    // Create tarball using tar command (paths are validated, using single quotes for safety)
-    // Timeout increased to 30 minutes for large backups (1GB+)
-    execSync(`tar -czf '${backupFile}' -C '${config.dataPath}' .`, {
-      timeout: 1800000, // 30 minutes
-      maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
-    });
+    try {
+      // Create tarball using tar command (paths are validated, using single quotes for safety)
+      // Timeout increased to 30 minutes for large backups (1GB+)
+      execSync(`tar -czf '${backupFile}' -C '${config.dataPath}' .`, {
+        timeout: 1800000, // 30 minutes
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
+      });
 
-    const stat = fs.statSync(backupFile);
+      const stat = fs.statSync(backupFile);
 
-    return {
-      success: true,
-      backup: {
-        id: backupName,
-        filename: `${backupName}.tar.gz`,
-        size_bytes: stat.size,
-        size_mb: Math.round(stat.size / (1024 * 1024) * 100) / 100,
-        created_at: new Date().toISOString(),
-        type: 'manual',
-      },
-    };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Backup failed' };
-  }
+      return {
+        success: true,
+        backup: {
+          id: backupName,
+          filename: `${backupName}.tar.gz`,
+          size_bytes: stat.size,
+          size_mb: Math.round(stat.size / (1024 * 1024) * 100) / 100,
+          created_at: new Date().toISOString(),
+          type: 'manual',
+        },
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Backup failed' };
+    }
+  });
 }
 
-export function deleteBackup(backupId: string): ActionResponse {
-  // SECURITY: Validate backup ID first
-  if (!validateBackupId(backupId)) {
-    return { success: false, error: 'Invalid backup ID' };
-  }
+export function deleteBackup(backupId: string): Promise<ActionResponse> {
+  return withBackupLock(() => {
+    // SECURITY: Validate backup ID first
+    if (!validateBackupId(backupId)) {
+      return { success: false, error: 'Invalid backup ID' };
+    }
 
-  const filePath = getBackupPath(backupId);
+    const filePath = getBackupPath(backupId);
 
-  if (!filePath) {
-    return { success: false, error: 'Backup not found' };
-  }
+    if (!filePath) {
+      return { success: false, error: 'Backup not found' };
+    }
 
-  // SECURITY: Verify path is safe before deletion
-  if (!isPathSafe(filePath, [config.backupsPath])) {
-    return { success: false, error: 'Invalid backup path' };
-  }
+    // SECURITY: Verify path is safe before deletion
+    if (!isPathSafe(filePath, [config.backupsPath])) {
+      return { success: false, error: 'Invalid backup path' };
+    }
 
-  try {
-    fs.unlinkSync(filePath);
-    return { success: true, message: `Backup ${backupId} deleted` };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Delete failed' };
-  }
+    try {
+      fs.unlinkSync(filePath);
+      return { success: true, message: `Backup ${backupId} deleted` };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Delete failed' };
+    }
+  });
 }
 
-export function restoreBackup(backupId: string): ActionResponse {
-  // SECURITY: Validate backup ID first
-  if (!validateBackupId(backupId)) {
-    return { success: false, error: 'Invalid backup ID' };
-  }
-
-  const filePath = getBackupPath(backupId);
-
-  if (!filePath) {
-    return { success: false, error: 'Backup not found' };
-  }
-
-  // SECURITY: Verify path is safe
-  if (!isPathSafe(filePath, [config.backupsPath])) {
-    return { success: false, error: 'Invalid backup path' };
-  }
-
-  try {
-    // Create a pre-restore backup
-    createBackup('pre_restore');
-
-    // Create temp directory
-    const tempDir = path.join(config.backupsPath, '_restore_temp');
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true });
+export function restoreBackup(backupId: string): Promise<ActionResponse> {
+  return withBackupLock(() => {
+    // SECURITY: Validate backup ID first
+    if (!validateBackupId(backupId)) {
+      return { success: false, error: 'Invalid backup ID' };
     }
-    fs.mkdirSync(tempDir, { recursive: true });
 
-    // Extract backup (paths are validated, using single quotes for safety)
-    // Timeout increased to 30 minutes for large backups (1GB+)
-    execSync(`tar -xzf '${filePath}' -C '${tempDir}'`, {
-      timeout: 1800000, // 30 minutes
-      maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
-    });
+    const filePath = getBackupPath(backupId);
 
-    // Clear current data and move restored data
-    if (fs.existsSync(config.dataPath)) {
-      fs.rmSync(config.dataPath, { recursive: true });
+    if (!filePath) {
+      return { success: false, error: 'Backup not found' };
     }
-    fs.renameSync(tempDir, config.dataPath);
 
-    return {
-      success: true,
-      message: `Restored from backup ${backupId}. Server restart required.`,
-    };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Restore failed' };
-  }
+    // SECURITY: Verify path is safe
+    if (!isPathSafe(filePath, [config.backupsPath])) {
+      return { success: false, error: 'Invalid backup path' };
+    }
+
+    try {
+      // Create a pre-restore backup. We can't call createBackup() here because
+      // it would deadlock on the lock we already hold — inline the tar instead.
+      try {
+        const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
+        const preFile = path.join(config.backupsPath, `manual_pre_restore_${ts}.tar.gz`);
+        if (isPathSafe(preFile, [config.backupsPath])) {
+          execSync(`tar -czf '${preFile}' -C '${config.dataPath}' .`, {
+            timeout: 1800000,
+            maxBuffer: 1024 * 1024 * 10,
+          });
+        }
+      } catch (preErr) {
+        console.warn('[Backup] Pre-restore backup failed, continuing:', preErr instanceof Error ? preErr.message : preErr);
+      }
+
+      // Create temp directory
+      const tempDir = path.join(config.backupsPath, '_restore_temp');
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true });
+      }
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      // Extract backup (paths are validated, using single quotes for safety)
+      // Timeout increased to 30 minutes for large backups (1GB+)
+      execSync(`tar -xzf '${filePath}' -C '${tempDir}'`, {
+        timeout: 1800000, // 30 minutes
+        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
+      });
+
+      // Clear current data and move restored data
+      if (fs.existsSync(config.dataPath)) {
+        fs.rmSync(config.dataPath, { recursive: true });
+      }
+      fs.renameSync(tempDir, config.dataPath);
+
+      return {
+        success: true,
+        message: `Restored from backup ${backupId}. Server restart required.`,
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Restore failed' };
+    }
+  });
 }
 
 export function getStorageInfo(): StorageInfo {

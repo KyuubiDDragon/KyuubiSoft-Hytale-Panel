@@ -2,6 +2,12 @@
 # ============================================================
 # Hytale Server - Entrypoint
 # ============================================================
+# pipefail catches failures inside pipelines (e.g. wget | unzip).
+# -e is intentionally omitted: the download retry loop relies on capturing
+# non-zero exit codes from the downloader. -u is omitted because several
+# optional env vars (SERVER_JAR_URL, ASSETS_URL, USE_HYTALE_DOWNLOADER,
+# AUTO_UPDATE, HYTALE_PATCHLINE) may be unset.
+set -o pipefail
 
 # ============================================================
 # Set timezone at runtime from TZ environment variable

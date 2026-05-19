@@ -60,15 +60,11 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const invalidationCodes = ['USER_DELETED', 'TOKEN_INVALIDATED']
       if (responseData?.code && invalidationCodes.includes(responseData.code)) {
-        authStore.logout()
+        const message = responseData.code === 'USER_DELETED'
+          ? 'Your account has been deleted.'
+          : 'Your session has expired due to account changes. Please log in again.'
+        authStore.logout(message)
         if (typeof window !== 'undefined') {
-          // Show message based on code
-          const message = responseData.code === 'USER_DELETED'
-            ? 'Your account has been deleted.'
-            : 'Your session has expired due to account changes. Please log in again.'
-
-          // Store message for login page to display
-          sessionStorage.setItem('logoutMessage', message)
           window.location.href = '/login'
         }
         return Promise.reject(error)

@@ -20,7 +20,7 @@
 import { readFile, writeFile, mkdir, access, constants } from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile } from '../config.js';
 
 // Paths

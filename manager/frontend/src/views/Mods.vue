@@ -37,6 +37,7 @@ import {
   type ModUpdateStatus,
 } from '@/api/management'
 import { getLocale } from '@/i18n'
+import { sanitizeHtml } from '@/utils/safeHtml'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -571,7 +572,8 @@ const changelogModalTitle = ref('')
 
 function openChangelogModal(name: string, changelog: string) {
   changelogModalTitle.value = name
-  changelogModalContent.value = changelog
+  // Changelog HTML comes from CurseForge/Modtale — sanitize before injection.
+  changelogModalContent.value = sanitizeHtml(changelog)
   showChangelogModal.value = true
 }
 

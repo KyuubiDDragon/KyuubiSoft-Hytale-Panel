@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken, createWsTicket } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
-import { getAllUsers, createUser, updateUser, deleteUser, getUser, invalidateUserTokens } from '../services/users.js';
+import { getAllUsers, createUser, updateUser, deleteUser, getUser, invalidateUserTokens, getTokenVersion } from '../services/users.js';
 import { getUserPermissions, hasPermission } from '../services/roles.js';
 import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
@@ -59,7 +59,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
     // Create tokens even in demo mode for consistent behavior
     const accessToken = await createAccessToken(username);
-    const refreshToken = createRefreshToken(username);
+    const refreshToken = await createRefreshToken(username);
 
     res.json({
       access_token: accessToken,
@@ -108,11 +108,20 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
     return;
   }
 
+  // Verify the refresh token wasn't invalidated by a password or role change.
+  if (!isDemoMode()) {
+    const currentVersion = await getTokenVersion(result.username);
+    if (result.tokenVersion !== undefined && result.tokenVersion !== currentVersion) {
+      res.status(401).json({ detail: 'Refresh token invalidated', code: 'TOKEN_INVALIDATED' });
+      return;
+    }
+  }
+
   // Demo mode: Create new tokens for demo users
   if (isDemoMode()) {
     const isAdmin = result.username === DEMO_ADMIN_USERNAME;
     const accessToken = await createAccessToken(result.username);
-    const newRefreshToken = createRefreshToken(result.username);
+    const newRefreshToken = await createRefreshToken(result.username);
     const permissions = isAdmin ? ['*'] : ['server.view_status', 'players.view', 'console.view', 'performance.view', 'backups.view', 'scheduler.view', 'mods.view', 'plugins.view', 'worlds.view', 'chat.view', 'activity.view'];
 
     res.json({
@@ -127,7 +136,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   }
 
   const accessToken = await createAccessToken(result.username);
-  const newRefreshToken = createRefreshToken(result.username);
+  const newRefreshToken = await createRefreshToken(result.username);
 
   res.json({
     access_token: accessToken,

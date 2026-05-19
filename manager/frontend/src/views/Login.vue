@@ -25,10 +25,9 @@ const checkingDemo = ref(true)
 
 // Check for logout message from session invalidation
 onMounted(async () => {
-  const logoutMessage = sessionStorage.getItem('logoutMessage')
-  if (logoutMessage) {
-    infoMessage.value = logoutMessage
-    sessionStorage.removeItem('logoutMessage')
+  const msg = authStore.consumeLogoutMessage()
+  if (msg) {
+    infoMessage.value = msg
   }
 
   // Check if demo mode is enabled

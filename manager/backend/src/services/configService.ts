@@ -11,7 +11,7 @@
 import { readFile, writeFile, mkdir, rename, access, constants } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 // ============================================================
 // Configuration Interface

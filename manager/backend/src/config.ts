@@ -145,6 +145,11 @@ export const config = {
   // CORS Origins - from config.json if available, otherwise from env
   corsOrigins: effectiveCors,
 
+  // Explicit opt-in to wildcard CORS. Required to allow CORS_ORIGINS='*' to
+  // bypass CSRF origin validation — otherwise wildcard means "open server",
+  // which is dangerous on a panel that controls a game server.
+  corsAllowWildcard: process.env.CORS_ALLOW_WILDCARD === 'true' || process.env.CORS_ALLOW_WILDCARD === '1',
+
   // Reverse Proxy Support - from config.json if available, otherwise from env
   trustProxy: effectiveTrustProxy,
 

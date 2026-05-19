@@ -91,7 +91,7 @@ router.get('/status', authMiddleware, requirePermission('scheduler.view'), async
 // POST /api/scheduler/backup/run - Run backup now
 router.post('/backup/run', authMiddleware, requirePermission('scheduler.edit'), async (_req: Request, res: Response) => {
   const { createBackup } = await import('../services/backup.js');
-  const result = createBackup('manual');
+  const result = await createBackup('manual');
   if (result.success) {
     res.json(result);
   } else {

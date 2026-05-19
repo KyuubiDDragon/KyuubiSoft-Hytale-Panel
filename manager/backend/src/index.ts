@@ -300,7 +300,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
 
-// CSRF Protection via Origin/Referer validation for state-changing requests
+// CSRF Protection via Origin/Referer validation for state-changing requests.
+// Modern browsers always send Origin on POST/PUT/PATCH/DELETE, so missing
+// Origin AND missing Referer on a state-changing request is suspicious and
+// rejected (was previously waved through, which made CSRF protection toothless).
 app.use((req, res, next) => {
   // Skip for safe methods
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
@@ -317,27 +320,37 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // Get origin from headers
+  // Wildcard CORS disables CSRF protection — only honor it when the operator
+  // has explicitly opted in. Otherwise treat '*' as misconfiguration.
+  if (config.corsOrigins === '*') {
+    if (!config.corsAllowWildcard) {
+      console.warn(`[CSRF] Blocking ${req.method} ${req.path}: CORS_ORIGINS=* without CORS_ALLOW_WILDCARD=true`);
+      res.status(403).json({ error: 'CSRF validation failed', detail: 'Wildcard CORS requires CORS_ALLOW_WILDCARD=true' });
+      return;
+    }
+    return next();
+  }
+
   const origin = req.headers.origin;
   const referer = req.headers.referer;
+  let requestOrigin: string | null = null;
+  if (origin) {
+    requestOrigin = origin;
+  } else if (referer) {
+    try {
+      requestOrigin = new URL(referer).origin;
+    } catch {
+      requestOrigin = null;
+    }
+  }
 
-  // If no origin header, check referer (some browsers don't send origin)
-  const requestOrigin = origin || (referer ? new URL(referer).origin : null);
-
-  // Allow same-origin requests (no origin header means same-origin in most cases)
   if (!requestOrigin) {
-    // For security, require origin header for cross-origin requests
-    // Same-origin requests from browsers typically don't include Origin for non-CORS
-    return next();
+    console.warn(`[CSRF] Blocked ${req.method} ${req.path}: missing Origin and Referer headers`);
+    res.status(403).json({ error: 'CSRF validation failed', detail: 'Origin or Referer header required' });
+    return;
   }
 
-  // Validate origin against allowed CORS origins
-  if (config.corsOrigins === '*') {
-    // Wildcard CORS - allow but log warning
-    return next();
-  }
-
-  const allowedOrigins = config.corsOrigins.split(',').map(o => o.trim());
+  const allowedOrigins = (config.corsOrigins || '').split(',').map(o => o.trim()).filter(Boolean);
 
   // Also allow requests from the server's own origin (same-origin)
   const host = req.headers.host;
@@ -349,7 +362,7 @@ app.use((req, res, next) => {
   }
 
   // Origin mismatch - potential CSRF
-  console.warn(`CSRF: Blocked request from origin ${requestOrigin} to ${req.path}`);
+  console.warn(`[CSRF] Blocked ${req.method} ${req.path} from origin ${requestOrigin}`);
   res.status(403).json({ error: 'CSRF validation failed', detail: 'Origin not allowed' });
 });
 

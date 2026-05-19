@@ -24,6 +24,9 @@ RUN npm run build
 # Stage 2: Build Backend
 FROM node:20-alpine AS backend-builder
 
+# bcrypt is a native module — needs build toolchain
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app/backend
 
 # Copy package files
@@ -56,9 +59,13 @@ RUN addgroup -g 9999 -S hytale && \
 
 WORKDIR /app
 
+# bcrypt native binding needs the build toolchain at install time
+RUN apk add --no-cache --virtual .build-deps python3 make g++
+
 # Copy package files and install production dependencies only
 COPY backend/package.json ./
-RUN npm install --omit=dev && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force \
+    && apk del .build-deps
 
 # Copy built backend from builder
 COPY --from=backend-builder /app/backend/dist ./dist

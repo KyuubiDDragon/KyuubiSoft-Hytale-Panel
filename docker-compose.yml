@@ -118,6 +118,8 @@ services:
       - no-new-privileges:true
 
     # SECURITY: Drop unnecessary capabilities
+    # NET_BIND_SERVICE is intentionally NOT added: the Hytale server binds
+    # UDP/5520 (and WebMap 18081/18082), all unprivileged ports.
     cap_drop:
       - ALL
     cap_add:
@@ -125,7 +127,6 @@ services:
       - SETUID           # Required for switching to hytale user
       - SETGID           # Required for switching to hytale group
       - DAC_OVERRIDE     # Required for chmod on bind-mounted volumes
-      - NET_BIND_SERVICE # Allow binding to privileged ports if needed
 
   # ============================================================
   # Hytale Server Manager - Web UI
@@ -215,8 +216,11 @@ services:
     networks:
       - internal-net
 
+    # Wait for the game container's healthcheck before booting the manager,
+    # so the manager never tries to talk to a half-started server.
     depends_on:
-      - hytale
+      hytale:
+        condition: service_healthy
 
     # Logging
     logging:
