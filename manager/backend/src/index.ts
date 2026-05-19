@@ -31,6 +31,7 @@ import webhooksRoutes from './routes/webhooks.js';
 import notificationsRoutes from './routes/notifications.js';
 import auditRoutes from './routes/audit.js';
 import serversRoutes from './routes/servers.js';
+import ssoRoutes from './routes/sso.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
@@ -440,6 +441,7 @@ app.use(async (req, res, next) => {
 // API Routes (require setup to be complete)
 // ============================================================
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/sso', ssoRoutes);
 app.use('/api/server', serverRoutes);
 app.use('/api/console', consoleRoutes);
 app.use('/api/backups', backupRoutes);
