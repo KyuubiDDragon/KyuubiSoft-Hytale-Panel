@@ -15,7 +15,7 @@
 
 ---
 
-**[Deutsch](#deutsch)** | **[English](#english)** | **[Upgrade v2.0](#upgrade-auf-v20)** | **[Commands](docs/COMMANDS.md)** | **[Changelog](CHANGELOG.md)**
+**[Deutsch](#deutsch)** | **[English](#english)** | **[Upgrade v2.0](#upgrade-auf-v20)** | **[V3 Roadmap](docs/V3_ROADMAP.md)** | **[API Cheatsheet](docs/V3_API_CHEATSHEET.md)** | **[Commands](docs/COMMANDS.md)** | **[Changelog](CHANGELOG.md)**
 
 </div>
 
