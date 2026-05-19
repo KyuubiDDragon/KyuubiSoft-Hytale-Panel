@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
+import ChangelogModal from '@/components/mods/ChangelogModal.vue'
+import { getLocalizedText, getCategoryColor, type ModsTab } from '@/composables/useMods'
 import {
   modsApi,
   pluginsApi,
@@ -36,39 +38,14 @@ import {
   type TrackedMod,
   type ModUpdateStatus,
 } from '@/api/management'
-import { getLocale } from '@/i18n'
 
 const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
 
-// Helper to get localized string based on current locale
-function getLocalizedText(text: string | LocalizedString | undefined | null): string {
-  if (!text) return ''
-  if (typeof text === 'string') return text
-
-  // Handle object type (LocalizedString)
-  if (typeof text === 'object') {
-    const locale = getLocale()
-    // Map locale to key (handle pt_br -> pt_br)
-    const localeKey = locale === 'pt_br' ? 'pt_br' : locale
-
-    // Try current locale, then English, then German, then Portuguese, then first available value
-    const result = text[localeKey as keyof LocalizedString]
-      || text.en
-      || text.de
-      || text.pt_br
-      || Object.values(text).find(v => typeof v === 'string' && v.length > 0)
-      || ''
-
-    return result
-  }
-
-  // Fallback: convert to string
-  return String(text)
-}
-
-type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge' | 'updates'
+// Tab type, getLocalizedText and getCategoryColor are shared with the
+// components/mods/* children via composables/useMods.
+type TabType = ModsTab
 
 // Check for tab query parameter
 const initialTab = (route.query.tab as TabType) || 'mods'
@@ -389,16 +366,7 @@ async function updateModFromSource(item: any) {
   }
 }
 
-function getCategoryColor(category: string): string {
-  const colors: Record<string, string> = {
-    map: 'bg-blue-500/20 text-blue-400',
-    utility: 'bg-green-500/20 text-green-400',
-    gameplay: 'bg-purple-500/20 text-purple-400',
-    admin: 'bg-red-500/20 text-red-400',
-    other: 'bg-gray-500/20 text-gray-400',
-  }
-  return colors[category] || colors.other
-}
+// getCategoryColor moved to composables/useMods (imported at the top).
 
 function getCategoryIcon(category: string): string {
   const icons: Record<string, string> = {
@@ -3126,37 +3094,11 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Changelog Modal -->
-    <div v-if="showChangelogModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="showChangelogModal = false">
-      <div class="bg-dark-200 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <!-- Modal Header -->
-        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.changelog') }}: {{ changelogModalTitle }}</h2>
-          <button @click="showChangelogModal = false" class="text-gray-400 hover:text-white">
-            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Modal Content -->
-        <div class="flex-1 overflow-y-auto p-4">
-          <div
-            class="prose prose-invert prose-sm max-w-none text-gray-300"
-            v-html="changelogModalContent"
-          />
-        </div>
-
-        <!-- Modal Footer -->
-        <div class="p-4 border-t border-dark-50/50 shrink-0">
-          <button
-            @click="showChangelogModal = false"
-            class="w-full px-4 py-2 bg-dark-100 hover:bg-dark-50 text-white rounded-lg transition-colors"
-          >
-            {{ t('common.close') }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Changelog Modal (extracted to components/mods/ChangelogModal.vue) -->
+    <ChangelogModal
+      v-model:visible="showChangelogModal"
+      :title="changelogModalTitle"
+      :content="changelogModalContent"
+    />
   </div>
 </template>
