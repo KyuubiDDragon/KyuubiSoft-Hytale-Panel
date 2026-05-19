@@ -81,6 +81,15 @@ public class ApiConfig {
     }
 
     /**
+     * Interval (in ms) for the periodic player_position broadcast. <= 0
+     * disables the ticker. Default 2 000 ms matches the panel's live-map
+     * expected refresh rate.
+     */
+    public int getPositionBroadcastIntervalMs() {
+        return data.positionBroadcastIntervalMs;
+    }
+
+    /**
      * Configuration data structure
      */
     public static class ConfigData {
@@ -91,5 +100,8 @@ public class ApiConfig {
         public String corsOrigin = "*";
         public int wsHeartbeatSeconds = 30;
         public boolean logRequests = false;
+        // v3.1 — periodic per-player position broadcast for the panel's
+        // live-map and replay recorder. Set to 0 to disable.
+        public int positionBroadcastIntervalMs = 2000;
     }
 }

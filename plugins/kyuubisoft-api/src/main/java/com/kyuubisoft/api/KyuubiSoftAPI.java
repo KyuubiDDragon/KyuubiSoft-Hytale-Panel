@@ -11,6 +11,7 @@ import com.kyuubisoft.api.metrics.PrometheusMetrics;
 import com.kyuubisoft.api.metrics.TpsTracker;
 import com.kyuubisoft.api.web.WebServer;
 import com.kyuubisoft.api.websocket.EventBroadcaster;
+import com.kyuubisoft.api.websocket.PositionTicker;
 import com.kyuubisoft.api.config.ApiConfig;
 
 import java.util.logging.Logger;
@@ -33,6 +34,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
     private ApiConfig config;
     private TpsTracker tpsTracker;
     private PrometheusMetrics prometheusMetrics;
+    private PositionTicker positionTicker;
 
     public KyuubiSoftAPI(JavaPluginInit init) {
         super(init);
@@ -91,6 +93,15 @@ public class KyuubiSoftAPI extends JavaPlugin {
 
         // Register event listeners
         registerEvents();
+
+        // Start periodic player_position broadcast for the panel's live-map and
+        // replay recorder. Disabled if positionBroadcastIntervalMs <= 0.
+        try {
+            positionTicker = new PositionTicker(eventBroadcaster, config.getPositionBroadcastIntervalMs());
+            positionTicker.start();
+        } catch (Exception e) {
+            LOGGER.warning("Failed to start PositionTicker: " + e.getMessage());
+        }
     }
 
     private void registerEvents() {
@@ -209,6 +220,10 @@ public class KyuubiSoftAPI extends JavaPlugin {
     @Override
     protected void shutdown() {
         LOGGER.info("Shutting down KyuubiSoft API...");
+
+        if (positionTicker != null) {
+            positionTicker.shutdown();
+        }
 
         if (tpsTracker != null) {
             tpsTracker.shutdown();
