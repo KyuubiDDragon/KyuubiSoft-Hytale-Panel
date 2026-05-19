@@ -49,6 +49,7 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data', permission: 'backups.view' },
   { name: 'scheduler', path: '/scheduler', icon: 'scheduler', label: t('nav.scheduler'), group: 'data', permission: 'scheduler.view' },
   { name: 'configuration', path: '/configuration', icon: 'configuration', label: t('nav.configuration'), group: 'data', permission: 'config.view' },
+  { name: 'files', path: '/files', icon: 'files', label: t('nav.files'), group: 'data', permission: 'files.read' },
   { name: 'settings', path: '/settings', icon: 'settings', label: t('nav.settings'), group: 'data', permission: 'settings.view' },
   { name: 'users', path: '/users', icon: 'users', label: t('nav.users'), group: 'admin', permission: 'users.view' },
   { name: 'roles', path: '/roles', icon: 'roles', label: t('nav.roles'), group: 'admin', permission: 'roles.view' },
