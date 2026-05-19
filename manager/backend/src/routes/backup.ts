@@ -15,7 +15,8 @@ const DEMO_STORAGE = {
 };
 
 // GET /api/backups
-router.get('/', authMiddleware, requirePermission('backups.view'), (_req: Request, res: Response) => {
+router.get('/', authMiddleware, requirePermission('backups.view'), async (req: Request, res: Response) => {
+  const serverId = (req as { serverId?: string }).serverId;
   // Demo mode: return mock backups
   if (isDemoMode()) {
     const demoBackups = getDemoBackups();
@@ -32,14 +33,14 @@ router.get('/', authMiddleware, requirePermission('backups.view'), (_req: Reques
     return;
   }
 
-  const backups = backupService.listBackups();
-  const storage = backupService.getStorageInfo();
+  const backups = await backupService.listBackups(serverId);
+  const storage = await backupService.getStorageInfo(serverId);
 
   res.json({ backups, storage });
 });
 
 // GET /api/backups/:id
-router.get('/:id', authMiddleware, requirePermission('backups.view'), (req: Request, res: Response) => {
+router.get('/:id', authMiddleware, requirePermission('backups.view'), async (req: Request, res: Response) => {
   // Demo mode: return mock backup
   if (isDemoMode()) {
     const demoBackups = getDemoBackups();
@@ -58,7 +59,7 @@ router.get('/:id', authMiddleware, requirePermission('backups.view'), (req: Requ
     return;
   }
 
-  const backup = backupService.getBackup(req.params.id);
+  const backup = await backupService.getBackup(req.params.id, (req as { serverId?: string }).serverId);
 
   if (!backup) {
     res.status(404).json({ detail: 'Backup not found' });
@@ -140,14 +141,14 @@ router.post('/:id/restore', authMiddleware, requirePermission('backups.restore')
 });
 
 // GET /api/backups/:id/download
-router.get('/:id/download', authMiddleware, requirePermission('backups.download'), (req: Request, res: Response) => {
+router.get('/:id/download', authMiddleware, requirePermission('backups.download'), async (req: Request, res: Response) => {
   // Demo mode: return error (can't download simulated files)
   if (isDemoMode()) {
     res.status(400).json({ detail: '[DEMO] Download not available in demo mode' });
     return;
   }
 
-  const filePath = backupService.getBackupPath(req.params.id);
+  const filePath = await backupService.getBackupPath(req.params.id, (req as { serverId?: string }).serverId);
 
   if (!filePath) {
     res.status(404).json({ detail: 'Backup not found' });

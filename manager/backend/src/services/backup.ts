@@ -5,6 +5,22 @@ import { config } from '../config.js';
 import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js';
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe } from '../utils/pathSecurity.js';
+import { getDefaultId, getServer } from './servers.js';
+
+/**
+ * Resolve the backup/data paths for a specific server id. Falls back to the
+ * default server (or the legacy env-var config if the registry isn't loaded
+ * yet on fresh boot). Multi-server callers pass an explicit id; legacy
+ * callers omit it.
+ */
+async function resolvePaths(serverId?: string): Promise<{ backups: string; data: string }> {
+  try {
+    const id = serverId ?? (await getDefaultId());
+    const s = await getServer(id);
+    if (s) return { backups: s.paths.backups, data: s.paths.data };
+  } catch { /* registry not ready */ }
+  return { backups: config.backupsPath, data: config.dataPath };
+}
 
 // Path to the off-host backup hook **inside the manager container**.
 // createBackup() runs tar itself (execSync), so the resulting tarball is
@@ -51,14 +67,15 @@ function validateBackupId(backupId: string): boolean {
   return safePattern.test(backupId) && !backupId.includes('..');
 }
 
-export function listBackups(): BackupInfo[] {
+export async function listBackups(serverId?: string): Promise<BackupInfo[]> {
   const backups: BackupInfo[] = [];
+  const paths = await resolvePaths(serverId);
 
-  if (!fs.existsSync(config.backupsPath)) {
+  if (!fs.existsSync(paths.backups)) {
     return backups;
   }
 
-  const files = fs.readdirSync(config.backupsPath);
+  const files = fs.readdirSync(paths.backups);
 
   for (const file of files) {
     const ext = path.extname(file).toLowerCase();
@@ -71,7 +88,7 @@ export function listBackups(): BackupInfo[] {
       continue;
     }
 
-    const filePath = path.join(config.backupsPath, file);
+    const filePath = path.join(paths.backups, file);
     try {
       const stat = fs.statSync(filePath);
 
@@ -118,24 +135,24 @@ export function listBackups(): BackupInfo[] {
   return backups;
 }
 
-export function getBackup(backupId: string): BackupInfo | null {
-  const backups = listBackups();
+export async function getBackup(backupId: string, serverId?: string): Promise<BackupInfo | null> {
+  const backups = await listBackups(serverId);
   return backups.find((b) => b.id === backupId) || null;
 }
 
-export function getBackupPath(backupId: string): string | null {
+export async function getBackupPath(backupId: string, serverId?: string): Promise<string | null> {
   // SECURITY: Validate backup ID
   if (!validateBackupId(backupId)) {
     return null;
   }
-
+  const paths = await resolvePaths(serverId);
   const extensions = ['.tar.gz', '.tar', '.zip'];
 
   for (const ext of extensions) {
-    const filePath = path.join(config.backupsPath, `${backupId}${ext}`);
+    const filePath = path.join(paths.backups, `${backupId}${ext}`);
 
     // SECURITY: Verify path is within backups directory
-    if (!isPathSafe(filePath, [config.backupsPath])) {
+    if (!isPathSafe(filePath, [paths.backups])) {
       return null;
     }
 
@@ -147,9 +164,10 @@ export function getBackupPath(backupId: string): string | null {
   return null;
 }
 
-export function createBackup(name?: string): Promise<ActionResponse & { backup?: BackupInfo }> {
-  return withBackupLock(() => {
-    if (!fs.existsSync(config.dataPath)) {
+export function createBackup(name?: string, serverId?: string): Promise<ActionResponse & { backup?: BackupInfo }> {
+  return withBackupLock(async () => {
+    const paths = await resolvePaths(serverId);
+    if (!fs.existsSync(paths.data)) {
       return { success: false, error: 'Data directory not found' };
     }
 
@@ -159,24 +177,24 @@ export function createBackup(name?: string): Promise<ActionResponse & { backup?:
     }
 
     // Ensure backups directory exists
-    if (!fs.existsSync(config.backupsPath)) {
-      fs.mkdirSync(config.backupsPath, { recursive: true });
+    if (!fs.existsSync(paths.backups)) {
+      fs.mkdirSync(paths.backups, { recursive: true });
     }
 
     // Generate backup name
     const timestamp = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
     const backupName = name ? `manual_${name}_${timestamp}` : `manual_${timestamp}`;
-    const backupFile = path.join(config.backupsPath, `${backupName}.tar.gz`);
+    const backupFile = path.join(paths.backups, `${backupName}.tar.gz`);
 
     // SECURITY: Double-check path is safe
-    if (!isPathSafe(backupFile, [config.backupsPath])) {
+    if (!isPathSafe(backupFile, [paths.backups])) {
       return { success: false, error: 'Invalid backup path' };
     }
 
     try {
       // Create tarball using tar command (paths are validated, using single quotes for safety)
       // Timeout increased to 30 minutes for large backups (1GB+)
-      execSync(`tar -czf '${backupFile}' -C '${config.dataPath}' .`, {
+      execSync(`tar -czf '${backupFile}' -C '${paths.data}' .`, {
         timeout: 1800000, // 30 minutes
         maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
       });
@@ -204,21 +222,22 @@ export function createBackup(name?: string): Promise<ActionResponse & { backup?:
   });
 }
 
-export function deleteBackup(backupId: string): Promise<ActionResponse> {
-  return withBackupLock(() => {
+export function deleteBackup(backupId: string, serverId?: string): Promise<ActionResponse> {
+  return withBackupLock(async () => {
     // SECURITY: Validate backup ID first
     if (!validateBackupId(backupId)) {
       return { success: false, error: 'Invalid backup ID' };
     }
 
-    const filePath = getBackupPath(backupId);
+    const paths = await resolvePaths(serverId);
+    const filePath = await getBackupPath(backupId, serverId);
 
     if (!filePath) {
       return { success: false, error: 'Backup not found' };
     }
 
     // SECURITY: Verify path is safe before deletion
-    if (!isPathSafe(filePath, [config.backupsPath])) {
+    if (!isPathSafe(filePath, [paths.backups])) {
       return { success: false, error: 'Invalid backup path' };
     }
 
@@ -231,21 +250,22 @@ export function deleteBackup(backupId: string): Promise<ActionResponse> {
   });
 }
 
-export function restoreBackup(backupId: string): Promise<ActionResponse> {
-  return withBackupLock(() => {
+export function restoreBackup(backupId: string, serverId?: string): Promise<ActionResponse> {
+  return withBackupLock(async () => {
     // SECURITY: Validate backup ID first
     if (!validateBackupId(backupId)) {
       return { success: false, error: 'Invalid backup ID' };
     }
 
-    const filePath = getBackupPath(backupId);
+    const paths = await resolvePaths(serverId);
+    const filePath = await getBackupPath(backupId, serverId);
 
     if (!filePath) {
       return { success: false, error: 'Backup not found' };
     }
 
     // SECURITY: Verify path is safe
-    if (!isPathSafe(filePath, [config.backupsPath])) {
+    if (!isPathSafe(filePath, [paths.backups])) {
       return { success: false, error: 'Invalid backup path' };
     }
 
@@ -254,9 +274,9 @@ export function restoreBackup(backupId: string): Promise<ActionResponse> {
       // it would deadlock on the lock we already hold — inline the tar instead.
       try {
         const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
-        const preFile = path.join(config.backupsPath, `manual_pre_restore_${ts}.tar.gz`);
-        if (isPathSafe(preFile, [config.backupsPath])) {
-          execSync(`tar -czf '${preFile}' -C '${config.dataPath}' .`, {
+        const preFile = path.join(paths.backups, `manual_pre_restore_${ts}.tar.gz`);
+        if (isPathSafe(preFile, [paths.backups])) {
+          execSync(`tar -czf '${preFile}' -C '${paths.data}' .`, {
             timeout: 1800000,
             maxBuffer: 1024 * 1024 * 10,
           });
@@ -266,7 +286,7 @@ export function restoreBackup(backupId: string): Promise<ActionResponse> {
       }
 
       // Create temp directory
-      const tempDir = path.join(config.backupsPath, '_restore_temp');
+      const tempDir = path.join(paths.backups, '_restore_temp');
       if (fs.existsSync(tempDir)) {
         fs.rmSync(tempDir, { recursive: true });
       }
@@ -280,10 +300,10 @@ export function restoreBackup(backupId: string): Promise<ActionResponse> {
       });
 
       // Clear current data and move restored data
-      if (fs.existsSync(config.dataPath)) {
-        fs.rmSync(config.dataPath, { recursive: true });
+      if (fs.existsSync(paths.data)) {
+        fs.rmSync(paths.data, { recursive: true });
       }
-      fs.renameSync(tempDir, config.dataPath);
+      fs.renameSync(tempDir, paths.data);
 
       return {
         success: true,
@@ -295,14 +315,15 @@ export function restoreBackup(backupId: string): Promise<ActionResponse> {
   });
 }
 
-export function getStorageInfo(): StorageInfo {
+export async function getStorageInfo(serverId?: string): Promise<StorageInfo> {
   let totalSize = 0;
   let count = 0;
+  const paths = await resolvePaths(serverId);
 
-  if (fs.existsSync(config.backupsPath)) {
-    const files = fs.readdirSync(config.backupsPath);
+  if (fs.existsSync(paths.backups)) {
+    const files = fs.readdirSync(paths.backups);
     for (const file of files) {
-      const filePath = path.join(config.backupsPath, file);
+      const filePath = path.join(paths.backups, file);
       const stat = fs.statSync(filePath);
       if (stat.isFile()) {
         totalSize += stat.size;

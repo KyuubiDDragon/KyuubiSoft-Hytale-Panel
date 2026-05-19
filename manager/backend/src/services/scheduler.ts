@@ -193,7 +193,7 @@ async function runAutoBackup(): Promise<void> {
 
 // Clean old backups based on retention
 async function cleanOldBackups(): Promise<void> {
-  const backups = listBackups();
+  const backups = await listBackups();
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - schedulerConfig.backups.retentionDays);
 
@@ -522,13 +522,13 @@ export function deleteQuickCommand(id: string): boolean {
 }
 
 // Get scheduler status
-export function getSchedulerStatus(): {
+export async function getSchedulerStatus(): Promise<{
   backups: { enabled: boolean; nextRun: string | null; lastRun: string | null; schedule: string };
   announcements: { enabled: boolean; activeCount: number };
   scheduledRestarts: { enabled: boolean; nextRestart: string | null; pendingRestart: { time: string; scheduledAt: string } | null; times: string[] };
-} {
+}> {
   const nextBackup = getNextBackupTime();
-  const backups = listBackups();
+  const backups = await listBackups();
   const lastAutoBackup = backups.find(b => b.type === 'auto');
   const nextRestart = getNextRestartTime();
 

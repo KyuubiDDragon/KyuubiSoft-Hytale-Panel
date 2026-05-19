@@ -84,7 +84,7 @@ router.get('/status', authMiddleware, requirePermission('scheduler.view'), async
     return;
   }
 
-  const status = schedulerService.getSchedulerStatus();
+  const status = await schedulerService.getSchedulerStatus();
   res.json(status);
 });
 
@@ -239,7 +239,7 @@ router.get('/restart/status', authMiddleware, requirePermission('scheduler.view'
     return;
   }
 
-  const status = schedulerService.getSchedulerStatus();
+  const status = await schedulerService.getSchedulerStatus();
   res.json(status.scheduledRestarts);
 });
 
