@@ -110,6 +110,14 @@ export const PERMISSIONS = {
   'updates.download': 'Download updates',
   'updates.apply': 'Apply updates (restart server)',
   'updates.config': 'Configure auto-update settings',
+
+  // Replay recorder
+  'replay.view': 'View replay segments',
+  'replay.manage': 'Export/delete replays and edit replay config',
+
+  // Auto-wiki
+  'wiki.view': 'View mod/plugin wiki',
+  'wiki.manage': 'Regenerate the wiki and edit wiki config',
 } as const;
 
 // Permission type derived from the keys
@@ -171,6 +179,8 @@ export const PERMISSION_CATEGORIES = [
   'hytale_auth',
   'settings',
   'updates',
+  'replay',
+  'wiki',
 ] as const;
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number];

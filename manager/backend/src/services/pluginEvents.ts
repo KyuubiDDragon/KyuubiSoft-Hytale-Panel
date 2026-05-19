@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import { config } from '../config.js';
 import { PLUGIN_PORT } from './kyuubiApi.js';
 import { addChatMessage, recordDeathPosition } from './chatLog.js';
+import { eventBus } from './eventBus.js';
 
 // WebSocket connection state
 let ws: WebSocket | null = null;
@@ -74,6 +75,7 @@ async function handleEvent(event: PluginEventData): Promise<void> {
     case 'player_chat':
       console.log(`[Chat] ${event.player}: ${event.message}`);
       await addChatMessage(event.player, event.message, event.uuid);
+      eventBus.publish('player_chat', { player: event.player, uuid: event.uuid, message: event.message });
       break;
 
     case 'player_death':
@@ -81,16 +83,19 @@ async function handleEvent(event: PluginEventData): Promise<void> {
       if (event.world && event.x !== undefined && event.y !== undefined && event.z !== undefined) {
         await recordDeathPosition(event.player, event.world, event.x, event.y, event.z);
       }
+      eventBus.publish('player_death', {
+        player: event.player, cause: event.cause, world: event.world, x: event.x, y: event.y, z: event.z,
+      });
       break;
 
     case 'player_join':
       console.log(`[Join] ${event.player}`);
-      // Player join is already handled by the player tracking service
+      eventBus.publish('player_join', { player: event.player, uuid: event.uuid });
       break;
 
     case 'player_leave':
       console.log(`[Leave] ${event.player}`);
-      // Player leave is already handled by the player tracking service
+      eventBus.publish('player_leave', { player: event.player, uuid: event.uuid });
       break;
 
     default:
