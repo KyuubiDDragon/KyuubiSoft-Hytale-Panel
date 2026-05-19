@@ -305,11 +305,11 @@ function getItemColorClass(itemId: string): string {
   if (id.includes('adamantite')) return 'text-purple-400 bg-purple-500/20'
   if (id.includes('thorium')) return 'text-green-400 bg-green-500/20'
   if (id.includes('cobalt')) return 'text-blue-400 bg-blue-500/20'
-  if (id.includes('iron')) return 'text-gray-300 bg-gray-500/20'
+  if (id.includes('iron')) return 'text-ink-muted bg-gray-500/20'
   if (id.includes('gold')) return 'text-yellow-400 bg-yellow-500/20'
   if (id.includes('potion')) return 'text-pink-400 bg-pink-500/20'
   if (id.includes('food') || id.includes('meat')) return 'text-orange-400 bg-orange-500/20'
-  return 'text-gray-300 bg-gray-600/30'
+  return 'text-ink-muted bg-gray-600/30'
 }
 
 // Get item rarity color for tooltip border
@@ -320,7 +320,7 @@ function getItemRarityClass(itemId: string): string {
   if (id.includes('cobalt')) return 'border-blue-500'
   if (id.includes('iron')) return 'border-gray-400'
   if (id.includes('gold')) return 'border-yellow-500'
-  return 'border-dark-50'
+  return 'border-border'
 }
 
 // Get item category/type description
@@ -450,9 +450,9 @@ const toolsGrid = computed(() => {
         />
 
         <!-- Modal -->
-        <div class="relative bg-dark-200 rounded-xl border border-dark-50 shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+        <div class="relative bg-surface-raised rounded-xl border border-border shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
           <!-- Header -->
-          <div class="flex items-center justify-between px-6 py-4 border-b border-dark-50">
+          <div class="flex items-center justify-between px-6 py-4 border-b border-border">
             <div class="flex items-center gap-4">
               <!-- Player Avatar -->
               <div class="w-16 h-16 rounded-lg flex-shrink-0 overflow-hidden bg-gradient-to-br from-hytale-orange/30 to-hytale-orange/10 border border-hytale-orange/20">
@@ -475,8 +475,8 @@ const toolsGrid = computed(() => {
                 </div>
               </div>
               <div>
-                <h3 class="text-lg font-semibold text-white">{{ playerName }}</h3>
-                <p v-if="details?.uuid" class="text-xs text-gray-500 font-mono truncate max-w-[200px]">
+                <h3 class="text-lg font-semibold text-ink">{{ playerName }}</h3>
+                <p v-if="details?.uuid" class="text-xs text-ink-subtle font-mono truncate max-w-[200px]">
                   {{ details.uuid }}
                 </p>
                 <!-- Online/Offline indicator could go here -->
@@ -484,7 +484,7 @@ const toolsGrid = computed(() => {
             </div>
             <button
               @click="emit('close')"
-              class="text-gray-400 hover:text-white transition-colors"
+              class="text-ink-muted hover:text-ink transition-colors"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -499,8 +499,8 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'info'
-                  ? 'bg-dark-100 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-surface-overlay text-ink'
+                  : 'text-ink-muted hover:text-ink'
               ]"
             >
               {{ t('players.details.info') }}
@@ -510,8 +510,8 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'inventory'
-                  ? 'bg-dark-100 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-surface-overlay text-ink'
+                  : 'text-ink-muted hover:text-ink'
               ]"
             >
               {{ t('players.details.inventory') }}
@@ -521,8 +521,8 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'stats'
-                  ? 'bg-dark-100 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-surface-overlay text-ink'
+                  : 'text-ink-muted hover:text-ink'
               ]"
             >
               {{ t('players.details.stats') }}
@@ -532,8 +532,8 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'chat'
-                  ? 'bg-dark-100 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-surface-overlay text-ink'
+                  : 'text-ink-muted hover:text-ink'
               ]"
             >
               {{ t('players.details.chat') }}
@@ -543,8 +543,8 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'deaths'
-                  ? 'bg-dark-100 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-surface-overlay text-ink'
+                  : 'text-ink-muted hover:text-ink'
               ]"
             >
               {{ t('players.details.deaths') }}
@@ -552,10 +552,10 @@ const toolsGrid = computed(() => {
           </div>
 
           <!-- Content -->
-          <div class="bg-dark-100 p-6 min-h-[300px] max-h-[60vh] overflow-y-auto">
+          <div class="bg-surface-overlay p-6 min-h-[300px] max-h-[60vh] overflow-y-auto">
             <!-- Loading -->
             <div v-if="loading" class="flex items-center justify-center h-48">
-              <div class="flex items-center gap-3 text-gray-400">
+              <div class="flex items-center gap-3 text-ink-muted">
                 <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -566,94 +566,94 @@ const toolsGrid = computed(() => {
 
             <!-- Error -->
             <div v-else-if="error" class="flex flex-col items-center justify-center h-48 text-center">
-              <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="w-12 h-12 text-ink-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              <p class="text-gray-400">{{ error }}</p>
+              <p class="text-ink-muted">{{ error }}</p>
             </div>
 
             <!-- Info Tab -->
             <div v-else-if="activeTab === 'info'">
               <div v-if="details" class="grid grid-cols-2 gap-4">
                 <!-- World -->
-                <div class="bg-dark-200 rounded-lg p-4">
-                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                <div class="bg-surface-raised rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-ink-muted text-sm mb-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {{ t('players.details.world') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.world || 'Unknown' }}</p>
+                  <p class="text-ink font-medium">{{ details.world || 'Unknown' }}</p>
                 </div>
 
                 <!-- Gamemode -->
-                <div class="bg-dark-200 rounded-lg p-4">
-                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                <div class="bg-surface-raised rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-ink-muted text-sm mb-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {{ t('players.details.gamemode') }}
                   </div>
-                  <p class="text-white font-medium capitalize">{{ details.gameMode || 'Unknown' }}</p>
+                  <p class="text-ink font-medium capitalize">{{ details.gameMode || 'Unknown' }}</p>
                 </div>
 
                 <!-- Position -->
-                <div class="bg-dark-200 rounded-lg p-4">
-                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                <div class="bg-surface-raised rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-ink-muted text-sm mb-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                     {{ t('players.details.position') }}
                   </div>
-                  <p class="text-white font-medium font-mono text-sm">
+                  <p class="text-ink font-medium font-mono text-sm">
                     <span v-if="details.position">
                       {{ details.position.x }}, {{ details.position.y }}, {{ details.position.z }}
                     </span>
-                    <span v-else class="text-gray-500">-</span>
+                    <span v-else class="text-ink-subtle">-</span>
                   </p>
                 </div>
 
                 <!-- Discovered Zones -->
-                <div class="bg-dark-200 rounded-lg p-4">
-                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                <div class="bg-surface-raised rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-ink-muted text-sm mb-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                     </svg>
                     {{ t('players.details.discoveredZones') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.discoveredZones?.length || 0 }}</p>
+                  <p class="text-ink font-medium">{{ details.discoveredZones?.length || 0 }}</p>
                 </div>
 
                 <!-- Memories -->
-                <div class="bg-dark-200 rounded-lg p-4">
-                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                <div class="bg-surface-raised rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-ink-muted text-sm mb-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
                     {{ t('players.details.memories') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.memoriesCount || 0 }} NPCs</p>
+                  <p class="text-ink font-medium">{{ details.memoriesCount || 0 }} NPCs</p>
                 </div>
 
                 <!-- Unique Items Used -->
-                <div class="bg-dark-200 rounded-lg p-4">
-                  <div class="flex items-center gap-2 text-gray-400 text-sm mb-1">
+                <div class="bg-surface-raised rounded-lg p-4">
+                  <div class="flex items-center gap-2 text-ink-muted text-sm mb-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                     </svg>
                     {{ t('players.details.uniqueItems') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.uniqueItemsUsed?.length || 0 }}</p>
+                  <p class="text-ink font-medium">{{ details.uniqueItemsUsed?.length || 0 }}</p>
                 </div>
               </div>
 
               <div v-else class="flex flex-col items-center justify-center h-48 text-center">
-                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-12 h-12 text-ink-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p class="text-gray-400">{{ t('players.details.noData') }}</p>
+                <p class="text-ink-muted">{{ t('players.details.noData') }}</p>
               </div>
             </div>
 
@@ -675,12 +675,12 @@ const toolsGrid = computed(() => {
 
                 <!-- Hotbar -->
                 <div>
-                  <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                  <h4 class="text-sm font-medium text-ink-muted mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
                     </svg>
                     Hotbar
-                    <span class="text-xs text-gray-500">({{ inventory.hotbar.length }}/9)</span>
+                    <span class="text-xs text-ink-subtle">({{ inventory.hotbar.length }}/9)</span>
                   </h4>
                   <div class="grid grid-cols-9 gap-1">
                     <div
@@ -688,7 +688,7 @@ const toolsGrid = computed(() => {
                       :key="`hotbar-${index}`"
                       :class="[
                         'aspect-square rounded border flex flex-col items-center justify-center relative group cursor-pointer',
-                        item ? 'bg-dark-200 border-hytale-orange/30 hover:border-hytale-orange' : 'bg-dark-300/50 border-dark-100',
+                        item ? 'bg-surface-raised border-hytale-orange/30 hover:border-hytale-orange' : 'bg-surface-muted/50 border-border',
                         index === inventory.activeHotbarSlot ? 'ring-2 ring-hytale-orange' : ''
                       ]"
                       @mouseenter="item && showTooltip(item, $event)"
@@ -707,11 +707,11 @@ const toolsGrid = computed(() => {
                         <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-lg font-bold', getItemColorClass(item.itemId)]">
                           {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span class="absolute bottom-0.5 right-1 text-[10px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                        <span class="absolute bottom-0.5 right-1 text-[10px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                         <!-- Durability bar -->
-                        <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-dark-300 rounded-b overflow-hidden">
+                        <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-surface-muted rounded-b overflow-hidden">
                           <div :class="['h-full transition-all', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
                         </div>
                       </template>
@@ -723,7 +723,7 @@ const toolsGrid = computed(() => {
                 <div class="grid grid-cols-3 gap-4">
                   <!-- Armor -->
                   <div>
-                    <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <h4 class="text-sm font-medium text-ink-muted mb-2 flex items-center gap-2">
                       <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                       </svg>
@@ -735,7 +735,7 @@ const toolsGrid = computed(() => {
                         :key="`armor-${index}`"
                         :class="[
                           'aspect-square rounded border flex flex-col items-center justify-center relative cursor-pointer',
-                          item ? 'bg-dark-200 border-blue-500/30 hover:border-blue-500' : 'bg-dark-300/50 border-dark-100'
+                          item ? 'bg-surface-raised border-blue-500/30 hover:border-blue-500' : 'bg-surface-muted/50 border-border'
                         ]"
                         @mouseenter="item && showTooltip(item, $event)"
                         @mouseleave="hideTooltip"
@@ -752,18 +752,18 @@ const toolsGrid = computed(() => {
                             {{ ['H', 'C', 'G', 'L'][index] }}
                           </div>
                           <!-- Durability bar -->
-                          <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-dark-300 rounded-b overflow-hidden">
+                          <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-surface-muted rounded-b overflow-hidden">
                             <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
                           </div>
                         </template>
-                        <span v-else class="text-[10px] text-gray-600">{{ ['H', 'C', 'G', 'L'][index] }}</span>
+                        <span v-else class="text-[10px] text-ink-subtle">{{ ['H', 'C', 'G', 'L'][index] }}</span>
                       </div>
                     </div>
                   </div>
 
                   <!-- Utility -->
                   <div>
-                    <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <h4 class="text-sm font-medium text-ink-muted mb-2 flex items-center gap-2">
                       <svg class="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -776,7 +776,7 @@ const toolsGrid = computed(() => {
                         :key="`utility-${index}`"
                         :class="[
                           'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                          item ? 'bg-dark-200 border-purple-500/30 hover:border-purple-500' : 'bg-dark-300/50 border-dark-100'
+                          item ? 'bg-surface-raised border-purple-500/30 hover:border-purple-500' : 'bg-surface-muted/50 border-border'
                         ]"
                         @mouseenter="item && showTooltip(item, $event)"
                         @mouseleave="hideTooltip"
@@ -792,7 +792,7 @@ const toolsGrid = computed(() => {
                           <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                             U
                           </div>
-                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                             {{ item.amount }}
                           </span>
                         </template>
@@ -802,7 +802,7 @@ const toolsGrid = computed(() => {
 
                   <!-- Tools (only show if tools exist) -->
                   <div v-if="toolsGrid.length > 0 && toolsGrid.some(t => t !== null)">
-                    <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                    <h4 class="text-sm font-medium text-ink-muted mb-2 flex items-center gap-2">
                       <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -815,7 +815,7 @@ const toolsGrid = computed(() => {
                         :key="`tool-${index}`"
                         :class="[
                           'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                          item ? 'bg-dark-200 border-cyan-500/30 hover:border-cyan-500' : 'bg-dark-300/50 border-dark-100'
+                          item ? 'bg-surface-raised border-cyan-500/30 hover:border-cyan-500' : 'bg-surface-muted/50 border-border'
                         ]"
                         @mouseenter="item && showTooltip(item, $event)"
                         @mouseleave="hideTooltip"
@@ -831,15 +831,15 @@ const toolsGrid = computed(() => {
                           <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                             T
                           </div>
-                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                             {{ item.amount }}
                           </span>
                           <!-- Durability bar -->
-                          <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-dark-300 rounded-b overflow-hidden">
+                          <div v-if="item.maxDurability > 0" class="absolute bottom-0 left-0 right-0 h-1 bg-surface-muted rounded-b overflow-hidden">
                             <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
                           </div>
                         </template>
-                        <span v-else class="text-[10px] text-gray-600">T</span>
+                        <span v-else class="text-[10px] text-ink-subtle">T</span>
                       </div>
                     </div>
                   </div>
@@ -847,12 +847,12 @@ const toolsGrid = computed(() => {
 
                 <!-- Storage -->
                 <div>
-                  <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <h4 class="text-sm font-medium text-ink-muted mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
                     Storage
-                    <span class="text-xs text-gray-500">({{ inventory.storage.length }}/36)</span>
+                    <span class="text-xs text-ink-subtle">({{ inventory.storage.length }}/36)</span>
                   </h4>
                   <div class="grid grid-cols-9 gap-1">
                     <div
@@ -860,7 +860,7 @@ const toolsGrid = computed(() => {
                       :key="`storage-${index}`"
                       :class="[
                         'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                        item ? 'bg-dark-200 border-dark-50 hover:border-gray-500' : 'bg-dark-300/50 border-dark-100'
+                        item ? 'bg-surface-raised border-border hover:border-gray-500' : 'bg-surface-muted/50 border-border'
                       ]"
                       @mouseenter="item && showTooltip(item, $event)"
                       @mouseleave="hideTooltip"
@@ -876,7 +876,7 @@ const toolsGrid = computed(() => {
                         <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                           {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                       </template>
@@ -886,12 +886,12 @@ const toolsGrid = computed(() => {
 
                 <!-- Backpack (only show if player has upgrades) -->
                 <div v-if="backpackCapacity > 0">
-                  <h4 class="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                  <h4 class="text-sm font-medium text-ink-muted mb-2 flex items-center gap-2">
                     <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                     </svg>
                     Backpack
-                    <span class="text-xs text-gray-500">({{ inventory.backpack.length }}/{{ backpackCapacity }})</span>
+                    <span class="text-xs text-ink-subtle">({{ inventory.backpack.length }}/{{ backpackCapacity }})</span>
                   </h4>
                   <div class="grid grid-cols-9 gap-1">
                     <div
@@ -899,7 +899,7 @@ const toolsGrid = computed(() => {
                       :key="`backpack-${index}`"
                       :class="[
                         'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                        item ? 'bg-dark-200 border-amber-500/30 hover:border-amber-500' : 'bg-dark-300/50 border-dark-100'
+                        item ? 'bg-surface-raised border-amber-500/30 hover:border-amber-500' : 'bg-surface-muted/50 border-border'
                       ]"
                       @mouseenter="item && showTooltip(item, $event)"
                       @mouseleave="hideTooltip"
@@ -915,7 +915,7 @@ const toolsGrid = computed(() => {
                         <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                           {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                       </template>
@@ -925,10 +925,10 @@ const toolsGrid = computed(() => {
               </div>
 
               <div v-else class="flex flex-col items-center justify-center h-48 text-center">
-                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-12 h-12 text-ink-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
-                <p class="text-gray-400">{{ t('players.details.inventoryUnavailable') }}</p>
+                <p class="text-ink-muted">{{ t('players.details.inventoryUnavailable') }}</p>
               </div>
             </div>
 
@@ -936,37 +936,37 @@ const toolsGrid = computed(() => {
             <div v-else-if="activeTab === 'stats'">
               <div v-if="details?.stats" class="space-y-6">
                 <!-- Health Bar -->
-                <div class="bg-dark-200 rounded-lg p-4">
+                <div class="bg-surface-raised rounded-lg p-4">
                   <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-2 text-gray-300">
+                    <div class="flex items-center gap-2 text-ink-muted">
                       <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                       </svg>
                       {{ t('players.details.health') }}
                     </div>
-                    <span class="text-white font-mono">
+                    <span class="text-ink font-mono">
                       {{ details.stats.health.toFixed(1) }} / {{ details.stats.maxHealth.toFixed(1) }}
                     </span>
                   </div>
-                  <div class="h-4 bg-dark-300 rounded-full overflow-hidden">
+                  <div class="h-4 bg-surface-muted rounded-full overflow-hidden">
                     <div :class="['h-full transition-all duration-300', healthColor]" :style="{ width: `${healthPercent}%` }"></div>
                   </div>
                 </div>
 
                 <!-- Stamina Bar -->
-                <div class="bg-dark-200 rounded-lg p-4">
+                <div class="bg-surface-raised rounded-lg p-4">
                   <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-2 text-gray-300">
+                    <div class="flex items-center gap-2 text-ink-muted">
                       <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       {{ t('players.details.stamina') }}
                     </div>
-                    <span class="text-white font-mono">
+                    <span class="text-ink font-mono">
                       {{ details.stats.stamina.toFixed(1) }} / {{ details.stats.maxStamina.toFixed(1) }}
                     </span>
                   </div>
-                  <div class="h-4 bg-dark-300 rounded-full overflow-hidden">
+                  <div class="h-4 bg-surface-muted rounded-full overflow-hidden">
                     <div class="h-full bg-yellow-500 transition-all duration-300" :style="{ width: `${staminaPercent}%` }"></div>
                   </div>
                 </div>
@@ -974,39 +974,39 @@ const toolsGrid = computed(() => {
                 <!-- Other Stats Grid -->
                 <div class="grid grid-cols-3 gap-4">
                   <!-- Oxygen -->
-                  <div class="bg-dark-200 rounded-lg p-4 text-center">
+                  <div class="bg-surface-raised rounded-lg p-4 text-center">
                     <svg class="w-6 h-6 text-cyan-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                     </svg>
-                    <div class="text-gray-400 text-xs mb-1">{{ t('players.details.oxygen') }}</div>
-                    <div class="text-white font-bold">{{ details.stats.oxygen.toFixed(0) }}%</div>
+                    <div class="text-ink-muted text-xs mb-1">{{ t('players.details.oxygen') }}</div>
+                    <div class="text-ink font-bold">{{ details.stats.oxygen.toFixed(0) }}%</div>
                   </div>
 
                   <!-- Mana -->
-                  <div class="bg-dark-200 rounded-lg p-4 text-center">
+                  <div class="bg-surface-raised rounded-lg p-4 text-center">
                     <svg class="w-6 h-6 text-blue-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
-                    <div class="text-gray-400 text-xs mb-1">{{ t('players.details.mana') }}</div>
-                    <div class="text-white font-bold">{{ details.stats.mana.toFixed(0) }}</div>
+                    <div class="text-ink-muted text-xs mb-1">{{ t('players.details.mana') }}</div>
+                    <div class="text-ink font-bold">{{ details.stats.mana.toFixed(0) }}</div>
                   </div>
 
                   <!-- Immunity -->
-                  <div class="bg-dark-200 rounded-lg p-4 text-center">
+                  <div class="bg-surface-raised rounded-lg p-4 text-center">
                     <svg class="w-6 h-6 text-green-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
-                    <div class="text-gray-400 text-xs mb-1">{{ t('players.details.immunity') }}</div>
-                    <div class="text-white font-bold">{{ details.stats.immunity.toFixed(0) }}</div>
+                    <div class="text-ink-muted text-xs mb-1">{{ t('players.details.immunity') }}</div>
+                    <div class="text-ink font-bold">{{ details.stats.immunity.toFixed(0) }}</div>
                   </div>
                 </div>
               </div>
 
               <div v-else class="flex flex-col items-center justify-center h-48 text-center">
-                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-12 h-12 text-ink-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                <p class="text-gray-400">{{ t('players.details.noStats') }}</p>
+                <p class="text-ink-muted">{{ t('players.details.noStats') }}</p>
               </div>
             </div>
 
@@ -1014,7 +1014,7 @@ const toolsGrid = computed(() => {
             <div v-else-if="activeTab === 'chat'">
               <!-- Loading -->
               <div v-if="chatLoading" class="flex items-center justify-center h-48">
-                <div class="flex items-center gap-3 text-gray-400">
+                <div class="flex items-center gap-3 text-ink-muted">
                   <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -1025,30 +1025,30 @@ const toolsGrid = computed(() => {
 
               <!-- No messages -->
               <div v-else-if="chatMessages.length === 0" class="flex flex-col items-center justify-center h-48 text-center">
-                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-12 h-12 text-ink-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-                <p class="text-gray-400">{{ t('players.details.noChat') }}</p>
+                <p class="text-ink-muted">{{ t('players.details.noChat') }}</p>
               </div>
 
               <!-- Chat messages list -->
               <div v-else class="space-y-2">
-                <div class="text-xs text-gray-500 mb-3">
+                <div class="text-xs text-ink-subtle mb-3">
                   {{ t('players.details.chatCount', { count: chatTotal }) }}
                 </div>
                 <div class="space-y-2 max-h-[400px] overflow-y-auto">
                   <div
                     v-for="msg in chatMessages"
                     :key="msg.id"
-                    class="p-3 bg-dark-200 rounded-lg"
+                    class="p-3 bg-surface-raised rounded-lg"
                   >
                     <div class="flex items-center gap-2 mb-1">
                       <span :class="['font-semibold text-sm', getPlayerColor(msg.player)]">
                         {{ msg.player }}
                       </span>
-                      <span class="text-xs text-gray-500">{{ formatChatTime(msg.timestamp) }}</span>
+                      <span class="text-xs text-ink-subtle">{{ formatChatTime(msg.timestamp) }}</span>
                     </div>
-                    <p class="text-gray-300 text-sm break-words">{{ msg.message }}</p>
+                    <p class="text-ink-muted text-sm break-words">{{ msg.message }}</p>
                   </div>
                 </div>
               </div>
@@ -1058,7 +1058,7 @@ const toolsGrid = computed(() => {
             <div v-else-if="activeTab === 'deaths'">
               <!-- Loading -->
               <div v-if="deathsLoading" class="flex items-center justify-center h-48">
-                <div class="flex items-center gap-3 text-gray-400">
+                <div class="flex items-center gap-3 text-ink-muted">
                   <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -1069,15 +1069,15 @@ const toolsGrid = computed(() => {
 
               <!-- No death positions -->
               <div v-else-if="deathPositions.length === 0" class="flex flex-col items-center justify-center h-48 text-center">
-                <svg class="w-12 h-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-12 h-12 text-ink-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
-                <p class="text-gray-400">{{ t('players.details.noDeaths') }}</p>
+                <p class="text-ink-muted">{{ t('players.details.noDeaths') }}</p>
               </div>
 
               <!-- Death positions list -->
               <div v-else class="space-y-3">
-                <div class="text-xs text-gray-500 mb-3">
+                <div class="text-xs text-ink-subtle mb-3">
                   {{ t('players.details.deathCount', { count: deathPositions.length }) }}
                 </div>
 
@@ -1089,7 +1089,7 @@ const toolsGrid = computed(() => {
                     'p-4 rounded-lg border-2 transition-all cursor-pointer',
                     selectedDeathIndex === (deathPositions.length - 1 - index)
                       ? 'bg-red-500/10 border-red-500/50'
-                      : 'bg-dark-200 border-dark-50 hover:border-red-500/30'
+                      : 'bg-surface-raised border-border hover:border-red-500/30'
                   ]"
                   @click="selectedDeathIndex = deathPositions.length - 1 - index"
                 >
@@ -1105,7 +1105,7 @@ const toolsGrid = computed(() => {
                       <div>
                         <!-- Day indicator -->
                         <div class="flex items-center gap-2">
-                          <span class="text-white font-semibold">
+                          <span class="text-ink font-semibold">
                             {{ t('players.details.deathDay', { day: death.day }) }}
                           </span>
                           <span v-if="index === 0" class="text-xs px-2 py-0.5 bg-red-500/30 text-red-300 rounded-full">
@@ -1114,7 +1114,7 @@ const toolsGrid = computed(() => {
                         </div>
 
                         <!-- Position -->
-                        <div class="text-sm text-gray-400 font-mono mt-1">
+                        <div class="text-sm text-ink-muted font-mono mt-1">
                           {{ death.world }}: {{ death.position.x.toFixed(1) }}, {{ death.position.y.toFixed(1) }}, {{ death.position.z.toFixed(1) }}
                         </div>
                       </div>
@@ -1145,7 +1145,7 @@ const toolsGrid = computed(() => {
           </div>
 
           <!-- Footer -->
-          <div class="px-6 py-4 border-t border-dark-50 flex justify-end">
+          <div class="px-6 py-4 border-t border-border flex justify-end">
             <Button variant="secondary" @click="emit('close')">{{ t('common.close') }}</Button>
           </div>
         </div>
@@ -1154,7 +1154,7 @@ const toolsGrid = computed(() => {
         <Transition name="fade">
           <div
             v-if="hoveredItem"
-            :class="['fixed z-[60] bg-dark-100 border-2 rounded-lg shadow-xl p-3 pointer-events-none min-w-[200px] max-w-xs', getItemRarityClass(hoveredItem.itemId)]"
+            :class="['fixed z-[60] bg-surface-overlay border-2 rounded-lg shadow-xl p-3 pointer-events-none min-w-[200px] max-w-xs', getItemRarityClass(hoveredItem.itemId)]"
             :style="{
               left: `${Math.min(tooltipPosition.x + 10, windowWidth - 280)}px`,
               top: `${Math.min(tooltipPosition.y + 10, windowHeight - 200)}px`
@@ -1165,39 +1165,39 @@ const toolsGrid = computed(() => {
               {{ hoveredItem.displayName }}
             </div>
             <!-- Item Type / Category -->
-            <div class="text-xs text-gray-400 mb-2">
+            <div class="text-xs text-ink-muted mb-2">
               {{ getItemCategory(hoveredItem.itemId) }}
-              <span v-if="getItemMaterial(hoveredItem.itemId)" class="text-gray-500">
+              <span v-if="getItemMaterial(hoveredItem.itemId)" class="text-ink-subtle">
                 · {{ getItemMaterial(hoveredItem.itemId) }}
               </span>
             </div>
 
             <!-- Item ID (smaller, for reference) -->
-            <div class="text-[10px] text-gray-500 font-mono mb-2 truncate">{{ hoveredItem.itemId }}</div>
+            <div class="text-[10px] text-ink-subtle font-mono mb-2 truncate">{{ hoveredItem.itemId }}</div>
 
             <!-- Stats -->
-            <div class="space-y-1.5 text-sm border-t border-dark-50 pt-2">
+            <div class="space-y-1.5 text-sm border-t border-border pt-2">
               <!-- Amount -->
               <div class="flex justify-between">
-                <span class="text-gray-400">{{ t('players.tooltip.amount') }}:</span>
-                <span class="text-white font-medium">{{ hoveredItem.amount }}x</span>
+                <span class="text-ink-muted">{{ t('players.tooltip.amount') }}:</span>
+                <span class="text-ink font-medium">{{ hoveredItem.amount }}x</span>
               </div>
 
               <!-- Durability -->
               <div v-if="hoveredItem.maxDurability > 0">
                 <div class="flex justify-between mb-1">
-                  <span class="text-gray-400">{{ t('players.tooltip.durability') }}:</span>
-                  <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-white' : 'text-red-400'" class="font-medium">
+                  <span class="text-ink-muted">{{ t('players.tooltip.durability') }}:</span>
+                  <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-ink' : 'text-red-400'" class="font-medium">
                     {{ Math.round(hoveredItem.durability) }} / {{ Math.round(hoveredItem.maxDurability) }}
                   </span>
                 </div>
-                <div class="h-2 bg-dark-300 rounded-full overflow-hidden">
+                <div class="h-2 bg-surface-muted rounded-full overflow-hidden">
                   <div :class="['h-full transition-all', getDurabilityColor(hoveredItem)]" :style="{ width: `${getDurabilityPercent(hoveredItem)}%` }"></div>
                 </div>
               </div>
 
               <!-- Slot info -->
-              <div class="flex justify-between text-xs text-gray-500">
+              <div class="flex justify-between text-xs text-ink-subtle">
                 <span>Slot:</span>
                 <span>{{ hoveredItem.slot }}</span>
               </div>

@@ -61,7 +61,7 @@ onMounted(() => {
         <h3 class="font-semibold text-status-error">
           {{ t('health.permissionIssue') }}
         </h3>
-        <p class="text-sm text-gray-300 mt-1">
+        <p class="text-sm text-ink-muted mt-1">
           {{ t('health.permissionIssueDesc') }}
         </p>
 
@@ -70,7 +70,7 @@ onMounted(() => {
           <div
             v-for="issue in permissionHealth.issues"
             :key="issue.path"
-            class="text-xs font-mono text-gray-400"
+            class="text-xs font-mono text-ink-muted"
           >
             <span class="text-status-warning">{{ issue.name }}</span>: {{ issue.path }}
             <span v-if="issue.error" class="text-status-error ml-2">({{ issue.error }})</span>
@@ -78,8 +78,8 @@ onMounted(() => {
         </div>
 
         <!-- Fix command -->
-        <div class="mt-3 p-2 bg-dark-400/50 rounded-md">
-          <p class="text-xs text-gray-400 mb-1">{{ t('health.fixCommand') }}:</p>
+        <div class="mt-3 p-2 bg-surface/50 rounded-md">
+          <p class="text-xs text-ink-muted mb-1">{{ t('health.fixCommand') }}:</p>
           <code class="text-sm text-hytale-orange font-mono select-all">
             sudo chown -R 9999:9999 /opt/hytale
           </code>
@@ -88,7 +88,7 @@ onMounted(() => {
 
       <button
         @click="dismiss"
-        class="flex-shrink-0 text-gray-400 hover:text-white transition-colors"
+        class="flex-shrink-0 text-ink-muted hover:text-ink transition-colors"
         :title="t('common.dismiss')"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

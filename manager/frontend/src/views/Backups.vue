@@ -9,6 +9,8 @@ import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import BackupTable from '@/components/backup/BackupTable.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -118,23 +120,19 @@ onMounted(fetchBackups)
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('backups.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('backups.subtitle') }}</p>
-      </div>
-      <Button v-if="authStore.hasPermission('backups.create')" :loading="creating" @click="createBackup">
-        <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
-        {{ t('backups.create') }}
-      </Button>
-    </div>
+    <PageHeader :title="t('backups.title')" :subtitle="t('backups.subtitle')">
+      <template #actions>
+        <Button v-if="authStore.hasPermission('backups.create')" :loading="creating" @click="createBackup">
+          <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          {{ t('backups.create') }}
+        </Button>
+      </template>
+    </PageHeader>
 
-    <!-- Error Message -->
-    <div v-if="error" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
-      <p class="text-status-error">{{ error }}</p>
-    </div>
+    <!-- Error State -->
+    <ErrorState v-if="error" size="sm" :message="error" @retry="fetchBackups" />
 
     <!-- Storage Info -->
     <div v-if="storage" class="card">
@@ -147,12 +145,12 @@ onMounted(fetchBackups)
               </svg>
             </div>
             <div>
-              <p class="text-sm text-gray-400">{{ t('backups.storage') }}</p>
-              <p class="text-lg font-semibold text-white">{{ storage.total_size_mb }} MB</p>
+              <p class="text-sm text-ink-muted">{{ t('backups.storage') }}</p>
+              <p class="text-lg font-semibold text-ink">{{ storage.total_size_mb }} MB</p>
             </div>
           </div>
           <div class="text-right">
-            <p class="text-sm text-gray-400">{{ storage.backup_count }} Backups</p>
+            <p class="text-sm text-ink-muted">{{ storage.backup_count }} Backups</p>
           </div>
         </div>
       </div>
@@ -175,7 +173,7 @@ onMounted(fetchBackups)
       :title="t('backups.delete')"
       @close="showDeleteModal = false"
     >
-      <p class="text-gray-300">{{ t('backups.confirmDelete') }}</p>
+      <p class="text-ink-muted">{{ t('backups.confirmDelete') }}</p>
       <template #footer>
         <Button variant="secondary" @click="showDeleteModal = false">
           {{ t('common.cancel') }}

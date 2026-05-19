@@ -61,9 +61,9 @@ function getCategoryColor(category: string): string {
     config: 'bg-yellow-500/20 text-yellow-400',
     mod: 'bg-orange-500/20 text-orange-400',
     user: 'bg-pink-500/20 text-pink-400',
-    system: 'bg-gray-500/20 text-gray-400',
+    system: 'bg-gray-500/20 text-ink-muted',
   }
-  return colors[category] || 'bg-gray-500/20 text-gray-400'
+  return colors[category] || 'bg-gray-500/20 text-ink-muted'
 }
 
 function getCategoryIcon(category: string): string {
@@ -110,15 +110,15 @@ onMounted(loadData)
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('activity.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('activity.subtitle') }}</p>
+        <h1 class="text-2xl font-bold text-ink">{{ t('activity.title') }}</h1>
+        <p class="text-ink-muted mt-1">{{ t('activity.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-3">
         <Button v-if="authStore.hasPermission('activity.clear')" variant="danger" @click="showClearConfirm = true" class="flex items-center gap-2">
           <Icon name="trash" class="w-4 h-4" />
           {{ t('activity.clearLog') }}
         </Button>
-        <button @click="loadData" class="p-2 text-gray-400 hover:text-white transition-colors" :aria-label="t('common.refresh')">
+        <button @click="loadData" class="p-2 text-ink-muted hover:text-ink transition-colors" :aria-label="t('common.refresh')">
           <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
         </button>
       </div>
@@ -139,7 +139,7 @@ onMounted(loadData)
           'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
           selectedCategory === cat
             ? 'bg-hytale-orange text-dark'
-            : 'bg-dark-100 text-gray-400 hover:text-white hover:bg-dark-50'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink hover:bg-surface-overlay'
         ]"
       >
         {{ t(`activity.categories.${cat}`) }}
@@ -155,8 +155,8 @@ onMounted(loadData)
           </svg>
         </div>
         <div>
-          <h3 class="font-semibold text-white">{{ t('activity.entries', { count: total }) }}</h3>
-          <p class="text-sm text-gray-400">
+          <h3 class="font-semibold text-ink">{{ t('activity.entries', { count: total }) }}</h3>
+          <p class="text-sm text-ink-muted">
             {{ selectedCategory === 'all' ? t('activity.categories.all') : t(`activity.categories.${selectedCategory}`) }}
           </p>
         </div>
@@ -172,7 +172,7 @@ onMounted(loadData)
         </svg>
       </div>
 
-      <div v-else-if="entries.length === 0" class="text-center text-gray-500 p-8">
+      <div v-else-if="entries.length === 0" class="text-center text-ink-subtle p-8">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
         </svg>
@@ -183,7 +183,7 @@ onMounted(loadData)
         <div
           v-for="entry in entries"
           :key="entry.id"
-          class="flex items-start gap-4 p-4 hover:bg-dark-50/20 transition-colors"
+          class="flex items-start gap-4 p-4 hover:bg-surface-overlay/20 transition-colors"
         >
           <!-- Category Icon -->
           <div :class="['p-2.5 rounded-lg', getCategoryColor(entry.category)]">
@@ -195,7 +195,7 @@ onMounted(loadData)
           <!-- Entry Details -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-1">
-              <span class="font-medium text-white">{{ formatLogMessage(entry.action) }}</span>
+              <span class="font-medium text-ink">{{ formatLogMessage(entry.action) }}</span>
               <span
                 :class="[
                   'px-2 py-0.5 rounded text-xs font-medium',
@@ -205,32 +205,32 @@ onMounted(loadData)
                 {{ entry.success ? t('activity.success') : t('activity.failed') }}
               </span>
             </div>
-            <div class="text-sm text-gray-400 space-y-0.5">
+            <div class="text-sm text-ink-muted space-y-0.5">
               <div v-if="entry.target" class="flex items-center gap-1">
-                <span class="text-gray-500">{{ t('activity.target') }}:</span>
-                <span class="text-gray-300">{{ formatLogMessage(entry.target) }}</span>
+                <span class="text-ink-subtle">{{ t('activity.target') }}:</span>
+                <span class="text-ink-muted">{{ formatLogMessage(entry.target) }}</span>
               </div>
-              <div v-if="entry.details" class="text-gray-500 truncate">{{ formatLogMessage(entry.details) }}</div>
+              <div v-if="entry.details" class="text-ink-subtle truncate">{{ formatLogMessage(entry.details) }}</div>
             </div>
           </div>
 
           <!-- Meta -->
           <div class="text-right text-sm">
-            <p class="text-white">{{ entry.user }}</p>
-            <p class="text-gray-500">{{ formatDate(entry.timestamp) }}</p>
+            <p class="text-ink">{{ entry.user }}</p>
+            <p class="text-ink-subtle">{{ formatDate(entry.timestamp) }}</p>
           </div>
         </div>
       </div>
 
       <!-- Pagination -->
-      <div v-if="entries.length > 0" class="flex items-center justify-between p-4 border-t border-dark-50/30">
+      <div v-if="entries.length > 0" class="flex items-center justify-between p-4 border-t border-border/40">
         <Button variant="secondary" size="sm" @click="prevPage" :disabled="!hasPrev" :aria-label="t('common.previous')">
           <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
           {{ t('common.previous') }}
         </Button>
-        <span class="text-gray-400">
+        <span class="text-ink-muted">
           {{ offset + 1 }} - {{ Math.min(offset + entries.length, total) }} / {{ total }}
         </span>
         <Button variant="secondary" size="sm" @click="nextPage" :disabled="!hasMore" :aria-label="t('common.next')">

@@ -119,7 +119,7 @@ onMounted(async () => {
         <svg class="w-16 h-16 text-hytale-orange animate-spin mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
-        <p class="text-gray-400">{{ t('setup.loading') }}</p>
+        <p class="text-ink-muted">{{ t('setup.loading') }}</p>
       </div>
     </div>
 
@@ -130,19 +130,19 @@ onMounted(async () => {
         <div class="max-w-4xl mx-auto flex items-center justify-between">
           <!-- Logo -->
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-dark-200 rounded-xl overflow-hidden border border-dark-50/50">
+            <div class="w-10 h-10 bg-surface-raised rounded-xl overflow-hidden border border-border/60">
               <img src="/logo.png" alt="KyuubiSoft Panel" class="w-full h-full object-cover" />
             </div>
             <div>
-              <h1 class="text-lg font-bold text-white">KyuubiSoft Panel</h1>
-              <p class="text-xs text-gray-400">{{ t('setup.wizardTitle') }}</p>
+              <h1 class="text-lg font-bold text-ink">KyuubiSoft Panel</h1>
+              <p class="text-xs text-ink-muted">{{ t('setup.wizardTitle') }}</p>
             </div>
           </div>
 
           <!-- Step Counter -->
-          <div class="hidden sm:flex items-center gap-2 text-sm text-gray-400">
+          <div class="hidden sm:flex items-center gap-2 text-sm text-ink-muted">
             <span>{{ t('setup.step') }}</span>
-            <span class="text-white font-medium">{{ setupStore.currentStep + 1 }}</span>
+            <span class="text-ink font-medium">{{ setupStore.currentStep + 1 }}</span>
             <span>/</span>
             <span>{{ setupStore.totalSteps }}</span>
           </div>
@@ -152,7 +152,7 @@ onMounted(async () => {
       <!-- Progress Bar -->
       <div class="relative z-10 px-4 sm:px-6 lg:px-8">
         <div class="max-w-4xl mx-auto">
-          <div class="h-1 bg-dark-200 rounded-full overflow-hidden">
+          <div class="h-1 bg-surface-raised rounded-full overflow-hidden">
             <div
               class="h-full bg-gradient-to-r from-hytale-orange to-hytale-yellow transition-all duration-500 ease-out"
               :style="{ width: `${setupStore.progress}%` }"
@@ -166,8 +166,8 @@ onMounted(async () => {
         <div class="max-w-4xl mx-auto">
           <!-- Mobile: Current step indicator only -->
           <div class="sm:hidden flex items-center justify-center gap-2">
-            <span class="text-sm text-gray-400">{{ t(setupStore.currentStepConfig?.titleKey || '') }}</span>
-            <span v-if="setupStore.currentStepConfig?.skippable" class="text-xs text-gray-500">({{ t('setup.optional') }})</span>
+            <span class="text-sm text-ink-muted">{{ t(setupStore.currentStepConfig?.titleKey || '') }}</span>
+            <span v-if="setupStore.currentStepConfig?.skippable" class="text-xs text-ink-subtle">({{ t('setup.optional') }})</span>
           </div>
 
           <!-- Desktop: Step dots with current step name -->
@@ -194,13 +194,13 @@ onMounted(async () => {
                           : 'bg-status-success'
                         : index === setupStore.currentStep
                           ? 'bg-hytale-orange ring-2 ring-hytale-orange/30 ring-offset-2 ring-offset-dark w-4 h-4'
-                          : 'bg-dark-200',
+                          : 'bg-surface-raised',
                     ]"
                   />
 
                   <!-- Tooltip on hover -->
                   <div class="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div class="bg-dark-100 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                    <div class="bg-surface-overlay text-ink text-xs px-2 py-1 rounded whitespace-nowrap">
                       {{ t(step.titleKey) }}
                     </div>
                   </div>
@@ -213,7 +213,7 @@ onMounted(async () => {
                   :class="[
                     index < setupStore.currentStep
                       ? isStepSkipped(step.id) ? 'bg-status-warning' : 'bg-status-success'
-                      : 'bg-dark-200',
+                      : 'bg-surface-raised',
                   ]"
                 />
               </template>
@@ -221,8 +221,8 @@ onMounted(async () => {
 
             <!-- Current step name -->
             <div class="flex items-center gap-2">
-              <span class="text-sm text-white font-medium">{{ t(setupStore.currentStepConfig?.titleKey || '') }}</span>
-              <span v-if="setupStore.currentStepConfig?.skippable" class="text-xs bg-dark-200 text-gray-400 px-2 py-0.5 rounded">
+              <span class="text-sm text-ink font-medium">{{ t(setupStore.currentStepConfig?.titleKey || '') }}</span>
+              <span v-if="setupStore.currentStepConfig?.skippable" class="text-xs bg-surface-raised text-ink-muted px-2 py-0.5 rounded">
                 {{ t('setup.optional') }}
               </span>
             </div>
@@ -249,7 +249,7 @@ onMounted(async () => {
       <!-- Footer -->
       <footer class="relative z-10 py-4 px-4 sm:px-6 lg:px-8">
         <div class="max-w-4xl mx-auto text-center">
-          <p class="text-xs text-gray-500">
+          <p class="text-xs text-ink-subtle">
             KyuubiSoft Hytale Panel &copy; {{ new Date().getFullYear() }}
           </p>
         </div>

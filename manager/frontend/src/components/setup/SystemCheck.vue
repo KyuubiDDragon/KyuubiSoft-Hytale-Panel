@@ -32,7 +32,7 @@ const statusIcons: Record<string, { svg: string; class: string; bg: string }> = 
   },
   checking: {
     svg: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />`,
-    class: 'text-gray-400 animate-spin',
+    class: 'text-ink-muted animate-spin',
     bg: 'bg-gray-500/20',
   },
 }
@@ -98,8 +98,8 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.systemCheckTitle') }}</h2>
-      <p class="text-gray-400">{{ t('setup.systemCheckDescription') }}</p>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.systemCheckTitle') }}</h2>
+      <p class="text-ink-muted">{{ t('setup.systemCheckDescription') }}</p>
     </div>
 
     <!-- Check Results -->
@@ -109,7 +109,7 @@ onMounted(() => {
           <svg class="w-12 h-12 text-hytale-orange animate-spin mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          <p class="text-gray-400">{{ t('setup.runningSystemCheck') }}</p>
+          <p class="text-ink-muted">{{ t('setup.runningSystemCheck') }}</p>
         </div>
 
         <div v-else class="divide-y divide-dark-50/30">
@@ -136,7 +136,7 @@ onMounted(() => {
             <!-- Check Info -->
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <p class="text-white font-medium">{{ check.name }}</p>
+                <p class="text-ink font-medium">{{ check.name }}</p>
                 <span
                   v-if="check.required"
                   class="text-xs px-1.5 py-0.5 rounded bg-status-error/20 text-status-error"
@@ -145,12 +145,12 @@ onMounted(() => {
                 </span>
                 <span
                   v-else
-                  class="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400"
+                  class="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-ink-muted"
                 >
                   {{ t('setup.optional') }}
                 </span>
               </div>
-              <p class="text-sm text-gray-400">{{ check.description }}</p>
+              <p class="text-sm text-ink-muted">{{ check.description }}</p>
             </div>
 
             <!-- Status Message -->
@@ -161,12 +161,12 @@ onMounted(() => {
                   'text-status-success': check.status === 'ok' || check.status === 'pass',
                   'text-status-error': check.status === 'error' || check.status === 'fail',
                   'text-status-warning': check.status === 'warning',
-                  'text-gray-400': check.status === 'checking',
+                  'text-ink-muted': check.status === 'checking',
                 }"
               >
                 {{ check.message }}
               </p>
-              <p v-if="check.details" class="text-xs text-gray-500">{{ check.details }}</p>
+              <p v-if="check.details" class="text-xs text-ink-subtle">{{ check.details }}</p>
             </div>
           </div>
         </div>

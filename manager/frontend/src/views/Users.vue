@@ -172,11 +172,11 @@ onMounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('users.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('users.subtitle') }}</p>
+        <h1 class="text-2xl font-bold text-ink">{{ t('users.title') }}</h1>
+        <p class="text-ink-muted mt-1">{{ t('users.subtitle') }}</p>
       </div>
       <div class="flex gap-2">
-        <button @click="loadUsers" class="p-2 text-gray-400 hover:text-white transition-colors" :aria-label="t('common.refresh')">
+        <button @click="loadUsers" class="p-2 text-ink-muted hover:text-ink transition-colors" :aria-label="t('common.refresh')">
           <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
         </button>
         <Button v-if="authStore.hasPermission('users.create')" @click="openAddModal" class="flex items-center gap-2">
@@ -200,13 +200,13 @@ onMounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="font-semibold text-white">{{ t('users.rolesInfo') }}</h3>
-          <div class="text-sm text-gray-400 mt-2 space-y-1">
+          <h3 class="font-semibold text-ink">{{ t('users.rolesInfo') }}</h3>
+          <div class="text-sm text-ink-muted mt-2 space-y-1">
             <p v-for="role in roles" :key="role.id">
               <span class="font-medium" :style="{ color: role.color || '#6b7280' }">{{ role.name }}:</span>
               {{ role.description }}
             </p>
-            <p v-if="roles.length === 0" class="text-gray-500 italic">{{ t('common.loading') }}</p>
+            <p v-if="roles.length === 0" class="text-ink-subtle italic">{{ t('common.loading') }}</p>
           </div>
         </div>
       </div>
@@ -221,7 +221,7 @@ onMounted(() => {
         </svg>
       </div>
 
-      <div v-else-if="users.length === 0" class="text-center text-gray-500 p-8">
+      <div v-else-if="users.length === 0" class="text-center text-ink-subtle p-8">
         {{ t('users.noUsers') }}
       </div>
 
@@ -229,7 +229,7 @@ onMounted(() => {
         <div
           v-for="user in users"
           :key="user.username"
-          class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
+          class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
         >
           <div class="flex items-center gap-4">
             <!-- Avatar -->
@@ -246,7 +246,7 @@ onMounted(() => {
             <!-- Info -->
             <div>
               <div class="flex items-center gap-2">
-                <p class="font-medium text-white">{{ user.username }}</p>
+                <p class="font-medium text-ink">{{ user.username }}</p>
                 <span
                   class="px-2 py-0.5 rounded text-xs font-medium"
                   :style="{
@@ -256,9 +256,9 @@ onMounted(() => {
                 >
                   {{ getRoleName(user.roleId) }}
                 </span>
-                <span v-if="user.username === authStore.username" class="text-xs text-gray-500">({{ t('users.you') }})</span>
+                <span v-if="user.username === authStore.username" class="text-xs text-ink-subtle">({{ t('users.you') }})</span>
               </div>
-              <div class="flex items-center gap-4 text-sm text-gray-500 mt-0.5">
+              <div class="flex items-center gap-4 text-sm text-ink-subtle mt-0.5">
                 <span>{{ t('users.created') }}: {{ formatDate(user.createdAt) }}</span>
                 <span v-if="user.lastLogin">{{ t('users.lastLogin') }}: {{ formatDate(user.lastLogin) }}</span>
               </div>
@@ -270,7 +270,7 @@ onMounted(() => {
             <button
               v-if="authStore.hasPermission('users.edit')"
               @click="openEditModal(user)"
-              class="p-2 text-gray-400 hover:text-hytale-orange transition-colors"
+              class="p-2 text-ink-muted hover:text-hytale-orange transition-colors"
               :title="t('common.edit')"
               :aria-label="t('common.edit')"
             >
@@ -281,7 +281,7 @@ onMounted(() => {
             <button
               v-if="user.username !== authStore.username && authStore.hasPermission('users.delete')"
               @click="deleteUser(user)"
-              class="p-2 text-gray-400 hover:text-status-error transition-colors"
+              class="p-2 text-ink-muted hover:text-status-error transition-colors"
               :title="t('common.delete')"
               :aria-label="t('common.delete')"
             >
@@ -296,8 +296,8 @@ onMounted(() => {
 
     <!-- Add User Modal -->
     <div v-if="showAddModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-dark-200 rounded-xl p-6 w-full max-w-md mx-4">
-        <h2 class="text-xl font-bold text-white mb-4">{{ t('users.addUser') }}</h2>
+      <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md mx-4">
+        <h2 class="text-xl font-bold text-ink mb-4">{{ t('users.addUser') }}</h2>
 
         <div v-if="formError" class="p-3 mb-4 bg-status-error/10 border border-status-error/20 rounded-lg">
           <p class="text-status-error text-sm">{{ formError }}</p>
@@ -305,30 +305,30 @@ onMounted(() => {
 
         <form @submit.prevent="addUser" class="space-y-4">
           <div>
-            <label class="block text-sm text-gray-400 mb-1">{{ t('users.username') }}</label>
+            <label class="block text-sm text-ink-muted mb-1">{{ t('users.username') }}</label>
             <input
               v-model="formUsername"
               type="text"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
               :placeholder="t('users.usernamePlaceholder')"
             />
           </div>
 
           <div>
-            <label class="block text-sm text-gray-400 mb-1">{{ t('users.password') }}</label>
+            <label class="block text-sm text-ink-muted mb-1">{{ t('users.password') }}</label>
             <input
               v-model="formPassword"
               type="password"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
               :placeholder="t('users.passwordPlaceholder')"
             />
           </div>
 
           <div>
-            <label class="block text-sm text-gray-400 mb-1">{{ t('users.role') }}</label>
+            <label class="block text-sm text-ink-muted mb-1">{{ t('users.role') }}</label>
             <select
               v-model="formRoleId"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
             >
               <option v-for="role in roles" :key="role.id" :value="role.id">
                 {{ role.name }} - {{ role.description }}
@@ -346,8 +346,8 @@ onMounted(() => {
 
     <!-- Edit User Modal -->
     <div v-if="showEditModal && editingUser" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-dark-200 rounded-xl p-6 w-full max-w-md mx-4">
-        <h2 class="text-xl font-bold text-white mb-4">{{ t('users.editUser') }}: {{ editingUser.username }}</h2>
+      <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md mx-4">
+        <h2 class="text-xl font-bold text-ink mb-4">{{ t('users.editUser') }}: {{ editingUser.username }}</h2>
 
         <div v-if="formError" class="p-3 mb-4 bg-status-error/10 border border-status-error/20 rounded-lg">
           <p class="text-status-error text-sm">{{ formError }}</p>
@@ -355,21 +355,21 @@ onMounted(() => {
 
         <form @submit.prevent="updateUser" class="space-y-4">
           <div>
-            <label class="block text-sm text-gray-400 mb-1">{{ t('users.newPassword') }}</label>
+            <label class="block text-sm text-ink-muted mb-1">{{ t('users.newPassword') }}</label>
             <input
               v-model="formPassword"
               type="password"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
               :placeholder="t('users.newPasswordPlaceholder')"
             />
-            <p class="text-xs text-gray-500 mt-1">{{ t('users.leaveBlank') }}</p>
+            <p class="text-xs text-ink-subtle mt-1">{{ t('users.leaveBlank') }}</p>
           </div>
 
           <div>
-            <label class="block text-sm text-gray-400 mb-1">{{ t('users.role') }}</label>
+            <label class="block text-sm text-ink-muted mb-1">{{ t('users.role') }}</label>
             <select
               v-model="formRoleId"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
             >
               <option v-for="role in roles" :key="role.id" :value="role.id">
                 {{ role.name }} - {{ role.description }}

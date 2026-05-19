@@ -58,12 +58,12 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('statistics.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('statistics.subtitle') }}</p>
+        <h1 class="text-2xl font-bold text-ink">{{ t('statistics.title') }}</h1>
+        <p class="text-ink-muted mt-1">{{ t('statistics.subtitle') }}</p>
       </div>
       <button
         @click="loadData"
-        class="p-2 text-gray-400 hover:text-white transition-colors"
+        class="p-2 text-ink-muted hover:text-ink transition-colors"
         :aria-label="t('common.refresh')"
       >
         <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
@@ -88,25 +88,25 @@ onMounted(() => {
         <Card>
           <div class="text-center">
             <p class="text-3xl font-bold text-hytale-orange">{{ stats.totalPlayers }}</p>
-            <p class="text-sm text-gray-400 mt-1">{{ t('statistics.totalPlayers') }}</p>
+            <p class="text-sm text-ink-muted mt-1">{{ t('statistics.totalPlayers') }}</p>
           </div>
         </Card>
         <Card>
           <div class="text-center">
             <p class="text-3xl font-bold text-hytale-yellow">{{ stats.peakOnlineToday }}</p>
-            <p class="text-sm text-gray-400 mt-1">{{ t('statistics.peakToday') }}</p>
+            <p class="text-sm text-ink-muted mt-1">{{ t('statistics.peakToday') }}</p>
           </div>
         </Card>
         <Card>
           <div class="text-center">
             <p class="text-3xl font-bold text-green-400">{{ stats.activePlayersLast7Days }}</p>
-            <p class="text-sm text-gray-400 mt-1">{{ t('statistics.activeLast7Days') }}</p>
+            <p class="text-sm text-ink-muted mt-1">{{ t('statistics.activeLast7Days') }}</p>
           </div>
         </Card>
         <Card>
           <div class="text-center">
             <p class="text-3xl font-bold text-blue-400">{{ stats.newPlayersLast7Days }}</p>
-            <p class="text-sm text-gray-400 mt-1">{{ t('statistics.newLast7Days') }}</p>
+            <p class="text-sm text-ink-muted mt-1">{{ t('statistics.newLast7Days') }}</p>
           </div>
         </Card>
       </div>
@@ -115,17 +115,17 @@ onMounted(() => {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card :title="t('statistics.playtimeStats')">
           <div class="space-y-4">
-            <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
-              <span class="text-gray-400">{{ t('statistics.totalPlaytime') }}</span>
-              <span class="font-medium text-white">{{ formatPlaytime(stats.totalPlaytime) }}</span>
+            <div class="flex justify-between items-center p-3 bg-surface rounded-lg">
+              <span class="text-ink-muted">{{ t('statistics.totalPlaytime') }}</span>
+              <span class="font-medium text-ink">{{ formatPlaytime(stats.totalPlaytime) }}</span>
             </div>
-            <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
-              <span class="text-gray-400">{{ t('statistics.averagePlaytime') }}</span>
-              <span class="font-medium text-white">{{ formatPlaytime(stats.averagePlaytime) }}</span>
+            <div class="flex justify-between items-center p-3 bg-surface rounded-lg">
+              <span class="text-ink-muted">{{ t('statistics.averagePlaytime') }}</span>
+              <span class="font-medium text-ink">{{ formatPlaytime(stats.averagePlaytime) }}</span>
             </div>
-            <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
-              <span class="text-gray-400">{{ t('statistics.avgSessions') }}</span>
-              <span class="font-medium text-white">{{ stats.averageSessionsPerPlayer }}</span>
+            <div class="flex justify-between items-center p-3 bg-surface rounded-lg">
+              <span class="text-ink-muted">{{ t('statistics.avgSessions') }}</span>
+              <span class="font-medium text-ink">{{ stats.averageSessionsPerPlayer }}</span>
             </div>
           </div>
         </Card>
@@ -134,14 +134,14 @@ onMounted(() => {
         <Card :title="t('statistics.weeklyActivity')">
           <div class="space-y-2">
             <div v-for="day in activity" :key="day.date" class="flex items-center gap-3">
-              <span class="w-12 text-xs text-gray-500">{{ formatDate(day.date) }}</span>
-              <div class="flex-1 h-6 bg-dark-400 rounded overflow-hidden">
+              <span class="w-12 text-xs text-ink-subtle">{{ formatDate(day.date) }}</span>
+              <div class="flex-1 h-6 bg-surface rounded overflow-hidden">
                 <div
                   class="h-full bg-gradient-to-r from-hytale-orange to-hytale-yellow transition-all duration-300"
                   :style="{ width: `${(day.uniquePlayers / maxActivityValue) * 100}%` }"
                 ></div>
               </div>
-              <span class="w-8 text-sm text-gray-400 text-right">{{ day.uniquePlayers }}</span>
+              <span class="w-8 text-sm text-ink-muted text-right">{{ day.uniquePlayers }}</span>
             </div>
           </div>
         </Card>
@@ -149,14 +149,14 @@ onMounted(() => {
 
       <!-- Top Players -->
       <Card :title="t('statistics.topPlayers')">
-        <div v-if="stats.topPlayers.length === 0" class="text-center py-8 text-gray-500">
+        <div v-if="stats.topPlayers.length === 0" class="text-center py-8 text-ink-subtle">
           <Icon name="players" class="w-10 h-10 mx-auto mb-2 opacity-50" />
           <p>{{ t('statistics.noPlayers') }}</p>
         </div>
         <div v-else class="overflow-x-auto">
           <table class="w-full">
             <thead>
-              <tr class="text-left text-gray-400 text-sm">
+              <tr class="text-left text-ink-muted text-sm">
                 <th class="pb-3 font-medium">#</th>
                 <th class="pb-3 font-medium">{{ t('statistics.playerName') }}</th>
                 <th class="pb-3 font-medium text-right">{{ t('statistics.playTime') }}</th>
@@ -167,16 +167,16 @@ onMounted(() => {
               <tr
                 v-for="(player, index) in stats.topPlayers"
                 :key="player.name"
-                class="border-t border-dark-50"
+                class="border-t border-border"
               >
                 <td class="py-3">
                   <span
                     :class="[
                       'inline-flex items-center justify-center w-6 h-6 rounded-full text-sm font-medium',
                       index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
-                      index === 1 ? 'bg-gray-400/20 text-gray-300' :
+                      index === 1 ? 'bg-gray-400/20 text-ink-muted' :
                       index === 2 ? 'bg-amber-600/20 text-amber-500' :
-                      'bg-dark-50 text-gray-500'
+                      'bg-surface-overlay text-ink-subtle'
                     ]"
                   >
                     {{ index + 1 }}
@@ -184,14 +184,14 @@ onMounted(() => {
                 </td>
                 <td class="py-3">
                   <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 bg-dark-50 rounded-lg flex items-center justify-center">
-                      <Icon name="players" class="w-4 h-4 text-gray-400" />
+                    <div class="w-8 h-8 bg-surface-overlay rounded-lg flex items-center justify-center">
+                      <Icon name="players" class="w-4 h-4 text-ink-muted" />
                     </div>
-                    <span class="font-medium text-white">{{ player.name }}</span>
+                    <span class="font-medium text-ink">{{ player.name }}</span>
                   </div>
                 </td>
-                <td class="py-3 text-right text-gray-300">{{ formatPlaytime(player.playTime) }}</td>
-                <td class="py-3 text-right text-gray-400">{{ player.sessions }}</td>
+                <td class="py-3 text-right text-ink-muted">{{ formatPlaytime(player.playTime) }}</td>
+                <td class="py-3 text-right text-ink-muted">{{ player.sessions }}</td>
               </tr>
             </tbody>
           </table>

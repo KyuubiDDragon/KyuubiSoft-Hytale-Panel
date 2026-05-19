@@ -11,7 +11,7 @@ const { t } = useI18n()
   <div class="h-full flex flex-col">
     <!-- Page Title -->
     <div class="mb-6">
-      <h1 class="text-2xl font-bold text-white">{{ t('console.title') }}</h1>
+      <h1 class="text-2xl font-bold text-ink">{{ t('console.title') }}</h1>
     </div>
 
     <!-- Console Card -->

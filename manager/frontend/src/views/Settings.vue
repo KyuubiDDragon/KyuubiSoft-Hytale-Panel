@@ -466,7 +466,7 @@ onUnmounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Title -->
-    <h1 class="text-2xl font-bold text-white">{{ t('settings.title') }}</h1>
+    <h1 class="text-2xl font-bold text-ink">{{ t('settings.title') }}</h1>
 
     <!-- Language Settings -->
     <Card :title="t('settings.language')">
@@ -477,13 +477,13 @@ onUnmounted(() => {
             'flex items-center gap-3 px-4 py-3 rounded-lg border-2 transition-all',
             currentLocale === 'de'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 hover:border-gray-600'
+              : 'border-border hover:border-gray-600'
           ]"
         >
           <span class="text-2xl">🇩🇪</span>
           <div class="text-left">
-            <p class="font-medium text-white">{{ t('settings.german') }}</p>
-            <p class="text-sm text-gray-400">Deutsch</p>
+            <p class="font-medium text-ink">{{ t('settings.german') }}</p>
+            <p class="text-sm text-ink-muted">Deutsch</p>
           </div>
           <svg
             v-if="currentLocale === 'de'"
@@ -502,13 +502,13 @@ onUnmounted(() => {
             'flex items-center gap-3 px-4 py-3 rounded-lg border-2 transition-all',
             currentLocale === 'en'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 hover:border-gray-600'
+              : 'border-border hover:border-gray-600'
           ]"
         >
           <span class="text-2xl">🇬🇧</span>
           <div class="text-left">
-            <p class="font-medium text-white">{{ t('settings.english') }}</p>
-            <p class="text-sm text-gray-400">English</p>
+            <p class="font-medium text-ink">{{ t('settings.english') }}</p>
+            <p class="text-sm text-ink-muted">English</p>
           </div>
           <svg
             v-if="currentLocale === 'en'"
@@ -527,13 +527,13 @@ onUnmounted(() => {
             'flex items-center gap-3 px-4 py-3 rounded-lg border-2 transition-all',
             currentLocale === 'pt_br'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 hover:border-gray-600'
+              : 'border-border hover:border-gray-600'
           ]"
         >
           <span class="text-2xl">🇧🇷</span>
           <div class="text-left">
-            <p class="font-medium text-white">Português (Brasil)</p>
-            <p class="text-sm text-gray-400">Portuguese (Brazil)</p>
+            <p class="font-medium text-ink">Português (Brasil)</p>
+            <p class="text-sm text-ink-muted">Portuguese (Brazil)</p>
           </div>
           <svg
             v-if="currentLocale === 'pt_br'"
@@ -550,7 +550,7 @@ onUnmounted(() => {
 
     <!-- Hytale Server Authentication (admins and moderators only) -->
     <Card v-if="authStore.canManageServer" :title="t('settings.hytaleAuth')">
-      <p class="text-gray-400 text-sm mb-4">{{ t('settings.hytaleAuthDesc') }}</p>
+      <p class="text-ink-muted text-sm mb-4">{{ t('settings.hytaleAuthDesc') }}</p>
 
       <!-- Error/Success Messages -->
       <div v-if="hytaleAuthError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
@@ -562,10 +562,10 @@ onUnmounted(() => {
 
       <div class="space-y-4">
         <!-- Current Status -->
-        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+        <div class="flex items-center justify-between p-4 bg-surface-muted rounded-lg">
           <div>
-            <p class="text-sm text-gray-400">{{ t('settings.authStatus') }}</p>
-            <p class="text-white font-medium mt-1">
+            <p class="text-sm text-ink-muted">{{ t('settings.authStatus') }}</p>
+            <p class="text-ink font-medium mt-1">
               <span v-if="hytaleAuthStatus.authenticated" class="flex items-center gap-2">
                 <svg class="w-5 h-5 text-status-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -573,7 +573,7 @@ onUnmounted(() => {
                 {{ t('settings.authenticated') }}
               </span>
               <span v-else class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-5 h-5 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {{ t('settings.notAuthenticated') }}
@@ -614,18 +614,18 @@ onUnmounted(() => {
         </div>
 
         <!-- Authentication in Progress -->
-        <div v-if="deviceCodeData" class="p-4 bg-dark-300 rounded-lg border-2 border-hytale-orange">
+        <div v-if="deviceCodeData" class="p-4 bg-surface-muted rounded-lg border-2 border-hytale-orange">
           <div class="flex items-start gap-3">
             <svg class="w-6 h-6 text-hytale-orange mt-1 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
             <div class="flex-1">
-              <h3 class="text-white font-medium mb-2">{{ t('settings.authInProgress') }}</h3>
-              <p class="text-gray-400 text-sm mb-4">{{ t('settings.completeAuth') }}</p>
+              <h3 class="text-ink font-medium mb-2">{{ t('settings.authInProgress') }}</h3>
+              <p class="text-ink-muted text-sm mb-4">{{ t('settings.completeAuth') }}</p>
 
               <!-- Auth Code Display -->
-              <div class="bg-dark-400 p-4 rounded-lg mb-4">
-                <p class="text-xs text-gray-500 uppercase mb-2">{{ t('settings.authCode') }}</p>
+              <div class="bg-surface p-4 rounded-lg mb-4">
+                <p class="text-xs text-ink-subtle uppercase mb-2">{{ t('settings.authCode') }}</p>
                 <div class="flex items-center justify-between">
                   <p class="text-2xl font-mono text-hytale-orange font-bold">{{ deviceCodeData.userCode }}</p>
                   <button
@@ -682,7 +682,7 @@ onUnmounted(() => {
 
     <!-- Patchline Settings (admins and moderators only) -->
     <Card v-if="authStore.canManageServer" :title="t('settings.patchlineTitle')">
-      <p class="text-gray-400 text-sm mb-4">{{ t('settings.patchlineDesc') }}</p>
+      <p class="text-ink-muted text-sm mb-4">{{ t('settings.patchlineDesc') }}</p>
 
       <!-- Error/Success Messages -->
       <div v-if="patchlineError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
@@ -694,10 +694,10 @@ onUnmounted(() => {
 
       <div class="space-y-4">
         <!-- Current Setting -->
-        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+        <div class="flex items-center justify-between p-4 bg-surface-muted rounded-lg">
           <div>
-            <p class="text-sm text-gray-400">{{ t('settings.currentPatchline') }}</p>
-            <p class="text-white font-medium mt-1 font-mono">
+            <p class="text-sm text-ink-muted">{{ t('settings.currentPatchline') }}</p>
+            <p class="text-ink font-medium mt-1 font-mono">
               {{ patchlineData?.patchline || '-' }}
             </p>
           </div>
@@ -712,12 +712,12 @@ onUnmounted(() => {
               'flex-1 flex items-center justify-center gap-3 px-4 py-3 rounded-lg border-2 transition-all',
               patchlineData?.patchline === 'release'
                 ? 'border-status-success bg-status-success/10'
-                : 'border-dark-50 hover:border-gray-600'
+                : 'border-border hover:border-gray-600'
             ]"
           >
             <div class="text-center">
-              <p class="font-medium text-white">{{ t('config.release') }}</p>
-              <p class="text-xs text-gray-400">{{ t('settings.patchlineReleaseDesc') }}</p>
+              <p class="font-medium text-ink">{{ t('config.release') }}</p>
+              <p class="text-xs text-ink-muted">{{ t('settings.patchlineReleaseDesc') }}</p>
             </div>
             <svg
               v-if="patchlineData?.patchline === 'release'"
@@ -737,12 +737,12 @@ onUnmounted(() => {
               'flex-1 flex items-center justify-center gap-3 px-4 py-3 rounded-lg border-2 transition-all',
               patchlineData?.patchline === 'pre-release'
                 ? 'border-status-warning bg-status-warning/10'
-                : 'border-dark-50 hover:border-gray-600'
+                : 'border-border hover:border-gray-600'
             ]"
           >
             <div class="text-center">
-              <p class="font-medium text-white">{{ t('config.preRelease') }}</p>
-              <p class="text-xs text-gray-400">{{ t('settings.patchlinePreReleaseDesc') }}</p>
+              <p class="font-medium text-ink">{{ t('config.preRelease') }}</p>
+              <p class="text-xs text-ink-muted">{{ t('settings.patchlinePreReleaseDesc') }}</p>
             </div>
             <svg
               v-if="patchlineData?.patchline === 'pre-release'"
@@ -756,7 +756,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div v-else class="text-center py-4 text-gray-400">
+        <div v-else class="text-center py-4 text-ink-muted">
           {{ t('common.loading') }}...
         </div>
 
@@ -765,7 +765,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between">
             <div>
               <p class="text-status-warning font-medium">{{ t('settings.patchlineRestartRequired') }}</p>
-              <p class="text-sm text-gray-400 mt-1">{{ t('settings.patchlineRestartRequiredDesc') }}</p>
+              <p class="text-sm text-ink-muted mt-1">{{ t('settings.patchlineRestartRequiredDesc') }}</p>
             </div>
             <button
               v-if="authStore.hasPermission('server.restart')"
@@ -778,7 +778,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <p v-if="!patchlineNeedsRestart" class="text-xs text-gray-500">
+        <p v-if="!patchlineNeedsRestart" class="text-xs text-ink-subtle">
           {{ t('settings.patchlineRestartNote') }}
         </p>
       </div>
@@ -786,7 +786,7 @@ onUnmounted(() => {
 
     <!-- Accept Early Plugins Settings (admins and moderators only) -->
     <Card v-if="authStore.canManageServer" :title="t('settings.acceptEarlyPluginsTitle')">
-      <p class="text-gray-400 text-sm mb-4">{{ t('settings.acceptEarlyPluginsDesc') }}</p>
+      <p class="text-ink-muted text-sm mb-4">{{ t('settings.acceptEarlyPluginsDesc') }}</p>
 
       <!-- Error/Success Messages -->
       <div v-if="acceptEarlyPluginsError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
@@ -798,7 +798,7 @@ onUnmounted(() => {
 
       <div class="space-y-4">
         <!-- Current Setting -->
-        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+        <div class="flex items-center justify-between p-4 bg-surface-muted rounded-lg">
           <div class="flex items-center gap-3">
             <label class="relative inline-flex items-center cursor-pointer">
               <input
@@ -808,17 +808,17 @@ onUnmounted(() => {
                 @change="setAcceptEarlyPlugins(($event.target as HTMLInputElement).checked)"
                 class="sr-only peer"
               />
-              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
+              <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
             </label>
             <div>
-              <p class="text-white font-medium">{{ t('settings.acceptEarlyPluginsLabel') }}</p>
-              <p class="text-sm text-gray-400">{{ t('settings.acceptEarlyPluginsHint') }}</p>
+              <p class="text-ink font-medium">{{ t('settings.acceptEarlyPluginsLabel') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('settings.acceptEarlyPluginsHint') }}</p>
             </div>
           </div>
-          <div class="text-sm text-gray-400">
+          <div class="text-sm text-ink-muted">
             <span v-if="acceptEarlyPluginsLoading">{{ t('common.loading') }}...</span>
             <span v-else-if="acceptEarlyPluginsData?.acceptEarlyPlugins" class="text-status-success">{{ t('settings.enabled') }}</span>
-            <span v-else class="text-gray-500">{{ t('settings.disabled') }}</span>
+            <span v-else class="text-ink-subtle">{{ t('settings.disabled') }}</span>
           </div>
         </div>
 
@@ -827,7 +827,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between">
             <div>
               <p class="text-status-warning font-medium">{{ t('settings.acceptEarlyPluginsRestartRequired') }}</p>
-              <p class="text-sm text-gray-400 mt-1">{{ t('settings.acceptEarlyPluginsRestartRequiredDesc') }}</p>
+              <p class="text-sm text-ink-muted mt-1">{{ t('settings.acceptEarlyPluginsRestartRequiredDesc') }}</p>
             </div>
             <button
               v-if="authStore.hasPermission('server.restart')"
@@ -840,7 +840,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <p v-if="!acceptEarlyPluginsNeedsRestart" class="text-xs text-gray-500">
+        <p v-if="!acceptEarlyPluginsNeedsRestart" class="text-xs text-ink-subtle">
           {{ t('settings.acceptEarlyPluginsRestartNote') }}
         </p>
       </div>
@@ -848,7 +848,7 @@ onUnmounted(() => {
 
     <!-- Disable Sentry Settings (admins and moderators only) -->
     <Card v-if="authStore.canManageServer" :title="t('settings.disableSentryTitle')">
-      <p class="text-gray-400 text-sm mb-4">{{ t('settings.disableSentryDesc') }}</p>
+      <p class="text-ink-muted text-sm mb-4">{{ t('settings.disableSentryDesc') }}</p>
 
       <!-- Error/Success Messages -->
       <div v-if="disableSentryError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
@@ -860,7 +860,7 @@ onUnmounted(() => {
 
       <div class="space-y-4">
         <!-- Current Setting -->
-        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+        <div class="flex items-center justify-between p-4 bg-surface-muted rounded-lg">
           <div class="flex items-center gap-3">
             <label class="relative inline-flex items-center cursor-pointer">
               <input
@@ -870,14 +870,14 @@ onUnmounted(() => {
                 @change="setDisableSentry(($event.target as HTMLInputElement).checked)"
                 class="sr-only peer"
               />
-              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
+              <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
             </label>
             <div>
-              <p class="text-white font-medium">{{ t('settings.disableSentryLabel') }}</p>
-              <p class="text-sm text-gray-400">{{ t('settings.disableSentryHint') }}</p>
+              <p class="text-ink font-medium">{{ t('settings.disableSentryLabel') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('settings.disableSentryHint') }}</p>
             </div>
           </div>
-          <div class="text-sm text-gray-400">
+          <div class="text-sm text-ink-muted">
             <span v-if="disableSentryLoading">{{ t('common.loading') }}...</span>
             <span v-else-if="disableSentryData?.disableSentry" class="text-status-warning">{{ t('settings.disabled') }}</span>
             <span v-else class="text-status-success">{{ t('settings.enabled') }}</span>
@@ -889,7 +889,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between">
             <div>
               <p class="text-status-warning font-medium">{{ t('settings.disableSentryRestartRequired') }}</p>
-              <p class="text-sm text-gray-400 mt-1">{{ t('settings.disableSentryRestartRequiredDesc') }}</p>
+              <p class="text-sm text-ink-muted mt-1">{{ t('settings.disableSentryRestartRequiredDesc') }}</p>
             </div>
             <button
               v-if="authStore.hasPermission('server.restart')"
@@ -902,7 +902,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <p v-if="!disableSentryNeedsRestart" class="text-xs text-gray-500">
+        <p v-if="!disableSentryNeedsRestart" class="text-xs text-ink-subtle">
           {{ t('settings.disableSentryRestartNote') }}
         </p>
       </div>
@@ -910,7 +910,7 @@ onUnmounted(() => {
 
     <!-- Allow OP Settings (admins and moderators only) -->
     <Card v-if="authStore.canManageServer" :title="t('settings.allowOpTitle')">
-      <p class="text-gray-400 text-sm mb-4">{{ t('settings.allowOpDesc') }}</p>
+      <p class="text-ink-muted text-sm mb-4">{{ t('settings.allowOpDesc') }}</p>
 
       <!-- Error/Success Messages -->
       <div v-if="allowOpError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
@@ -922,7 +922,7 @@ onUnmounted(() => {
 
       <div class="space-y-4">
         <!-- Current Setting -->
-        <div class="flex items-center justify-between p-4 bg-dark-300 rounded-lg">
+        <div class="flex items-center justify-between p-4 bg-surface-muted rounded-lg">
           <div class="flex items-center gap-3">
             <label class="relative inline-flex items-center cursor-pointer">
               <input
@@ -932,17 +932,17 @@ onUnmounted(() => {
                 @change="setAllowOp(($event.target as HTMLInputElement).checked)"
                 class="sr-only peer"
               />
-              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
+              <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
             </label>
             <div>
-              <p class="text-white font-medium">{{ t('settings.allowOpLabel') }}</p>
-              <p class="text-sm text-gray-400">{{ t('settings.allowOpHint') }}</p>
+              <p class="text-ink font-medium">{{ t('settings.allowOpLabel') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('settings.allowOpHint') }}</p>
             </div>
           </div>
-          <div class="text-sm text-gray-400">
+          <div class="text-sm text-ink-muted">
             <span v-if="allowOpLoading">{{ t('common.loading') }}...</span>
             <span v-else-if="allowOpData?.allowOp" class="text-status-success">{{ t('settings.enabled') }}</span>
-            <span v-else class="text-gray-500">{{ t('settings.disabled') }}</span>
+            <span v-else class="text-ink-subtle">{{ t('settings.disabled') }}</span>
           </div>
         </div>
 
@@ -951,7 +951,7 @@ onUnmounted(() => {
           <div class="flex items-center justify-between">
             <div>
               <p class="text-status-warning font-medium">{{ t('settings.allowOpRestartRequired') }}</p>
-              <p class="text-sm text-gray-400 mt-1">{{ t('settings.allowOpRestartRequiredDesc') }}</p>
+              <p class="text-sm text-ink-muted mt-1">{{ t('settings.allowOpRestartRequiredDesc') }}</p>
             </div>
             <button
               v-if="authStore.hasPermission('server.restart')"
@@ -964,7 +964,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <p v-if="!allowOpNeedsRestart" class="text-xs text-gray-500">
+        <p v-if="!allowOpNeedsRestart" class="text-xs text-ink-subtle">
           {{ t('settings.allowOpRestartNote') }}
         </p>
       </div>
@@ -972,51 +972,51 @@ onUnmounted(() => {
 
     <!-- Recommended Plugins Info -->
     <Card v-if="authStore.canManageServer" :title="t('settings.recommendedPluginsTitle')">
-      <p class="text-gray-400 text-sm mb-4">{{ t('settings.recommendedPluginsDesc') }}</p>
+      <p class="text-ink-muted text-sm mb-4">{{ t('settings.recommendedPluginsDesc') }}</p>
 
       <div class="space-y-3">
-        <div class="p-3 bg-dark-300 rounded-lg">
+        <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">Nitrado:WebServer</p>
-              <p class="text-sm text-gray-400">{{ t('settings.pluginWebServerDesc') }}</p>
+              <p class="text-ink font-medium">Nitrado:WebServer</p>
+              <p class="text-sm text-ink-muted">{{ t('settings.pluginWebServerDesc') }}</p>
             </div>
-            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Nitrado</span>
           </div>
         </div>
 
-        <div class="p-3 bg-dark-300 rounded-lg">
+        <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">Nitrado:Query</p>
-              <p class="text-sm text-gray-400">{{ t('settings.pluginQueryDesc') }}</p>
+              <p class="text-ink font-medium">Nitrado:Query</p>
+              <p class="text-sm text-ink-muted">{{ t('settings.pluginQueryDesc') }}</p>
             </div>
-            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Nitrado</span>
           </div>
         </div>
 
-        <div class="p-3 bg-dark-300 rounded-lg">
+        <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">Nitrado:PerformanceSaver</p>
-              <p class="text-sm text-gray-400">{{ t('settings.pluginPerformanceSaverDesc') }}</p>
+              <p class="text-ink font-medium">Nitrado:PerformanceSaver</p>
+              <p class="text-sm text-ink-muted">{{ t('settings.pluginPerformanceSaverDesc') }}</p>
             </div>
-            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Nitrado</span>
           </div>
         </div>
 
-        <div class="p-3 bg-dark-300 rounded-lg">
+        <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">ApexHosting:PrometheusExporter</p>
-              <p class="text-sm text-gray-400">{{ t('settings.pluginPrometheusDesc') }}</p>
+              <p class="text-ink font-medium">ApexHosting:PrometheusExporter</p>
+              <p class="text-sm text-ink-muted">{{ t('settings.pluginPrometheusDesc') }}</p>
             </div>
-            <span class="text-xs text-gray-500 bg-dark-400 px-2 py-1 rounded">Apex Hosting</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Apex Hosting</span>
           </div>
         </div>
       </div>
 
-      <p class="text-xs text-gray-500 mt-4">
+      <p class="text-xs text-ink-subtle mt-4">
         {{ t('settings.recommendedPluginsNote') }}
       </p>
     </Card>
@@ -1034,13 +1034,13 @@ onUnmounted(() => {
 
         <!-- File List -->
         <div v-if="!selectedFile">
-          <p class="text-gray-400 text-sm mb-3">{{ t('settings.selectConfigFile') }}</p>
+          <p class="text-ink-muted text-sm mb-3">{{ t('settings.selectConfigFile') }}</p>
 
-          <div v-if="loading" class="text-center py-4 text-gray-400">
+          <div v-if="loading" class="text-center py-4 text-ink-muted">
             {{ t('common.loading') }}...
           </div>
 
-          <div v-else-if="configFiles.length === 0" class="text-center py-4 text-gray-500">
+          <div v-else-if="configFiles.length === 0" class="text-center py-4 text-ink-subtle">
             {{ t('settings.noConfigFiles') }}
           </div>
 
@@ -1049,21 +1049,21 @@ onUnmounted(() => {
               v-for="file in configFiles"
               :key="file.name"
               @click="selectFile(file.name)"
-              class="w-full flex items-center justify-between p-3 bg-dark-300 hover:bg-dark-50 rounded-lg transition-colors"
+              class="w-full flex items-center justify-between p-3 bg-surface-muted hover:bg-surface-overlay rounded-lg transition-colors"
             >
               <div class="flex items-center gap-3">
-                <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="text-white font-mono text-sm">{{ file.name }}</span>
+                <span class="text-ink font-mono text-sm">{{ file.name }}</span>
               </div>
-              <span class="text-gray-500 text-xs">{{ Math.round(file.size / 1024) }} KB</span>
+              <span class="text-ink-subtle text-xs">{{ Math.round(file.size / 1024) }} KB</span>
             </button>
           </div>
 
           <button
             @click="loadConfigFiles"
-            class="mt-4 text-sm text-gray-400 hover:text-white flex items-center gap-1"
+            class="mt-4 text-sm text-ink-muted hover:text-ink flex items-center gap-1"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1078,13 +1078,13 @@ onUnmounted(() => {
             <div class="flex items-center gap-2">
               <button
                 @click="closeEditor"
-                class="text-gray-400 hover:text-white"
+                class="text-ink-muted hover:text-ink"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
               </button>
-              <span class="text-white font-mono">{{ selectedFile }}</span>
+              <span class="text-ink font-mono">{{ selectedFile }}</span>
               <span v-if="hasChanges" class="text-status-warning text-xs">({{ t('settings.unsavedChanges') }})</span>
             </div>
             <button
@@ -1106,11 +1106,11 @@ onUnmounted(() => {
 
           <textarea
             v-model="fileContent"
-            class="w-full h-96 bg-dark-400 text-gray-300 font-mono text-sm p-4 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none resize-y"
+            class="w-full h-96 bg-surface text-ink-muted font-mono text-sm p-4 rounded-lg border border-border focus:border-hytale-orange focus:outline-none resize-y"
             spellcheck="false"
           ></textarea>
 
-          <p class="text-gray-500 text-xs mt-2">
+          <p class="text-ink-subtle text-xs mt-2">
             {{ t('settings.configWarning') }}
           </p>
         </div>
@@ -1125,26 +1125,26 @@ onUnmounted(() => {
             <span class="text-dark font-bold text-3xl">H</span>
           </div>
           <div>
-            <h3 class="text-xl font-bold text-white">Hytale Server Manager</h3>
-            <p class="text-gray-400">{{ t('settings.version') }}: 2.1.0</p>
+            <h3 class="text-xl font-bold text-ink">Hytale Server Manager</h3>
+            <p class="text-ink-muted">{{ t('settings.version') }}: 2.1.0</p>
           </div>
         </div>
 
-        <div class="pt-4 border-t border-dark-50">
-          <p class="text-gray-400 text-sm">
+        <div class="pt-4 border-t border-border">
+          <p class="text-ink-muted text-sm">
             {{ t('settings.aboutDescription') }}
           </p>
         </div>
 
-        <div class="pt-4 border-t border-dark-50">
+        <div class="pt-4 border-t border-border">
           <div class="flex gap-4">
             <div class="flex-1">
-              <p class="text-sm text-gray-500 mb-1">Backend</p>
-              <p class="text-white">Node.js + Express</p>
+              <p class="text-sm text-ink-subtle mb-1">Backend</p>
+              <p class="text-ink">Node.js + Express</p>
             </div>
             <div class="flex-1">
-              <p class="text-sm text-gray-500 mb-1">Frontend</p>
-              <p class="text-white">Vue.js 3 + Tailwind CSS</p>
+              <p class="text-sm text-ink-subtle mb-1">Frontend</p>
+              <p class="text-ink">Vue.js 3 + Tailwind CSS</p>
             </div>
           </div>
         </div>

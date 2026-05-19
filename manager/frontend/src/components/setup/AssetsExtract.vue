@@ -221,12 +221,12 @@ function getIconPath(icon: string): string {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">
+      <h2 class="text-2xl font-bold text-ink mb-2">
         {{ currentExtractionStep === 'extracting' ? t('setup.extractingAssetsTitle') :
            currentExtractionStep === 'complete' ? t('setup.extractionCompleteTitle') :
            t('setup.extractAssetsTitle') }}
       </h2>
-      <p class="text-gray-400">
+      <p class="text-ink-muted">
         {{ currentExtractionStep === 'extracting' ? t('setup.extractingAssetsDescription') :
            currentExtractionStep === 'complete' ? (extractionSkipped ? t('setup.extractionSkippedDescription') : t('setup.extractionCompleteDescription')) :
            t('setup.extractAssetsDescription') }}
@@ -243,7 +243,7 @@ function getIconPath(icon: string): string {
           :class="[
             extractionOption === 'extract'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+              : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
           ]"
         >
           <div class="flex items-start gap-4">
@@ -259,8 +259,8 @@ function getIconPath(icon: string): string {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.extractAssetsOption') }}</p>
-              <p class="text-sm text-gray-400 mb-3">{{ t('setup.extractAssetsOptionDesc') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.extractAssetsOption') }}</p>
+              <p class="text-sm text-ink-muted mb-3">{{ t('setup.extractAssetsOptionDesc') }}</p>
 
               <!-- Feature List -->
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
@@ -283,7 +283,7 @@ function getIconPath(icon: string): string {
                     />
                   </svg>
                   <div>
-                    <p class="text-sm text-gray-300">{{ feature.title }}</p>
+                    <p class="text-sm text-ink-muted">{{ feature.title }}</p>
                   </div>
                 </div>
               </div>
@@ -306,7 +306,7 @@ function getIconPath(icon: string): string {
           :class="[
             extractionOption === 'skip'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+              : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
           ]"
         >
           <div class="flex items-start gap-4">
@@ -322,8 +322,8 @@ function getIconPath(icon: string): string {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.skipExtractionOption') }}</p>
-              <p class="text-sm text-gray-400">{{ t('setup.skipExtractionOptionDesc') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.skipExtractionOption') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('setup.skipExtractionOptionDesc') }}</p>
             </div>
           </div>
         </button>
@@ -343,12 +343,12 @@ function getIconPath(icon: string): string {
               </svg>
             </div>
 
-            <h3 class="text-xl font-semibold text-white mb-2">{{ t('setup.extractingAssetsTitle') }}</h3>
-            <p class="text-gray-400 mb-6">{{ t('setup.extractingAssetsDescription') }}</p>
+            <h3 class="text-xl font-semibold text-ink mb-2">{{ t('setup.extractingAssetsTitle') }}</h3>
+            <p class="text-ink-muted mb-6">{{ t('setup.extractingAssetsDescription') }}</p>
 
             <!-- Simple animated progress bar -->
             <div class="max-w-md mx-auto">
-              <div class="h-2 bg-dark-50 rounded-full overflow-hidden">
+              <div class="h-2 bg-surface-overlay rounded-full overflow-hidden">
                 <div class="h-full bg-gradient-to-r from-hytale-orange to-hytale-yellow animate-extraction-progress" />
               </div>
             </div>
@@ -357,12 +357,12 @@ function getIconPath(icon: string): string {
       </div>
 
       <!-- Info Notice -->
-      <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+      <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
         <div class="flex items-start gap-3">
-          <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-5 h-5 text-ink-muted mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p class="text-sm text-gray-400">{{ t('setup.extractionInfoNotice') }}</p>
+          <p class="text-sm text-ink-muted">{{ t('setup.extractionInfoNotice') }}</p>
         </div>
       </div>
     </template>
@@ -378,8 +378,8 @@ function getIconPath(icon: string): string {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg mb-2">{{ t('setup.extractionSuccess') }}</p>
-            <p class="text-gray-400">{{ t('setup.extractionSuccessDesc') }}</p>
+            <p class="text-ink font-semibold text-lg mb-2">{{ t('setup.extractionSuccess') }}</p>
+            <p class="text-ink-muted">{{ t('setup.extractionSuccessDesc') }}</p>
           </div>
 
           <!-- Skipped State -->
@@ -389,23 +389,23 @@ function getIconPath(icon: string): string {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg mb-2">{{ t('setup.extractionSkipped') }}</p>
-            <p class="text-gray-400">{{ t('setup.extractionSkippedInfo') }}</p>
+            <p class="text-ink font-semibold text-lg mb-2">{{ t('setup.extractionSkipped') }}</p>
+            <p class="text-ink-muted">{{ t('setup.extractionSkippedInfo') }}</p>
           </div>
 
           <!-- Enabled Features (if extracted) -->
-          <div v-if="!extractionSkipped" class="mt-6 pt-6 border-t border-dark-50/30">
-            <p class="text-sm text-gray-400 mb-3">{{ t('setup.enabledFeatures') }}</p>
+          <div v-if="!extractionSkipped" class="mt-6 pt-6 border-t border-border/40">
+            <p class="text-sm text-ink-muted mb-3">{{ t('setup.enabledFeatures') }}</p>
             <div class="grid grid-cols-2 gap-3">
               <div
                 v-for="feature in extractionFeatures"
                 :key="feature.title"
-                class="flex items-center gap-2 p-2 bg-dark-300 rounded-lg"
+                class="flex items-center gap-2 p-2 bg-surface-muted rounded-lg"
               >
                 <svg class="w-4 h-4 text-status-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
-                <span class="text-sm text-gray-300">{{ feature.title }}</span>
+                <span class="text-sm text-ink-muted">{{ feature.title }}</span>
               </div>
             </div>
           </div>
