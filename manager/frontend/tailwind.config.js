@@ -1,5 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Class strategy so the existing `dark:` utilities keep working but we can
+  // also opt into Light Mode by toggling a single class on <html>.
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{vue,js,ts,jsx,tsx}",
@@ -7,6 +10,19 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Semantic surface colors that read CSS custom properties so the
+        // active theme can be flipped at runtime without rebuilding Tailwind.
+        surface: {
+          base: 'rgb(var(--surface-base) / <alpha-value>)',
+          panel: 'rgb(var(--surface-panel) / <alpha-value>)',
+          elevated: 'rgb(var(--surface-elevated) / <alpha-value>)',
+          muted: 'rgb(var(--surface-muted) / <alpha-value>)',
+        },
+        ink: {
+          primary: 'rgb(var(--ink-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--ink-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--ink-muted) / <alpha-value>)',
+        },
         // Hytale Brand Colors
         hytale: {
           orange: '#FF6B35',
