@@ -30,6 +30,7 @@ import setupRoutes from './routes/setup.js';
 import webhooksRoutes from './routes/webhooks.js';
 import notificationsRoutes from './routes/notifications.js';
 import auditRoutes from './routes/audit.js';
+import serversRoutes from './routes/servers.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
@@ -450,6 +451,19 @@ app.use('/api/roles', rolesRouter);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/me/notifications', notificationsRoutes);
 app.use('/api/audit-log', auditRoutes);
+
+// v3 multi-server registry.
+//
+// /api/servers/*       — registry CRUD (this router)
+// /api/servers/:id/... — reserved for the future per-server router; for v3.0
+//                        alpha the registry only tracks instances. All
+//                        existing /api/server/*, /api/backups/*, /api/players/*
+//                        routes still operate against the single default
+//                        server identified by `servers.json.defaultId` so
+//                        nothing breaks for v2.x clients. Per-server
+//                        scoping is the docker.ts refactor that lands in
+//                        a follow-up alpha.
+app.use('/api/servers', serversRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

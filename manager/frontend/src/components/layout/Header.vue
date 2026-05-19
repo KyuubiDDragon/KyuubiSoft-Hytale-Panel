@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { setLocale, getLocale } from '@/i18n'
 import { modStoreApi } from '@/api/management'
+import ServerPicker from './ServerPicker.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -76,7 +77,7 @@ onMounted(() => {
 
 <template>
   <header class="h-16 bg-dark-200 border-b border-dark-50/50 flex items-center justify-between px-4 sm:px-6">
-    <!-- Left: Hamburger + Page Title -->
+    <!-- Left: Hamburger + Server Picker + Page Title -->
     <div class="flex items-center gap-3">
       <!-- Mobile menu toggle -->
       <button
@@ -87,8 +88,11 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
+      <!-- v3 server picker. Falls back to a single label if only one server
+           is registered — invisible until the operator adopts multi-server. -->
+      <ServerPicker class="hidden sm:flex" />
       <!-- Current page title -->
-      <h2 class="text-sm font-medium text-gray-400">
+      <h2 class="text-sm font-medium text-gray-400 ml-2">
         {{ currentPageTitle }}
       </h2>
     </div>
