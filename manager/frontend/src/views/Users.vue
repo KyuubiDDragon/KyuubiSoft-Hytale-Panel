@@ -95,7 +95,7 @@ function openAddModal() {
 function openEditModal(user: User) {
   editingUser.value = user
   formPassword.value = ''
-  formRoleId.value = (user as any).roleId || ''
+  formRoleId.value = user.roleId || ''
   formError.value = ''
   showEditModal.value = true
 }
@@ -123,7 +123,7 @@ async function updateUser() {
     if (formPassword.value) {
       updates.password = formPassword.value
     }
-    const currentRoleId = (editingUser.value as any).roleId
+    const currentRoleId = editingUser.value.roleId
     if (formRoleId.value !== currentRoleId) {
       updates.roleId = formRoleId.value
     }
@@ -236,8 +236,8 @@ onMounted(() => {
             <div
               class="w-10 h-10 rounded-full flex items-center justify-center"
               :style="{
-                backgroundColor: getRoleBadgeStyle((user as any).roleId).bg,
-                color: getRoleBadgeStyle((user as any).roleId).text
+                backgroundColor: getRoleBadgeStyle(user.roleId).bg,
+                color: getRoleBadgeStyle(user.roleId).text
               }"
             >
               <span class="font-bold text-lg">{{ user.username[0]?.toUpperCase() }}</span>
@@ -250,11 +250,11 @@ onMounted(() => {
                 <span
                   class="px-2 py-0.5 rounded text-xs font-medium"
                   :style="{
-                    backgroundColor: getRoleBadgeStyle((user as any).roleId).bg,
-                    color: getRoleBadgeStyle((user as any).roleId).text
+                    backgroundColor: getRoleBadgeStyle(user.roleId).bg,
+                    color: getRoleBadgeStyle(user.roleId).text
                   }"
                 >
-                  {{ getRoleName((user as any).roleId) }}
+                  {{ getRoleName(user.roleId) }}
                 </span>
                 <span v-if="user.username === authStore.username" class="text-xs text-gray-500">({{ t('users.you') }})</span>
               </div>

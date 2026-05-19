@@ -566,8 +566,11 @@ export const useSetupStore = defineStore('setup', () => {
         }
         const dataKey = stepDataMap[stepId]
         if (dataKey) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (setupData.value as any)[dataKey] = data
+          // dataKey ∈ SetupData; the runtime shape of `data` is whatever the
+          // matching step expects. We don't have step-typed signatures here
+          // so widen via unknown to satisfy the union without resorting to
+          // `any`.
+          (setupData.value as Record<keyof SetupData, unknown>)[dataKey] = data
         }
         markStepCompleted(stepId)
         return true

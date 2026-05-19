@@ -2,6 +2,41 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [2.2.0] - 2026-05-19 - Security, Robustness & Hytale Early Access Alignment
+
+### Security
+
+- **bcrypt** replaces `bcryptjs` (native binding, no longer blocks the event loop under password hashing load)
+- **WebSocket tickets** are atomically check-and-deleted on first verify, closing a small race where two parallel `/api/console/ws` upgrades could share the same single-use ticket
+- **Refresh tokens** now carry `tokenVersion`; `/api/auth/refresh` rejects refresh tokens whose version diverges from the user record, so password and role changes invalidate refresh tokens too
+- **CSRF middleware** stops waving through requests with missing `Origin` AND `Referer`. Wildcard CORS now requires explicit `CORS_ALLOW_WILDCARD=true` opt-in instead of silently disabling CSRF protection
+- **Granular console permissions**: dangerous commands (`/op`, `/ban`, `/stop`, `/give`, ...) now require `console.execute.admin`. Plain `console.execute` is enough for `/say`, `/help`, `/list`, etc.
+- **DOMPurify-sanitized** changelog modal — CurseForge/Modtale HTML is sanitized before `v-html`
+- **Drop unused `NET_BIND_SERVICE`** capability from the hytale container (UDP/5520 and WebMap ports are unprivileged)
+
+### Robustness
+
+- **Backup operations are serialized** in-process (and `scripts/backup.sh` uses `flock(1)` for cross-process safety) so concurrent create/restore/delete requests can't corrupt each other's tarball or race the retention cleanup
+- **Pre-restore backup** is inlined in `restoreBackup` so it doesn't deadlock the new lock
+- **`docker-compose`** now waits for the game container's healthcheck before booting the manager (`depends_on.condition: service_healthy`)
+- **Manager Dockerfile** installs the native build toolchain for bcrypt's postinstall, then strips it from the final layer
+- **Shell scripts** set `pipefail` (errexit and nounset stay off on purpose; restart-loop relies on capturing java exit codes, several env vars are optional)
+- **Plugin events** from the KyuubiSoft API plugin are now validated at runtime against Zod schemas. Contract drift surfaces as a loud warning instead of silently feeding bad data into chat logs and death tracking
+
+### Added
+
+- **`HytaleServerAPI` adapter** (`services/hytaleAdapter.ts`) — stable façade over the plugin transport with version-aware capability flags (`supportsNativeUpdates`, `supportsServerBrowser`, `configFormat`, `minJavaVersion`). Ready to grow a second adapter once Hytale ships native HTTP/RPC endpoints
+- **Logout messages** flow through a Pinia action (`logoutMessage` / `consumeLogoutMessage`) instead of a `sessionStorage` tunnel between API client and Login view
+- **Frontend safe-html helper** (`utils/safeHtml.ts`) using DOMPurify with a strict tag/attribute allowlist and an `afterSanitizeAttributes` hook that forces `target="_blank" rel="noopener noreferrer nofollow"` on anchors
+
+### Fixed
+
+- `User` interface in the frontend used a hardcoded role union; replaced with `roleId: string` to match the custom-role-aware backend, eliminating several `as any` casts in `Users.vue`
+
+### Repo hygiene
+
+- Untracked `EasyWebMap-v1.0.9.jar`, `hytale-server-files.zip`, `server-files2401.zip` (~209 MB of binaries that don't belong in git; `.gitignore` already excluded them but the originals were checked in before the rule landed). Distribute these via releases / object storage; the entrypoint downloads them on first run
+
 ## [2.1.4] - 2026-02-19 - Design Overhaul & UX Improvements
 
 ### Added

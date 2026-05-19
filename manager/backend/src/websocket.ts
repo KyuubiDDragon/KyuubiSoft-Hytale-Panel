@@ -5,6 +5,7 @@ import { getDockerInstance, getContainerName, execCommand, getLogs } from './ser
 import { parseLogLine } from './services/logs.js';
 import { processLogLine } from './services/players.js';
 import { hasPermission } from './services/roles.js';
+import { getCommandRequiredPermission } from './utils/sanitize.js';
 import type { WsMessage } from './types/index.js';
 import { isDemoMode, getNextDemoLogLine, getDemoOnlinePlayers } from './services/demoData.js';
 
@@ -96,14 +97,18 @@ export function setupWebSocket(wss: WebSocketServer): void {
         switch (message.type) {
           case 'command':
             if (message.payload) {
-              // Check if user has permission to execute commands
               const wsUsername = clientUsernames.get(ws);
-              if (!wsUsername || !(await hasPermission(wsUsername, 'console.execute'))) {
+              // Dangerous commands (/op, /ban, /stop, /give, ...) require
+              // console.execute.admin. Everything else just console.execute.
+              // Unknown commands fall through to the whitelist rejection in
+              // validateCommand() inside execCommand().
+              const requiredPerm = getCommandRequiredPermission(message.payload) ?? 'console.execute';
+              if (!wsUsername || !(await hasPermission(wsUsername, requiredPerm))) {
                 ws.send(JSON.stringify({
                   type: 'command_response',
                   command: message.payload,
                   success: false,
-                  error: 'Permission denied: console.execute required',
+                  error: `Permission denied: ${requiredPerm} required`,
                 }));
                 break;
               }

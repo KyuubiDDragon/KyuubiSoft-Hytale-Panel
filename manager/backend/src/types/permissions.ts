@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   // Console
   'console.view': 'View console',
   'console.execute': 'Execute console commands',
+  'console.execute.admin': 'Execute privileged console commands (/op, /ban, /stop, ...)',
 
   // Performance
   'performance.view': 'View performance metrics',

@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import { config } from '../config.js';
 import { PLUGIN_PORT } from './kyuubiApi.js';
 import { addChatMessage, recordDeathPosition } from './chatLog.js';
+import { parsePluginEvent, type PluginEvent } from '../schemas/pluginEvents.js';
 
 // WebSocket connection state
 let ws: WebSocket | null = null;
@@ -21,42 +22,7 @@ const RECONNECT_DELAY = 5000; // 5 seconds
 const MAX_RECONNECT_DELAY = 60000; // 1 minute max
 let currentReconnectDelay = RECONNECT_DELAY;
 
-// Event types from the plugin
-interface PluginEvent {
-  type: string;
-  timestamp: string;
-}
-
-interface PlayerChatEvent extends PluginEvent {
-  type: 'player_chat';
-  player: string;
-  uuid?: string;
-  message: string;
-}
-
-interface PlayerDeathEvent extends PluginEvent {
-  type: 'player_death';
-  player: string;
-  cause: string;
-  world?: string;
-  x?: number;
-  y?: number;
-  z?: number;
-}
-
-interface PlayerJoinEvent extends PluginEvent {
-  type: 'player_join';
-  player: string;
-  uuid: string;
-}
-
-interface PlayerLeaveEvent extends PluginEvent {
-  type: 'player_leave';
-  player: string;
-  uuid: string;
-}
-
-type PluginEventData = PlayerChatEvent | PlayerDeathEvent | PlayerJoinEvent | PlayerLeaveEvent;
+type PluginEventData = PluginEvent;
 
 /**
  * Get the plugin host for WebSocket connection
@@ -122,11 +88,24 @@ export function connectToPluginWebSocket(): void {
     });
 
     ws.on('message', async (data: WebSocket.Data) => {
+      let raw: unknown;
       try {
-        const event = JSON.parse(data.toString()) as PluginEventData;
-        await handleEvent(event);
+        raw = JSON.parse(data.toString());
       } catch (error) {
-        console.error('Failed to parse plugin event:', error);
+        console.error('[Plugin] Malformed JSON from plugin WebSocket:', error);
+        return;
+      }
+      const parsed = parsePluginEvent(raw);
+      if (!parsed.ok) {
+        // Plugin contract drift — surface loudly so it can be fixed instead of
+        // silently feeding bad data into chat logs / death tracking.
+        console.warn(`[Plugin] Rejected event: ${parsed.error}`, raw);
+        return;
+      }
+      try {
+        await handleEvent(parsed.event);
+      } catch (error) {
+        console.error('[Plugin] Handler error:', error);
       }
     });
 
