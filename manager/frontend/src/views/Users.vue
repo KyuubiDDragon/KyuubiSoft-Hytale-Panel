@@ -8,6 +8,10 @@ import Card from '@/components/ui/Card.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
+import EmptyTableState from '@/components/ui/EmptyTableState.vue'
+import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -28,33 +32,36 @@ const formPassword = ref('')
 const formRoleId = ref<string>('')
 const formError = ref('')
 
+const columns = computed<TableColumn[]>(() => [
+  { key: 'username', label: t('users.username') },
+  { key: 'role', label: t('users.role') },
+  { key: 'created', label: t('users.created'), hideOnMobile: false, nowrap: true },
+  { key: 'lastLogin', label: t('users.lastLogin'), hideOnMobile: false, nowrap: true },
+])
+
 // Helper to get default role ID (viewer role or first role)
 const defaultRoleId = computed(() => {
   const viewerRole = roles.value.find(r => r.name.toLowerCase() === 'viewer')
   return viewerRole?.id || roles.value[0]?.id || ''
 })
 
-// Helper to get role by ID
 function getRoleById(roleId: string): Role | undefined {
   return roles.value.find(r => r.id === roleId)
 }
 
-// Helper to get role name for display
 function getRoleName(roleId: string): string {
   const role = getRoleById(roleId)
   return role?.name || roleId
 }
 
-// Helper to get role color for badge styling
 function getRoleBadgeStyle(roleId: string): { bg: string; text: string } {
   const role = getRoleById(roleId)
   if (role?.color) {
     return {
-      bg: `${role.color}33`, // 20% opacity
-      text: role.color
+      bg: `${role.color}33`,
+      text: role.color,
     }
   }
-  // Default fallback colors based on role name
   const name = role?.name?.toLowerCase() || ''
   if (name === 'admin') return { bg: 'rgba(239, 68, 68, 0.2)', text: '#ef4444' }
   if (name === 'moderator') return { bg: 'rgba(251, 146, 60, 0.2)', text: '#fb923c' }
@@ -79,8 +86,8 @@ async function loadRoles() {
   try {
     const response = await rolesApi.getAll()
     roles.value = response.roles
-  } catch (error) {
-    console.error('Failed to load roles:', error)
+  } catch (e) {
+    console.error('Failed to load roles:', e)
   }
 }
 
@@ -170,13 +177,17 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold text-ink">{{ t('users.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('users.subtitle') }}</p>
       </div>
       <div class="flex gap-2">
-        <button @click="loadUsers" class="p-2 text-ink-muted hover:text-ink transition-colors" :aria-label="t('common.refresh')">
+        <button
+          @click="loadUsers"
+          class="p-2 text-ink-muted hover:text-ink transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
+          :aria-label="t('common.refresh')"
+        >
           <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
         </button>
         <Button v-if="authStore.hasPermission('users.create')" @click="openAddModal" class="flex items-center gap-2">
@@ -186,20 +197,18 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Error Message -->
-    <div v-if="error" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
+    <!-- Error Banner -->
+    <div v-if="error && users.length > 0" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
       <p class="text-status-error">{{ error }}</p>
     </div>
 
     <!-- Info Card -->
     <Card>
       <div class="flex items-start gap-4">
-        <div class="p-3 bg-hytale-orange/20 rounded-lg">
-          <svg class="w-6 h-6 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
+        <div class="p-3 bg-hytale-orange/20 rounded-lg flex-shrink-0">
+          <Icon name="users" class="w-6 h-6 text-hytale-orange" />
         </div>
-        <div class="flex-1">
+        <div class="flex-1 min-w-0">
           <h3 class="font-semibold text-ink">{{ t('users.rolesInfo') }}</h3>
           <div class="text-sm text-ink-muted mt-2 space-y-1">
             <p v-for="role in roles" :key="role.id">
@@ -212,91 +221,105 @@ onMounted(() => {
       </div>
     </Card>
 
-    <!-- Users List -->
-    <Card :title="t('users.usersList') + ` (${users.length})`" :padding="false">
-      <div v-if="loading" class="flex items-center justify-center p-8">
-        <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
+    <!-- Users list -->
+    <div>
+      <h2 class="text-lg font-semibold text-ink mb-3">
+        {{ t('users.usersList') }} <span class="text-ink-muted font-normal">({{ users.length }})</span>
+      </h2>
+
+      <ErrorState
+        v-if="error && users.length === 0"
+        :message="error"
+        @retry="loadUsers"
+      />
+
+      <div v-else-if="loading && users.length === 0" class="space-y-2">
+        <Skeleton v-for="i in 4" :key="i" height="3.5rem" />
       </div>
 
-      <div v-else-if="users.length === 0" class="text-center text-ink-subtle p-8">
-        {{ t('users.noUsers') }}
-      </div>
+      <EmptyTableState
+        v-else-if="users.length === 0"
+        icon="users"
+        :title="t('users.noUsers')"
+        :subtitle="t('users.noUsersSubtitle')"
+      >
+        <Button v-if="authStore.hasPermission('users.create')" size="sm" @click="openAddModal">
+          {{ t('users.addUser') }}
+        </Button>
+      </EmptyTableState>
 
-      <div v-else class="divide-y divide-dark-50/30">
-        <div
-          v-for="user in users"
-          :key="user.username"
-          class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
-        >
-          <div class="flex items-center gap-4">
-            <!-- Avatar -->
+      <ResponsiveTable
+        v-else
+        :columns="columns"
+        :rows="users"
+        :row-key="(u) => u.username"
+        :aria-label="t('users.usersList')"
+        :mobile-card-label="(u) => u.username"
+      >
+        <template #cell:username="{ row }">
+          <div class="flex items-center gap-3">
             <div
-              class="w-10 h-10 rounded-full flex items-center justify-center"
+              class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
               :style="{
-                backgroundColor: getRoleBadgeStyle(user.roleId).bg,
-                color: getRoleBadgeStyle(user.roleId).text
+                backgroundColor: getRoleBadgeStyle(row.roleId).bg,
+                color: getRoleBadgeStyle(row.roleId).text,
               }"
             >
-              <span class="font-bold text-lg">{{ user.username[0]?.toUpperCase() }}</span>
+              <span class="font-bold">{{ row.username[0]?.toUpperCase() }}</span>
             </div>
-
-            <!-- Info -->
-            <div>
-              <div class="flex items-center gap-2">
-                <p class="font-medium text-ink">{{ user.username }}</p>
-                <span
-                  class="px-2 py-0.5 rounded text-xs font-medium"
-                  :style="{
-                    backgroundColor: getRoleBadgeStyle(user.roleId).bg,
-                    color: getRoleBadgeStyle(user.roleId).text
-                  }"
-                >
-                  {{ getRoleName(user.roleId) }}
-                </span>
-                <span v-if="user.username === authStore.username" class="text-xs text-ink-subtle">({{ t('users.you') }})</span>
-              </div>
-              <div class="flex items-center gap-4 text-sm text-ink-subtle mt-0.5">
-                <span>{{ t('users.created') }}: {{ formatDate(user.createdAt) }}</span>
-                <span v-if="user.lastLogin">{{ t('users.lastLogin') }}: {{ formatDate(user.lastLogin) }}</span>
-              </div>
+            <div class="min-w-0">
+              <p class="font-medium text-ink truncate">{{ row.username }}</p>
+              <span v-if="row.username === authStore.username" class="text-xs text-ink-subtle">({{ t('users.you') }})</span>
             </div>
           </div>
-
-          <!-- Actions -->
-          <div class="flex items-center gap-2">
-            <button
-              v-if="authStore.hasPermission('users.edit')"
-              @click="openEditModal(user)"
-              class="p-2 text-ink-muted hover:text-hytale-orange transition-colors"
-              :title="t('common.edit')"
-              :aria-label="t('common.edit')"
-            >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button
-              v-if="user.username !== authStore.username && authStore.hasPermission('users.delete')"
-              @click="deleteUser(user)"
-              class="p-2 text-ink-muted hover:text-status-error transition-colors"
-              :title="t('common.delete')"
-              :aria-label="t('common.delete')"
-            >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </Card>
+        </template>
+        <template #cell:role="{ row }">
+          <span
+            class="px-2 py-0.5 rounded text-xs font-medium"
+            :style="{
+              backgroundColor: getRoleBadgeStyle(row.roleId).bg,
+              color: getRoleBadgeStyle(row.roleId).text,
+            }"
+          >
+            {{ getRoleName(row.roleId) }}
+          </span>
+        </template>
+        <template #cell:created="{ row }">
+          <span class="text-sm text-ink-muted whitespace-nowrap">{{ formatDate(row.createdAt) }}</span>
+        </template>
+        <template #cell:lastLogin="{ row }">
+          <span v-if="row.lastLogin" class="text-sm text-ink-muted whitespace-nowrap">{{ formatDate(row.lastLogin) }}</span>
+          <span v-else class="text-sm text-ink-subtle">—</span>
+        </template>
+        <template #actions="{ row }">
+          <Button
+            v-if="authStore.hasPermission('users.edit')"
+            variant="ghost"
+            size="sm"
+            icon-only
+            :aria-label="t('common.edit')"
+            @click="openEditModal(row)"
+          >
+            <Icon name="edit" class="w-5 h-5" />
+          </Button>
+          <Button
+            v-if="row.username !== authStore.username && authStore.hasPermission('users.delete')"
+            variant="ghost"
+            size="sm"
+            icon-only
+            :aria-label="t('common.delete')"
+            class="!text-ink-muted hover:!text-status-error"
+            @click="deleteUser(row)"
+          >
+            <Icon name="trash" class="w-5 h-5" />
+          </Button>
+        </template>
+      </ResponsiveTable>
+    </div>
 
     <!-- Add User Modal -->
-    <div v-if="showAddModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md mx-4">
+    <div v-if="showAddModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md">
         <h2 class="text-xl font-bold text-ink mb-4">{{ t('users.addUser') }}</h2>
 
         <div v-if="formError" class="p-3 mb-4 bg-status-error/10 border border-status-error/20 rounded-lg">
@@ -345,8 +368,8 @@ onMounted(() => {
     </div>
 
     <!-- Edit User Modal -->
-    <div v-if="showEditModal && editingUser" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md mx-4">
+    <div v-if="showEditModal && editingUser" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md">
         <h2 class="text-xl font-bold text-ink mb-4">{{ t('users.editUser') }}: {{ editingUser.username }}</h2>
 
         <div v-if="formError" class="p-3 mb-4 bg-status-error/10 border border-status-error/20 rounded-lg">

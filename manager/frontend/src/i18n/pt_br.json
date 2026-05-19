@@ -50,7 +50,8 @@
     "toggleTheme": "Alternar tema",
     "lightMode": "Tema claro",
     "darkMode": "Tema escuro",
-    "userMenu": "Menu do usuário"
+    "userMenu": "Menu do usuário",
+    "loadMore": "Carregar mais"
   },
   "health": {
     "permissionIssue": "Problema de Permissão de Arquivo Detectado",
@@ -470,7 +471,10 @@
     "bannedPlayers": "Jogadores Banidos",
     "confirmRemove": "Remover \"{player}\" da whitelist?",
     "confirmUnban": "Desbanir jogador \"{player}\"?",
-    "noBans": "Nenhum jogador banido"
+    "noBans": "Nenhum jogador banido",
+    "noPlayersSubtitle": "Adicione nomes de jogadores para permitir o acesso ao servidor.",
+    "noBansSubtitle": "Jogadores banidos aparecem aqui.",
+    "bannedAt": "Banido em"
   },
   "permissions": {
     "confirmDeleteUser": "Excluir usuário de permissões \"{name}\"?",
@@ -871,7 +875,8 @@
     "lastLogin": "Último Login",
     "you": "Você",
     "confirmDelete": "Realmente deseja excluir o usuário \"{username}\"?",
-    "requiredFields": "Usuário e senha são obrigatórios"
+    "requiredFields": "Usuário e senha são obrigatórios",
+    "noUsersSubtitle": "Adicione um usuário do painel para conceder acesso ao dashboard."
   },
   "activity": {
     "title": "Registro de Atividades",
@@ -898,7 +903,50 @@
     "failed": "Falhou",
     "clearLog": "Limpar Registro",
     "confirmClear": "Realmente deseja limpar todo o registro de atividades?",
-    "entries": "{count} entradas"
+    "entries": "{count} entradas",
+    "noEntriesSubtitle": "Ações realizadas no painel aparecem aqui."
+  },
+  "audit": {
+    "title": "Registro de Auditoria",
+    "subtitle": "Trilha de auditoria detalhada para eventos sensíveis à segurança",
+    "time": "Hora",
+    "actor": "Ator",
+    "action": "Ação",
+    "target": "Alvo",
+    "ip": "IP",
+    "result": "Resultado",
+    "success": "Sucesso",
+    "failed": "Falhou",
+    "actorPlaceholder": "Ator (nome de usuário)",
+    "allActions": "Todas as ações",
+    "from": "De",
+    "to": "Até",
+    "apply": "Aplicar",
+    "exportCsv": "Exportar CSV",
+    "noEvents": "Sem eventos de auditoria",
+    "noEventsSubtitle": "Nenhum evento corresponde ao filtro atual."
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Receba eventos do servidor no Discord, Slack ou em qualquer endpoint HTTP",
+    "add": "Adicionar Webhook",
+    "name": "Nome",
+    "namePlaceholder": "Nome (ex.: Discord #ops)",
+    "type": "Tipo",
+    "typeGeneric": "HTTP Genérico (assinado)",
+    "url": "URL",
+    "urlPlaceholder": "https://discord.com/api/webhooks/...",
+    "secret": "Secret",
+    "secretPlaceholder": "Segredo HMAC (X-KyuubiSoft-Signature)",
+    "events": "Eventos",
+    "eventCount": "{count} eventos",
+    "status": "Status",
+    "create": "Criar",
+    "test": "Testar",
+    "testResult": "Teste",
+    "noHooks": "Nenhum webhook configurado",
+    "noHooksSubtitle": "Adicione um para receber eventos do servidor no Discord, Slack ou em um endpoint genérico.",
+    "confirmDelete": "Excluir webhook \"{name}\"?"
   },
   "chat": {
     "title": "Log de Chat",
@@ -1077,7 +1125,9 @@
     "deselectAll": "Desselecionar Tudo",
     "confirmDelete": "Tem certeza de que deseja excluir a função \"{name}\"?",
     "cannotDeleteSystem": "Funções do sistema não podem ser excluídas",
-    "noRoles": "Nenhuma função encontrada"
+    "noRoles": "Nenhuma função encontrada",
+    "noRolesSubtitle": "Crie uma função personalizada para conceder permissões específicas.",
+    "type": "Tipo"
   },
   "permissionCategories": {
     "dashboard": "Painel",

@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
+import Card from '@/components/ui/Card.vue'
+import Button from '@/components/ui/Button.vue'
+import Icon from '@/components/ui/Icon.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
+import EmptyTableState from '@/components/ui/EmptyTableState.vue'
+import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
 
 interface AuditEvent {
   id: number
@@ -14,14 +22,26 @@ interface AuditEvent {
   success: boolean
 }
 
+const { t } = useI18n()
 const events = ref<AuditEvent[]>([])
 const actions = ref<string[]>([])
 const loading = ref(false)
+const error = ref('')
 const nextCursor = ref<number | null>(null)
 const filter = ref<{ actor?: string; action?: string; from?: string; to?: string }>({})
 
+const columns: TableColumn[] = [
+  { key: 'ts', label: t('audit.time'), nowrap: true },
+  { key: 'actor', label: t('audit.actor') },
+  { key: 'action', label: t('audit.action') },
+  { key: 'target', label: t('audit.target') },
+  { key: 'ip', label: t('audit.ip'), hideOnMobile: true },
+  { key: 'success', label: t('audit.result'), align: 'center', width: '6rem' },
+]
+
 async function load(reset = true) {
   loading.value = true
+  if (reset) error.value = ''
   try {
     const params: Record<string, string | number> = { limit: 50 }
     if (filter.value.actor) params.actor = filter.value.actor
@@ -34,6 +54,7 @@ async function load(reset = true) {
     nextCursor.value = data.nextCursor
   } catch (err) {
     console.error('audit load failed', err)
+    error.value = t('errors.connectionFailed')
   } finally {
     loading.value = false
   }
@@ -55,6 +76,15 @@ function exportCsv() {
   window.open(`/api/audit-log/export?${params.toString()}`, '_blank')
 }
 
+function resetFilter() {
+  filter.value = {}
+  void load()
+}
+
+function formatTime(ts: string): string {
+  return new Date(ts).toLocaleString()
+}
+
 onMounted(() => {
   void load()
   void loadActions()
@@ -63,63 +93,117 @@ onMounted(() => {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-white">Audit Log</h1>
-      <button @click="exportCsv" class="px-3 py-1.5 rounded-lg bg-dark-100 hover:bg-dark-50 text-sm text-white">
-        Export CSV
-      </button>
+    <!-- Header -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-ink">{{ t('audit.title') }}</h1>
+        <p class="text-ink-muted mt-1">{{ t('audit.subtitle') }}</p>
+      </div>
+      <Button variant="secondary" size="sm" @click="exportCsv">
+        <Icon name="download" class="w-4 h-4 mr-2" />
+        {{ t('audit.exportCsv') }}
+      </Button>
     </div>
 
-    <div class="card bg-dark-200 border border-dark-50/40 rounded-xl p-4">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <input v-model="filter.actor" placeholder="Actor (username)" class="input bg-dark-100 border border-dark-50/40 rounded-lg px-3 py-2 text-sm text-white" />
-        <select v-model="filter.action" class="bg-dark-100 border border-dark-50/40 rounded-lg px-3 py-2 text-sm text-white">
-          <option value="">All actions</option>
+    <!-- Filters -->
+    <Card>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <input
+          v-model="filter.actor"
+          :placeholder="t('audit.actorPlaceholder')"
+          class="input"
+          :aria-label="t('audit.actor')"
+        />
+        <select v-model="filter.action" class="input" :aria-label="t('audit.action')">
+          <option value="">{{ t('audit.allActions') }}</option>
           <option v-for="a in actions" :key="a" :value="a">{{ a }}</option>
         </select>
-        <input v-model="filter.from" type="datetime-local" class="bg-dark-100 border border-dark-50/40 rounded-lg px-3 py-2 text-sm text-white" />
-        <input v-model="filter.to" type="datetime-local" class="bg-dark-100 border border-dark-50/40 rounded-lg px-3 py-2 text-sm text-white" />
+        <input
+          v-model="filter.from"
+          type="datetime-local"
+          class="input"
+          :aria-label="t('audit.from')"
+        />
+        <input
+          v-model="filter.to"
+          type="datetime-local"
+          class="input"
+          :aria-label="t('audit.to')"
+        />
       </div>
-      <div class="mt-3 flex justify-end gap-2">
-        <button @click="filter = {}; void load()" class="px-3 py-1.5 rounded-lg bg-dark-100 hover:bg-dark-50 text-sm text-gray-300">Reset</button>
-        <button @click="void load()" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-sm text-white">Apply</button>
+      <div class="mt-3 flex flex-wrap justify-end gap-2">
+        <Button variant="secondary" size="sm" @click="resetFilter">{{ t('common.clear') }}</Button>
+        <Button size="sm" @click="() => load()">{{ t('audit.apply') }}</Button>
       </div>
+    </Card>
+
+    <!-- Body -->
+    <ErrorState
+      v-if="error && events.length === 0"
+      :message="error"
+      @retry="() => load()"
+    />
+
+    <div v-else-if="loading && events.length === 0" class="space-y-2">
+      <Skeleton v-for="i in 5" :key="i" height="3rem" />
     </div>
 
-    <div class="bg-dark-200 border border-dark-50/40 rounded-xl overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-dark-100 text-gray-400 text-left">
-          <tr>
-            <th class="px-3 py-2">Time</th>
-            <th class="px-3 py-2">Actor</th>
-            <th class="px-3 py-2">Action</th>
-            <th class="px-3 py-2">Target</th>
-            <th class="px-3 py-2">IP</th>
-            <th class="px-3 py-2">Result</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="e in events" :key="e.id" class="border-t border-dark-50/30">
-            <td class="px-3 py-2 text-gray-300 whitespace-nowrap">{{ new Date(e.ts).toLocaleString() }}</td>
-            <td class="px-3 py-2 text-white">{{ e.actorUsername }} <span class="text-[10px] text-gray-500">{{ e.actorType }}</span></td>
-            <td class="px-3 py-2 text-hytale-orange font-mono">{{ e.action }}</td>
-            <td class="px-3 py-2 text-gray-400">{{ e.target ?? '—' }}</td>
-            <td class="px-3 py-2 text-gray-500 font-mono">{{ e.ip ?? '—' }}</td>
-            <td class="px-3 py-2">
-              <span v-if="e.success" class="text-status-success">✓</span>
-              <span v-else class="text-status-error">✗</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-if="events.length === 0 && !loading" class="p-8 text-center text-gray-400">
-        No events match the current filter.
+    <EmptyTableState
+      v-else-if="events.length === 0"
+      icon="activity"
+      :title="t('audit.noEvents')"
+      :subtitle="t('audit.noEventsSubtitle')"
+    />
+
+    <template v-else>
+      <ResponsiveTable
+        :columns="columns"
+        :rows="events"
+        row-key="id"
+        :aria-label="t('audit.title')"
+        :mobile-card-label="(e) => `${e.action} — ${e.actorUsername}`"
+      >
+        <template #cell:ts="{ row }">
+          <span class="text-ink-muted whitespace-nowrap">{{ formatTime(row.ts) }}</span>
+        </template>
+        <template #cell:actor="{ row }">
+          <span class="text-ink font-medium">{{ row.actorUsername }}</span>
+          <span class="ml-1 text-xs text-ink-subtle">{{ row.actorType }}</span>
+        </template>
+        <template #cell:action="{ row }">
+          <span class="font-mono text-sm text-hytale-orange break-all">{{ row.action }}</span>
+        </template>
+        <template #cell:target="{ row }">
+          <span class="text-ink-muted break-all">{{ row.target ?? '—' }}</span>
+        </template>
+        <template #cell:ip="{ row }">
+          <span class="font-mono text-xs text-ink-subtle">{{ row.ip ?? '—' }}</span>
+        </template>
+        <template #cell:success="{ row }">
+          <span
+            v-if="row.success"
+            class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-status-success/20 text-status-success"
+            :aria-label="t('audit.success')"
+            role="img"
+          >
+            <Icon name="check" class="w-4 h-4" />
+          </span>
+          <span
+            v-else
+            class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-status-error/20 text-status-error"
+            :aria-label="t('audit.failed')"
+            role="img"
+          >
+            <Icon name="close" class="w-4 h-4" />
+          </span>
+        </template>
+      </ResponsiveTable>
+
+      <div v-if="nextCursor" class="flex justify-center">
+        <Button variant="secondary" size="sm" :loading="loading" @click="() => load(false)">
+          {{ t('common.loadMore') }}
+        </Button>
       </div>
-      <div v-if="nextCursor" class="p-4 text-center">
-        <button @click="void load(false)" :disabled="loading" class="px-4 py-2 rounded-lg bg-dark-100 hover:bg-dark-50 text-sm text-white">
-          {{ loading ? 'Loading…' : 'Load more' }}
-        </button>
-      </div>
-    </div>
+    </template>
   </div>
 </template>

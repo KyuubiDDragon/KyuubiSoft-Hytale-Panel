@@ -50,7 +50,8 @@
     "toggleTheme": "Theme umschalten",
     "lightMode": "Helles Theme",
     "darkMode": "Dunkles Theme",
-    "userMenu": "Benutzermenü"
+    "userMenu": "Benutzermenü",
+    "loadMore": "Mehr laden"
   },
   "health": {
     "permissionIssue": "Dateiberechtigungs-Problem erkannt",
@@ -537,7 +538,10 @@
     "bannedPlayers": "Gebannte Spieler",
     "confirmRemove": "\"{player}\" von der Whitelist entfernen?",
     "confirmUnban": "Spieler \"{player}\" entbannen?",
-    "noBans": "Keine Spieler gebannt"
+    "noBans": "Keine Spieler gebannt",
+    "noPlayersSubtitle": "Füge Spielernamen hinzu, um ihnen den Beitritt zu erlauben.",
+    "noBansSubtitle": "Gebannte Spieler erscheinen hier.",
+    "bannedAt": "Gebannt am"
   },
   "permissions": {
     "confirmDeleteUser": "Berechtigungs-Benutzer \"{name}\" löschen?",
@@ -996,7 +1000,8 @@
     "lastLogin": "Letzter Login",
     "you": "Du",
     "confirmDelete": "Benutzer \"{username}\" wirklich löschen?",
-    "requiredFields": "Benutzername und Passwort erforderlich"
+    "requiredFields": "Benutzername und Passwort erforderlich",
+    "noUsersSubtitle": "Lege einen Panel-Benutzer an, um Zugriff auf das Dashboard zu gewähren."
   },
   "roles": {
     "title": "Rollenverwaltung",
@@ -1025,7 +1030,9 @@
     "deselectAll": "Alle abwählen",
     "confirmDelete": "Sind Sie sicher, dass Sie die Rolle \"{name}\" löschen möchten?",
     "cannotDeleteSystem": "Systemrollen können nicht gelöscht werden",
-    "noRoles": "Keine Rollen gefunden"
+    "noRoles": "Keine Rollen gefunden",
+    "noRolesSubtitle": "Lege eine eigene Rolle an, um spezifische Berechtigungen zu vergeben.",
+    "type": "Typ"
   },
   "permissionCategories": {
     "dashboard": "Dashboard",
@@ -1072,7 +1079,50 @@
     "failed": "Fehlgeschlagen",
     "clearLog": "Log leeren",
     "confirmClear": "Aktivitätslog wirklich komplett leeren?",
-    "entries": "{count} Einträge"
+    "entries": "{count} Einträge",
+    "noEntriesSubtitle": "Aktionen im Panel erscheinen hier."
+  },
+  "audit": {
+    "title": "Audit-Log",
+    "subtitle": "Detaillierter Audit-Trail für sicherheitsrelevante Ereignisse",
+    "time": "Zeit",
+    "actor": "Akteur",
+    "action": "Aktion",
+    "target": "Ziel",
+    "ip": "IP",
+    "result": "Ergebnis",
+    "success": "Erfolg",
+    "failed": "Fehler",
+    "actorPlaceholder": "Akteur (Benutzername)",
+    "allActions": "Alle Aktionen",
+    "from": "Von",
+    "to": "Bis",
+    "apply": "Anwenden",
+    "exportCsv": "CSV exportieren",
+    "noEvents": "Keine Audit-Ereignisse",
+    "noEventsSubtitle": "Keine Ereignisse entsprechen dem aktuellen Filter."
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Server-Ereignisse auf Discord, Slack oder einem HTTP-Endpunkt empfangen",
+    "add": "Webhook hinzufügen",
+    "name": "Name",
+    "namePlaceholder": "Name (z.B. Discord #ops)",
+    "type": "Typ",
+    "typeGeneric": "Generisches HTTP (signiert)",
+    "url": "URL",
+    "urlPlaceholder": "https://discord.com/api/webhooks/...",
+    "secret": "Secret",
+    "secretPlaceholder": "HMAC-Secret (X-KyuubiSoft-Signature)",
+    "events": "Ereignisse",
+    "eventCount": "{count} Ereignisse",
+    "status": "Status",
+    "create": "Erstellen",
+    "test": "Test",
+    "testResult": "Test",
+    "noHooks": "Keine Webhooks konfiguriert",
+    "noHooksSubtitle": "Füge einen hinzu, um Server-Events auf Discord, Slack oder einem generischen Endpunkt zu empfangen.",
+    "confirmDelete": "Webhook \"{name}\" löschen?"
   },
   "chat": {
     "title": "Chat-Protokoll",
