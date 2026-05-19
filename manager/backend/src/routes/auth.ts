@@ -1,5 +1,6 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, CookieOptions } from 'express';
 import rateLimit from 'express-rate-limit';
+import { config } from '../config.js';
 import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken, createWsTicket } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -8,6 +9,40 @@ import { getUserPermissions, hasPermission } from '../services/roles.js';
 import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 import { isDemoMode, getDemoUsers, getDemoRoles } from '../services/demoData.js';
+
+// HttpOnly refresh-token cookie. SameSite=Strict because the panel and the
+// API live on the same origin in every supported deployment, so the cookie
+// only needs to ride first-party navigations. `Secure` is auto-enabled when
+// the operator is behind a reverse proxy (TRUST_PROXY=true) — over plain
+// HTTP a Secure cookie would just be dropped silently.
+const REFRESH_COOKIE_NAME = 'kp_refresh';
+const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches refreshExpiresIn
+
+function refreshCookieOptions(): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: config.trustProxy,
+    sameSite: 'strict',
+    path: '/api/auth',
+    maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+  };
+}
+
+function setRefreshCookie(res: Response, token: string): void {
+  res.cookie(REFRESH_COOKIE_NAME, token, refreshCookieOptions());
+}
+
+function clearRefreshCookie(res: Response): void {
+  res.clearCookie(REFRESH_COOKIE_NAME, { ...refreshCookieOptions(), maxAge: 0 });
+}
+
+function readRefreshToken(req: Request): string | undefined {
+  // Cookie wins; body fallback keeps non-browser callers working during the
+  // transition period and lets the deprecation be staged.
+  const cookieVal = (req as Request & { cookies?: Record<string, string> }).cookies?.[REFRESH_COOKIE_NAME];
+  if (cookieVal) return cookieVal;
+  return (req.body && typeof req.body === 'object') ? req.body.refresh_token : undefined;
+}
 
 // Demo credentials
 const DEMO_USERNAME = 'demo';
@@ -61,9 +96,10 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     const accessToken = await createAccessToken(username);
     const refreshToken = await createRefreshToken(username);
 
+    setRefreshCookie(res, refreshToken);
     res.json({
       access_token: accessToken,
-      refresh_token: refreshToken,
+      refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
       token_type: 'bearer',
       role,
       permissions,
@@ -80,12 +116,13 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   }
 
   const accessToken = await createAccessToken(username);
-  const refreshToken = createRefreshToken(username);
+  const refreshToken = await createRefreshToken(username);
   const permissions = await getUserPermissions(username);
 
+  setRefreshCookie(res, refreshToken);
   res.json({
     access_token: accessToken,
-    refresh_token: refreshToken,
+    refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
     token_type: 'bearer',
     role: result.role,
     permissions,
@@ -94,7 +131,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
 // POST /api/auth/refresh
 router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
-  const { refresh_token } = req.body;
+  const refresh_token = readRefreshToken(req);
 
   if (!refresh_token) {
     res.status(400).json({ detail: 'Refresh token required' });
@@ -124,6 +161,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
     const newRefreshToken = await createRefreshToken(result.username);
     const permissions = isAdmin ? ['*'] : ['server.view_status', 'players.view', 'console.view', 'performance.view', 'backups.view', 'scheduler.view', 'mods.view', 'plugins.view', 'worlds.view', 'chat.view', 'activity.view'];
 
+    setRefreshCookie(res, newRefreshToken);
     res.json({
       access_token: accessToken,
       refresh_token: newRefreshToken,
@@ -138,6 +176,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   const accessToken = await createAccessToken(result.username);
   const newRefreshToken = await createRefreshToken(result.username);
 
+  setRefreshCookie(res, newRefreshToken);
   res.json({
     access_token: accessToken,
     refresh_token: newRefreshToken,
@@ -152,6 +191,7 @@ router.post('/logout', authMiddleware, async (req: Request, res: Response) => {
   if (authReq.user) {
     await invalidateUserTokens(authReq.user);
   }
+  clearRefreshCookie(res);
   res.json({ message: 'Logged out successfully' });
 });
 

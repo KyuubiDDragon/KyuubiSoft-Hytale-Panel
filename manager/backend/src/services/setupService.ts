@@ -310,9 +310,25 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         if (!/^[a-zA-Z0-9_-]{3,32}$/.test(data.username as string)) {
           return { success: false, nextStep: stepId, error: 'Username must be 3-32 characters, alphanumeric with _ or -' };
         }
-        // Validate password strength
-        if ((data.password as string).length < 12) {
-          return { success: false, nextStep: stepId, error: 'Password must be at least 12 characters' };
+        {
+          const pw = data.password as string;
+          if (pw.length < 12) {
+            return { success: false, nextStep: stepId, error: 'Password must be at least 12 characters' };
+          }
+          // Defense in depth: also require a mix of character classes and
+          // refuse passwords that match the username. This is the only
+          // chance to enforce policy before the admin account exists.
+          const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(pw)).length;
+          if (classes < 3) {
+            return { success: false, nextStep: stepId, error: 'Password must include at least three of: lowercase, uppercase, digit, symbol' };
+          }
+          if (pw.toLowerCase().includes((data.username as string).toLowerCase())) {
+            return { success: false, nextStep: stepId, error: 'Password must not contain the username' };
+          }
+          const common = ['password', 'changeme', '123456789012', 'qwertyuiop', 'administrator'];
+          if (common.some(c => pw.toLowerCase().includes(c))) {
+            return { success: false, nextStep: stepId, error: 'Password contains a well-known sequence; pick something less guessable' };
+          }
         }
 
         // Store admin info (we'll create the user during finalization)

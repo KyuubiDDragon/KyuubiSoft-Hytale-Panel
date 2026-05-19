@@ -9,6 +9,8 @@ import { getPlayerInventoryFromFile, getPlayerDetailsFromFile } from '../service
 import { config } from '../config.js';
 import { dismissNewFeaturesBanner } from '../services/migration.js';
 import { checkPanelUpdate, getCurrentVersion } from '../services/panelVersionService.js';
+import { parseHytaleConfig, HytaleConfigSchema } from '../schemas/hytaleConfig.js';
+import { getHytaleApi } from '../services/hytaleAdapter.js';
 import {
   isDemoMode,
   getDemoQuickSettings,
@@ -154,6 +156,82 @@ router.get('/quick-settings', authMiddleware, requirePermission('config.view'), 
     res.status(500).json({
       error: 'Failed to load quick settings',
       message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/config - Read the full server config.json with Zod
+// validation metadata. Returns the parsed config plus a list of validation
+// issues so the UI can flag unexpected fields without throwing them away.
+router.get('/config', authMiddleware, requirePermission('config.view'), async (_req: Request, res: Response) => {
+  if (isDemoMode()) {
+    const demo = getDemoQuickSettings();
+    res.json({
+      config: {
+        ServerName: demo.serverName,
+        MOTD: demo.motd,
+        MaxPlayers: demo.maxPlayers,
+        MaxViewRadius: demo.maxViewRadius,
+        Defaults: { GameMode: demo.defaultGameMode },
+      },
+      issues: [],
+      capabilities: getHytaleApi().getCapabilities(),
+    });
+    return;
+  }
+
+  try {
+    const configPath = path.join(config.serverPath, 'config.json');
+    const raw = JSON.parse(await readFile(configPath, 'utf-8'));
+    const parsed = parseHytaleConfig(raw);
+    res.json({
+      config: parsed.config,
+      issues: parsed.issues,
+      capabilities: getHytaleApi().getCapabilities(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to load server config',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// PUT /api/server/config - Replace the server config.json. Body must match
+// HytaleConfigSchema (extra fields are kept via .passthrough()). A snapshot
+// of the previous file is written next to it as config.json.bak so a bad
+// edit is one rename away from recovery.
+router.put('/config', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Server config saved (simulated)' });
+    return;
+  }
+
+  const parsed = HytaleConfigSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: 'Invalid server config',
+      issues: parsed.error.issues.map(i => `${i.path.join('.') || '<root>'}: ${i.message}`),
+    });
+    return;
+  }
+
+  try {
+    const configPath = path.join(config.serverPath, 'config.json');
+    // Snapshot before overwrite so an admin can roll back without restoring
+    // a full server backup.
+    try {
+      const previous = await readFile(configPath, 'utf-8');
+      await writeFile(`${configPath}.bak`, previous, 'utf-8');
+    } catch {
+      // No previous config — first write, nothing to back up.
+    }
+    await writeFile(configPath, JSON.stringify(parsed.data, null, 2), 'utf-8');
+    res.json({ success: true, message: 'Server config saved' });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to save server config',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });

@@ -32,6 +32,15 @@ fi
 
 echo "[OK] Backup created: ${BACKUP_DIR}/${BACKUP_NAME}"
 
+# Off-host backup hook. Stubbed out by default; see scripts/backup-hook.sh
+# for restic / rclone / borg / s3 examples. Failure is non-fatal — the
+# local copy is already on disk.
+if [ -x "/opt/hytale/backup-hook.sh" ]; then
+    if ! /opt/hytale/backup-hook.sh "${BACKUP_DIR}/${BACKUP_NAME}"; then
+        echo "[WARN] backup-hook.sh returned non-zero; local backup is still on disk."
+    fi
+fi
+
 # Keep only the configured number of manual backups (oldest pruned first).
 # Run from BACKUP_DIR to avoid leaking absolute paths into the rm command.
 cd "${BACKUP_DIR}"

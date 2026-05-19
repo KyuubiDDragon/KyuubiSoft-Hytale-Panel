@@ -1,10 +1,29 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { config } from '../config.js';
 import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js';
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe } from '../utils/pathSecurity.js';
+
+// Path to the off-host backup hook inside the hytale container. The manager
+// container can't exec it directly because they're separate containers, so
+// the hook is invoked through the in-container backup.sh path on the host.
+// The path is well-known; the script ships from scripts/backup-hook.sh.
+const BACKUP_HOOK_PATH = process.env.BACKUP_HOOK_PATH || '/opt/hytale/backup-hook.sh';
+
+function runBackupHookAsync(absolutePath: string): void {
+  if (!fs.existsSync(BACKUP_HOOK_PATH)) return;
+  try {
+    const child = spawn(BACKUP_HOOK_PATH, [absolutePath], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+  } catch (err) {
+    console.warn('[Backup] Failed to spawn backup-hook:', err instanceof Error ? err.message : err);
+  }
+}
 
 // In-process lock to prevent concurrent backup/restore operations.
 // Two parallel HTTP requests can otherwise corrupt each other's tarball or
@@ -161,6 +180,10 @@ export function createBackup(name?: string): Promise<ActionResponse & { backup?:
       });
 
       const stat = fs.statSync(backupFile);
+
+      // Fire-and-forget off-host backup. The hook is a no-op stub by default;
+      // see scripts/backup-hook.sh for restic / rclone / borg / s3 examples.
+      runBackupHookAsync(backupFile);
 
       return {
         success: true,

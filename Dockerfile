@@ -68,6 +68,7 @@ WORKDIR /opt/hytale
 COPY --chmod=755 scripts/entrypoint.sh /opt/hytale/entrypoint.sh
 COPY --chmod=755 scripts/start-server.sh /opt/hytale/start-server.sh
 COPY --chmod=755 scripts/backup.sh /opt/hytale/backup.sh
+COPY --chmod=755 scripts/backup-hook.sh /opt/hytale/backup-hook.sh
 
 # ============================================================
 # Volumes for persistent data

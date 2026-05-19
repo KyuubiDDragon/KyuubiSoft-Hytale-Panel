@@ -1,4 +1,5 @@
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -287,6 +288,9 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow loading cross-origin resources
 }));
 app.use(compression());
+// Parse refresh-token cookie (HttpOnly, set by /api/auth/login & /refresh).
+// Body-based refresh tokens still work for backward compat — see auth route.
+app.use(cookieParser());
 
 // CORS configuration - must be explicitly set
 const corsOrigins = config.corsOrigins

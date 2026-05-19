@@ -26,6 +26,10 @@ export type UserRole = 'admin' | 'moderator' | 'operator' | 'viewer'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
+  // Refresh tokens moved into an HttpOnly cookie (kp_refresh) in v2.2.
+  // We still rehydrate any value previously stored in localStorage so users
+  // who upgraded mid-session aren't forced to re-login. After the next
+  // successful refresh the localStorage copy is dropped (see setTokens).
   const accessToken = ref<string | null>(getStorageItem('accessToken'))
   const refreshToken = ref<string | null>(getStorageItem('refreshToken'))
   const username = ref<string | null>(getStorageItem('username'))
@@ -62,9 +66,13 @@ export const useAuthStore = defineStore('auth', () => {
   // Actions
   function setTokens(access: string, refresh: string) {
     accessToken.value = access
+    // Refresh token lives in an HttpOnly cookie now — keep it in memory
+    // only so we can still send a body fallback to /api/auth/refresh if
+    // the cookie was blocked, but don't persist it to localStorage where
+    // any XSS could exfiltrate it.
     refreshToken.value = refresh
     setStorageItem('accessToken', access)
-    setStorageItem('refreshToken', refresh)
+    removeStorageItem('refreshToken')
   }
 
   function setUser(name: string, userRole?: UserRole, userPermissions?: string[]) {
