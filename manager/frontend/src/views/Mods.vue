@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import ChangelogModal from '@/components/mods/ChangelogModal.vue'
+import { getLocalizedText, getCategoryColor, type ModsTab } from '@/composables/useMods'
 import {
   modsApi,
   pluginsApi,
@@ -37,40 +38,14 @@ import {
   type TrackedMod,
   type ModUpdateStatus,
 } from '@/api/management'
-import { getLocale } from '@/i18n'
-import { sanitizeHtml } from '@/utils/safeHtml'
 
 const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
 
-// Helper to get localized string based on current locale
-function getLocalizedText(text: string | LocalizedString | undefined | null): string {
-  if (!text) return ''
-  if (typeof text === 'string') return text
-
-  // Handle object type (LocalizedString)
-  if (typeof text === 'object') {
-    const locale = getLocale()
-    // Map locale to key (handle pt_br -> pt_br)
-    const localeKey = locale === 'pt_br' ? 'pt_br' : locale
-
-    // Try current locale, then English, then German, then Portuguese, then first available value
-    const result = text[localeKey as keyof LocalizedString]
-      || text.en
-      || text.de
-      || text.pt_br
-      || Object.values(text).find(v => typeof v === 'string' && v.length > 0)
-      || ''
-
-    return result
-  }
-
-  // Fallback: convert to string
-  return String(text)
-}
-
-type TabType = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge' | 'updates'
+// Tab type, getLocalizedText and getCategoryColor are shared with the
+// components/mods/* children via composables/useMods.
+type TabType = ModsTab
 
 // Check for tab query parameter
 const initialTab = (route.query.tab as TabType) || 'mods'
@@ -391,16 +366,7 @@ async function updateModFromSource(item: any) {
   }
 }
 
-function getCategoryColor(category: string): string {
-  const colors: Record<string, string> = {
-    map: 'bg-blue-500/20 text-blue-400',
-    utility: 'bg-green-500/20 text-green-400',
-    gameplay: 'bg-purple-500/20 text-purple-400',
-    admin: 'bg-red-500/20 text-red-400',
-    other: 'bg-gray-500/20 text-ink-muted',
-  }
-  return colors[category] || colors.other
-}
+// getCategoryColor moved to composables/useMods (imported at the top).
 
 function getCategoryIcon(category: string): string {
   const icons: Record<string, string> = {
@@ -573,8 +539,7 @@ const changelogModalTitle = ref('')
 
 function openChangelogModal(name: string, changelog: string) {
   changelogModalTitle.value = name
-  // Changelog HTML comes from CurseForge/Modtale — sanitize before injection.
-  changelogModalContent.value = sanitizeHtml(changelog)
+  changelogModalContent.value = changelog
   showChangelogModal.value = true
 }
 
@@ -721,7 +686,7 @@ function getClassificationColor(classification: string): string {
     SAVE: 'bg-green-500/20 text-green-400',
     MODPACK: 'bg-orange-500/20 text-orange-400',
   }
-  return colors[classification] || 'bg-gray-500/20 text-ink-muted'
+  return colors[classification] || 'bg-gray-500/20 text-gray-400'
 }
 
 function formatDownloads(num: number | null | undefined): string {
@@ -875,7 +840,7 @@ function getStackMartCategoryColor(category: string): string {
     scripts: 'bg-green-500/20 text-green-400',
     tools: 'bg-orange-500/20 text-orange-400',
   }
-  return colors[category?.toLowerCase()] || 'bg-gray-500/20 text-ink-muted'
+  return colors[category?.toLowerCase()] || 'bg-gray-500/20 text-gray-400'
 }
 
 // Watch for StackMart search/filter changes
@@ -1158,8 +1123,8 @@ onMounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-ink">{{ t('mods.title') }}</h1>
-        <p class="text-ink-muted mt-1">{{ t('mods.subtitle') }}</p>
+        <h1 class="text-2xl font-bold text-white">{{ t('mods.title') }}</h1>
+        <p class="text-gray-400 mt-1">{{ t('mods.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-3">
         <button
@@ -1178,7 +1143,7 @@ onMounted(() => {
         </button>
         <button
           @click="loadData"
-          class="text-ink-muted hover:text-ink transition-colors"
+          class="text-gray-400 hover:text-white transition-colors"
           :class="{ 'animate-spin': loading }"
         >
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1201,7 +1166,7 @@ onMounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'mods'
             ? 'bg-hytale-orange text-dark'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1214,8 +1179,8 @@ onMounted(() => {
         :class="[
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'plugins'
-            ? 'bg-purple-500 text-ink'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            ? 'bg-purple-500 text-white'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1228,8 +1193,8 @@ onMounted(() => {
         :class="[
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'store'
-            ? 'bg-emerald-500 text-ink'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            ? 'bg-emerald-500 text-white'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1243,7 +1208,7 @@ onMounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'modtale'
             ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1257,7 +1222,7 @@ onMounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'stackmart'
             ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1271,7 +1236,7 @@ onMounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'curseforge'
             ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1286,7 +1251,7 @@ onMounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'updates'
             ? (updateStatus && updateStatus.updatesAvailable > 0 ? 'bg-status-warning text-dark' : 'bg-status-success text-dark')
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            : 'bg-dark-100 text-gray-400 hover:text-white'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1308,9 +1273,9 @@ onMounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="font-semibold text-ink">{{ enabledCount }} {{ t('mods.active') }}</h3>
-          <p class="text-sm text-ink-muted mt-1">{{ t('mods.path') }}: <code class="text-xs bg-surface-overlay px-2 py-0.5 rounded">{{ currentPath }}</code></p>
-          <p class="text-sm text-ink-subtle mt-2">{{ t('mods.restartNote') }}</p>
+          <h3 class="font-semibold text-white">{{ enabledCount }} {{ t('mods.active') }}</h3>
+          <p class="text-sm text-gray-400 mt-1">{{ t('mods.path') }}: <code class="text-xs bg-dark-100 px-2 py-0.5 rounded">{{ currentPath }}</code></p>
+          <p class="text-sm text-gray-500 mt-2">{{ t('mods.restartNote') }}</p>
         </div>
       </div>
     </Card>
@@ -1324,20 +1289,20 @@ onMounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="font-semibold text-ink">{{ t('mods.storeTitle') }}</h3>
-          <p class="text-sm text-ink-muted mt-1">{{ t('mods.storeDescription') }}</p>
-          <p class="text-sm text-ink-subtle mt-2">{{ t('mods.restartNote') }}</p>
+          <h3 class="font-semibold text-white">{{ t('mods.storeTitle') }}</h3>
+          <p class="text-sm text-gray-400 mt-1">{{ t('mods.storeDescription') }}</p>
+          <p class="text-sm text-gray-500 mt-2">{{ t('mods.restartNote') }}</p>
         </div>
       </div>
     </Card>
 
     <!-- Items List (Mods/Plugins) -->
     <Card v-if="activeTab === 'mods' || activeTab === 'plugins'" :title="activeTab === 'mods' ? t('mods.mods') : t('mods.plugins')" :padding="false">
-      <div v-if="loading" class="text-center text-ink-subtle p-8">
+      <div v-if="loading" class="text-center text-gray-500 p-8">
         {{ t('common.loading') }}
       </div>
 
-      <div v-else-if="enrichedItems.length === 0" class="text-center text-ink-subtle p-8">
+      <div v-else-if="enrichedItems.length === 0" class="text-center text-gray-500 p-8">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
         </svg>
@@ -1348,7 +1313,7 @@ onMounted(() => {
         <div
           v-for="item in enrichedItems"
           :key="item.filename"
-          class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
+          class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
           <div class="flex items-center gap-4">
             <!-- Icon -->
@@ -1362,7 +1327,7 @@ onMounted(() => {
             >
               <svg
                 class="w-6 h-6"
-                :class="item.enabled ? (activeTab === 'mods' ? 'text-hytale-orange' : 'text-purple-400') : 'text-ink-subtle'"
+                :class="item.enabled ? (activeTab === 'mods' ? 'text-hytale-orange' : 'text-purple-400') : 'text-gray-500'"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -1374,20 +1339,20 @@ onMounted(() => {
 
             <!-- Info -->
             <div>
-              <p :class="['font-medium', item.enabled ? 'text-ink' : 'text-ink-subtle']">{{ item.name }}</p>
-              <div class="flex items-center gap-3 text-sm text-ink-subtle">
+              <p :class="['font-medium', item.enabled ? 'text-white' : 'text-gray-500']">{{ item.name }}</p>
+              <div class="flex items-center gap-3 text-sm text-gray-500">
                 <span>{{ formatSize(item.size) }}</span>
                 <span>{{ formatDate(item.lastModified) }}</span>
                 <span
                   :class="[
                     'px-2 py-0.5 rounded text-xs',
-                    item.enabled ? 'bg-status-success/20 text-status-success' : 'bg-gray-600/20 text-ink-subtle'
+                    item.enabled ? 'bg-status-success/20 text-status-success' : 'bg-gray-600/20 text-gray-500'
                   ]"
                 >
                   {{ item.enabled ? t('mods.enabled') : t('mods.disabled') }}
                 </span>
                 <!-- Version info -->
-                <span v-if="item.installedVersion" class="text-xs text-ink-muted">
+                <span v-if="item.installedVersion" class="text-xs text-gray-400">
                   {{ item.installedVersion }}
                 </span>
                 <!-- Update badge -->
@@ -1402,7 +1367,7 @@ onMounted(() => {
                   <button
                     v-if="item.updateChangelog"
                     @click.stop="openChangelogModal(item.name, item.updateChangelog)"
-                    class="ml-1 hover:text-ink transition-colors"
+                    class="ml-1 hover:text-white transition-colors"
                     :title="t('mods.viewChangelog')"
                   >
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1444,7 +1409,7 @@ onMounted(() => {
             <button
               v-if="authStore.hasPermission(activeTab === 'mods' ? 'mods.config' : 'plugins.config')"
               @click="openConfigEditor(item)"
-              class="p-2 text-ink-muted hover:text-blue-400 transition-colors"
+              class="p-2 text-gray-400 hover:text-blue-400 transition-colors"
               :title="t('mods.editConfig')"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1457,7 +1422,7 @@ onMounted(() => {
             <button
               v-if="authStore.hasPermission(activeTab === 'mods' ? 'mods.delete' : 'plugins.delete')"
               @click="deleteItem(item)"
-              class="p-2 text-ink-muted hover:text-status-error transition-colors"
+              class="p-2 text-gray-400 hover:text-status-error transition-colors"
               :title="t('common.delete')"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1471,7 +1436,7 @@ onMounted(() => {
               @click="activeTab === 'mods' ? toggleMod(item) : togglePlugin(item)"
               :class="[
                 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                item.enabled ? (activeTab === 'mods' ? 'bg-hytale-orange' : 'bg-purple-500') : 'bg-surface-overlay'
+                item.enabled ? (activeTab === 'mods' ? 'bg-hytale-orange' : 'bg-purple-500') : 'bg-dark-50'
               ]"
             >
               <span
@@ -1488,11 +1453,11 @@ onMounted(() => {
 
     <!-- Mod Store List -->
     <Card v-if="activeTab === 'store'" :title="t('mods.availableMods')" :padding="false">
-      <div v-if="storeLoading" class="text-center text-ink-subtle p-8">
+      <div v-if="storeLoading" class="text-center text-gray-500 p-8">
         {{ t('common.loading') }}
       </div>
 
-      <div v-else-if="storeMods.length === 0" class="text-center text-ink-subtle p-8">
+      <div v-else-if="storeMods.length === 0" class="text-center text-gray-500 p-8">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
@@ -1503,7 +1468,7 @@ onMounted(() => {
         <div
           v-for="mod in storeMods"
           :key="mod.id"
-          class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
+          class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors"
         >
           <div class="flex items-center gap-4">
             <!-- Icon -->
@@ -1516,7 +1481,7 @@ onMounted(() => {
             <!-- Info -->
             <div class="flex-1">
               <div class="flex items-center gap-2 flex-wrap">
-                <p class="font-medium text-ink">{{ mod.name }}</p>
+                <p class="font-medium text-white">{{ mod.name }}</p>
                 <span :class="['px-2 py-0.5 rounded text-xs', getCategoryColor(mod.category)]">
                   {{ mod.category }}
                 </span>
@@ -1533,7 +1498,7 @@ onMounted(() => {
                   {{ t('mods.updateSuccess') }}
                 </span>
               </div>
-              <p class="text-sm text-ink-muted mt-1">{{ getLocalizedText(mod.description) }}</p>
+              <p class="text-sm text-gray-400 mt-1">{{ getLocalizedText(mod.description) }}</p>
               <!-- Hint (if available) -->
               <div v-if="mod.hints && getLocalizedText(mod.hints)" class="mt-2 p-2 bg-status-warning/10 border border-status-warning/30 rounded text-xs text-status-warning flex items-start gap-2">
                 <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1541,7 +1506,7 @@ onMounted(() => {
                 </svg>
                 <span>{{ getLocalizedText(mod.hints) }}</span>
               </div>
-              <div class="flex items-center gap-3 text-sm text-ink-subtle mt-1">
+              <div class="flex items-center gap-3 text-sm text-gray-500 mt-1">
                 <span>{{ t('mods.by') }} {{ mod.author }}</span>
                 <a :href="'https://github.com/' + mod.github" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline flex items-center gap-1">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -1549,7 +1514,7 @@ onMounted(() => {
                   </svg>
                   GitHub
                 </a>
-                <span v-if="mod.ports" class="text-ink-subtle">
+                <span v-if="mod.ports" class="text-gray-600">
                   {{ t('mods.ports') }}: {{ mod.ports.map(p => p.default).join(', ') }}
                 </span>
               </div>
@@ -1578,7 +1543,7 @@ onMounted(() => {
               v-if="!mod.installed && authStore.hasPermission('mods.install')"
               @click="installStoreMod(mod.id)"
               :disabled="installingMod === mod.id"
-              class="px-4 py-2 bg-emerald-500 text-ink font-medium rounded-lg hover:bg-emerald-400 transition-colors flex items-center gap-2 disabled:opacity-50"
+              class="px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg hover:bg-emerald-400 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <svg v-if="installingMod === mod.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1621,7 +1586,7 @@ onMounted(() => {
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <h3 class="font-semibold text-ink">Modtale</h3>
+                <h3 class="font-semibold text-white">Modtale</h3>
                 <a
                   href="https://modtale.net"
                   target="_blank"
@@ -1636,7 +1601,7 @@ onMounted(() => {
               </div>
               <button
                 @click="showModtaleSettings = true"
-                class="px-3 py-1.5 bg-surface-overlay text-ink-muted rounded-lg hover:bg-surface-overlay transition-colors flex items-center gap-2 text-sm"
+                class="px-3 py-1.5 bg-dark-100 text-gray-300 rounded-lg hover:bg-dark-50 transition-colors flex items-center gap-2 text-sm"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
@@ -1644,7 +1609,7 @@ onMounted(() => {
                 API Key
               </button>
             </div>
-            <p class="text-sm text-ink-muted mt-1">{{ t('mods.modtaleDescription') }}</p>
+            <p class="text-sm text-gray-400 mt-1">{{ t('mods.modtaleDescription') }}</p>
             <div class="flex items-center gap-4 mt-2 text-sm">
               <span v-if="modtaleStatus?.apiAvailable" class="flex items-center gap-1 text-green-400">
                 <span class="w-2 h-2 bg-green-400 rounded-full"></span>
@@ -1657,10 +1622,10 @@ onMounted(() => {
               <span v-if="modtaleStatus?.hasApiKey" class="text-cyan-400">
                 {{ modtaleStatus.rateLimit?.limit }} req/min
               </span>
-              <span v-else class="text-ink-subtle">
+              <span v-else class="text-gray-500">
                 10 req/min ({{ t('mods.noApiKey') }})
               </span>
-              <span class="text-ink-subtle">
+              <span class="text-gray-500">
                 {{ modtaleTotalElements }} {{ t('mods.modsFound') }}
               </span>
             </div>
@@ -1674,14 +1639,14 @@ onMounted(() => {
           <!-- Search Input -->
           <div class="flex-1 min-w-[200px]">
             <div class="relative">
-              <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
                 v-model="modtaleSearch"
                 type="text"
                 :placeholder="t('mods.searchModtale')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-cyan-500"
+                class="w-full pl-10 pr-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
               />
             </div>
           </div>
@@ -1689,7 +1654,7 @@ onMounted(() => {
           <!-- Sort -->
           <select
             v-model="modtaleSort"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-cyan-500"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-cyan-500"
           >
             <option value="downloads">{{ t('mods.sortDownloads') }}</option>
             <option value="updated">{{ t('mods.sortUpdated') }}</option>
@@ -1701,7 +1666,7 @@ onMounted(() => {
           <!-- Classification Filter -->
           <select
             v-model="modtaleClassification"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-cyan-500"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-cyan-500"
           >
             <option value="">{{ t('mods.allTypes') }}</option>
             <option value="PLUGIN">Plugins</option>
@@ -1715,14 +1680,14 @@ onMounted(() => {
 
       <!-- Modtale Results -->
       <Card :title="t('mods.modtaleResults')" :padding="false">
-        <div v-if="modtaleLoading" class="text-center text-ink-subtle p-8">
+        <div v-if="modtaleLoading" class="text-center text-gray-500 p-8">
           <svg class="w-8 h-8 mx-auto animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           <p class="mt-2">{{ t('common.loading') }}</p>
         </div>
 
-        <div v-else-if="modtaleMods.length === 0" class="text-center text-ink-subtle p-8">
+        <div v-else-if="modtaleMods.length === 0" class="text-center text-gray-500 p-8">
           <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -1733,12 +1698,12 @@ onMounted(() => {
           <div
             v-for="mod in modtaleMods"
             :key="mod.id"
-            class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors cursor-pointer"
+            class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors cursor-pointer"
             @click="openModtaleDetail(mod)"
           >
             <div class="flex items-center gap-4 flex-1 min-w-0">
               <!-- Image/Icon -->
-              <div class="w-16 h-16 rounded-lg overflow-hidden bg-surface-overlay shrink-0">
+              <div class="w-16 h-16 rounded-lg overflow-hidden bg-dark-100 shrink-0">
                 <img
                   v-if="mod.imageUrl"
                   :src="mod.imageUrl"
@@ -1746,7 +1711,7 @@ onMounted(() => {
                   class="w-full h-full object-cover"
                 />
                 <div v-else class="w-full h-full flex items-center justify-center">
-                  <svg class="w-8 h-8 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 </div>
@@ -1755,7 +1720,7 @@ onMounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-medium text-ink truncate">{{ mod.title }}</p>
+                  <p class="font-medium text-white truncate">{{ mod.title }}</p>
                   <span :class="['px-2 py-0.5 rounded text-xs', getClassificationColor(mod.classification)]">
                     {{ mod.classification }}
                   </span>
@@ -1766,8 +1731,8 @@ onMounted(() => {
                     {{ t('mods.installSuccess') }}
                   </span>
                 </div>
-                <p class="text-sm text-ink-muted mt-1 line-clamp-1">{{ mod.description }}</p>
-                <div class="flex items-center gap-4 text-sm text-ink-subtle mt-1">
+                <p class="text-sm text-gray-400 mt-1 line-clamp-1">{{ mod.description }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500 mt-1">
                   <span>{{ mod.author }}</span>
                   <span class="flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1782,7 +1747,7 @@ onMounted(() => {
                     {{ mod.rating?.toFixed(1) || '0.0' }}
                   </span>
                   <div v-if="mod.tags?.length" class="flex gap-1 flex-wrap">
-                    <span v-for="tag in mod.tags.slice(0, 3)" :key="tag" class="px-1.5 py-0.5 rounded text-xs bg-surface-overlay text-ink-muted">
+                    <span v-for="tag in mod.tags.slice(0, 3)" :key="tag" class="px-1.5 py-0.5 rounded text-xs bg-dark-100 text-gray-400">
                       {{ tag }}
                     </span>
                   </div>
@@ -1842,21 +1807,21 @@ onMounted(() => {
         </div>
 
         <!-- Pagination -->
-        <div v-if="modtaleTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-border/40">
+        <div v-if="modtaleTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-dark-50/30">
           <button
             @click="modtalePage = Math.max(0, modtalePage - 1)"
             :disabled="modtalePage === 0"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
           >
             &larr;
           </button>
-          <span class="text-ink-muted">
+          <span class="text-gray-400">
             {{ modtalePage + 1 }} / {{ modtaleTotalPages }}
           </span>
           <button
             @click="modtalePage = Math.min(modtaleTotalPages - 1, modtalePage + 1)"
             :disabled="modtalePage >= modtaleTotalPages - 1"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
           >
             &rarr;
           </button>
@@ -1866,10 +1831,10 @@ onMounted(() => {
 
     <!-- Modtale Settings Modal -->
     <div v-if="showModtaleSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-surface-raised rounded-xl w-full max-w-md">
-        <div class="p-4 border-b border-border/60 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-ink">{{ t('mods.modtaleApiSettings') }}</h2>
-          <button @click="showModtaleSettings = false" class="text-ink-muted hover:text-ink">
+      <div class="bg-dark-200 rounded-xl w-full max-w-md">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">{{ t('mods.modtaleApiSettings') }}</h2>
+          <button @click="showModtaleSettings = false" class="text-gray-400 hover:text-white">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -1877,23 +1842,23 @@ onMounted(() => {
         </div>
 
         <div class="p-6 space-y-4">
-          <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.statusLabel') }}:</span>
                 <span :class="modtaleStatus?.apiAvailable ? 'text-green-400' : 'text-red-400'">
                   {{ modtaleStatus?.apiAvailable ? t('mods.online') : t('mods.offline') }}
                 </span>
               </div>
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.apiKeyLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.apiKeyLabel') }}:</span>
                 <span :class="modtaleStatus?.hasApiKey ? 'text-green-400' : 'text-yellow-400'">
                   {{ modtaleStatus?.hasApiKey ? t('mods.configured') : t('mods.notConfigured') }}
                 </span>
               </div>
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.rateLimitLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.rateLimitLabel') }}:</span>
                 <span class="text-cyan-400">
                   {{ modtaleStatus?.rateLimit?.limit || 10 }} req/min
                 </span>
@@ -1908,19 +1873,19 @@ onMounted(() => {
               </svg>
               {{ t('mods.setupApiKey') }}
             </h3>
-            <p class="text-sm text-ink-muted mb-3">
+            <p class="text-sm text-gray-400 mb-3">
               {{ t('mods.apiKeyInstructions') }}
             </p>
-            <ol class="text-sm text-ink-muted space-y-1 list-decimal list-inside mb-3">
+            <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
               <li>{{ t('mods.apiKeyStep1') }} <a href="https://modtale.net" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline">modtale.net</a></li>
               <li>{{ t('mods.apiKeyStep2') }}</li>
               <li>{{ t('mods.apiKeyStep3') }}</li>
               <li>{{ t('mods.apiKeyStep4') }}</li>
             </ol>
-            <p class="text-sm text-ink-muted">
+            <p class="text-sm text-gray-400">
               {{ t('mods.apiKeyEnvInstructions') }}
             </p>
-            <code class="block mt-2 p-2 bg-surface-muted rounded text-sm text-green-400 font-mono">
+            <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
               MODTALE_API_KEY=md_your_api_key_here
             </code>
           </div>
@@ -1937,10 +1902,10 @@ onMounted(() => {
 
     <!-- Modtale Detail Modal -->
     <div v-if="showModtaleDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-surface-raised rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
-        <div class="p-4 border-b border-border/60 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-ink">{{ modtaleDetailProject?.title || t('common.loading') }}</h2>
-          <button @click="showModtaleDetail = false" class="text-ink-muted hover:text-ink">
+      <div class="bg-dark-200 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
+          <h2 class="text-xl font-bold text-white">{{ modtaleDetailProject?.title || t('common.loading') }}</h2>
+          <button @click="showModtaleDetail = false" class="text-gray-400 hover:text-white">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -1948,7 +1913,7 @@ onMounted(() => {
         </div>
 
         <div class="flex-1 overflow-y-auto p-6">
-          <div v-if="modtaleDetailLoading" class="text-center text-ink-subtle py-8">
+          <div v-if="modtaleDetailLoading" class="text-center text-gray-500 py-8">
             <svg class="w-8 h-8 mx-auto animate-spin text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -1967,12 +1932,12 @@ onMounted(() => {
                   <span :class="['px-2 py-0.5 rounded text-xs', getClassificationColor(modtaleDetailProject.classification)]">
                     {{ modtaleDetailProject.classification }}
                   </span>
-                  <span v-for="tag in (modtaleDetailProject.tags || [])" :key="tag" class="px-2 py-0.5 rounded text-xs bg-surface-overlay text-ink-muted">
+                  <span v-for="tag in (modtaleDetailProject.tags || [])" :key="tag" class="px-2 py-0.5 rounded text-xs bg-dark-100 text-gray-400">
                     {{ tag }}
                   </span>
                 </div>
-                <p class="text-ink-muted mb-2">{{ modtaleDetailProject.description }}</p>
-                <div class="flex items-center gap-4 text-sm text-ink-subtle">
+                <p class="text-gray-400 mb-2">{{ modtaleDetailProject.description }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500">
                   <span>{{ modtaleDetailProject.author }}</span>
                   <span class="flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1997,26 +1962,26 @@ onMounted(() => {
 
             <!-- Versions -->
             <div v-if="modtaleDetailProject.versions?.length" class="mb-6">
-              <h3 class="font-semibold text-ink mb-3">{{ t('mods.versions') }}</h3>
+              <h3 class="font-semibold text-white mb-3">{{ t('mods.versions') }}</h3>
               <div class="space-y-2">
                 <div
                   v-for="version in modtaleDetailProject.versions.slice(0, 5)"
                   :key="version.id"
-                  class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg hover:bg-surface-overlay transition-colors"
+                  class="flex items-center justify-between p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
                 >
                   <div>
-                    <span class="text-ink font-medium">{{ version.versionNumber }}</span>
+                    <span class="text-white font-medium">{{ version.versionNumber }}</span>
                     <span v-if="version.channel && version.channel !== 'RELEASE'" class="ml-2 px-2 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400">
                       {{ version.channel }}
                     </span>
-                    <span v-if="version.gameVersions?.length" class="ml-2 text-sm text-ink-subtle">
+                    <span v-if="version.gameVersions?.length" class="ml-2 text-sm text-gray-500">
                       ({{ version.gameVersions.join(', ') }})
                     </span>
                   </div>
                   <button
                     v-if="authStore.hasPermission('mods.install')"
                     @click="modtaleApi.install(modtaleDetailProject!.id, version.versionNumber).then(() => { loadData(); showModtaleDetail = false; })"
-                    class="px-3 py-1 bg-cyan-500 text-ink rounded hover:bg-cyan-400 transition-colors text-sm"
+                    class="px-3 py-1 bg-cyan-500 text-white rounded hover:bg-cyan-400 transition-colors text-sm"
                   >
                     {{ t('mods.install') }}
                   </button>
@@ -2026,8 +1991,8 @@ onMounted(() => {
 
             <!-- Description -->
             <div v-if="modtaleDetailProject.about" class="prose prose-invert max-w-none">
-              <h3 class="font-semibold text-ink mb-3">{{ t('mods.description') }}</h3>
-              <div class="text-ink-muted whitespace-pre-wrap">{{ modtaleDetailProject.about }}</div>
+              <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
+              <div class="text-gray-400 whitespace-pre-wrap">{{ modtaleDetailProject.about }}</div>
             </div>
           </template>
         </div>
@@ -2047,7 +2012,7 @@ onMounted(() => {
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <h3 class="font-semibold text-ink">StackMart</h3>
+                <h3 class="font-semibold text-white">StackMart</h3>
                 <a
                   href="https://stackmart.org"
                   target="_blank"
@@ -2062,7 +2027,7 @@ onMounted(() => {
               </div>
               <button
                 @click="showStackMartSettings = true"
-                class="px-3 py-1.5 bg-surface-overlay text-ink-muted rounded-lg hover:bg-surface-overlay transition-colors flex items-center gap-2 text-sm"
+                class="px-3 py-1.5 bg-dark-100 text-gray-300 rounded-lg hover:bg-dark-50 transition-colors flex items-center gap-2 text-sm"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
@@ -2070,7 +2035,7 @@ onMounted(() => {
                 API Key
               </button>
             </div>
-            <p class="text-sm text-ink-muted mt-1">{{ t('mods.stackmartDescription') }}</p>
+            <p class="text-sm text-gray-400 mt-1">{{ t('mods.stackmartDescription') }}</p>
             <div class="flex items-center gap-4 mt-2 text-sm">
               <span v-if="stackmartStatus?.apiAvailable" class="flex items-center gap-1 text-green-400">
                 <span class="w-2 h-2 bg-green-400 rounded-full"></span>
@@ -2080,10 +2045,10 @@ onMounted(() => {
                 <span class="w-2 h-2 bg-red-400 rounded-full"></span>
                 {{ t('mods.apiOffline') }}
               </span>
-              <span class="text-ink-subtle">
+              <span class="text-gray-500">
                 {{ stackmartStatus?.rateLimit?.limit || 100 }} req/min
               </span>
-              <span class="text-ink-subtle">
+              <span class="text-gray-500">
                 {{ stackmartTotal }} {{ t('mods.resourcesFound') }}
               </span>
             </div>
@@ -2097,14 +2062,14 @@ onMounted(() => {
           <!-- Search Input -->
           <div class="flex-1 min-w-[200px]">
             <div class="relative">
-              <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
                 v-model="stackmartSearch"
                 type="text"
                 :placeholder="t('mods.searchStackMart')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-amber-500"
+                class="w-full pl-10 pr-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>
@@ -2112,7 +2077,7 @@ onMounted(() => {
           <!-- Sort -->
           <select
             v-model="stackmartSort"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-amber-500"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-amber-500"
           >
             <option value="popular">{{ t('mods.sortPopular') }}</option>
             <option value="recent">{{ t('mods.sortRecent') }}</option>
@@ -2122,7 +2087,7 @@ onMounted(() => {
           <!-- Category Filter -->
           <select
             v-model="stackmartCategory"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-amber-500"
+            class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-amber-500"
           >
             <option value="">{{ t('mods.allCategories') }}</option>
             <option value="plugins">Plugins</option>
@@ -2135,14 +2100,14 @@ onMounted(() => {
 
       <!-- StackMart Results -->
       <Card :title="t('mods.stackmartResults')" :padding="false">
-        <div v-if="stackmartLoading" class="text-center text-ink-subtle p-8">
+        <div v-if="stackmartLoading" class="text-center text-gray-500 p-8">
           <svg class="w-8 h-8 mx-auto animate-spin text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           <p class="mt-2">{{ t('common.loading') }}</p>
         </div>
 
-        <div v-else-if="stackmartResources.length === 0" class="text-center text-ink-subtle p-8">
+        <div v-else-if="stackmartResources.length === 0" class="text-center text-gray-500 p-8">
           <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -2153,12 +2118,12 @@ onMounted(() => {
           <div
             v-for="resource in stackmartResources"
             :key="resource.id"
-            class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors cursor-pointer"
+            class="flex items-center justify-between p-4 hover:bg-dark-50/20 transition-colors cursor-pointer"
             @click="openStackMartDetail(resource)"
           >
             <div class="flex items-center gap-4 flex-1 min-w-0">
               <!-- Image/Icon -->
-              <div class="w-16 h-16 rounded-lg overflow-hidden bg-surface-overlay shrink-0">
+              <div class="w-16 h-16 rounded-lg overflow-hidden bg-dark-100 shrink-0">
                 <img
                   v-if="resource.iconUrl"
                   :src="resource.iconUrl.startsWith('http') ? resource.iconUrl : `https://stackmart.org${resource.iconUrl}`"
@@ -2166,7 +2131,7 @@ onMounted(() => {
                   class="w-full h-full object-cover"
                 />
                 <div v-else class="w-full h-full flex items-center justify-center">
-                  <svg class="w-8 h-8 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                 </div>
@@ -2175,7 +2140,7 @@ onMounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-medium text-ink truncate">{{ resource.name }}</p>
+                  <p class="font-medium text-white truncate">{{ resource.name }}</p>
                   <span :class="['px-2 py-0.5 rounded text-xs', getStackMartCategoryColor(resource.category)]">
                     {{ resource.category }}
                   </span>
@@ -2186,8 +2151,8 @@ onMounted(() => {
                     {{ t('mods.installSuccess') }}
                   </span>
                 </div>
-                <p class="text-sm text-ink-muted mt-1 line-clamp-1">{{ resource.tagline }}</p>
-                <div class="flex items-center gap-4 text-sm text-ink-subtle mt-1">
+                <p class="text-sm text-gray-400 mt-1 line-clamp-1">{{ resource.tagline }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500 mt-1">
                   <span>{{ resource.author }}</span>
                   <span class="flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2201,7 +2166,7 @@ onMounted(() => {
                     </svg>
                     {{ resource.rating?.toFixed(1) || '0.0' }}
                   </span>
-                  <span class="text-xs text-ink-subtle">v{{ resource.version }}</span>
+                  <span class="text-xs text-gray-600">v{{ resource.version }}</span>
                 </div>
               </div>
             </div>
@@ -2258,21 +2223,21 @@ onMounted(() => {
         </div>
 
         <!-- Pagination -->
-        <div v-if="stackmartTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-border/40">
+        <div v-if="stackmartTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-dark-50/30">
           <button
             @click="stackmartPage = Math.max(1, stackmartPage - 1)"
             :disabled="stackmartPage === 1"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
           >
             &larr;
           </button>
-          <span class="text-ink-muted">
+          <span class="text-gray-400">
             {{ stackmartPage }} / {{ stackmartTotalPages }}
           </span>
           <button
             @click="stackmartPage = Math.min(stackmartTotalPages, stackmartPage + 1)"
             :disabled="stackmartPage >= stackmartTotalPages"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
           >
             &rarr;
           </button>
@@ -2292,10 +2257,10 @@ onMounted(() => {
           </div>
           <div class="flex-1">
             <div class="flex items-center gap-3">
-              <h3 class="font-semibold text-ink">CurseForge</h3>
+              <h3 class="font-semibold text-white">CurseForge</h3>
               <button
                 @click="showCurseForgeSettings = true"
-                class="p-1 text-ink-muted hover:text-ink transition-colors"
+                class="p-1 text-gray-400 hover:text-white transition-colors"
                 title="API Settings"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2304,8 +2269,8 @@ onMounted(() => {
                 </svg>
               </button>
             </div>
-            <p class="text-sm text-ink-muted mt-1">{{ t('mods.curseforgeDescription') }}</p>
-            <p class="text-sm text-ink-subtle mt-2">{{ t('mods.restartNote') }}</p>
+            <p class="text-sm text-gray-400 mt-1">{{ t('mods.curseforgeDescription') }}</p>
+            <p class="text-sm text-gray-500 mt-2">{{ t('mods.restartNote') }}</p>
           </div>
         </div>
       </Card>
@@ -2319,15 +2284,15 @@ onMounted(() => {
             </svg>
             {{ t('mods.curseforgeUnavailable') }}
           </h3>
-          <p class="text-sm text-ink-muted mb-3">
+          <p class="text-sm text-gray-400 mb-3">
             {{ t('mods.curseforgeApiKeyInstructions') }}
           </p>
-          <ol class="text-sm text-ink-muted space-y-1 list-decimal list-inside mb-3">
+          <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
             <li>{{ t('mods.curseforgeApiKeyStep1') }} <a href="https://console.curseforge.com/" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:underline">console.curseforge.com</a></li>
             <li>{{ t('mods.curseforgeApiKeyStep2') }}</li>
             <li>{{ t('mods.curseforgeApiKeyStep3') }}</li>
           </ol>
-          <code class="block mt-2 p-2 bg-surface-muted rounded text-sm text-green-400 font-mono">
+          <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
             CURSEFORGE_API_KEY=your_api_key_here
           </code>
         </div>
@@ -2336,19 +2301,19 @@ onMounted(() => {
       <!-- CurseForge Search & Filters -->
       <Card v-if="curseforgeStatus?.apiAvailable" :title="t('mods.curseforgeResults')" :padding="false">
         <!-- Search Bar -->
-        <div class="p-4 border-b border-border/40">
+        <div class="p-4 border-b border-dark-50/30">
           <div class="flex gap-3">
             <div class="flex-1">
               <input
                 v-model="curseforgeSearch"
                 type="text"
                 :placeholder="t('mods.searchCurseForge')"
-                class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-orange-500"
+                class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
               />
             </div>
             <select
               v-model="curseforgeSortField"
-              class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-orange-500"
+              class="px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-orange-500"
             >
               <option value="Popularity">{{ t('mods.sortPopular') }}</option>
               <option value="TotalDownloads">{{ t('mods.sortDownloads') }}</option>
@@ -2359,14 +2324,14 @@ onMounted(() => {
         </div>
 
         <!-- Loading -->
-        <div v-if="curseforgeLoading" class="text-center text-ink-subtle p-8">
+        <div v-if="curseforgeLoading" class="text-center text-gray-500 p-8">
           <svg class="w-8 h-8 mx-auto animate-spin text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </div>
 
         <!-- No Results -->
-        <div v-else-if="curseforgeMods.length === 0" class="text-center text-ink-subtle p-8">
+        <div v-else-if="curseforgeMods.length === 0" class="text-center text-gray-500 p-8">
           <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
@@ -2378,18 +2343,18 @@ onMounted(() => {
           <div
             v-for="mod in curseforgeMods"
             :key="mod.id"
-            class="p-4 bg-surface-overlay rounded-lg hover:bg-surface-overlay/50 transition-colors"
+            class="p-4 bg-dark-100 rounded-lg hover:bg-dark-50/50 transition-colors"
           >
             <div class="flex gap-4">
               <!-- Mod Logo -->
-              <div class="w-16 h-16 rounded-lg overflow-hidden bg-surface-raised shrink-0">
+              <div class="w-16 h-16 rounded-lg overflow-hidden bg-dark-200 shrink-0">
                 <img
                   v-if="mod.logo"
                   :src="mod.logo.thumbnailUrl"
                   :alt="mod.name"
                   class="w-full h-full object-cover"
                 />
-                <div v-else class="w-full h-full flex items-center justify-center text-ink-subtle">
+                <div v-else class="w-full h-full flex items-center justify-center text-gray-600">
                   <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
@@ -2398,9 +2363,9 @@ onMounted(() => {
 
               <!-- Mod Info -->
               <div class="flex-1 min-w-0">
-                <h4 class="font-semibold text-ink truncate">{{ mod.name }}</h4>
-                <p class="text-sm text-ink-muted line-clamp-2 mt-1">{{ mod.summary }}</p>
-                <div class="flex items-center gap-3 mt-2 text-xs text-ink-subtle">
+                <h4 class="font-semibold text-white truncate">{{ mod.name }}</h4>
+                <p class="text-sm text-gray-400 line-clamp-2 mt-1">{{ mod.summary }}</p>
+                <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
                   <span class="flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -2471,21 +2436,21 @@ onMounted(() => {
         </div>
 
         <!-- Pagination -->
-        <div v-if="curseforgeTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-border/40">
+        <div v-if="curseforgeTotalPages > 1" class="flex items-center justify-center gap-2 p-4 border-t border-dark-50/30">
           <button
             @click="curseforgePage = Math.max(0, curseforgePage - 1)"
             :disabled="curseforgePage === 0"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
           >
             &larr;
           </button>
-          <span class="text-ink-muted">
+          <span class="text-gray-400">
             {{ curseforgePage + 1 }} / {{ curseforgeTotalPages }}
           </span>
           <button
             @click="curseforgePage = Math.min(curseforgeTotalPages - 1, curseforgePage + 1)"
             :disabled="curseforgePage >= curseforgeTotalPages - 1"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
+            class="px-3 py-1 bg-dark-100 rounded text-gray-400 hover:text-white disabled:opacity-50"
           >
             &rarr;
           </button>
@@ -2495,10 +2460,10 @@ onMounted(() => {
 
     <!-- CurseForge Settings Modal -->
     <div v-if="showCurseForgeSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-surface-raised rounded-xl w-full max-w-md">
-        <div class="p-4 border-b border-border/60 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-ink">{{ t('mods.curseforgeApiSettings') }}</h2>
-          <button @click="showCurseForgeSettings = false" class="text-ink-muted hover:text-ink">
+      <div class="bg-dark-200 rounded-xl w-full max-w-md">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">{{ t('mods.curseforgeApiSettings') }}</h2>
+          <button @click="showCurseForgeSettings = false" class="text-gray-400 hover:text-white">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2506,17 +2471,17 @@ onMounted(() => {
         </div>
 
         <div class="p-6 space-y-4">
-          <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.statusLabel') }}:</span>
                 <span :class="curseforgeStatus?.apiAvailable ? 'text-green-400' : 'text-red-400'">
                   {{ curseforgeStatus?.apiAvailable ? t('mods.online') : t('mods.offline') }}
                 </span>
               </div>
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.apiKeyLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.apiKeyLabel') }}:</span>
                 <span :class="curseforgeStatus?.hasApiKey ? 'text-green-400' : 'text-yellow-400'">
                   {{ curseforgeStatus?.hasApiKey ? t('mods.configured') : t('mods.notConfigured') }}
                 </span>
@@ -2531,15 +2496,15 @@ onMounted(() => {
               </svg>
               {{ t('mods.setupApiKey') }}
             </h3>
-            <p class="text-sm text-ink-muted mb-3">
+            <p class="text-sm text-gray-400 mb-3">
               {{ t('mods.curseforgeApiKeyInstructions') }}
             </p>
-            <ol class="text-sm text-ink-muted space-y-1 list-decimal list-inside mb-3">
+            <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
               <li>{{ t('mods.curseforgeApiKeyStep1') }} <a href="https://console.curseforge.com/" target="_blank" rel="noopener noreferrer" class="text-orange-400 hover:underline">console.curseforge.com</a></li>
               <li>{{ t('mods.curseforgeApiKeyStep2') }}</li>
               <li>{{ t('mods.curseforgeApiKeyStep3') }}</li>
             </ol>
-            <code class="block mt-2 p-2 bg-surface-muted rounded text-sm text-green-400 font-mono">
+            <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
               CURSEFORGE_API_KEY=your_api_key_here
             </code>
           </div>
@@ -2556,10 +2521,10 @@ onMounted(() => {
 
     <!-- StackMart Settings Modal -->
     <div v-if="showStackMartSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-surface-raised rounded-xl w-full max-w-md">
-        <div class="p-4 border-b border-border/60 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-ink">StackMart API Settings</h2>
-          <button @click="showStackMartSettings = false" class="text-ink-muted hover:text-ink">
+      <div class="bg-dark-200 rounded-xl w-full max-w-md">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between">
+          <h2 class="text-xl font-bold text-white">StackMart API Settings</h2>
+          <button @click="showStackMartSettings = false" class="text-gray-400 hover:text-white">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2567,23 +2532,23 @@ onMounted(() => {
         </div>
 
         <div class="p-6 space-y-4">
-          <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
+          <div class="p-4 bg-dark-100 rounded-lg">
+            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.statusLabel') }}:</span>
                 <span :class="stackmartStatus?.apiAvailable ? 'text-green-400' : 'text-red-400'">
                   {{ stackmartStatus?.apiAvailable ? t('mods.online') : t('mods.offline') }}
                 </span>
               </div>
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.apiKeyLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.apiKeyLabel') }}:</span>
                 <span :class="stackmartStatus?.hasApiKey ? 'text-green-400' : 'text-yellow-400'">
                   {{ stackmartStatus?.hasApiKey ? t('mods.configured') : t('mods.notConfigured') }}
                 </span>
               </div>
               <div class="flex justify-between">
-                <span class="text-ink-muted">{{ t('mods.rateLimitLabel') }}:</span>
+                <span class="text-gray-400">{{ t('mods.rateLimitLabel') }}:</span>
                 <span class="text-amber-400">
                   {{ stackmartStatus?.rateLimit?.limit || 100 }} req/min
                 </span>
@@ -2598,15 +2563,15 @@ onMounted(() => {
               </svg>
               {{ t('mods.setupApiKey') }}
             </h3>
-            <p class="text-sm text-ink-muted mb-3">
+            <p class="text-sm text-gray-400 mb-3">
               {{ t('mods.stackmartApiKeyInstructions') }}
             </p>
-            <ol class="text-sm text-ink-muted space-y-1 list-decimal list-inside mb-3">
+            <ol class="text-sm text-gray-400 space-y-1 list-decimal list-inside mb-3">
               <li>{{ t('mods.stackmartApiKeyStep1') }} <a href="https://stackmart.org" target="_blank" rel="noopener noreferrer" class="text-amber-400 hover:underline">stackmart.org</a></li>
               <li>{{ t('mods.stackmartApiKeyStep2') }}</li>
               <li>{{ t('mods.stackmartApiKeyStep3') }}</li>
             </ol>
-            <code class="block mt-2 p-2 bg-surface-muted rounded text-sm text-green-400 font-mono">
+            <code class="block mt-2 p-2 bg-dark-300 rounded text-sm text-green-400 font-mono">
               STACKMART_API_KEY=sm_pub_your_key_here
             </code>
           </div>
@@ -2623,10 +2588,10 @@ onMounted(() => {
 
     <!-- StackMart Detail Modal -->
     <div v-if="showStackMartDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-surface-raised rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
-        <div class="p-4 border-b border-border/60 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-ink">{{ stackmartDetailResource?.name || t('common.loading') }}</h2>
-          <button @click="showStackMartDetail = false" class="text-ink-muted hover:text-ink">
+      <div class="bg-dark-200 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
+          <h2 class="text-xl font-bold text-white">{{ stackmartDetailResource?.name || t('common.loading') }}</h2>
+          <button @click="showStackMartDetail = false" class="text-gray-400 hover:text-white">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2634,7 +2599,7 @@ onMounted(() => {
         </div>
 
         <div class="flex-1 overflow-y-auto p-6">
-          <div v-if="stackmartDetailLoading" class="text-center text-ink-subtle py-8">
+          <div v-if="stackmartDetailLoading" class="text-center text-gray-500 py-8">
             <svg class="w-8 h-8 mx-auto animate-spin text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -2657,12 +2622,12 @@ onMounted(() => {
                   <span :class="['px-2 py-0.5 rounded text-xs', getStackMartCategoryColor(stackmartDetailResource.category)]">
                     {{ stackmartDetailResource.category }}
                   </span>
-                  <span v-for="tag in (stackmartDetailResource.tags || [])" :key="tag" class="px-2 py-0.5 rounded text-xs bg-surface-overlay text-ink-muted">
+                  <span v-for="tag in (stackmartDetailResource.tags || [])" :key="tag" class="px-2 py-0.5 rounded text-xs bg-dark-100 text-gray-400">
                     {{ tag }}
                   </span>
                 </div>
-                <p class="text-ink-muted mb-2">{{ stackmartDetailResource.tagline }}</p>
-                <div class="flex items-center gap-4 text-sm text-ink-subtle">
+                <p class="text-gray-400 mb-2">{{ stackmartDetailResource.tagline }}</p>
+                <div class="flex items-center gap-4 text-sm text-gray-500">
                   <span>{{ stackmartDetailResource.author }}</span>
                   <span class="flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2691,16 +2656,16 @@ onMounted(() => {
 
             <!-- Features -->
             <div v-if="stackmartDetailResource.features?.length" class="mb-6">
-              <h3 class="font-semibold text-ink mb-3">Features</h3>
-              <ul class="list-disc list-inside text-ink-muted space-y-1">
+              <h3 class="font-semibold text-white mb-3">Features</h3>
+              <ul class="list-disc list-inside text-gray-400 space-y-1">
                 <li v-for="feature in stackmartDetailResource.features" :key="feature">{{ feature }}</li>
               </ul>
             </div>
 
             <!-- Description -->
             <div v-if="stackmartDetailResource.description" class="mb-6">
-              <h3 class="font-semibold text-ink mb-3">{{ t('mods.description') }}</h3>
-              <div class="text-ink-muted whitespace-pre-wrap">{{ stackmartDetailResource.description }}</div>
+              <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
+              <div class="text-gray-400 whitespace-pre-wrap">{{ stackmartDetailResource.description }}</div>
             </div>
 
             <!-- Install Button -->
@@ -2726,8 +2691,8 @@ onMounted(() => {
       <Card>
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.status') }}</h2>
-            <p class="text-sm text-ink-muted mt-1">
+            <h2 class="text-lg font-semibold text-white">{{ t('modupdates.status') }}</h2>
+            <p class="text-sm text-gray-400 mt-1">
               {{ t('modupdates.lastChecked') }}: {{ formatUpdateDate(updateStatus?.lastChecked || null) }}
             </p>
           </div>
@@ -2770,8 +2735,8 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <p class="text-ink-muted text-sm">{{ t('modupdates.tracked') }}</p>
-              <p class="text-2xl font-bold text-ink">{{ updateStatus.totalTracked }}</p>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.tracked') }}</p>
+              <p class="text-2xl font-bold text-white">{{ updateStatus.totalTracked }}</p>
             </div>
           </div>
         </Card>
@@ -2784,7 +2749,7 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <p class="text-ink-muted text-sm">{{ t('modupdates.available') }}</p>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.available') }}</p>
               <p class="text-2xl font-bold" :class="updateStatus.updatesAvailable > 0 ? 'text-status-warning' : 'text-status-success'">
                 {{ updateStatus.updatesAvailable }}
               </p>
@@ -2800,8 +2765,8 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <p class="text-ink-muted text-sm">{{ t('modupdates.autoCheck') }}</p>
-              <p class="text-lg font-medium text-ink">1h</p>
+              <p class="text-gray-400 text-sm">{{ t('modupdates.autoCheck') }}</p>
+              <p class="text-lg font-medium text-white">1h</p>
             </div>
           </div>
         </Card>
@@ -2818,10 +2783,10 @@ onMounted(() => {
       <!-- Tracked Mods List -->
       <Card v-else-if="updateStatus">
         <template #header>
-          <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.tracked') }}</h2>
+          <h2 class="text-lg font-semibold text-white">{{ t('modupdates.tracked') }}</h2>
         </template>
 
-        <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-ink-muted">
+        <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-gray-400">
           {{ t('modupdates.noTrackedMods') }}
         </div>
 
@@ -2841,7 +2806,7 @@ onMounted(() => {
                   class="w-12 h-12 rounded-lg object-cover"
                 />
                 <div v-else class="w-12 h-12 rounded-lg bg-gray-700 flex items-center justify-center">
-                  <svg class="w-6 h-6 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-6 h-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 </div>
@@ -2850,7 +2815,7 @@ onMounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <h3 class="font-medium text-ink truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                  <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
                   <!-- Wishlist item (not installed) -->
                   <span
                     v-if="mod.installed === false"
@@ -2873,9 +2838,9 @@ onMounted(() => {
                     {{ t('modupdates.noUpdate') }}
                   </span>
                 </div>
-                <p v-if="mod.installed !== false" class="text-sm text-ink-muted truncate">{{ mod.filename }}</p>
-                <p v-else class="text-sm text-ink-muted truncate">{{ mod.curseforgeSlug }}</p>
-                <div class="flex items-center gap-4 mt-1 text-xs text-ink-subtle">
+                <p v-if="mod.installed !== false" class="text-sm text-gray-400 truncate">{{ mod.filename }}</p>
+                <p v-else class="text-sm text-gray-400 truncate">{{ mod.curseforgeSlug }}</p>
+                <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
                   <span v-if="mod.installed !== false">{{ t('modupdates.installedVersion') }}: {{ mod.installedVersion || '-' }}</span>
                   <span v-else class="text-purple-400">{{ t('modupdates.notInstalled') }}</span>
                   <span>{{ t('modupdates.latestVersion') }}: {{ mod.latestVersion || '-' }}</span>
@@ -2887,7 +2852,7 @@ onMounted(() => {
                 <!-- Install button (for wishlist items) -->
                 <button
                   v-if="mod.installed === false && authStore.hasPermission('mods.install')"
-                  class="btn btn-sm bg-purple-600 hover:bg-purple-700 text-ink"
+                  class="btn btn-sm bg-purple-600 hover:bg-purple-700 text-white"
                   :disabled="installingFilename === mod.filename"
                   :title="t('modupdates.install')"
                   @click="installTrackedMod(mod.filename)"
@@ -2956,7 +2921,7 @@ onMounted(() => {
     <div v-if="showTrackDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div class="bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
         <div class="p-6">
-          <h3 class="text-lg font-semibold text-ink mb-4">{{ t('modupdates.trackMod') }}</h3>
+          <h3 class="text-lg font-semibold text-white mb-4">{{ t('modupdates.trackMod') }}</h3>
 
           <!-- Error -->
           <div v-if="trackError" class="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
@@ -2967,7 +2932,7 @@ onMounted(() => {
           <div class="space-y-4">
             <!-- CurseForge URL/Slug (first, as it's required) -->
             <div>
-              <label class="block text-sm font-medium text-ink-muted mb-1">{{ t('modupdates.curseforgeUrl') }} *</label>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.curseforgeUrl') }} *</label>
               <input
                 v-model="trackCurseforgeInput"
                 type="text"
@@ -2982,16 +2947,16 @@ onMounted(() => {
                 id="track-wishlist"
                 v-model="trackAsWishlist"
                 type="checkbox"
-                class="w-4 h-4 rounded border-gray-600 bg-surface-overlay text-hytale-orange focus:ring-hytale-orange"
+                class="w-4 h-4 rounded border-gray-600 bg-dark-100 text-hytale-orange focus:ring-hytale-orange"
               />
-              <label for="track-wishlist" class="text-sm text-ink-muted">
+              <label for="track-wishlist" class="text-sm text-gray-300">
                 {{ t('modupdates.trackAsWishlist') }}
               </label>
             </div>
 
             <!-- Filename Select or Input (only if not wishlist) -->
             <div v-if="!trackAsWishlist">
-              <label class="block text-sm font-medium text-ink-muted mb-1">{{ t('modupdates.filename') }} *</label>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.filename') }} *</label>
               <select
                 v-if="untrackedMods.length > 0"
                 v-model="trackFilename"
@@ -3013,7 +2978,7 @@ onMounted(() => {
 
             <!-- Current Version (optional, only if not wishlist) -->
             <div v-if="!trackAsWishlist">
-              <label class="block text-sm font-medium text-ink-muted mb-1">{{ t('modupdates.installedVersion') }} (optional)</label>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.installedVersion') }} (optional)</label>
               <input
                 v-model="trackCurrentVersion"
                 type="text"
@@ -3046,11 +3011,11 @@ onMounted(() => {
 
     <!-- Config Editor Modal -->
     <div v-if="showConfigModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-surface-raised rounded-xl w-full max-w-7xl h-[85vh] flex flex-col">
+      <div class="bg-dark-200 rounded-xl w-full max-w-7xl h-[85vh] flex flex-col">
         <!-- Modal Header -->
-        <div class="p-4 border-b border-border/60 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-ink">{{ t('mods.configEditor') }}: {{ editingItem?.name }}</h2>
-          <button @click="showConfigModal = false" class="text-ink-muted hover:text-ink">
+        <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
+          <h2 class="text-xl font-bold text-white">{{ t('mods.configEditor') }}: {{ editingItem?.name }}</h2>
+          <button @click="showConfigModal = false" class="text-gray-400 hover:text-white">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -3060,12 +3025,12 @@ onMounted(() => {
         <!-- Modal Content -->
         <div class="flex-1 flex overflow-hidden min-h-0">
           <!-- Config Files List -->
-          <div class="w-80 border-r border-border/60 overflow-y-auto p-4 shrink-0">
-            <h3 class="text-sm font-semibold text-ink-muted uppercase mb-3">{{ t('mods.configFiles') }}</h3>
-            <div v-if="configLoading && !selectedConfig" class="text-ink-subtle text-sm">
+          <div class="w-80 border-r border-dark-50/50 overflow-y-auto p-4 shrink-0">
+            <h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">{{ t('mods.configFiles') }}</h3>
+            <div v-if="configLoading && !selectedConfig" class="text-gray-500 text-sm">
               {{ t('common.loading') }}
             </div>
-            <div v-else-if="configFiles.length === 0" class="text-ink-subtle text-sm">
+            <div v-else-if="configFiles.length === 0" class="text-gray-500 text-sm">
               {{ t('mods.noConfigs') }}
             </div>
             <div v-else class="space-y-1">
@@ -3077,23 +3042,23 @@ onMounted(() => {
                   'w-full px-3 py-2 rounded text-left text-sm transition-colors',
                   selectedConfig?.path === config.path
                     ? 'bg-hytale-orange/20 text-hytale-orange'
-                    : 'text-ink-muted hover:bg-surface-overlay'
+                    : 'text-gray-300 hover:bg-dark-100'
                 ]"
               >
                 <div class="font-medium">{{ config.name }}</div>
-                <div class="text-xs text-ink-subtle truncate mt-0.5">{{ config.path }}</div>
+                <div class="text-xs text-gray-500 truncate mt-0.5">{{ config.path }}</div>
               </button>
             </div>
           </div>
 
           <!-- Config Editor -->
           <div class="flex-1 flex flex-col p-4 min-w-0">
-            <div v-if="!selectedConfig" class="flex-1 flex items-center justify-center text-ink-subtle">
+            <div v-if="!selectedConfig" class="flex-1 flex items-center justify-center text-gray-500">
               {{ t('mods.selectConfig') }}
             </div>
             <template v-else>
               <div class="flex items-center justify-between mb-3 shrink-0">
-                <span class="text-sm text-ink-muted truncate mr-4">{{ selectedConfig.path }}</span>
+                <span class="text-sm text-gray-400 truncate mr-4">{{ selectedConfig.path }}</span>
                 <div class="flex items-center gap-3 shrink-0">
                   <!-- Success indicator -->
                   <span
@@ -3114,13 +3079,13 @@ onMounted(() => {
                   </button>
                 </div>
               </div>
-              <div v-if="configLoading" class="flex-1 flex items-center justify-center text-ink-subtle">
+              <div v-if="configLoading" class="flex-1 flex items-center justify-center text-gray-500">
                 {{ t('common.loading') }}
               </div>
               <textarea
                 v-else
                 v-model="configContent"
-                class="flex-1 w-full p-4 bg-surface-muted border border-border rounded-lg text-ink font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange min-h-[400px]"
+                class="flex-1 w-full p-4 bg-dark-300 border border-dark-50 rounded-lg text-white font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange min-h-[400px]"
                 spellcheck="false"
               />
             </template>
@@ -3129,12 +3094,11 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Changelog Modal (extracted) -->
+    <!-- Changelog Modal (extracted to components/mods/ChangelogModal.vue) -->
     <ChangelogModal
-      :show="showChangelogModal"
+      v-model:visible="showChangelogModal"
       :title="changelogModalTitle"
       :content="changelogModalContent"
-      @close="showChangelogModal = false"
     />
   </div>
 </template>

@@ -20,11 +20,11 @@ import { logger } from './utils/logger.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
-import serverRoutes from './routes/server.js';
+import serverRoutes from './routes/server/index.js';
 import consoleRoutes from './routes/console.js';
 import backupRoutes from './routes/backup.js';
 import playersRoutes from './routes/players.js';
-import managementRoutes from './routes/management.js';
+import managementRoutes from './routes/management/index.js';
 import schedulerRoutes from './routes/scheduler.js';
 import assetsRoutes from './routes/assets.js';
 import rolesRouter from './routes/roles.js';
