@@ -14,19 +14,22 @@ onMounted(async () => {
 <template>
   <div
     v-if="demoStore.isDemoMode"
-    class="bg-gradient-to-r from-orange-600 to-amber-500 text-white px-4 py-2 flex items-center justify-center gap-3 shadow-lg"
+    class="relative bg-surface text-ink px-4 py-2 flex items-center justify-center gap-3 border-b border-hytale-orange/30"
+    role="status"
+    :aria-label="t('demo.banner', 'DEMO MODE')"
   >
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
-    <span class="font-medium">
-      {{ t('demo.banner', 'DEMO MODE') }}
+    <!-- Gradient accent bar instead of full-bleed background -->
+    <span class="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-hytale-orange to-transparent" aria-hidden="true" />
+    <span class="inline-flex items-center gap-2 px-3 py-0.5 rounded-full border border-hytale-orange/40 bg-hytale-orange/10">
+      <svg class="h-4 w-4 text-hytale-orange animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+      <span class="text-xs font-semibold tracking-wider uppercase text-hytale-orange">
+        {{ t('demo.banner', 'DEMO MODE') }}
+      </span>
     </span>
-    <span class="text-ink/90 text-sm hidden sm:inline">
+    <span class="text-xs text-ink-muted hidden sm:inline">
       {{ t('demo.description', 'All data is simulated. No real server connected.') }}
     </span>
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
   </div>
 </template>
