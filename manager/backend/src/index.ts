@@ -27,6 +27,9 @@ import schedulerRoutes from './routes/scheduler.js';
 import assetsRoutes from './routes/assets.js';
 import rolesRouter from './routes/roles.js';
 import setupRoutes from './routes/setup.js';
+import webhooksRoutes from './routes/webhooks.js';
+import notificationsRoutes from './routes/notifications.js';
+import auditRoutes from './routes/audit.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
@@ -444,6 +447,9 @@ app.use('/api/management', managementRoutes);
 app.use('/api/scheduler', schedulerRoutes);
 app.use('/api/assets', assetsRoutes);
 app.use('/api/roles', rolesRouter);
+app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/me/notifications', notificationsRoutes);
+app.use('/api/audit-log', auditRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -638,6 +644,12 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Start CFWidget mod update checker (checks hourly for CurseForge mod updates)
   startAutoUpdateCheck();
+
+  // Start the event-bus consumers (webhook dispatcher + notification fanout).
+  const { startWebhookDispatcher } = await import('./services/webhooks.js');
+  const { startNotificationFanout } = await import('./services/notifications.js');
+  startWebhookDispatcher();
+  startNotificationFanout();
 });
 
 // Graceful shutdown
