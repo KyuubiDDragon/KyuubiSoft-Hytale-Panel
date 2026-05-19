@@ -9,6 +9,7 @@
     "noRealData": "All data is simulated. No real changes possible."
   },
   "common": {
+    "revoke": "Revoke",
     "loading": "Loading...",
     "save": "Save",
     "saving": "Saving...",
@@ -1050,6 +1051,28 @@
     "exportCsv": "Export CSV",
     "noEvents": "No audit events",
     "noEventsSubtitle": "No events match the current filter."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "bellWithCount": "Notifications, {count} unread",
+    "empty": "No notifications",
+    "dismissAll": "Dismiss all"
+  },
+  "servers": {
+    "title": "Servers",
+    "subtitle": "Manage Hytale server instances",
+    "addServer": "Add server",
+    "default": "default",
+    "setDefault": "Set as default",
+    "deleteConfirm": "Delete server \"{name}\"? The container will be stopped.",
+    "ready": "ready",
+    "creating": "creating",
+    "broken": "broken"
+  },
+  "security": {
+    "confirmRevokeTitle": "Revoke API key?",
+    "confirmRevokeMessage": "Revoke the key \"{name}\"? Any tool using it will immediately lose access.",
+    "revokeApiKeyAria": "Revoke API key {name}"
   },
   "webhooks": {
     "title": "Webhooks",

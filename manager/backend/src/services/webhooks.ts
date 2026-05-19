@@ -16,6 +16,7 @@
 import crypto from 'crypto';
 import { getDb } from '../db/index.js';
 import { publish as publishEvent, subscribe } from './eventBus.js';
+import { webhookDeliveries } from './metrics.js';
 import type { PanelEvent, PanelEventName } from '../schemas/events.js';
 
 const RETRY_DELAYS_MS = [30_000, 5 * 60_000, 30 * 60_000, 6 * 3600_000, 24 * 3600_000];
@@ -157,6 +158,7 @@ function markCompleted(deliveryId: number, success: boolean, code: number | null
       SET status='success', response_code=?, response_body_truncated=?, attempt=?, completed_at=?
       WHERE id=?
     `).run(code, bodySnippet, attempt, now, deliveryId);
+    webhookDeliveries.inc({ status: 'success' });
     return;
   }
   if (attempt >= MAX_ATTEMPTS) {
@@ -165,8 +167,10 @@ function markCompleted(deliveryId: number, success: boolean, code: number | null
       SET status='gave_up', response_code=?, response_body_truncated=?, attempt=?, completed_at=?
       WHERE id=?
     `).run(code, bodySnippet, attempt, now, deliveryId);
+    webhookDeliveries.inc({ status: 'gave_up' });
     return;
   }
+  webhookDeliveries.inc({ status: 'failed' });
   const nextAt = new Date(Date.now() + RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)]).toISOString();
   getDb().prepare(`
     UPDATE webhook_deliveries

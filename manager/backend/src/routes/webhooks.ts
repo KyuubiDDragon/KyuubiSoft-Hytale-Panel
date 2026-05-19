@@ -8,6 +8,7 @@ import {
 } from '../services/webhooks.js';
 import { PanelEventNames, type PanelEventName } from '../schemas/events.js';
 import { audit } from '../services/audit.js';
+import { assertSafeOutboundUrl, UnsafeUrlError } from '../utils/urlGuard.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -31,6 +32,13 @@ router.post('/', authMiddleware, requirePermission('webhooks.manage'), (req: Aut
     res.status(400).json({ error: 'invalid_body', issues: parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`) });
     return;
   }
+  try {
+    assertSafeOutboundUrl(parsed.data.url);
+  } catch (e) {
+    const err = e as UnsafeUrlError;
+    res.status(400).json({ error: 'unsafe_url', detail: err.message, reason: err.reason });
+    return;
+  }
   const wh = createWebhook({ ...parsed.data, events: parsed.data.events as PanelEventName[], createdBy: req.user! });
   audit(req, 'webhook.created', { target: `webhook:${wh.id}`, metadata: { name: wh.name, type: wh.type } });
   res.json({ webhook: wh });
@@ -41,6 +49,14 @@ router.put('/:id', authMiddleware, requirePermission('webhooks.manage'), (req: A
   if (!parsed.success) {
     res.status(400).json({ error: 'invalid_body', issues: parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`) });
     return;
+  }
+  if (parsed.data.url) {
+    try { assertSafeOutboundUrl(parsed.data.url); }
+    catch (e) {
+      const err = e as UnsafeUrlError;
+      res.status(400).json({ error: 'unsafe_url', detail: err.message, reason: err.reason });
+      return;
+    }
   }
   const data = { ...parsed.data, events: parsed.data.events as PanelEventName[] | undefined };
   const wh = updateWebhook(req.params.id, data);

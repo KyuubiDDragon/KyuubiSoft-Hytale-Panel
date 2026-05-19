@@ -9,6 +9,7 @@
     "noRealData": "Todos os dados sao simulados. Nenhuma alteracao real possivel."
   },
   "common": {
+    "revoke": "Revogar",
     "loading": "Carregando...",
     "save": "Salvar",
     "saving": "Salvando...",
@@ -925,6 +926,23 @@
     "exportCsv": "Exportar CSV",
     "noEvents": "Sem eventos de auditoria",
     "noEventsSubtitle": "Nenhum evento corresponde ao filtro atual."
+  },
+  "notifications": {
+    "title": "Notificações",
+    "bellWithCount": "Notificações, {count} não lidas",
+    "empty": "Sem notificações",
+    "dismissAll": "Descartar todas"
+  },
+  "servers": {
+    "title": "Servidores",
+    "subtitle": "Gerenciar instâncias do servidor Hytale",
+    "addServer": "Adicionar servidor",
+    "default": "padrão",
+    "setDefault": "Definir como padrão",
+    "deleteConfirm": "Excluir servidor \"{name}\"? O contêiner será parado.",
+    "ready": "pronto",
+    "creating": "criando",
+    "broken": "com erro"
   },
   "webhooks": {
     "title": "Webhooks",

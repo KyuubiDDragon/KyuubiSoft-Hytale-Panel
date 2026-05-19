@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+
+const { t } = useI18n()
 
 // ---------- 2FA ----------
 const twoFAEnabled = ref(false)
@@ -70,9 +74,23 @@ async function createKey() {
   await loadKeys()
 }
 
-async function revoke(id: string) {
-  if (!confirm('Revoke this API key? Any tool using it will stop working immediately.')) return
-  await api.delete(`/auth/api-keys/${id}`)
+// Revoke flow via ConfirmDialog instead of window.confirm so it matches
+// the rest of the panel's modal style and is keyboard/focus-trap correct.
+const revokeDialogOpen = ref(false)
+const revokeTargetId = ref<string | null>(null)
+const revokeTargetName = ref('')
+
+function askRevoke(key: ApiKey) {
+  revokeTargetId.value = key.id
+  revokeTargetName.value = key.name
+  revokeDialogOpen.value = true
+}
+
+async function confirmRevoke() {
+  if (!revokeTargetId.value) return
+  await api.delete(`/auth/api-keys/${revokeTargetId.value}`)
+  revokeDialogOpen.value = false
+  revokeTargetId.value = null
   await loadKeys()
 }
 
@@ -150,7 +168,7 @@ onMounted(async () => {
             </div>
             <div class="text-xs text-gray-500 mt-0.5">{{ k.scopes.length }} scopes · created {{ new Date(k.createdAt).toLocaleDateString() }} · last used {{ k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : 'never' }}</div>
           </div>
-          <button @click="revoke(k.id)" class="px-2 py-1 text-xs rounded bg-status-error/20 hover:bg-status-error/40 text-status-error">Revoke</button>
+          <button @click="askRevoke(k)" :aria-label="t('security.revokeApiKeyAria', { name: k.name })" class="px-2 py-1 text-xs rounded bg-status-error/20 hover:bg-status-error/40 text-status-error">{{ t('common.revoke') }}</button>
         </div>
         <div v-if="apiKeys.length === 0" class="text-center text-sm text-gray-400 py-4">No API keys yet.</div>
       </div>
@@ -161,5 +179,16 @@ onMounted(async () => {
         <button @click="createKey" :disabled="!newKey.name || !newKey.scopes" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm disabled:opacity-50">Create key</button>
       </div>
     </section>
+
+    <!-- Revoke confirm dialog (replaces window.confirm) -->
+    <ConfirmDialog
+      :show="revokeDialogOpen"
+      :title="t('security.confirmRevokeTitle')"
+      :message="t('security.confirmRevokeMessage', { name: revokeTargetName })"
+      :confirm-text="t('common.revoke')"
+      variant="danger"
+      @confirm="confirmRevoke"
+      @cancel="revokeDialogOpen = false"
+    />
   </div>
 </template>

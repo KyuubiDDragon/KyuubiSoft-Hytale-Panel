@@ -6,6 +6,7 @@ import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js'
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe } from '../utils/pathSecurity.js';
 import { getDefaultId, getServer } from './servers.js';
+import { publish } from './eventBus.js';
 
 /**
  * Resolve the backup/data paths for a specific server id. Falls back to the
@@ -191,6 +192,7 @@ export function createBackup(name?: string, serverId?: string): Promise<ActionRe
       return { success: false, error: 'Invalid backup path' };
     }
 
+    publish('backup.started', { name: backupName, file: backupFile }, serverId);
     try {
       // Create tarball using tar command (paths are validated, using single quotes for safety)
       // Timeout increased to 30 minutes for large backups (1GB+)
@@ -205,6 +207,9 @@ export function createBackup(name?: string, serverId?: string): Promise<ActionRe
       // see scripts/backup-hook.sh for restic / rclone / borg / s3 examples.
       runBackupHookAsync(backupFile);
 
+      publish('backup.completed', {
+        name: backupName, file: backupFile, sizeMb: Math.round(stat.size / (1024 * 1024) * 100) / 100,
+      }, serverId);
       return {
         success: true,
         backup: {
@@ -217,6 +222,7 @@ export function createBackup(name?: string, serverId?: string): Promise<ActionRe
         },
       };
     } catch (error) {
+      publish('backup.failed', { name: backupName, error: error instanceof Error ? error.message : 'unknown' }, serverId);
       return { success: false, error: error instanceof Error ? error.message : 'Backup failed' };
     }
   });

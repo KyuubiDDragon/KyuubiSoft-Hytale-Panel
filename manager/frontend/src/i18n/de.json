@@ -15,6 +15,7 @@
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "confirm": "Bestätigen",
+    "revoke": "Widerrufen",
     "close": "Schließen",
     "error": "Fehler",
     "success": "Erfolg",
@@ -1101,6 +1102,28 @@
     "exportCsv": "CSV exportieren",
     "noEvents": "Keine Audit-Ereignisse",
     "noEventsSubtitle": "Keine Ereignisse entsprechen dem aktuellen Filter."
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "bellWithCount": "Benachrichtigungen, {count} ungelesen",
+    "empty": "Keine Benachrichtigungen",
+    "dismissAll": "Alle als gelesen markieren"
+  },
+  "servers": {
+    "title": "Server",
+    "subtitle": "Hytale-Server-Instanzen verwalten",
+    "addServer": "Server hinzufügen",
+    "default": "Standard",
+    "setDefault": "Als Standard setzen",
+    "deleteConfirm": "Server „{name}\" wirklich löschen? Container wird gestoppt.",
+    "ready": "bereit",
+    "creating": "wird erstellt",
+    "broken": "fehlerhaft"
+  },
+  "security": {
+    "confirmRevokeTitle": "API-Key widerrufen?",
+    "confirmRevokeMessage": "Den Key „{name}\" widerrufen? Jedes Tool, das diesen Key benutzt, wird sofort den Zugriff verlieren.",
+    "revokeApiKeyAria": "API-Key {name} widerrufen"
   },
   "webhooks": {
     "title": "Webhooks",

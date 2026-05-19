@@ -15,6 +15,8 @@ import {
 } from '../services/totp.js';
 import { createApiKey, listApiKeys, revokeApiKey } from '../services/apiKeys.js';
 import { audit } from '../services/audit.js';
+import { publish } from '../services/eventBus.js';
+import { authLogins } from '../services/metrics.js';
 
 // HttpOnly refresh-token cookie. SameSite=Strict because the panel and the
 // API live on the same origin in every supported deployment, so the cookie
@@ -118,6 +120,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
   if (!result.valid) {
     audit(req, 'auth.login_failed', { actor: username, success: false });
+    publish('auth.login_failed', { username, reason: 'invalid_credentials' });
+    authLogins.inc({ result: 'failed' });
     res.status(401).json({ detail: 'Invalid credentials' });
     return;
   }
@@ -134,6 +138,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     const ok = await verifyTotpOrBackup(username, totpCode);
     if (!ok) {
       audit(req, 'auth.2fa_failed', { actor: username, success: false });
+      publish('auth.2fa_failed', { username });
+      authLogins.inc({ result: '2fa_failed' });
       res.status(401).json({ detail: 'Invalid 2FA code', code: '2FA_INVALID' });
       return;
     }
@@ -145,6 +151,8 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
   setRefreshCookie(res, refreshToken);
   audit(req, 'auth.login_success', { actor: username });
+  publish('auth.login_success', { username });
+  authLogins.inc({ result: 'success' });
   res.json({
     access_token: accessToken,
     refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
@@ -238,6 +246,7 @@ router.post('/api-keys', authMiddleware, requirePermission('apikeys.manage'), as
     expiresAt: expiresAt ?? null,
   });
   audit(req, 'apikey.created', { target: `apikey:${key.id}`, metadata: { name, scopes } });
+  publish('user.created', { kind: 'api_key', name, scopes, owner: req.user });
   res.json({ key, token });
 });
 
@@ -327,16 +336,23 @@ const wsTicketLimiter = rateLimit({
 
 router.post('/ws-ticket', authMiddleware, wsTicketLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const username = req.user!;
+  // Optional server scope. Callers can request a scoped ticket for a
+  // specific Hytale instance; the ticket then only opens the matching
+  // /api/servers/:id/console/ws upgrade — cross-server reuse is rejected
+  // by verifyWsTicket().
+  const requestedServerId = (req.body && typeof req.body === 'object' && typeof (req.body as { serverId?: string }).serverId === 'string')
+    ? (req.body as { serverId?: string }).serverId
+    : undefined;
 
   // Verify user has console.view permission before issuing ticket
-  const canViewConsole = await hasPermission(username, 'console.view');
+  const canViewConsole = await hasPermission(username, 'console.view', requestedServerId);
   if (!canViewConsole) {
     res.status(403).json({ error: 'Permission denied: console.view required' });
     return;
   }
 
-  const ticket = createWsTicket(username);
-  res.json({ ticket, expiresIn: 30 }); // 30 seconds TTL
+  const ticket = createWsTicket(username, requestedServerId);
+  res.json({ ticket, expiresIn: 30, serverId: requestedServerId ?? null });
 });
 
 // GET /api/auth/me
@@ -498,7 +514,11 @@ router.post('/hytale/initiate', authMiddleware, requirePermission('hytale_auth.m
       success: true,
       message: '[DEMO] Device login initiated (simulated)',
       deviceCode: 'DEMO-1234-5678',
-      verificationUri: 'https://hypixel.net/activate',
+      // Field name aligned with the real hytaleAuth service (verificationUrl)
+      // and the frontend api/auth.ts expectation. Demo response uses the
+      // same field so /ServerAuth.vue and Dashboard.vue see consistent
+      // shape between demo + real auth.
+      verificationUrl: 'https://hypixel.net/activate',
       expiresIn: 300,
       demo: true,
     });

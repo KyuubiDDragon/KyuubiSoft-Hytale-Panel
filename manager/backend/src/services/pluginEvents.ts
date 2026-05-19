@@ -14,7 +14,7 @@ import WebSocket from 'ws';
 import { resolvePluginEndpoint } from './kyuubiApi.js';
 import { addChatMessage, recordDeathPosition } from './chatLog.js';
 import { parsePluginEvent, type PluginEvent } from '../schemas/pluginEvents.js';
-import { eventBus } from './eventBus.js';
+import { eventBus, publish as publishPanelEvent } from './eventBus.js';
 import { listServers, onServerAdded, onServerDeleted } from './servers.js';
 
 // Reconnection settings
@@ -62,6 +62,7 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
       eventBus.publish('player_chat', {
         player: event.player, uuid: event.uuid, message: event.message, serverId,
       });
+      // Also publish to panel-event taxonomy so webhooks / notifications see it.
       break;
 
     case 'player_death':
@@ -72,16 +73,21 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
       eventBus.publish('player_death', {
         player: event.player, cause: event.cause, world: event.world, x: event.x, y: event.y, z: event.z, serverId,
       });
+      publishPanelEvent('player.death', {
+        player: event.player, cause: event.cause, world: event.world, x: event.x, y: event.y, z: event.z,
+      }, serverId);
       break;
 
     case 'player_join':
       console.log(`[Join:${serverId}] ${event.player}`);
       eventBus.publish('player_join', { player: event.player, uuid: event.uuid, serverId });
+      publishPanelEvent('player.joined', { player: event.player, uuid: event.uuid }, serverId);
       break;
 
     case 'player_leave':
       console.log(`[Leave:${serverId}] ${event.player}`);
       eventBus.publish('player_leave', { player: event.player, uuid: event.uuid, serverId });
+      publishPanelEvent('player.left', { player: event.player, uuid: event.uuid }, serverId);
       break;
 
     default:

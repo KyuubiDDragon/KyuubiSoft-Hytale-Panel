@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useServersStore, type ServerInstance } from '@/stores/servers'
@@ -8,6 +9,8 @@ import { useToast } from '@/composables/useToast'
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+
+const { t } = useI18n()
 
 /**
  * Servers fleet management view.
@@ -170,8 +173,8 @@ onMounted(refresh)
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-ink">Servers</h1>
-        <p class="text-sm text-ink-muted">Manage the Hytale instances this panel controls.</p>
+        <h1 class="text-2xl font-bold text-ink">{{ t('servers.title') }}</h1>
+        <p class="text-sm text-ink-muted">{{ t('servers.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <Button variant="secondary" size="sm" :loading="loading" @click="refresh">

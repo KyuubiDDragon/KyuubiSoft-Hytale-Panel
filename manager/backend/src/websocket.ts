@@ -95,10 +95,27 @@ export function setupWebSocket(wss: WebSocketServer): void {
     const ticket = url.searchParams.get('ticket');
     const token = url.searchParams.get('token');
 
+    // Determine which server this socket subscribes to BEFORE ticket verify
+    // so we can enforce the ticket-server binding (a ticket issued for
+    // server A cannot be used to open a WS for server B).
+    const serverId = await resolveSocketServerId(req.url || '');
+    if (!serverId) {
+      ws.close(4004, 'Unknown server');
+      return;
+    }
+
+    // The scoped path /api/servers/:id/console/ws carries the id in the
+    // URL; the legacy /api/console/ws path resolves to the default-server.
+    // Only the scoped path passes expectedServerId so legacy tickets
+    // (unscoped) still work for legacy clients.
+    const pathname = url.pathname;
+    const isScoped = pathname.startsWith('/api/servers/');
+    const expectedServerId = isScoped ? serverId : undefined;
+
     let username: string;
 
     if (ticket) {
-      const ticketResult = verifyWsTicket(ticket);
+      const ticketResult = verifyWsTicket(ticket, expectedServerId);
       if (!ticketResult.valid || !ticketResult.username) {
         ws.close(4001, 'Invalid or expired ticket');
         return;
@@ -117,16 +134,9 @@ export function setupWebSocket(wss: WebSocketServer): void {
       return;
     }
 
-    const canViewLogs = await hasPermission(username, 'console.view');
+    const canViewLogs = await hasPermission(username, 'console.view', isScoped ? serverId : undefined);
     if (!canViewLogs) {
       ws.close(4003, 'Permission denied: console.view required');
-      return;
-    }
-
-    // Determine which server this socket subscribes to.
-    const serverId = await resolveSocketServerId(req.url || '');
-    if (!serverId) {
-      ws.close(4004, 'Unknown server');
       return;
     }
 
