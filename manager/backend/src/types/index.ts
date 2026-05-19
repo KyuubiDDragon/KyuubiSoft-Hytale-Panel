@@ -21,6 +21,10 @@ export interface JwtPayload {
 
 export interface AuthenticatedRequest extends Request {
   user?: string;
+  /** Set when the caller authenticated via REST API key instead of JWT. */
+  apiKey?: { id: string; scopes: string[] };
+  /** Per-server scope when the route lives under /api/servers/:serverId/... */
+  serverId?: string;
 }
 
 // Server Types

@@ -9,6 +9,12 @@ import { getUserPermissions, hasPermission } from '../services/roles.js';
 import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 import { isDemoMode, getDemoUsers, getDemoRoles } from '../services/demoData.js';
+import {
+  startTotpEnrollment, verifyAndEnableTotp, disableTotp,
+  regenerateBackupCodes, isTotpEnabled, verifyTotpOrBackup,
+} from '../services/totp.js';
+import { createApiKey, listApiKeys, revokeApiKey } from '../services/apiKeys.js';
+import { audit } from '../services/audit.js';
 
 // HttpOnly refresh-token cookie. SameSite=Strict because the panel and the
 // API live on the same origin in every supported deployment, so the cookie
@@ -111,8 +117,26 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   const result = await verifyCredentials(username, password);
 
   if (!result.valid) {
+    audit(req, 'auth.login_failed', { actor: username, success: false });
     res.status(401).json({ detail: 'Invalid credentials' });
     return;
+  }
+
+  // 2FA gate. If the user has TOTP enabled we require a valid code (TOTP
+  // or a single-use backup code) BEFORE issuing any tokens. Browsers will
+  // typically submit a second login request with the code field populated.
+  if (await isTotpEnabled(username)) {
+    const totpCode = (req.body as { totpCode?: string }).totpCode;
+    if (!totpCode) {
+      res.status(401).json({ detail: '2FA code required', code: '2FA_REQUIRED' });
+      return;
+    }
+    const ok = await verifyTotpOrBackup(username, totpCode);
+    if (!ok) {
+      audit(req, 'auth.2fa_failed', { actor: username, success: false });
+      res.status(401).json({ detail: 'Invalid 2FA code', code: '2FA_INVALID' });
+      return;
+    }
   }
 
   const accessToken = await createAccessToken(username);
@@ -120,6 +144,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   const permissions = await getUserPermissions(username);
 
   setRefreshCookie(res, refreshToken);
+  audit(req, 'auth.login_success', { actor: username });
   res.json({
     access_token: accessToken,
     refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
@@ -127,6 +152,100 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     role: result.role,
     permissions,
   });
+});
+
+// ============== 2FA / TOTP ==============
+
+router.post('/2fa/setup', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await startTotpEnrollment(req.user!);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed to start 2FA setup' });
+  }
+});
+
+router.post('/2fa/verify-enable', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const { code } = req.body as { code?: string };
+  if (!code) { res.status(400).json({ detail: 'Code required' }); return; }
+  try {
+    const result = await verifyAndEnableTotp(req.user!, code);
+    audit(req, 'auth.2fa_enabled');
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed to enable 2FA' });
+  }
+});
+
+router.post('/2fa/disable', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const { password, code } = req.body as { password?: string; code?: string };
+  if (!password || !code) { res.status(400).json({ detail: 'Password and 2FA code required' }); return; }
+  const creds = await verifyCredentials(req.user!, password);
+  if (!creds.valid) { res.status(401).json({ detail: 'Invalid password' }); return; }
+  if (!(await verifyTotpOrBackup(req.user!, code))) {
+    res.status(401).json({ detail: 'Invalid 2FA code' });
+    return;
+  }
+  await disableTotp(req.user!);
+  audit(req, 'auth.2fa_disabled');
+  res.json({ success: true });
+});
+
+router.post('/2fa/regenerate-backup-codes', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const { password } = req.body as { password?: string };
+  if (!password) { res.status(400).json({ detail: 'Password required' }); return; }
+  const creds = await verifyCredentials(req.user!, password);
+  if (!creds.valid) { res.status(401).json({ detail: 'Invalid password' }); return; }
+  try {
+    const backupCodes = await regenerateBackupCodes(req.user!);
+    audit(req, 'auth.2fa_backup_codes_regenerated');
+    res.json({ backupCodes });
+  } catch (err) {
+    res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed' });
+  }
+});
+
+router.get('/2fa/status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  res.json({ enabled: await isTotpEnabled(req.user!) });
+});
+
+// ============== REST API KEYS ==============
+
+router.get('/api-keys', authMiddleware, requirePermission('apikeys.manage'), (req: AuthenticatedRequest, res: Response) => {
+  res.json({ keys: listApiKeys(req.user!) });
+});
+
+router.post('/api-keys', authMiddleware, requirePermission('apikeys.manage'), async (req: AuthenticatedRequest, res: Response) => {
+  const { name, scopes, expiresAt } = req.body as { name?: string; scopes?: string[]; expiresAt?: string };
+  if (!name || !Array.isArray(scopes) || scopes.length === 0) {
+    res.status(400).json({ detail: 'name and scopes[] required' });
+    return;
+  }
+  // Disallow giving an API key more rights than its owner has, except for
+  // admins (`*`). This prevents privilege escalation through key creation.
+  const ownerPerms = await getUserPermissions(req.user!);
+  if (!ownerPerms.includes('*')) {
+    const bad = scopes.filter(s => !(ownerPerms as string[]).includes(s));
+    if (bad.length) {
+      res.status(403).json({ detail: 'Cannot grant scopes you do not hold', scopes: bad });
+      return;
+    }
+  }
+  const { key, token } = await createApiKey({
+    ownerUsername: req.user!,
+    name,
+    scopes,
+    expiresAt: expiresAt ?? null,
+  });
+  audit(req, 'apikey.created', { target: `apikey:${key.id}`, metadata: { name, scopes } });
+  res.json({ key, token });
+});
+
+router.delete('/api-keys/:id', authMiddleware, requirePermission('apikeys.manage'), (req: AuthenticatedRequest, res: Response) => {
+  const ok = revokeApiKey(req.user!, req.params.id);
+  if (!ok) { res.status(404).json({ detail: 'Key not found' }); return; }
+  audit(req, 'apikey.revoked', { target: `apikey:${req.params.id}` });
+  res.json({ success: true });
 });
 
 // POST /api/auth/refresh

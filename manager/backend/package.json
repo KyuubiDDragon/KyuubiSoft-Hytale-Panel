@@ -1,16 +1,20 @@
 {
   "name": "hytale-manager-backend",
-  "version": "2.2.0",
+  "version": "3.0.0-alpha",
   "description": "Backend for Hytale Server Manager",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write src",
+    "test": "vitest run"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
+    "better-sqlite3": "^11.3.0",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -24,12 +28,18 @@
     "http-proxy-middleware": "^3.0.5",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "openid-client": "^5.7.0",
+    "otplib": "^12.0.1",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
     "proper-lockfile": "^4.1.2",
+    "qrcode": "^1.5.4",
     "ws": "^8.16.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
+    "@types/better-sqlite3": "^7.6.11",
     "@types/cookie-parser": "^1.4.7",
     "@types/proper-lockfile": "^4.1.4",
     "@types/compression": "^1.7.5",
@@ -40,8 +50,10 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/multer": "^2.0.0",
     "@types/node": "^20.11.5",
+    "@types/qrcode": "^1.5.5",
     "@types/ws": "^8.5.10",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.0"
   }
 }
