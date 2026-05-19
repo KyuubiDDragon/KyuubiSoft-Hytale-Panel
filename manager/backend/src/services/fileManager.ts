@@ -355,12 +355,23 @@ export async function writeFile(
   }
   const abs = resolveSafe(root, relPath);
 
+  // Symlink defence: if the resolved path or any segment of its parent
+  // chain is a symlink, refuse the write. This closes the TOCTOU window
+  // between resolveSafe() and the actual write (a concurrent process
+  // could otherwise swap a symlink in to redirect us outside the root).
+  // We re-walk the directory chain with lstat — the absolute path is
+  // already known to be inside `root.path` at this point.
+  await assertNoSymlinkOnPath(root.path, abs);
+
   // Don't allow writing to a directory path
   let existing: Stats | null = null;
   try {
-    existing = await fsp.stat(abs);
+    existing = await fsp.lstat(abs);
   } catch {
     existing = null;
+  }
+  if (existing && existing.isSymbolicLink()) {
+    throw new FileManagerError('Refusing to overwrite a symlink', 400, 'IS_SYMLINK');
   }
   if (existing && existing.isDirectory()) {
     throw new FileManagerError('Path is a directory', 400, 'IS_DIRECTORY');
@@ -391,10 +402,14 @@ export async function writeFile(
     );
   }
 
-  // Ensure parent dir exists
+  // Ensure parent dir exists (re-check for symlinks afterwards in case
+  // mkdir followed one — mkdir(recursive) doesn't create symlinks but
+  // can succeed even if an intermediate dir is a symlink someone planted).
   await fsp.mkdir(path.dirname(abs), { recursive: true });
+  await assertNoSymlinkOnPath(root.path, path.dirname(abs));
 
-  // Atomic write via temp file + rename
+  // Atomic write via temp file + rename. The temp file lives in the same
+  // directory so rename() is atomic on POSIX.
   const tmp = `${abs}.tmp-${process.pid}-${Date.now()}`;
   await fsp.writeFile(tmp, buf);
   await fsp.rename(tmp, abs);
@@ -405,6 +420,35 @@ export async function writeFile(
     mtimeMs: newStat.mtimeMs,
     mtime: newStat.mtime.toISOString(),
   };
+}
+
+/**
+ * Walk every path segment between rootDir and target and reject if any of
+ * them is a symbolic link. Each segment is lstat()ed so the symlink-bit
+ * is observed even when the target exists.
+ */
+async function assertNoSymlinkOnPath(rootDir: string, target: string): Promise<void> {
+  const rel = path.relative(rootDir, target);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return;
+  const parts = rel.split(path.sep).filter(Boolean);
+  let current = rootDir;
+  for (const part of parts) {
+    current = path.join(current, part);
+    try {
+      const st = await fsp.lstat(current);
+      if (st.isSymbolicLink()) {
+        throw new FileManagerError(`Refusing to traverse symlink ${path.relative(rootDir, current)}`, 400, 'PATH_SYMLINK');
+      }
+    } catch (err) {
+      // Last segment may not exist yet (we're about to create it). Earlier
+      // segments must exist; ENOENT there means the parent disappeared
+      // between mkdir and write, which is itself suspicious — treat as
+      // PATH_GONE.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+      if (err instanceof FileManagerError) throw err;
+      throw new FileManagerError('Failed to verify path', 500, 'PATH_VERIFY_FAILED');
+    }
+  }
 }
 
 export async function deleteFile(rootId: string, relPath: string): Promise<void> {
