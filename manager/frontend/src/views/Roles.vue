@@ -3,7 +3,12 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { rolesApi, type Role } from '@/api/roles'
-import Card from '@/components/ui/Card.vue'
+import Button from '@/components/ui/Button.vue'
+import Icon from '@/components/ui/Icon.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
+import EmptyTableState from '@/components/ui/EmptyTableState.vue'
+import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -27,7 +32,6 @@ const formPermissions = ref<string[]>([])
 const formError = ref('')
 const saving = ref(false)
 
-// Predefined colors
 const colorOptions = [
   { name: 'red', class: 'bg-red-500', textClass: 'text-red-500' },
   { name: 'orange', class: 'bg-orange-500', textClass: 'text-orange-500' },
@@ -38,7 +42,13 @@ const colorOptions = [
   { name: 'gray', class: 'bg-gray-500', textClass: 'text-ink-subtle' },
 ]
 
-// Group permissions by category
+const columns = computed<TableColumn[]>(() => [
+  { key: 'name', label: t('roles.name') },
+  { key: 'description', label: t('roles.description') },
+  { key: 'permissions', label: t('roles.permissions'), align: 'center', width: '10rem' },
+  { key: 'type', label: t('roles.type'), align: 'center', width: '8rem' },
+])
+
 const groupedPermissions = computed(() => {
   const groups: Record<string, { key: string }[]> = {}
 
@@ -51,7 +61,6 @@ const groupedPermissions = computed(() => {
     groups[category].push({ key })
   }
 
-  // Sort categories alphabetically
   const sortedGroups: Record<string, { key: string }[]> = {}
   Object.keys(groups).sort().forEach(key => {
     sortedGroups[key] = groups[key].sort((a, b) => a.key.localeCompare(b.key))
@@ -67,26 +76,13 @@ function getColorClass(color?: string): string {
   return option?.class || 'bg-gray-500'
 }
 
-function getColorBadgeClass(color?: string): string {
-  const colorMap: Record<string, string> = {
-    red: 'bg-red-500/20 text-red-400',
-    orange: 'bg-orange-500/20 text-orange-400',
-    yellow: 'bg-yellow-500/20 text-yellow-400',
-    green: 'bg-green-500/20 text-green-400',
-    blue: 'bg-blue-500/20 text-blue-400',
-    purple: 'bg-purple-500/20 text-purple-400',
-    gray: 'bg-gray-500/20 text-ink-muted',
-  }
-  return colorMap[color || 'gray'] || 'bg-gray-500/20 text-ink-muted'
-}
-
 async function loadRoles() {
   loading.value = true
   error.value = ''
   try {
     const [rolesData, permissionsData] = await Promise.all([
       rolesApi.getAll(),
-      rolesApi.getPermissions()
+      rolesApi.getPermissions(),
     ])
     roles.value = rolesData.roles
     availablePermissions.value = permissionsData.permissions
@@ -117,13 +113,6 @@ function openEditModal(role: Role) {
   formPermissions.value = [...role.permissions]
   formError.value = ''
   showEditModal.value = true
-}
-
-// Handler for role card click - checks permission before opening edit modal
-function handleRoleCardClick(role: Role) {
-  if (canManageRoles.value) {
-    openEditModal(role)
-  }
 }
 
 function closeModal() {
@@ -169,7 +158,6 @@ async function saveRole() {
     if (isCreating.value) {
       await rolesApi.create(data)
     } else if (editingRole.value) {
-      // For system roles, only update permissions
       if (editingRole.value.isSystem) {
         await rolesApi.update(editingRole.value.id, { permissions: formPermissions.value })
       } else {
@@ -188,7 +176,6 @@ async function saveRole() {
 
 async function deleteRole(role: Role) {
   if (role.isSystem) return
-
   if (!confirm(t('roles.confirmDelete', { name: role.name }))) return
 
   try {
@@ -199,17 +186,13 @@ async function deleteRole(role: Role) {
   }
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString()
-}
-
 onMounted(loadRoles)
 </script>
 
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold text-ink">{{ t('roles.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('roles.subtitle') }}</p>
@@ -217,114 +200,97 @@ onMounted(loadRoles)
       <div class="flex gap-2">
         <button
           @click="loadRoles"
-          class="text-ink-muted hover:text-ink transition-colors"
+          class="p-2 text-ink-muted hover:text-ink transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
           :class="{ 'animate-spin': loading }"
+          :aria-label="t('common.refresh')"
         >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+          <Icon name="refresh" class="w-5 h-5" />
         </button>
-        <button
-          v-if="canManageRoles"
-          @click="openCreateModal"
-          class="px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors flex items-center gap-2"
-        >
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
+        <Button v-if="canManageRoles" @click="openCreateModal" class="flex items-center gap-2">
+          <Icon name="plus" class="w-5 h-5" />
           {{ t('roles.createRole') }}
-        </button>
+        </Button>
       </div>
     </div>
 
-    <!-- Error Message -->
-    <div v-if="error" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
-      <p class="text-status-error">{{ error }}</p>
+    <ErrorState
+      v-if="error && roles.length === 0"
+      :message="error"
+      @retry="loadRoles"
+    />
+
+    <div v-else-if="loading && roles.length === 0" class="space-y-2">
+      <Skeleton v-for="i in 3" :key="i" height="4rem" />
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="flex justify-center py-12">
-      <div class="text-ink-muted">{{ t('common.loading') }}</div>
-    </div>
+    <EmptyTableState
+      v-else-if="roles.length === 0"
+      icon="shield"
+      :title="t('roles.noRoles')"
+      :subtitle="t('roles.noRolesSubtitle')"
+    >
+      <Button v-if="canManageRoles" size="sm" @click="openCreateModal">
+        {{ t('roles.createRole') }}
+      </Button>
+    </EmptyTableState>
 
-    <!-- Roles Grid -->
-    <div v-else-if="roles.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div
-        v-for="role in roles"
-        :key="role.id"
-        @click="handleRoleCardClick(role)"
-        :class="[
-          'bg-surface-raised rounded-xl p-5 transition-colors border border-transparent',
-          canManageRoles ? 'cursor-pointer hover:bg-surface-overlay hover:border-border' : ''
-        ]"
-      >
-        <!-- Role Header -->
-        <div class="flex items-start justify-between mb-3">
-          <div class="flex items-center gap-3">
-            <!-- Color Indicator -->
-            <div
-              :class="['w-3 h-3 rounded-full', getColorClass(role.color)]"
-            ></div>
-            <!-- Name -->
-            <h3 class="font-semibold text-ink">{{ role.name }}</h3>
-          </div>
-          <!-- Badges -->
-          <div class="flex items-center gap-2">
-            <span
-              v-if="role.isSystem"
-              class="flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded"
-            >
-              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              {{ t('roles.system') }}
-            </span>
-            <span
-              :class="['px-2 py-0.5 rounded text-xs', getColorBadgeClass(role.color)]"
-            >
-              {{ role.color || 'gray' }}
-            </span>
-          </div>
+    <ResponsiveTable
+      v-else
+      :columns="columns"
+      :rows="roles"
+      row-key="id"
+      :aria-label="t('roles.title')"
+      :mobile-card-label="(r) => r.name"
+    >
+      <template #cell:name="{ row }">
+        <div class="flex items-center gap-3">
+          <span :class="['w-3 h-3 rounded-full flex-shrink-0', getColorClass(row.color)]" />
+          <span class="font-semibold text-ink">{{ row.name }}</span>
         </div>
-
-        <!-- Description -->
-        <p class="text-ink-muted text-sm mb-4 line-clamp-2">
-          {{ role.description || t('roles.noDescription') }}
-        </p>
-
-        <!-- Footer -->
-        <div class="flex items-center justify-between text-sm">
-          <div class="flex items-center gap-1 text-ink-subtle">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            <span>{{ role.permissions.length }} {{ t('roles.permissions') }}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              v-if="!role.isSystem && canManageRoles"
-              @click.stop="deleteRole(role)"
-              class="p-1.5 text-ink-muted hover:text-status-error transition-colors"
-              :title="t('common.delete')"
-            >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Empty State -->
-    <Card v-else>
-      <div class="text-center py-8">
-        <svg class="w-12 h-12 text-ink-subtle mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-        <p class="text-ink-muted">{{ t('roles.noRoles') }}</p>
-      </div>
-    </Card>
+      </template>
+      <template #cell:description="{ row }">
+        <span class="text-ink-muted">{{ row.description || t('roles.noDescription') }}</span>
+      </template>
+      <template #cell:permissions="{ row }">
+        <span class="inline-flex items-center gap-1 text-sm text-ink-muted">
+          <Icon name="shield" class="w-4 h-4" />
+          {{ row.permissions.length }}
+        </span>
+      </template>
+      <template #cell:type="{ row }">
+        <span
+          v-if="row.isSystem"
+          class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded"
+        >
+          <Icon name="lock" class="w-3 h-3" />
+          {{ t('roles.system') }}
+        </span>
+        <span v-else class="text-xs text-ink-subtle">{{ t('roles.customRole') }}</span>
+      </template>
+      <template #actions="{ row }">
+        <Button
+          v-if="canManageRoles"
+          variant="ghost"
+          size="sm"
+          icon-only
+          :aria-label="t('common.edit')"
+          @click="openEditModal(row)"
+        >
+          <Icon name="edit" class="w-5 h-5" />
+        </Button>
+        <Button
+          v-if="!row.isSystem && canManageRoles"
+          variant="ghost"
+          size="sm"
+          icon-only
+          class="!text-ink-muted hover:!text-status-error"
+          :aria-label="t('common.delete')"
+          @click="deleteRole(row)"
+        >
+          <Icon name="trash" class="w-5 h-5" />
+        </Button>
+      </template>
+    </ResponsiveTable>
 
     <!-- Edit/Create Role Modal -->
     <div v-if="showEditModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -340,19 +306,16 @@ onMounted(loadRoles)
                 v-if="editingRole?.isSystem"
                 class="flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded"
               >
-                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
+                <Icon name="lock" class="w-3 h-3" />
                 {{ t('roles.system') }}
               </span>
             </div>
             <button
               @click="closeModal"
               class="text-ink-muted hover:text-ink transition-colors"
+              :aria-label="t('common.close')"
             >
-              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <Icon name="close" class="w-6 h-6" />
             </button>
           </div>
           <p v-if="editingRole?.isSystem" class="text-sm text-ink-subtle mt-2">
@@ -362,15 +325,12 @@ onMounted(loadRoles)
 
         <!-- Modal Body -->
         <div class="p-6 overflow-y-auto flex-1">
-          <!-- Error Message -->
           <div v-if="formError" class="p-3 mb-4 bg-status-error/10 border border-status-error/20 rounded-lg">
             <p class="text-status-error text-sm">{{ formError }}</p>
           </div>
 
           <form @submit.prevent="saveRole" class="space-y-6">
-            <!-- Basic Info -->
             <div class="space-y-4">
-              <!-- Name -->
               <div>
                 <label class="block text-sm text-ink-muted mb-1">{{ t('roles.name') }}</label>
                 <input
@@ -382,7 +342,6 @@ onMounted(loadRoles)
                 />
               </div>
 
-              <!-- Description -->
               <div>
                 <label class="block text-sm text-ink-muted mb-1">{{ t('roles.description') }}</label>
                 <textarea
@@ -394,10 +353,9 @@ onMounted(loadRoles)
                 />
               </div>
 
-              <!-- Color Picker -->
               <div>
                 <label class="block text-sm text-ink-muted mb-2">{{ t('roles.color') }}</label>
-                <div class="flex gap-2">
+                <div class="flex gap-2 flex-wrap">
                   <button
                     v-for="color in colorOptions"
                     :key="color.name"
@@ -407,16 +365,16 @@ onMounted(loadRoles)
                     :class="[
                       'w-8 h-8 rounded-lg transition-all',
                       color.class,
-                      formColor === color.name ? 'ring-2 ring-white ring-offset-2 ring-offset-dark-200' : '',
-                      editingRole?.isSystem ? 'opacity-50 cursor-not-allowed' : 'hover:scale-110'
+                      formColor === color.name ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface-raised' : '',
+                      editingRole?.isSystem ? 'opacity-50 cursor-not-allowed' : 'hover:scale-110',
                     ]"
                     :title="color.name"
+                    :aria-label="color.name"
                   />
                 </div>
               </div>
             </div>
 
-            <!-- Permissions -->
             <div>
               <div class="flex items-center justify-between mb-3">
                 <label class="text-sm text-ink-muted">{{ t('roles.permissions') }}</label>
@@ -445,7 +403,7 @@ onMounted(loadRoles)
                     <label
                       v-for="perm in permissions"
                       :key="perm.key"
-                      class="flex items-start gap-2 p-2 rounded hover:bg-surface-overlay cursor-pointer transition-colors"
+                      class="flex items-start gap-2 p-2 rounded hover:bg-surface-muted cursor-pointer transition-colors"
                     >
                       <input
                         type="checkbox"
@@ -453,10 +411,12 @@ onMounted(loadRoles)
                         @change="togglePermission(perm.key)"
                         class="sr-only peer"
                       />
-                      <div class="w-5 h-5 bg-surface-overlay rounded peer-checked:bg-hytale-orange flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <svg v-if="formPermissions.includes(perm.key)" class="w-3 h-3 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                        </svg>
+                      <div class="w-5 h-5 bg-surface-muted rounded peer-checked:bg-hytale-orange flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Icon
+                          v-if="formPermissions.includes(perm.key)"
+                          name="check"
+                          class="w-3 h-3 text-ink-inverse"
+                        />
                       </div>
                       <div class="flex-1 min-w-0">
                         <span class="text-sm text-ink">{{ t('permissionDescriptions.' + perm.key) }}</span>
@@ -480,21 +440,18 @@ onMounted(loadRoles)
 
         <!-- Modal Footer -->
         <div class="p-6 border-t border-border flex gap-3">
-          <button
-            type="button"
-            @click="closeModal"
-            class="flex-1 px-4 py-2 bg-surface-overlay text-ink-muted rounded-lg hover:bg-surface-overlay transition-colors"
-          >
+          <Button variant="secondary" type="button" @click="closeModal" class="flex-1">
             {{ t('common.cancel') }}
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="authStore.hasPermission('roles.manage')"
             @click="saveRole"
+            :loading="saving"
             :disabled="saving || !formName.trim()"
-            class="flex-1 px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="flex-1"
           >
             {{ saving ? t('common.saving') : t('common.save') }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

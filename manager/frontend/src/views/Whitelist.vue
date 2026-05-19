@@ -7,6 +7,14 @@ import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
+import EmptyTableState from '@/components/ui/EmptyTableState.vue'
+import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
+
+interface WhitelistRow {
+  player: string
+}
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -38,10 +46,12 @@ const pendingUnbanPlayer = ref<string | null>(null)
 const whitelistSearch = ref('')
 const bansSearch = ref('')
 
-const filteredWhitelist = computed(() => {
-  if (!whitelistSearch.value) return whitelistPlayers.value
+const filteredWhitelistRows = computed<WhitelistRow[]>(() => {
   const search = whitelistSearch.value.toLowerCase()
-  return whitelistPlayers.value.filter(p => p.toLowerCase().includes(search))
+  const list = search
+    ? whitelistPlayers.value.filter(p => p.toLowerCase().includes(search))
+    : whitelistPlayers.value
+  return list.map(player => ({ player }))
 })
 
 const filteredBans = computed(() => {
@@ -52,6 +62,16 @@ const filteredBans = computed(() => {
     (b.reason && b.reason.toLowerCase().includes(search))
   )
 })
+
+const whitelistColumns = computed<TableColumn[]>(() => [
+  { key: 'player', label: t('whitelist.playerName') },
+])
+
+const bansColumns = computed<TableColumn[]>(() => [
+  { key: 'player', label: t('whitelist.playerName') },
+  { key: 'reason', label: t('whitelist.banReason') },
+  { key: 'bannedAt', label: t('whitelist.bannedAt'), nowrap: true },
+])
 
 async function loadData() {
   loading.value = true
@@ -147,14 +167,14 @@ onMounted(loadData)
 <template>
   <div class="space-y-6">
     <!-- Page Title -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold text-ink">{{ t('whitelist.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('whitelist.subtitle') }}</p>
       </div>
       <button
         @click="loadData"
-        class="p-2 text-ink-muted hover:text-ink transition-colors"
+        class="p-2 text-ink-muted hover:text-ink transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
         :aria-label="t('common.refresh')"
       >
         <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
@@ -167,25 +187,29 @@ onMounted(loadData)
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-2">
+    <div class="flex gap-2" role="tablist">
       <button
+        role="tab"
+        :aria-selected="activeTab === 'whitelist'"
         @click="activeTab = 'whitelist'"
         :class="[
-          'px-4 py-2 rounded-lg font-medium transition-colors',
+          'px-4 py-2 rounded-lg font-medium transition-colors min-h-[44px]',
           activeTab === 'whitelist'
-            ? 'bg-hytale-orange text-dark'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            ? 'bg-hytale-orange text-ink-inverse'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink',
         ]"
       >
         {{ t('whitelist.whitelist') }}
       </button>
       <button
+        role="tab"
+        :aria-selected="activeTab === 'bans'"
         @click="activeTab = 'bans'"
         :class="[
-          'px-4 py-2 rounded-lg font-medium transition-colors',
+          'px-4 py-2 rounded-lg font-medium transition-colors min-h-[44px]',
           activeTab === 'bans'
             ? 'bg-status-error text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-ink'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink',
         ]"
       >
         {{ t('whitelist.bans') }}
@@ -196,7 +220,7 @@ onMounted(loadData)
     <div v-if="activeTab === 'whitelist'" class="space-y-6">
       <!-- Whitelist Toggle -->
       <Card>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 class="font-semibold text-ink">{{ t('whitelist.enabled') }}</h3>
             <p class="text-sm text-ink-muted">{{ t('whitelist.enabledDescription') }}</p>
@@ -206,15 +230,16 @@ onMounted(loadData)
             @click="toggleWhitelist"
             role="switch"
             :aria-checked="whitelistEnabled"
+            :aria-label="t('whitelist.enabled')"
             :class="[
               'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-              whitelistEnabled ? 'bg-hytale-orange' : 'bg-surface-overlay'
+              whitelistEnabled ? 'bg-hytale-orange' : 'bg-surface-overlay',
             ]"
           >
             <span
               :class="[
                 'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                whitelistEnabled ? 'translate-x-6' : 'translate-x-1'
+                whitelistEnabled ? 'translate-x-6' : 'translate-x-1',
               ]"
             />
           </button>
@@ -227,7 +252,7 @@ onMounted(loadData)
       <!-- Add Player -->
       <Card v-if="authStore.hasPermission('players.whitelist')">
         <h3 class="font-semibold text-ink mb-4">{{ t('whitelist.addPlayer') }}</h3>
-        <form @submit.prevent="addToWhitelist" class="flex gap-3">
+        <form @submit.prevent="addToWhitelist" class="flex flex-col sm:flex-row gap-3">
           <input
             v-model="newWhitelistPlayer"
             type="text"
@@ -241,50 +266,61 @@ onMounted(loadData)
       </Card>
 
       <!-- Whitelist List -->
-      <Card>
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-ink">{{ t('whitelist.players') }} ({{ whitelistPlayers.length }})</h3>
+      <div>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 class="font-semibold text-ink">
+            {{ t('whitelist.players') }} <span class="text-ink-muted font-normal">({{ whitelistPlayers.length }})</span>
+          </h3>
           <input
             v-model="whitelistSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm w-full sm:w-auto"
           />
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-8">
-          <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+        <div v-if="loading && whitelistPlayers.length === 0" class="space-y-2">
+          <Skeleton v-for="i in 3" :key="i" height="3rem" />
         </div>
-        <div v-else-if="filteredWhitelist.length === 0" class="text-center py-8 text-ink-subtle">
-          <Icon name="players" class="w-10 h-10 mx-auto mb-2 opacity-50" />
-          <p>{{ t('whitelist.noPlayers') }}</p>
-        </div>
-        <TransitionGroup v-else name="list" tag="div" class="space-y-2">
-          <div
-            v-for="player in filteredWhitelist"
-            :key="player"
-            class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg hover:bg-surface-overlay transition-colors"
-          >
+
+        <EmptyTableState
+          v-else-if="filteredWhitelistRows.length === 0"
+          icon="players"
+          :title="t('whitelist.noPlayers')"
+          :subtitle="whitelistSearch ? t('common.noResults') : t('whitelist.noPlayersSubtitle')"
+        />
+
+        <ResponsiveTable
+          v-else
+          :columns="whitelistColumns"
+          :rows="filteredWhitelistRows"
+          :row-key="(r) => r.player"
+          :aria-label="t('whitelist.players')"
+          :mobile-card-label="(r) => r.player"
+        >
+          <template #cell:player="{ row }">
             <div class="flex items-center gap-3">
-              <div class="w-8 h-8 bg-hytale-orange/20 rounded-full flex items-center justify-center">
-                <span class="text-hytale-orange font-medium">{{ player[0]?.toUpperCase() }}</span>
+              <div class="w-8 h-8 bg-hytale-orange/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <span class="text-hytale-orange font-medium">{{ row.player[0]?.toUpperCase() }}</span>
               </div>
-              <span class="text-ink">{{ player }}</span>
+              <span class="text-ink">{{ row.player }}</span>
             </div>
-            <button
+          </template>
+          <template #actions="{ row }">
+            <Button
               v-if="authStore.hasPermission('players.whitelist')"
-              @click="confirmRemoveFromWhitelist(player)"
-              class="p-2 text-ink-muted hover:text-status-error transition-colors"
+              variant="ghost"
+              size="sm"
+              icon-only
+              class="!text-ink-muted hover:!text-status-error"
               :aria-label="t('common.remove')"
+              @click="confirmRemoveFromWhitelist(row.player)"
             >
               <Icon name="trash" class="w-5 h-5" />
-            </button>
-          </div>
-        </TransitionGroup>
-      </Card>
+            </Button>
+          </template>
+        </ResponsiveTable>
+      </div>
     </div>
 
     <!-- Bans Tab -->
@@ -293,15 +329,13 @@ onMounted(loadData)
       <Card v-if="authStore.hasPermission('players.ban')">
         <h3 class="font-semibold text-ink mb-4">{{ t('whitelist.banPlayer') }}</h3>
         <form @submit.prevent="addBan" class="space-y-3">
-          <div class="flex gap-3">
-            <input
-              v-model="newBanPlayer"
-              type="text"
-              :placeholder="t('whitelist.playerName')"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
-            />
-          </div>
-          <div class="flex gap-3">
+          <input
+            v-model="newBanPlayer"
+            type="text"
+            :placeholder="t('whitelist.playerName')"
+            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
+          />
+          <div class="flex flex-col sm:flex-row gap-3">
             <input
               v-model="newBanReason"
               type="text"
@@ -316,57 +350,65 @@ onMounted(loadData)
       </Card>
 
       <!-- Bans List -->
-      <Card>
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-ink">{{ t('whitelist.bannedPlayers') }} ({{ bans.length }})</h3>
+      <div>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 class="font-semibold text-ink">
+            {{ t('whitelist.bannedPlayers') }} <span class="text-ink-muted font-normal">({{ bans.length }})</span>
+          </h3>
           <input
             v-model="bansSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm w-full sm:w-auto"
           />
         </div>
 
-        <div v-if="loading" class="flex items-center justify-center py-8">
-          <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+        <div v-if="loading && bans.length === 0" class="space-y-2">
+          <Skeleton v-for="i in 3" :key="i" height="3rem" />
         </div>
-        <div v-else-if="filteredBans.length === 0" class="text-center py-8 text-ink-subtle">
-          <svg class="w-10 h-10 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-          </svg>
-          <p>{{ t('whitelist.noBans') }}</p>
-        </div>
-        <TransitionGroup v-else name="list" tag="div" class="space-y-2">
-          <div
-            v-for="ban in filteredBans"
-            :key="ban.player"
-            class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg hover:bg-surface-overlay transition-colors"
-          >
+
+        <EmptyTableState
+          v-else-if="filteredBans.length === 0"
+          icon="ban"
+          :title="t('whitelist.noBans')"
+          :subtitle="bansSearch ? t('common.noResults') : t('whitelist.noBansSubtitle')"
+        />
+
+        <ResponsiveTable
+          v-else
+          :columns="bansColumns"
+          :rows="filteredBans"
+          :row-key="(b) => b.player"
+          :aria-label="t('whitelist.bannedPlayers')"
+          :mobile-card-label="(b) => b.player"
+        >
+          <template #cell:player="{ row }">
             <div class="flex items-center gap-3">
-              <div class="w-8 h-8 bg-status-error/20 rounded-full flex items-center justify-center">
-                <svg class="w-4 h-4 text-status-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                </svg>
+              <div class="w-8 h-8 bg-status-error/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <Icon name="ban" class="w-4 h-4 text-status-error" />
               </div>
-              <div>
-                <p class="text-ink font-medium">{{ ban.player }}</p>
-                <p v-if="ban.reason" class="text-sm text-ink-muted">{{ ban.reason }}</p>
-                <p class="text-xs text-ink-subtle">{{ formatDate(ban.bannedAt) }}</p>
-              </div>
+              <span class="text-ink font-medium">{{ row.player }}</span>
             </div>
-            <button
+          </template>
+          <template #cell:reason="{ row }">
+            <span v-if="row.reason" class="text-ink-muted">{{ row.reason }}</span>
+            <span v-else class="text-ink-subtle">—</span>
+          </template>
+          <template #cell:bannedAt="{ row }">
+            <span class="text-sm text-ink-muted whitespace-nowrap">{{ formatDate(row.bannedAt) }}</span>
+          </template>
+          <template #actions="{ row }">
+            <Button
               v-if="authStore.hasPermission('players.unban')"
-              @click="confirmUnban(ban.player)"
-              class="px-3 py-1.5 bg-surface-overlay text-ink-muted text-sm rounded-lg hover:bg-hytale-orange hover:text-dark transition-colors"
+              variant="secondary"
+              size="sm"
+              @click="confirmUnban(row.player)"
             >
               {{ t('whitelist.unban') }}
-            </button>
-          </div>
-        </TransitionGroup>
-      </Card>
+            </Button>
+          </template>
+        </ResponsiveTable>
+      </div>
     </div>
 
     <!-- Confirm Remove from Whitelist -->

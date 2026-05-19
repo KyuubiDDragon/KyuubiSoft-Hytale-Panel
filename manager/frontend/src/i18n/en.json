@@ -50,7 +50,8 @@
     "toggleTheme": "Toggle theme",
     "lightMode": "Light mode",
     "darkMode": "Dark mode",
-    "userMenu": "User menu"
+    "userMenu": "User menu",
+    "loadMore": "Load more"
   },
   "health": {
     "permissionIssue": "File Permission Issue Detected",
@@ -537,7 +538,10 @@
     "bannedPlayers": "Banned Players",
     "confirmRemove": "Remove \"{player}\" from the whitelist?",
     "confirmUnban": "Unban player \"{player}\"?",
-    "noBans": "No players banned"
+    "noBans": "No players banned",
+    "noPlayersSubtitle": "Add player names to allow them to join the server.",
+    "noBansSubtitle": "Banned players will appear here.",
+    "bannedAt": "Banned at"
   },
   "permissions": {
     "confirmDeleteGroup": "Delete permission group \"{name}\"?",
@@ -996,7 +1000,8 @@
     "lastLogin": "Last Login",
     "you": "You",
     "confirmDelete": "Really delete user \"{username}\"?",
-    "requiredFields": "Username and password required"
+    "requiredFields": "Username and password required",
+    "noUsersSubtitle": "Add a panel user to grant access to the dashboard."
   },
   "activity": {
     "title": "Activity Log",
@@ -1023,7 +1028,50 @@
     "failed": "Failed",
     "clearLog": "Clear Log",
     "confirmClear": "Really clear the entire activity log?",
-    "entries": "{count} entries"
+    "entries": "{count} entries",
+    "noEntriesSubtitle": "Actions performed on the panel will show up here."
+  },
+  "audit": {
+    "title": "Audit Log",
+    "subtitle": "Detailed audit trail for security-sensitive events",
+    "time": "Time",
+    "actor": "Actor",
+    "action": "Action",
+    "target": "Target",
+    "ip": "IP",
+    "result": "Result",
+    "success": "Success",
+    "failed": "Failed",
+    "actorPlaceholder": "Actor (username)",
+    "allActions": "All actions",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "exportCsv": "Export CSV",
+    "noEvents": "No audit events",
+    "noEventsSubtitle": "No events match the current filter."
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Receive server events on Discord, Slack or any HTTP endpoint",
+    "add": "Add Webhook",
+    "name": "Name",
+    "namePlaceholder": "Name (e.g. Discord #ops)",
+    "type": "Type",
+    "typeGeneric": "Generic HTTP (signed)",
+    "url": "URL",
+    "urlPlaceholder": "https://discord.com/api/webhooks/...",
+    "secret": "Secret",
+    "secretPlaceholder": "HMAC secret (X-KyuubiSoft-Signature)",
+    "events": "Events",
+    "eventCount": "{count} events",
+    "status": "Status",
+    "create": "Create",
+    "test": "Test",
+    "testResult": "Test",
+    "noHooks": "No webhooks configured",
+    "noHooksSubtitle": "Add one to receive server events on Discord, Slack or a generic endpoint.",
+    "confirmDelete": "Delete webhook \"{name}\"?"
   },
   "chat": {
     "title": "Chat Log",
@@ -1208,7 +1256,9 @@
     "deselectAll": "Deselect All",
     "confirmDelete": "Are you sure you want to delete the role \"{name}\"?",
     "cannotDeleteSystem": "System roles cannot be deleted",
-    "noRoles": "No roles found"
+    "noRoles": "No roles found",
+    "noRolesSubtitle": "Create a custom role to grant specific permissions.",
+    "type": "Type"
   },
   "permissionCategories": {
     "dashboard": "Dashboard",
