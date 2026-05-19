@@ -35,13 +35,13 @@ watch(() => props.open, (isOpen) => {
         />
 
         <!-- Modal -->
-        <div role="dialog" aria-modal="true" class="relative bg-dark-200 rounded-xl border border-dark-50 shadow-2xl w-full max-w-md">
+        <div role="dialog" aria-modal="true" class="relative bg-surface-raised rounded-xl border border-border shadow-2xl w-full max-w-md">
           <!-- Header -->
-          <div v-if="title" class="flex items-center justify-between px-6 py-4 border-b border-dark-50">
+          <div v-if="title" class="flex items-center justify-between px-6 py-4 border-b border-border">
             <h3 class="text-lg font-semibold text-white">{{ title }}</h3>
             <button
               @click="emit('close')"
-              class="text-gray-400 hover:text-white transition-colors"
+              class="text-ink-muted hover:text-ink transition-colors"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -55,7 +55,7 @@ watch(() => props.open, (isOpen) => {
           </div>
 
           <!-- Footer -->
-          <div v-if="$slots.footer" class="px-6 py-4 border-t border-dark-50 flex justify-end gap-3">
+          <div v-if="$slots.footer" class="px-6 py-4 border-t border-border flex justify-end gap-3">
             <slot name="footer" />
           </div>
         </div>

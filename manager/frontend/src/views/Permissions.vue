@@ -186,7 +186,7 @@ onMounted(loadData)
       <h1 class="text-2xl font-bold text-white">{{ t('permissions.title') }}</h1>
       <button
         @click="loadData"
-        class="text-gray-400 hover:text-white transition-colors"
+        class="text-ink-muted hover:text-ink transition-colors"
         :class="{ 'animate-spin': loading }"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -208,7 +208,7 @@ onMounted(loadData)
           'px-4 py-2 rounded-lg font-medium transition-colors',
           activeTab === 'users'
             ? 'bg-hytale-orange text-dark'
-            : 'bg-dark-100 text-gray-400 hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         {{ t('permissions.users') }}
@@ -219,7 +219,7 @@ onMounted(loadData)
           'px-4 py-2 rounded-lg font-medium transition-colors',
           activeTab === 'groups'
             ? 'bg-hytale-orange text-dark'
-            : 'bg-dark-100 text-gray-400 hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         {{ t('permissions.groups') }}
@@ -235,18 +235,18 @@ onMounted(loadData)
         </h3>
         <form @submit.prevent="saveUser" class="space-y-4">
           <div>
-            <label class="block text-sm text-gray-400 mb-2">{{ t('permissions.playerName') }}</label>
+            <label class="block text-sm text-ink-muted mb-2">{{ t('permissions.playerName') }}</label>
             <input
               v-model="newUserName"
               type="text"
               :placeholder="t('permissions.playerName')"
               :disabled="!!editingUser"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
             />
           </div>
 
           <div>
-            <label class="block text-sm text-gray-400 mb-2">{{ t('permissions.assignGroups') }}</label>
+            <label class="block text-sm text-ink-muted mb-2">{{ t('permissions.assignGroups') }}</label>
             <div class="flex flex-wrap gap-2">
               <button
                 v-for="group in groups"
@@ -257,12 +257,12 @@ onMounted(loadData)
                   'px-3 py-1.5 rounded-lg text-sm transition-colors',
                   newUserGroups.includes(group.name)
                     ? 'bg-hytale-orange text-dark'
-                    : 'bg-dark-100 text-gray-400 hover:text-white'
+                    : 'bg-surface-overlay text-ink-muted hover:text-ink'
                 ]"
               >
                 {{ group.name }}
               </button>
-              <span v-if="groups.length === 0" class="text-gray-500 text-sm">
+              <span v-if="groups.length === 0" class="text-ink-subtle text-sm">
                 {{ t('permissions.noGroups') }}
               </span>
             </div>
@@ -281,7 +281,7 @@ onMounted(loadData)
               v-if="editingUser"
               type="button"
               @click="cancelEditUser"
-              class="px-6 py-2 bg-dark-100 text-gray-400 font-medium rounded-lg hover:text-white transition-colors"
+              class="px-6 py-2 bg-surface-overlay text-ink-muted font-medium rounded-lg hover:text-ink transition-colors"
             >
               {{ t('common.cancel') }}
             </button>
@@ -297,21 +297,21 @@ onMounted(loadData)
             v-model="userSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
-        <div v-if="loading" class="text-center py-8 text-gray-400">
+        <div v-if="loading" class="text-center py-8 text-ink-muted">
           {{ t('common.loading') }}
         </div>
-        <div v-else-if="filteredUsers.length === 0" class="text-center py-8 text-gray-400">
+        <div v-else-if="filteredUsers.length === 0" class="text-center py-8 text-ink-muted">
           {{ t('permissions.noUsers') }}
         </div>
         <div v-else class="space-y-2">
           <div
             v-for="user in filteredUsers"
             :key="user.name"
-            class="flex items-center justify-between p-3 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
+            class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg hover:bg-surface-overlay transition-colors"
           >
             <div class="flex items-center gap-3">
               <div class="w-8 h-8 bg-hytale-orange/20 rounded-full flex items-center justify-center">
@@ -319,16 +319,16 @@ onMounted(loadData)
               </div>
               <div>
                 <p class="text-white font-medium">{{ user.name }}</p>
-                <p v-if="user.uuid" class="text-xs text-gray-500 font-mono">{{ user.uuid }}</p>
+                <p v-if="user.uuid" class="text-xs text-ink-subtle font-mono">{{ user.uuid }}</p>
                 <div class="flex flex-wrap gap-1 mt-1">
                   <span
                     v-for="group in user.groups"
                     :key="group"
-                    class="px-2 py-0.5 bg-dark-50 text-gray-300 text-xs rounded"
+                    class="px-2 py-0.5 bg-surface-overlay text-ink-muted text-xs rounded"
                   >
                     {{ group }}
                   </span>
-                  <span v-if="user.groups.length === 0" class="text-xs text-gray-500">
+                  <span v-if="user.groups.length === 0" class="text-xs text-ink-subtle">
                     {{ t('permissions.noGroupsAssigned') }}
                   </span>
                 </div>
@@ -337,7 +337,7 @@ onMounted(loadData)
             <div v-if="authStore.hasPermission('players.permissions')" class="flex gap-2">
               <button
                 @click="editUser(user)"
-                class="p-2 text-gray-400 hover:text-hytale-orange transition-colors"
+                class="p-2 text-ink-muted hover:text-hytale-orange transition-colors"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -345,7 +345,7 @@ onMounted(loadData)
               </button>
               <button
                 @click="confirmDeleteUser(user.name)"
-                class="p-2 text-gray-400 hover:text-status-error transition-colors"
+                class="p-2 text-ink-muted hover:text-status-error transition-colors"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -366,28 +366,28 @@ onMounted(loadData)
         </h3>
         <form @submit.prevent="saveGroup" class="space-y-4">
           <div>
-            <label class="block text-sm text-gray-400 mb-2">{{ t('permissions.groupName') }}</label>
+            <label class="block text-sm text-ink-muted mb-2">{{ t('permissions.groupName') }}</label>
             <input
               v-model="newGroupName"
               type="text"
               :placeholder="t('permissions.groupName')"
               :disabled="!!editingGroup"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
             />
           </div>
 
           <div>
-            <label class="block text-sm text-gray-400 mb-2">{{ t('permissions.permissions') }}</label>
+            <label class="block text-sm text-ink-muted mb-2">{{ t('permissions.permissions') }}</label>
             <textarea
               v-model="newGroupPermissions"
               :placeholder="t('permissions.permissionsPlaceholder')"
               rows="4"
-              class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange font-mono text-sm"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange font-mono text-sm"
             />
           </div>
 
           <div>
-            <label class="block text-sm text-gray-400 mb-2">{{ t('permissions.inheritsFrom') }}</label>
+            <label class="block text-sm text-ink-muted mb-2">{{ t('permissions.inheritsFrom') }}</label>
             <div class="flex flex-wrap gap-2">
               <button
                 v-for="group in groups.filter(g => g.name !== newGroupName)"
@@ -398,7 +398,7 @@ onMounted(loadData)
                   'px-3 py-1.5 rounded-lg text-sm transition-colors',
                   newGroupInherits.includes(group.name)
                     ? 'bg-hytale-orange text-dark'
-                    : 'bg-dark-100 text-gray-400 hover:text-white'
+                    : 'bg-surface-overlay text-ink-muted hover:text-ink'
                 ]"
               >
                 {{ group.name }}
@@ -419,7 +419,7 @@ onMounted(loadData)
               v-if="editingGroup"
               type="button"
               @click="cancelEditGroup"
-              class="px-6 py-2 bg-dark-100 text-gray-400 font-medium rounded-lg hover:text-white transition-colors"
+              class="px-6 py-2 bg-surface-overlay text-ink-muted font-medium rounded-lg hover:text-ink transition-colors"
             >
               {{ t('common.cancel') }}
             </button>
@@ -435,21 +435,21 @@ onMounted(loadData)
             v-model="groupSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
-        <div v-if="loading" class="text-center py-8 text-gray-400">
+        <div v-if="loading" class="text-center py-8 text-ink-muted">
           {{ t('common.loading') }}
         </div>
-        <div v-else-if="filteredGroups.length === 0" class="text-center py-8 text-gray-400">
+        <div v-else-if="filteredGroups.length === 0" class="text-center py-8 text-ink-muted">
           {{ t('permissions.noGroups') }}
         </div>
         <div v-else class="space-y-3">
           <div
             v-for="group in filteredGroups"
             :key="group.name"
-            class="p-4 bg-dark-100 rounded-lg hover:bg-dark-50 transition-colors"
+            class="p-4 bg-surface-overlay rounded-lg hover:bg-surface-overlay transition-colors"
           >
             <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-3">
@@ -463,7 +463,7 @@ onMounted(loadData)
               <div v-if="authStore.hasPermission('players.permissions')" class="flex gap-2">
                 <button
                   @click="editGroup(group)"
-                  class="p-2 text-gray-400 hover:text-hytale-orange transition-colors"
+                  class="p-2 text-ink-muted hover:text-hytale-orange transition-colors"
                 >
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -471,7 +471,7 @@ onMounted(loadData)
                 </button>
                 <button
                   @click="confirmDeleteGroup(group.name)"
-                  class="p-2 text-gray-400 hover:text-status-error transition-colors"
+                  class="p-2 text-ink-muted hover:text-status-error transition-colors"
                 >
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -481,29 +481,29 @@ onMounted(loadData)
             </div>
 
             <div v-if="group.inherits && group.inherits.length > 0" class="mb-2">
-              <span class="text-xs text-gray-500">{{ t('permissions.inheritsFrom') }}:</span>
+              <span class="text-xs text-ink-subtle">{{ t('permissions.inheritsFrom') }}:</span>
               <span
                 v-for="inherit in group.inherits"
                 :key="inherit"
-                class="ml-2 px-2 py-0.5 bg-dark-50 text-gray-300 text-xs rounded"
+                class="ml-2 px-2 py-0.5 bg-surface-overlay text-ink-muted text-xs rounded"
               >
                 {{ inherit }}
               </span>
             </div>
 
             <div v-if="group.permissions.length > 0">
-              <p class="text-xs text-gray-500 mb-1">{{ t('permissions.permissions') }}:</p>
+              <p class="text-xs text-ink-subtle mb-1">{{ t('permissions.permissions') }}:</p>
               <div class="flex flex-wrap gap-1">
                 <span
                   v-for="perm in group.permissions.slice(0, 10)"
                   :key="perm"
-                  class="px-2 py-0.5 bg-dark-50 text-gray-300 text-xs rounded font-mono"
+                  class="px-2 py-0.5 bg-surface-overlay text-ink-muted text-xs rounded font-mono"
                 >
                   {{ perm }}
                 </span>
                 <span
                   v-if="group.permissions.length > 10"
-                  class="px-2 py-0.5 bg-dark-50 text-gray-400 text-xs rounded"
+                  class="px-2 py-0.5 bg-surface-overlay text-ink-muted text-xs rounded"
                 >
                   +{{ group.permissions.length - 10 }} {{ t('permissions.more') }}
                 </span>

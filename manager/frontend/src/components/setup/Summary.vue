@@ -157,7 +157,7 @@ function copyToClipboard(text: string) {
           </svg>
         </div>
         <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.summary.successTitle') }}</h2>
-        <p class="text-gray-400">{{ t('setup.summary.successDescription') }}</p>
+        <p class="text-ink-muted">{{ t('setup.summary.successDescription') }}</p>
       </div>
 
       <!-- Server Ready Banner -->
@@ -176,10 +176,10 @@ function copyToClipboard(text: string) {
         <!-- Panel Access -->
         <div class="card">
           <div class="card-body">
-            <h4 class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+            <h4 class="text-sm font-medium text-ink-muted uppercase tracking-wider mb-3">
               {{ t('setup.summary.panelAccess') }}
             </h4>
-            <div class="flex items-center justify-between p-3 bg-dark-300 rounded-lg">
+            <div class="flex items-center justify-between p-3 bg-surface-muted rounded-lg">
               <div class="flex items-center gap-3">
                 <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -188,7 +188,7 @@ function copyToClipboard(text: string) {
               </div>
               <button
                 @click="copyToClipboard(finalPanelUrl)"
-                class="p-2 text-gray-400 hover:text-white transition-colors"
+                class="p-2 text-ink-muted hover:text-ink transition-colors"
                 :title="t('common.copy')"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -196,8 +196,8 @@ function copyToClipboard(text: string) {
                 </svg>
               </button>
             </div>
-            <p class="text-sm text-gray-500 mt-2">
-              {{ t('setup.summary.loginWith') }}: <span class="text-gray-300">{{ configSummary.admin.username }}</span>
+            <p class="text-sm text-ink-subtle mt-2">
+              {{ t('setup.summary.loginWith') }}: <span class="text-ink-muted">{{ configSummary.admin.username }}</span>
             </p>
           </div>
         </div>
@@ -205,10 +205,10 @@ function copyToClipboard(text: string) {
         <!-- Server Address for Players -->
         <div class="card">
           <div class="card-body">
-            <h4 class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+            <h4 class="text-sm font-medium text-ink-muted uppercase tracking-wider mb-3">
               {{ t('setup.summary.serverAddress') }}
             </h4>
-            <div class="flex items-center justify-between p-3 bg-dark-300 rounded-lg">
+            <div class="flex items-center justify-between p-3 bg-surface-muted rounded-lg">
               <div class="flex items-center gap-3">
                 <svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
@@ -217,7 +217,7 @@ function copyToClipboard(text: string) {
               </div>
               <button
                 @click="copyToClipboard(finalServerAddress)"
-                class="p-2 text-gray-400 hover:text-white transition-colors"
+                class="p-2 text-ink-muted hover:text-ink transition-colors"
                 :title="t('common.copy')"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -225,7 +225,7 @@ function copyToClipboard(text: string) {
                 </svg>
               </button>
             </div>
-            <p class="text-sm text-gray-500 mt-2">{{ t('setup.summary.shareWithPlayers') }}</p>
+            <p class="text-sm text-ink-subtle mt-2">{{ t('setup.summary.shareWithPlayers') }}</p>
           </div>
         </div>
       </div>
@@ -238,21 +238,21 @@ function copyToClipboard(text: string) {
           </svg>
           <div>
             <p class="font-medium text-hytale-orange mb-2">{{ t('setup.summary.nextStepsTitle') }}</p>
-            <ul class="text-sm text-gray-400 space-y-1.5">
+            <ul class="text-sm text-ink-muted space-y-1.5">
               <li class="flex items-start gap-2">
-                <svg class="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-4 h-4 text-ink-subtle mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
                 {{ t('setup.summary.tipWhitelist') }}
               </li>
               <li class="flex items-start gap-2">
-                <svg class="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-4 h-4 text-ink-subtle mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
                 {{ t('setup.summary.tipBackup') }}
               </li>
               <li class="flex items-start gap-2">
-                <svg class="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-4 h-4 text-ink-subtle mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
                 {{ t('setup.summary.tipSettings') }}
@@ -283,7 +283,7 @@ function copyToClipboard(text: string) {
           </svg>
         </div>
         <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.summary.title') }}</h2>
-        <p class="text-gray-400">{{ t('setup.summary.description') }}</p>
+        <p class="text-ink-muted">{{ t('setup.summary.description') }}</p>
       </div>
 
       <!-- Configuration Summary -->
@@ -305,10 +305,10 @@ function copyToClipboard(text: string) {
                 {{ t('common.edit') }}
               </button>
             </div>
-            <div class="text-sm text-gray-400">
+            <div class="text-sm text-ink-muted">
               <div class="flex justify-between py-1">
                 <span>{{ t('setup.summary.username') }}</span>
-                <span class="text-gray-200">{{ configSummary.admin.username }}</span>
+                <span class="text-ink">{{ configSummary.admin.username }}</span>
               </div>
             </div>
           </div>
@@ -331,7 +331,7 @@ function copyToClipboard(text: string) {
                 {{ t('common.edit') }}
               </button>
             </div>
-            <div class="text-sm text-gray-400">
+            <div class="text-sm text-ink-muted">
               <div class="flex justify-between py-1">
                 <span>{{ t('setup.summary.kyuubiApi') }}</span>
                 <span class="flex items-center gap-2">
@@ -341,7 +341,7 @@ function copyToClipboard(text: string) {
                     </svg>
                     {{ t('setup.summary.installed') }} (v{{ configSummary.plugin.version }})
                   </span>
-                  <span v-else class="text-gray-500">{{ t('setup.summary.notInstalled') }}</span>
+                  <span v-else class="text-ink-subtle">{{ t('setup.summary.notInstalled') }}</span>
                 </span>
               </div>
             </div>
@@ -365,22 +365,22 @@ function copyToClipboard(text: string) {
                 {{ t('common.edit') }}
               </button>
             </div>
-            <div class="text-sm text-gray-400 space-y-1">
+            <div class="text-sm text-ink-muted space-y-1">
               <div class="flex justify-between py-1">
                 <span>Modtale</span>
-                <span :class="configSummary.integrations.modtale ? 'text-status-success' : 'text-gray-500'">
+                <span :class="configSummary.integrations.modtale ? 'text-status-success' : 'text-ink-subtle'">
                   {{ configSummary.integrations.modtale ? t('setup.summary.configured') : t('setup.summary.notConfigured') }}
                 </span>
               </div>
               <div class="flex justify-between py-1">
                 <span>StackMart</span>
-                <span :class="configSummary.integrations.stackmart ? 'text-status-success' : 'text-gray-500'">
+                <span :class="configSummary.integrations.stackmart ? 'text-status-success' : 'text-ink-subtle'">
                   {{ configSummary.integrations.stackmart ? t('setup.summary.configured') : t('setup.summary.notConfigured') }}
                 </span>
               </div>
               <div class="flex justify-between py-1">
                 <span>WebMap</span>
-                <span :class="configSummary.integrations.webmap ? 'text-status-success' : 'text-gray-500'">
+                <span :class="configSummary.integrations.webmap ? 'text-status-success' : 'text-ink-subtle'">
                   {{ configSummary.integrations.webmap ? t('setup.summary.enabled') : t('setup.summary.disabled') }}
                 </span>
               </div>
@@ -405,18 +405,18 @@ function copyToClipboard(text: string) {
                 {{ t('common.edit') }}
               </button>
             </div>
-            <div class="text-sm text-gray-400 space-y-1">
+            <div class="text-sm text-ink-muted space-y-1">
               <div class="flex justify-between py-1">
                 <span>{{ t('setup.summary.accessMode') }}</span>
-                <span class="text-gray-200 capitalize">{{ configSummary.network.accessMode }}</span>
+                <span class="text-ink capitalize">{{ configSummary.network.accessMode }}</span>
               </div>
               <div class="flex justify-between py-1">
                 <span>{{ t('setup.summary.panelUrlLabel') }}</span>
-                <span class="text-gray-200 font-mono text-xs">{{ configSummary.network.panelUrl }}</span>
+                <span class="text-ink font-mono text-xs">{{ configSummary.network.panelUrl }}</span>
               </div>
               <div class="flex justify-between py-1">
                 <span>{{ t('setup.summary.serverAddressLabel') }}</span>
-                <span class="text-gray-200 font-mono text-xs">{{ configSummary.network.serverAddress }}</span>
+                <span class="text-ink font-mono text-xs">{{ configSummary.network.serverAddress }}</span>
               </div>
             </div>
           </div>

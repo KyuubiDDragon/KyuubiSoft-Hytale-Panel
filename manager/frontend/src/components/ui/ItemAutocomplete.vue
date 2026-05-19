@@ -135,13 +135,13 @@ onUnmounted(() => {
         :value="inputValue"
         :placeholder="placeholder"
         :disabled="disabled"
-        class="w-full px-4 py-2 bg-dark-100 border border-dark-50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange pr-8"
+        class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange pr-8"
         @input="handleInput"
         @keydown="handleKeydown"
         @focus="handleFocus"
       />
       <div v-if="loading" class="absolute right-3 top-1/2 -translate-y-1/2">
-        <svg class="w-4 h-4 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+        <svg class="w-4 h-4 animate-spin text-ink-muted" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -151,7 +151,7 @@ onUnmounted(() => {
     <!-- Dropdown -->
     <div
       v-if="showDropdown && items.length > 0"
-      class="absolute z-50 w-full mt-1 bg-dark-200 border border-dark-50 rounded-lg shadow-xl max-h-60 overflow-y-auto"
+      class="absolute z-50 w-full mt-1 bg-surface-raised border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto"
     >
       <button
         v-for="(item, index) in items"
@@ -159,13 +159,13 @@ onUnmounted(() => {
         type="button"
         :class="[
           'w-full px-3 py-2 flex items-center gap-3 text-left transition-colors',
-          index === selectedIndex ? 'bg-hytale-orange/20 text-white' : 'text-gray-300 hover:bg-dark-100'
+          index === selectedIndex ? 'bg-hytale-orange/20 text-white' : 'text-ink-muted hover:bg-surface-overlay'
         ]"
         @click="selectItem(item)"
         @mouseenter="selectedIndex = index"
       >
         <!-- Item Icon -->
-        <div class="w-8 h-8 bg-dark-50 rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+        <div class="w-8 h-8 bg-surface-overlay rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
           <img
             :src="getItemIconUrl(item.id)"
             :alt="item.name"
@@ -177,13 +177,13 @@ onUnmounted(() => {
         <!-- Item Info -->
         <div class="flex-1 min-w-0">
           <div class="font-medium truncate">{{ item.name }}</div>
-          <div class="text-xs text-gray-500 truncate">{{ item.id }}</div>
+          <div class="text-xs text-ink-subtle truncate">{{ item.id }}</div>
         </div>
 
         <!-- Category Badge -->
         <span
           v-if="item.category"
-          class="px-2 py-0.5 text-xs rounded bg-dark-50 text-gray-400 flex-shrink-0"
+          class="px-2 py-0.5 text-xs rounded bg-surface-overlay text-ink-muted flex-shrink-0"
         >
           {{ item.category }}
         </span>

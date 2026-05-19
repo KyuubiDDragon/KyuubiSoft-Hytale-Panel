@@ -53,7 +53,7 @@ function iconColorClass(type: string) {
           <p class="text-sm text-white flex-1">{{ toast.message }}</p>
           <button
             @click="removeToast(toast.id)"
-            class="text-gray-400 hover:text-white flex-shrink-0"
+            class="text-ink-muted hover:text-ink flex-shrink-0"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

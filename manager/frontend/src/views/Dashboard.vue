@@ -998,7 +998,7 @@ async function tickDashboard() {
         <button
           @click="checkForUpdates"
           :disabled="checkingUpdate"
-          class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-ink text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+          class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
         >
           <svg
             class="w-4 h-4"

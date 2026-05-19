@@ -91,16 +91,16 @@ onMounted(async () => {
         </svg>
       </div>
       <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.integrations.title') }}</h2>
-      <p class="text-gray-400">{{ t('setup.integrations.description') }}</p>
+      <p class="text-ink-muted">{{ t('setup.integrations.description') }}</p>
     </div>
 
     <!-- Info Banner -->
-    <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+    <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
       <div class="flex items-start gap-3">
-        <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="w-5 h-5 text-ink-muted mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <p class="text-sm text-gray-400">{{ t('setup.integrations.configLaterInfo') }}</p>
+        <p class="text-sm text-ink-muted">{{ t('setup.integrations.configLaterInfo') }}</p>
       </div>
     </div>
 
@@ -117,7 +117,7 @@ onMounted(async () => {
             </div>
             <div class="flex-1">
               <h3 class="text-lg font-semibold text-white">{{ t('setup.integrations.modtale.title') }}</h3>
-              <p class="text-sm text-gray-400 mt-1">{{ t('setup.integrations.modtale.description') }}</p>
+              <p class="text-sm text-ink-muted mt-1">{{ t('setup.integrations.modtale.description') }}</p>
             </div>
           </div>
 
@@ -132,7 +132,7 @@ onMounted(async () => {
               <button
                 type="button"
                 @click="showModtaleKey = !showModtaleKey"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
               >
                 <svg v-if="showModtaleKey" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
@@ -143,7 +143,7 @@ onMounted(async () => {
                 </svg>
               </button>
             </div>
-            <p class="mt-1 text-xs text-gray-500">{{ t('setup.integrations.modtale.hint') }}</p>
+            <p class="mt-1 text-xs text-ink-subtle">{{ t('setup.integrations.modtale.hint') }}</p>
           </div>
         </div>
       </div>
@@ -159,7 +159,7 @@ onMounted(async () => {
             </div>
             <div class="flex-1">
               <h3 class="text-lg font-semibold text-white">{{ t('setup.integrations.stackmart.title') }}</h3>
-              <p class="text-sm text-gray-400 mt-1">{{ t('setup.integrations.stackmart.description') }}</p>
+              <p class="text-sm text-ink-muted mt-1">{{ t('setup.integrations.stackmart.description') }}</p>
             </div>
           </div>
 
@@ -174,7 +174,7 @@ onMounted(async () => {
               <button
                 type="button"
                 @click="showStackmartKey = !showStackmartKey"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
               >
                 <svg v-if="showStackmartKey" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
@@ -185,7 +185,7 @@ onMounted(async () => {
                 </svg>
               </button>
             </div>
-            <p class="mt-1 text-xs text-gray-500">{{ t('setup.integrations.stackmart.hint') }}</p>
+            <p class="mt-1 text-xs text-ink-subtle">{{ t('setup.integrations.stackmart.hint') }}</p>
           </div>
         </div>
       </div>
@@ -203,14 +203,14 @@ onMounted(async () => {
               <div class="flex items-center justify-between">
                 <div>
                   <h3 class="text-lg font-semibold text-white">{{ t('setup.integrations.webmap.title') }}</h3>
-                  <p class="text-sm text-gray-400 mt-1">{{ t('setup.integrations.webmap.description') }}</p>
+                  <p class="text-sm text-ink-muted mt-1">{{ t('setup.integrations.webmap.description') }}</p>
                 </div>
                 <!-- Toggle -->
                 <button
                   type="button"
                   @click="webmapEnabled = !webmapEnabled"
                   class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-hytale-orange focus:ring-offset-2 focus:ring-offset-dark-200"
-                  :class="webmapEnabled ? 'bg-hytale-orange' : 'bg-dark-50'"
+                  :class="webmapEnabled ? 'bg-hytale-orange' : 'bg-surface-overlay'"
                   role="switch"
                   :aria-checked="webmapEnabled"
                 >
@@ -222,16 +222,16 @@ onMounted(async () => {
               </div>
 
               <!-- Port Requirements -->
-              <div v-if="webmapEnabled" class="mt-4 p-3 bg-dark-300 rounded-lg">
-                <p class="text-sm text-gray-400 mb-2">{{ t('setup.integrations.webmap.portRequirements') }}</p>
+              <div v-if="webmapEnabled" class="mt-4 p-3 bg-surface-muted rounded-lg">
+                <p class="text-sm text-ink-muted mb-2">{{ t('setup.integrations.webmap.portRequirements') }}</p>
                 <div class="flex gap-4 text-sm">
-                  <div class="flex items-center gap-2 text-gray-300">
+                  <div class="flex items-center gap-2 text-ink-muted">
                     <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                     </svg>
                     <span>HTTP: {{ webmapPorts.http }}</span>
                   </div>
-                  <div class="flex items-center gap-2 text-gray-300">
+                  <div class="flex items-center gap-2 text-ink-muted">
                     <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>

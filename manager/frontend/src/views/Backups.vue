@@ -121,7 +121,7 @@ onMounted(fetchBackups)
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-white">{{ t('backups.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('backups.subtitle') }}</p>
+        <p class="text-ink-muted mt-1">{{ t('backups.subtitle') }}</p>
       </div>
       <Button v-if="authStore.hasPermission('backups.create')" :loading="creating" @click="createBackup">
         <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -147,12 +147,12 @@ onMounted(fetchBackups)
               </svg>
             </div>
             <div>
-              <p class="text-sm text-gray-400">{{ t('backups.storage') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('backups.storage') }}</p>
               <p class="text-lg font-semibold text-white">{{ storage.total_size_mb }} MB</p>
             </div>
           </div>
           <div class="text-right">
-            <p class="text-sm text-gray-400">{{ storage.backup_count }} Backups</p>
+            <p class="text-sm text-ink-muted">{{ storage.backup_count }} Backups</p>
           </div>
         </div>
       </div>
@@ -175,7 +175,7 @@ onMounted(fetchBackups)
       :title="t('backups.delete')"
       @close="showDeleteModal = false"
     >
-      <p class="text-gray-300">{{ t('backups.confirmDelete') }}</p>
+      <p class="text-ink-muted">{{ t('backups.confirmDelete') }}</p>
       <template #footer>
         <Button variant="secondary" @click="showDeleteModal = false">
           {{ t('common.cancel') }}

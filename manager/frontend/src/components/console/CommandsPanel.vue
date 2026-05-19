@@ -115,12 +115,12 @@ defineExpose({ toggle, isOpen })
   <Transition name="slide">
     <div
       v-if="isOpen"
-      class="fixed right-0 top-0 h-full w-96 bg-dark-200 border-l border-dark-50/50 shadow-2xl z-50 flex flex-col"
+      class="fixed right-0 top-0 h-full w-96 bg-surface-raised border-l border-border/60 shadow-2xl z-50 flex flex-col"
     >
       <!-- Header -->
-      <div class="flex items-center justify-between p-4 border-b border-dark-50/50">
+      <div class="flex items-center justify-between p-4 border-b border-border/60">
         <h2 class="text-lg font-semibold text-white">{{ t('commands.title') }}</h2>
-        <button @click="toggle" class="p-1 text-gray-400 hover:text-white transition-colors">
+        <button @click="toggle" class="p-1 text-ink-muted hover:text-ink transition-colors">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -128,7 +128,7 @@ defineExpose({ toggle, isOpen })
       </div>
 
       <!-- Category Tabs -->
-      <div class="flex border-b border-dark-50/50 overflow-x-auto">
+      <div class="flex border-b border-border/60 overflow-x-auto">
         <button
           v-for="cat in categories"
           :key="cat.id"
@@ -137,7 +137,7 @@ defineExpose({ toggle, isOpen })
             'px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors',
             activeCategory === cat.id
               ? 'text-hytale-orange border-b-2 border-hytale-orange'
-              : 'text-gray-400 hover:text-white'
+              : 'text-ink-muted hover:text-ink'
           ]"
         >
           {{ cat.label }}
@@ -149,16 +149,16 @@ defineExpose({ toggle, isOpen })
         <div
           v-for="cmd in activeCommands"
           :key="cmd.usage"
-          class="bg-dark-100 rounded-lg p-3 hover:bg-dark-50/50 transition-colors group"
+          class="bg-surface-overlay rounded-lg p-3 hover:bg-surface-overlay/50 transition-colors group"
         >
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
               <code class="text-hytale-orange font-mono text-sm">{{ cmd.command }}</code>
-              <p class="text-gray-400 text-xs mt-1">{{ cmd.description }}</p>
+              <p class="text-ink-muted text-xs mt-1">{{ cmd.description }}</p>
             </div>
             <button
               @click="copyCommand(cmd.usage)"
-              class="p-1.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
+              class="p-1.5 text-ink-subtle hover:text-ink opacity-0 group-hover:opacity-100 transition-all"
               :title="t('common.copy')"
             >
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -166,15 +166,15 @@ defineExpose({ toggle, isOpen })
               </svg>
             </button>
           </div>
-          <div class="mt-2 bg-dark-200 rounded px-2 py-1">
-            <code class="text-xs text-gray-300 font-mono">{{ cmd.usage }}</code>
+          <div class="mt-2 bg-surface-raised rounded px-2 py-1">
+            <code class="text-xs text-ink-muted font-mono">{{ cmd.usage }}</code>
           </div>
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="p-3 border-t border-dark-50/50 text-center">
-        <p class="text-xs text-gray-500">{{ t('commands.clickToCopy') }}</p>
+      <div class="p-3 border-t border-border/60 text-center">
+        <p class="text-xs text-ink-subtle">{{ t('commands.clickToCopy') }}</p>
       </div>
     </div>
   </Transition>

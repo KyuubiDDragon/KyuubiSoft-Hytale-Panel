@@ -177,7 +177,7 @@ function handleBack() {
         </svg>
       </div>
       <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.createAdminTitle') }}</h2>
-      <p class="text-gray-400">{{ t('setup.createAdminDescription') }}</p>
+      <p class="text-ink-muted">{{ t('setup.createAdminDescription') }}</p>
     </div>
 
     <!-- Form -->
@@ -193,7 +193,7 @@ function handleBack() {
           autocomplete="username"
           @blur="validateUsername"
         />
-        <p v-if="!usernameError" class="mt-1 text-xs text-gray-500">
+        <p v-if="!usernameError" class="mt-1 text-xs text-ink-subtle">
           {{ t('setup.usernameHint') }}
         </p>
       </div>
@@ -213,7 +213,7 @@ function handleBack() {
           <button
             type="button"
             @click="showPassword = !showPassword"
-            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
           >
             <svg v-if="showPassword" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
@@ -228,7 +228,7 @@ function handleBack() {
         <!-- Password Strength Indicator -->
         <div v-if="password" class="mt-2">
           <div class="flex items-center gap-2">
-            <div class="flex-1 h-1.5 bg-dark-50 rounded-full overflow-hidden">
+            <div class="flex-1 h-1.5 bg-surface-overlay rounded-full overflow-hidden">
               <div
                 class="h-full transition-all duration-300"
                 :class="passwordStrength.class"
@@ -248,7 +248,7 @@ function handleBack() {
           </div>
         </div>
 
-        <p v-if="!passwordError" class="mt-1 text-xs text-gray-500">
+        <p v-if="!passwordError" class="mt-1 text-xs text-ink-subtle">
           {{ t('setup.passwordHint') }}
         </p>
       </div>
@@ -268,7 +268,7 @@ function handleBack() {
           <button
             type="button"
             @click="showConfirmPassword = !showConfirmPassword"
-            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
           >
             <svg v-if="showConfirmPassword" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
@@ -310,13 +310,13 @@ function handleBack() {
       </div>
 
       <!-- Security Notice -->
-      <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+      <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
         <div class="flex items-start gap-3">
           <svg class="w-5 h-5 text-hytale-orange mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-          <div class="text-sm text-gray-400">
-            <p class="font-medium text-gray-300 mb-1">{{ t('setup.securityNoticeTitle') }}</p>
+          <div class="text-sm text-ink-muted">
+            <p class="font-medium text-ink-muted mb-1">{{ t('setup.securityNoticeTitle') }}</p>
             <p>{{ t('setup.securityNoticeText') }}</p>
           </div>
         </div>

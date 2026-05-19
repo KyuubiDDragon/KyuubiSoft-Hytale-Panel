@@ -157,7 +157,7 @@ onMounted(() => {
         </svg>
       </div>
       <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.network.title') }}</h2>
-      <p class="text-gray-400">{{ t('setup.network.description') }}</p>
+      <p class="text-ink-muted">{{ t('setup.network.description') }}</p>
     </div>
 
     <!-- Access Mode Selection -->
@@ -169,7 +169,7 @@ onMounted(() => {
         :class="[
           accessMode === 'localhost'
             ? 'border-hytale-orange bg-hytale-orange/10'
-            : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+            : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
         ]"
       >
         <div class="flex items-start gap-3">
@@ -189,8 +189,8 @@ onMounted(() => {
                 {{ t('setup.network.mostSecure') }}
               </span>
             </div>
-            <p class="text-sm text-gray-400 mt-1">{{ t('setup.network.localhost.description') }}</p>
-            <div class="mt-2 flex items-center gap-2 text-sm text-gray-500">
+            <p class="text-sm text-ink-muted mt-1">{{ t('setup.network.localhost.description') }}</p>
+            <div class="mt-2 flex items-center gap-2 text-sm text-ink-subtle">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
@@ -207,7 +207,7 @@ onMounted(() => {
         :class="[
           accessMode === 'lan'
             ? 'border-hytale-orange bg-hytale-orange/10'
-            : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+            : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
         ]"
       >
         <div class="flex items-start gap-3">
@@ -222,19 +222,19 @@ onMounted(() => {
           </div>
           <div class="flex-1">
             <p class="text-white font-medium">{{ t('setup.network.lan.title') }}</p>
-            <p class="text-sm text-gray-400 mt-1">{{ t('setup.network.lan.description') }}</p>
+            <p class="text-sm text-ink-muted mt-1">{{ t('setup.network.lan.description') }}</p>
             <div class="mt-2 flex items-center gap-2 text-sm">
-              <svg class="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="w-4 h-4 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
-              <span v-if="isDetectingIp" class="text-gray-500">
+              <span v-if="isDetectingIp" class="text-ink-subtle">
                 <svg class="animate-spin h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 {{ t('setup.network.detectingIp') }}
               </span>
-              <span v-else class="text-gray-300">
+              <span v-else class="text-ink-muted">
                 {{ t('setup.network.detectedIp') }}: {{ detectedIp || 'N/A' }}
               </span>
             </div>
@@ -248,7 +248,7 @@ onMounted(() => {
         :class="[
           accessMode === 'custom'
             ? 'border-hytale-orange bg-hytale-orange/10'
-            : 'border-dark-50 bg-dark-200'
+            : 'border-border bg-surface-raised'
         ]"
       >
         <button
@@ -267,7 +267,7 @@ onMounted(() => {
             </div>
             <div class="flex-1">
               <p class="text-white font-medium">{{ t('setup.network.custom.title') }}</p>
-              <p class="text-sm text-gray-400 mt-1">{{ t('setup.network.custom.description') }}</p>
+              <p class="text-sm text-ink-muted mt-1">{{ t('setup.network.custom.description') }}</p>
             </div>
           </div>
         </button>
@@ -281,19 +281,19 @@ onMounted(() => {
             placeholder="https://panel.yourserver.com"
             :error="customDomainError"
           />
-          <p class="mt-1 text-xs text-gray-500">{{ t('setup.network.custom.hint') }}</p>
+          <p class="mt-1 text-xs text-ink-subtle">{{ t('setup.network.custom.hint') }}</p>
 
           <!-- Trust Proxy Toggle -->
-          <div class="mt-4 flex items-center justify-between p-3 bg-dark-300 rounded-lg">
+          <div class="mt-4 flex items-center justify-between p-3 bg-surface-muted rounded-lg">
             <div>
               <p class="text-sm text-white font-medium">{{ t('setup.network.trustProxy.title') }}</p>
-              <p class="text-xs text-gray-400 mt-0.5">{{ t('setup.network.trustProxy.description') }}</p>
+              <p class="text-xs text-ink-muted mt-0.5">{{ t('setup.network.trustProxy.description') }}</p>
             </div>
             <button
               type="button"
               @click="trustProxy = !trustProxy"
               class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-hytale-orange focus:ring-offset-2 focus:ring-offset-dark-200"
-              :class="trustProxy ? 'bg-hytale-orange' : 'bg-dark-50'"
+              :class="trustProxy ? 'bg-hytale-orange' : 'bg-surface-overlay'"
               role="switch"
               :aria-checked="trustProxy"
             >
@@ -308,14 +308,14 @@ onMounted(() => {
     </div>
 
     <!-- CORS Explanation -->
-    <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+    <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
       <div class="flex items-start gap-3">
         <svg class="w-5 h-5 text-hytale-orange mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <div class="text-sm">
-          <p class="font-medium text-gray-300 mb-1">{{ t('setup.network.corsTitle') }}</p>
-          <p class="text-gray-400">{{ t('setup.network.corsExplanation') }}</p>
+          <p class="font-medium text-ink-muted mb-1">{{ t('setup.network.corsTitle') }}</p>
+          <p class="text-ink-muted">{{ t('setup.network.corsExplanation') }}</p>
         </div>
       </div>
     </div>
@@ -324,7 +324,7 @@ onMounted(() => {
     <div class="card">
       <div class="card-body py-3">
         <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-400">{{ t('setup.network.panelUrl') }}</span>
+          <span class="text-sm text-ink-muted">{{ t('setup.network.panelUrl') }}</span>
           <span class="text-sm text-white font-mono">{{ panelUrl }}</span>
         </div>
       </div>

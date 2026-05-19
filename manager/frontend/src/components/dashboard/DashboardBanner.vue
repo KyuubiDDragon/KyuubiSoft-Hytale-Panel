@@ -31,10 +31,10 @@ defineEmits<{
       </div>
       <div class="flex-1 min-w-0">
         <h3 class="text-lg font-semibold text-white mb-1">{{ title }}</h3>
-        <p class="text-gray-300 text-sm mb-3">{{ description }}</p>
+        <p class="text-ink-muted text-sm mb-3">{{ description }}</p>
         <slot />
       </div>
-      <button @click="$emit('dismiss')" class="flex-shrink-0 text-gray-400 hover:text-white transition-colors">
+      <button @click="$emit('dismiss')" class="flex-shrink-0 text-ink-muted hover:text-ink transition-colors">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>

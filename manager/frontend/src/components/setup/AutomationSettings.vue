@@ -110,7 +110,7 @@ onMounted(() => {
         </svg>
       </div>
       <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.automationSettingsTitle') }}</h2>
-      <p class="text-gray-400">{{ t('setup.automationSettingsDescription') }}</p>
+      <p class="text-ink-muted">{{ t('setup.automationSettingsDescription') }}</p>
     </div>
 
     <!-- Form -->
@@ -126,7 +126,7 @@ onMounted(() => {
             </div>
             <div>
               <h3 class="font-semibold text-white">{{ t('setup.automaticBackups') }}</h3>
-              <p class="text-sm text-gray-400">{{ t('setup.automaticBackupsDescription') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('setup.automaticBackupsDescription') }}</p>
             </div>
           </div>
         </div>
@@ -139,7 +139,7 @@ onMounted(() => {
               type="button"
               @click="backupEnabled = !backupEnabled"
               class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-              :class="backupEnabled ? 'bg-hytale-orange' : 'bg-dark-50'"
+              :class="backupEnabled ? 'bg-hytale-orange' : 'bg-surface-overlay'"
             >
               <span
                 class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
@@ -149,7 +149,7 @@ onMounted(() => {
           </div>
 
           <!-- Backup Interval -->
-          <div v-if="backupEnabled" class="space-y-4 pt-2 border-t border-dark-50/50">
+          <div v-if="backupEnabled" class="space-y-4 pt-2 border-t border-border/60">
             <div>
               <label class="label">{{ t('setup.backupInterval') }}</label>
               <div class="relative">
@@ -166,7 +166,7 @@ onMounted(() => {
                   </option>
                 </select>
                 <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
@@ -190,12 +190,12 @@ onMounted(() => {
                   </option>
                 </select>
                 <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
               </div>
-              <p class="mt-1 text-xs text-gray-500">
+              <p class="mt-1 text-xs text-ink-subtle">
                 {{ t('setup.backupRetentionHint') }}
               </p>
             </div>
@@ -214,7 +214,7 @@ onMounted(() => {
             </div>
             <div>
               <h3 class="font-semibold text-white">{{ t('setup.automaticRestarts') }}</h3>
-              <p class="text-sm text-gray-400">{{ t('setup.automaticRestartsDescription') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('setup.automaticRestartsDescription') }}</p>
             </div>
           </div>
         </div>
@@ -227,7 +227,7 @@ onMounted(() => {
               type="button"
               @click="restartEnabled = !restartEnabled"
               class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-              :class="restartEnabled ? 'bg-hytale-orange' : 'bg-dark-50'"
+              :class="restartEnabled ? 'bg-hytale-orange' : 'bg-surface-overlay'"
             >
               <span
                 class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
@@ -236,7 +236,7 @@ onMounted(() => {
             </button>
           </div>
 
-          <div v-if="restartEnabled" class="space-y-4 pt-2 border-t border-dark-50/50">
+          <div v-if="restartEnabled" class="space-y-4 pt-2 border-t border-border/60">
             <!-- Restart Schedule -->
             <div>
               <label class="label">{{ t('setup.restartSchedule') }}</label>
@@ -254,7 +254,7 @@ onMounted(() => {
                   </option>
                 </select>
                 <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
@@ -262,7 +262,7 @@ onMounted(() => {
             </div>
 
             <!-- Warn Players Toggle -->
-            <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+            <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <svg class="w-5 h-5 text-status-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -270,14 +270,14 @@ onMounted(() => {
                   </svg>
                   <div>
                     <span class="font-medium text-white">{{ t('setup.warnBeforeRestart') }}</span>
-                    <p class="text-xs text-gray-400">{{ t('setup.warnBeforeRestartDescription') }}</p>
+                    <p class="text-xs text-ink-muted">{{ t('setup.warnBeforeRestartDescription') }}</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   @click="warnBeforeRestart = !warnBeforeRestart"
                   class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
-                  :class="warnBeforeRestart ? 'bg-hytale-orange' : 'bg-dark-50'"
+                  :class="warnBeforeRestart ? 'bg-hytale-orange' : 'bg-surface-overlay'"
                 >
                   <span
                     class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
@@ -291,12 +291,12 @@ onMounted(() => {
       </div>
 
       <!-- Info Box -->
-      <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+      <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
         <div class="flex items-start gap-3">
-          <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-5 h-5 text-ink-muted mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p class="text-sm text-gray-400">{{ t('setup.automationSettingsInfo') }}</p>
+          <p class="text-sm text-ink-muted">{{ t('setup.automationSettingsInfo') }}</p>
         </div>
       </div>
 

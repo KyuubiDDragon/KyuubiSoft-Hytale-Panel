@@ -150,7 +150,7 @@ onMounted(() => {
         </svg>
       </div>
       <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.serverConfigTitle') }}</h2>
-      <p class="text-gray-400">{{ t('setup.serverConfigDescription') }}</p>
+      <p class="text-ink-muted">{{ t('setup.serverConfigDescription') }}</p>
     </div>
 
     <!-- Form -->
@@ -165,7 +165,7 @@ onMounted(() => {
           :error="serverNameError"
           @blur="validateServerName"
         />
-        <p v-if="!serverNameError" class="mt-1 text-xs text-gray-500">
+        <p v-if="!serverNameError" class="mt-1 text-xs text-ink-subtle">
           {{ t('setup.serverNameHint') }}
         </p>
       </div>
@@ -181,12 +181,12 @@ onMounted(() => {
             :class="{ 'input-error': motdError }"
             @blur="validateMotd"
           />
-          <span class="absolute bottom-2 right-2 text-xs text-gray-500">
+          <span class="absolute bottom-2 right-2 text-xs text-ink-subtle">
             {{ motd.length }}/256
           </span>
         </div>
         <p v-if="motdError" class="mt-1 text-sm text-status-error">{{ motdError }}</p>
-        <p v-else class="mt-1 text-xs text-gray-500">
+        <p v-else class="mt-1 text-xs text-ink-subtle">
           {{ t('setup.motdHint') }}
         </p>
       </div>
@@ -208,12 +208,12 @@ onMounted(() => {
             </option>
           </select>
           <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-            <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
         </div>
-        <p class="mt-1 text-xs text-gray-500">
+        <p class="mt-1 text-xs text-ink-subtle">
           {{ t('setup.maxPlayersHint') }}
         </p>
       </div>
@@ -235,22 +235,22 @@ onMounted(() => {
             </option>
           </select>
           <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-            <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
         </div>
-        <p class="mt-1 text-xs text-gray-500">
+        <p class="mt-1 text-xs text-ink-subtle">
           {{ t('setup.gameModeHint') }}
         </p>
       </div>
 
       <!-- Advanced Settings Toggle -->
-      <div class="border-t border-dark-50/30 pt-4">
+      <div class="border-t border-border/40 pt-4">
         <button
           type="button"
           @click="showAdvanced = !showAdvanced"
-          class="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          class="flex items-center gap-2 text-ink-muted hover:text-ink transition-colors"
         >
           <svg
             class="w-4 h-4 transition-transform duration-200"
@@ -271,11 +271,11 @@ onMounted(() => {
             <input
               v-model="acceptEarlyPlugins"
               type="checkbox"
-              class="mt-1 w-4 h-4 rounded border-gray-600 bg-dark-300 text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
+              class="mt-1 w-4 h-4 rounded border-gray-600 bg-surface-muted text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
             />
             <div>
               <p class="text-white font-medium">{{ t('setup.acceptEarlyPlugins') }}</p>
-              <p class="text-sm text-gray-400">{{ t('setup.acceptEarlyPluginsDesc') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('setup.acceptEarlyPluginsDesc') }}</p>
             </div>
           </label>
 
@@ -284,23 +284,23 @@ onMounted(() => {
             <input
               v-model="disableSentry"
               type="checkbox"
-              class="mt-1 w-4 h-4 rounded border-gray-600 bg-dark-300 text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
+              class="mt-1 w-4 h-4 rounded border-gray-600 bg-surface-muted text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
             />
             <div>
               <p class="text-white font-medium">{{ t('setup.disableSentry') }}</p>
-              <p class="text-sm text-gray-400">{{ t('setup.disableSentryDesc') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('setup.disableSentryDesc') }}</p>
             </div>
           </label>
         </div>
       </div>
 
       <!-- Info Box -->
-      <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+      <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
         <div class="flex items-start gap-3">
-          <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-5 h-5 text-ink-muted mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p class="text-sm text-gray-400">{{ t('setup.serverConfigInfo') }}</p>
+          <p class="text-sm text-ink-muted">{{ t('setup.serverConfigInfo') }}</p>
         </div>
       </div>
 

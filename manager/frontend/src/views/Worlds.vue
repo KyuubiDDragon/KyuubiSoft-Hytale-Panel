@@ -231,9 +231,9 @@ onMounted(loadWorlds)
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-white">{{ t('worlds.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('worlds.subtitle') }}</p>
+        <p class="text-ink-muted mt-1">{{ t('worlds.subtitle') }}</p>
       </div>
-      <button @click="loadWorlds" class="p-2 text-gray-400 hover:text-white transition-colors" :aria-label="t('common.refresh')">
+      <button @click="loadWorlds" class="p-2 text-ink-muted hover:text-ink transition-colors" :aria-label="t('common.refresh')">
         <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
       </button>
     </div>
@@ -257,7 +257,7 @@ onMounted(loadWorlds)
         <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <p class="text-gray-400">{{ t('worlds.noWorlds') }}</p>
+        <p class="text-ink-muted">{{ t('worlds.noWorlds') }}</p>
       </div>
     </div>
 
@@ -276,7 +276,7 @@ onMounted(loadWorlds)
               class="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2 border-b border-gray-700"
             >
               <svg
-                class="w-4 h-4 text-gray-400 transition-transform"
+                class="w-4 h-4 text-ink-muted transition-transform"
                 :class="{ 'rotate-90': expandedWorlds.has(world.name) }"
                 fill="none" viewBox="0 0 24 24" stroke="currentColor"
               >
@@ -286,7 +286,7 @@ onMounted(loadWorlds)
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span class="text-white font-medium">{{ world.name }}</span>
-              <span class="text-xs text-gray-500 ml-auto">{{ world.files?.length || 0 }} {{ t('worlds.fileCount') }}</span>
+              <span class="text-xs text-ink-subtle ml-auto">{{ world.files?.length || 0 }} {{ t('worlds.fileCount') }}</span>
             </button>
 
             <!-- Files in world -->
@@ -302,12 +302,12 @@ onMounted(loadWorlds)
                 <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="text-gray-300 text-sm">{{ file.name }}</span>
-                <span class="text-xs text-gray-500 ml-auto">{{ formatFileSize(file.size) }}</span>
+                <span class="text-ink-muted text-sm">{{ file.name }}</span>
+                <span class="text-xs text-ink-subtle ml-auto">{{ formatFileSize(file.size) }}</span>
               </button>
 
               <!-- Resources folder header -->
-              <div v-if="selectedWorldFiles.resources.length > 0" class="pl-10 pr-4 py-2 flex items-center gap-2 text-gray-500">
+              <div v-if="selectedWorldFiles.resources.length > 0" class="pl-10 pr-4 py-2 flex items-center gap-2 text-ink-subtle">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                 </svg>
@@ -325,8 +325,8 @@ onMounted(loadWorlds)
                 <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="text-gray-300 text-sm">{{ file.name }}</span>
-                <span class="text-xs text-gray-500 ml-auto">{{ formatFileSize(file.size) }}</span>
+                <span class="text-ink-muted text-sm">{{ file.name }}</span>
+                <span class="text-xs text-ink-subtle ml-auto">{{ formatFileSize(file.size) }}</span>
               </button>
             </div>
           </div>
@@ -339,7 +339,7 @@ onMounted(loadWorlds)
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-xl font-semibold text-white">{{ selectedFile }}</h2>
-            <p class="text-sm text-gray-400">{{ selectedWorld }}</p>
+            <p class="text-sm text-ink-muted">{{ selectedWorld }}</p>
           </div>
           <div class="flex items-center gap-3">
             <span v-if="saveSuccess" class="text-status-success flex items-center gap-1">
@@ -366,19 +366,19 @@ onMounted(loadWorlds)
         <template v-if="isConfigJson && worldConfig">
           <!-- Edit mode toggle -->
           <div class="flex items-center gap-4 mb-4">
-            <span class="text-gray-400 text-sm">{{ t('worlds.editMode') }}:</span>
-            <div class="flex bg-dark-200 rounded-lg p-1">
+            <span class="text-ink-muted text-sm">{{ t('worlds.editMode') }}:</span>
+            <div class="flex bg-surface-raised rounded-lg p-1">
               <button
                 @click="configEditMode = 'form'"
                 class="px-3 py-1 text-sm rounded-md transition-colors"
-                :class="configEditMode === 'form' ? 'bg-hytale-orange text-white' : 'text-gray-400 hover:text-white'"
+                :class="configEditMode === 'form' ? 'bg-hytale-orange text-white' : 'text-ink-muted hover:text-ink'"
               >
                 {{ t('worlds.formMode') }}
               </button>
               <button
                 @click="configEditMode = 'text'"
                 class="px-3 py-1 text-sm rounded-md transition-colors"
-                :class="configEditMode === 'text' ? 'bg-hytale-orange text-white' : 'text-gray-400 hover:text-white'"
+                :class="configEditMode === 'text' ? 'bg-hytale-orange text-white' : 'text-ink-muted hover:text-ink'"
               >
                 {{ t('worlds.jsonTextMode') }}
               </button>
@@ -394,10 +394,10 @@ onMounted(loadWorlds)
               <div class="card-body">
                 <textarea
                   v-model="configRawText"
-                  class="w-full h-[500px] px-4 py-3 bg-dark-100 border border-dark-50 rounded-lg text-gray-300 font-mono text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange resize-none"
+                  class="w-full h-[500px] px-4 py-3 bg-surface-overlay border border-border rounded-lg text-ink-muted font-mono text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange resize-none"
                   spellcheck="false"
                 ></textarea>
-                <p class="text-xs text-gray-500 mt-2">{{ t('worlds.rawEditorHint') }}</p>
+                <p class="text-xs text-ink-subtle mt-2">{{ t('worlds.rawEditorHint') }}</p>
               </div>
             </div>
           </template>
@@ -412,11 +412,11 @@ onMounted(loadWorlds)
             <div class="card-body">
               <div class="grid grid-cols-2 gap-4">
                 <div>
-                  <span class="text-gray-400 text-sm">{{ t('worlds.seed') }}</span>
+                  <span class="text-ink-muted text-sm">{{ t('worlds.seed') }}</span>
                   <p class="text-white font-mono">{{ worldConfig.seed }}</p>
                 </div>
                 <div>
-                  <span class="text-gray-400 text-sm">{{ t('worlds.gameTime') }}</span>
+                  <span class="text-ink-muted text-sm">{{ t('worlds.gameTime') }}</span>
                   <p class="text-white font-mono text-sm">{{ worldConfig.gameTime || 'N/A' }}</p>
                 </div>
               </div>
@@ -452,11 +452,11 @@ onMounted(loadWorlds)
                 </label>
               </div>
               <div class="mt-4">
-                <label class="block text-sm text-gray-400 mb-2">{{ t('worlds.gameplayConfig') }}</label>
+                <label class="block text-sm text-ink-muted mb-2">{{ t('worlds.gameplayConfig') }}</label>
                 <input
                   type="text"
                   v-model="form.gameplayConfig"
-                  class="w-full px-3 py-2 bg-dark-100 border border-dark-50 rounded-lg text-gray-300 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+                  class="w-full px-3 py-2 bg-surface-overlay border border-border rounded-lg text-ink-muted focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
                   :placeholder="t('worlds.defaultPlaceholder')"
                 />
               </div>
@@ -515,7 +515,7 @@ onMounted(loadWorlds)
               <h3 class="text-lg font-semibold text-status-error">{{ t('worlds.dangerZone.title') }}</h3>
             </div>
             <div class="card-body">
-              <p class="text-gray-400 text-sm mb-4">{{ t('worlds.dangerZone.description') }}</p>
+              <p class="text-ink-muted text-sm mb-4">{{ t('worlds.dangerZone.description') }}</p>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input
@@ -526,7 +526,7 @@ onMounted(loadWorlds)
                   >
                   <div>
                     <span class="text-white">{{ t('worlds.dangerZone.deleteOnUniverseStart') }}</span>
-                    <p class="text-xs text-gray-500">{{ t('worlds.dangerZone.deleteOnUniverseStartDesc') }}</p>
+                    <p class="text-xs text-ink-subtle">{{ t('worlds.dangerZone.deleteOnUniverseStartDesc') }}</p>
                   </div>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
@@ -538,7 +538,7 @@ onMounted(loadWorlds)
                   >
                   <div>
                     <span class="text-white">{{ t('worlds.dangerZone.deleteOnRemove') }}</span>
-                    <p class="text-xs text-gray-500">{{ t('worlds.dangerZone.deleteOnRemoveDesc') }}</p>
+                    <p class="text-xs text-ink-subtle">{{ t('worlds.dangerZone.deleteOnRemoveDesc') }}</p>
                   </div>
                 </label>
               </div>
@@ -551,7 +551,7 @@ onMounted(loadWorlds)
               <h3 class="text-lg font-semibold text-white">{{ t('worlds.rawConfigJson') }}</h3>
             </summary>
             <div class="card-body">
-              <pre class="bg-gray-900 p-4 rounded-lg text-sm text-gray-300 overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
+              <pre class="bg-gray-900 p-4 rounded-lg text-sm text-ink-muted overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
             </div>
           </details>
           </template>
@@ -566,10 +566,10 @@ onMounted(loadWorlds)
             <div class="card-body">
               <textarea
                 v-model="fileContent"
-                class="w-full h-[500px] px-4 py-3 bg-dark-100 border border-dark-50 rounded-lg text-gray-300 font-mono text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange resize-none"
+                class="w-full h-[500px] px-4 py-3 bg-surface-overlay border border-border rounded-lg text-ink-muted font-mono text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange resize-none"
                 spellcheck="false"
               ></textarea>
-              <p class="text-xs text-gray-500 mt-2">{{ t('worlds.jsonEditorHint') }}</p>
+              <p class="text-xs text-ink-subtle mt-2">{{ t('worlds.jsonEditorHint') }}</p>
             </div>
           </div>
         </template>
@@ -588,7 +588,7 @@ onMounted(loadWorlds)
           <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <p class="text-gray-400">{{ t('worlds.selectFile') }}</p>
+          <p class="text-ink-muted">{{ t('worlds.selectFile') }}</p>
         </div>
       </div>
     </div>
