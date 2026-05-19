@@ -82,7 +82,50 @@
     "roles": "Roles",
     "help": "Command Help",
     "avatarInventory": "Avatar & Inventory",
-    "modUpdates": "Mod Updates"
+    "modUpdates": "Mod Updates",
+    "files": "File Manager"
+  },
+  "files": {
+    "title": "File Manager",
+    "subtitle": "Browse and edit files on your Hytale server",
+    "upload": "Upload",
+    "move": "Move / Rename",
+    "modified": "Modified",
+    "binary": "Binary",
+    "binaryHint": "Binary file - use Download to retrieve a copy.",
+    "readonlyHint": "This root is read-only. Editing and uploads are disabled.",
+    "empty": {
+      "title": "No file selected",
+      "subtitle": "Select a file from the tree to start editing.",
+      "dir": "This folder is empty."
+    },
+    "confirm": {
+      "delete": "Delete \"{path}\"? This cannot be undone.",
+      "discardChanges": "You have unsaved changes. Discard them?"
+    },
+    "prompt": {
+      "move": "Enter the new path (relative to the root):"
+    },
+    "success": {
+      "saved": "File saved",
+      "uploaded": "Upload complete",
+      "deleted": "File deleted",
+      "moved": "File moved"
+    },
+    "error": {
+      "loadRoots": "Failed to load file manager roots",
+      "loadDir": "Failed to load directory",
+      "loadFile": "Failed to load file",
+      "save": "Failed to save file",
+      "upload": "Upload failed",
+      "delete": "Failed to delete file",
+      "move": "Failed to move file"
+    },
+    "conflict": {
+      "title": "File changed on disk",
+      "message": "Another process modified this file since you opened it. Reload to get the latest version (your unsaved changes will be lost).",
+      "reload": "Reload from disk"
+    }
   },
   "dashboard": {
     "title": "Dashboard",

@@ -82,7 +82,50 @@
     "roles": "Rollen",
     "help": "Befehlshilfe",
     "avatarInventory": "Avatar & Inventar",
-    "modUpdates": "Mod Updates"
+    "modUpdates": "Mod Updates",
+    "files": "Dateimanager"
+  },
+  "files": {
+    "title": "Dateimanager",
+    "subtitle": "Dateien auf deinem Hytale-Server durchsuchen und bearbeiten",
+    "upload": "Hochladen",
+    "move": "Verschieben / Umbenennen",
+    "modified": "Geändert",
+    "binary": "Binär",
+    "binaryHint": "Binärdatei – über Download eine Kopie laden.",
+    "readonlyHint": "Dieses Verzeichnis ist schreibgeschützt. Bearbeiten und Upload sind deaktiviert.",
+    "empty": {
+      "title": "Keine Datei ausgewählt",
+      "subtitle": "Wähle eine Datei aus dem Baum, um sie zu bearbeiten.",
+      "dir": "Dieser Ordner ist leer."
+    },
+    "confirm": {
+      "delete": "\"{path}\" wirklich löschen? Das kann nicht rückgängig gemacht werden.",
+      "discardChanges": "Ungespeicherte Änderungen verwerfen?"
+    },
+    "prompt": {
+      "move": "Neuen Pfad eingeben (relativ zum Root):"
+    },
+    "success": {
+      "saved": "Datei gespeichert",
+      "uploaded": "Upload abgeschlossen",
+      "deleted": "Datei gelöscht",
+      "moved": "Datei verschoben"
+    },
+    "error": {
+      "loadRoots": "Konnte Dateimanager-Roots nicht laden",
+      "loadDir": "Verzeichnis konnte nicht geladen werden",
+      "loadFile": "Datei konnte nicht geladen werden",
+      "save": "Speichern fehlgeschlagen",
+      "upload": "Upload fehlgeschlagen",
+      "delete": "Löschen fehlgeschlagen",
+      "move": "Verschieben fehlgeschlagen"
+    },
+    "conflict": {
+      "title": "Datei auf Festplatte geändert",
+      "message": "Ein anderer Prozess hat diese Datei seit dem Öffnen verändert. Lade neu, um die aktuelle Version zu erhalten (ungespeicherte Änderungen gehen verloren).",
+      "reload": "Von Festplatte neu laden"
+    }
   },
   "dashboard": {
     "title": "Dashboard",

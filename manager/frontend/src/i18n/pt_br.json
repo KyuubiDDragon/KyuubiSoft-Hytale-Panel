@@ -81,7 +81,50 @@
     "chat": "Log de Chat",
     "roles": "Funções",
     "help": "Ajuda de Comandos",
-    "avatarInventory": "Avatar e Inventário"
+    "avatarInventory": "Avatar e Inventário",
+    "files": "Gerenciador de Arquivos"
+  },
+  "files": {
+    "title": "Gerenciador de Arquivos",
+    "subtitle": "Navegue e edite arquivos do seu servidor Hytale",
+    "upload": "Enviar",
+    "move": "Mover / Renomear",
+    "modified": "Modificado",
+    "binary": "Binário",
+    "binaryHint": "Arquivo binário - use Download para obter uma cópia.",
+    "readonlyHint": "Este diretório é somente leitura. Edição e upload estão desativados.",
+    "empty": {
+      "title": "Nenhum arquivo selecionado",
+      "subtitle": "Selecione um arquivo na árvore para começar a editar.",
+      "dir": "Esta pasta está vazia."
+    },
+    "confirm": {
+      "delete": "Excluir \"{path}\"? Esta ação não pode ser desfeita.",
+      "discardChanges": "Há alterações não salvas. Descartar?"
+    },
+    "prompt": {
+      "move": "Digite o novo caminho (relativo ao root):"
+    },
+    "success": {
+      "saved": "Arquivo salvo",
+      "uploaded": "Upload concluído",
+      "deleted": "Arquivo excluído",
+      "moved": "Arquivo movido"
+    },
+    "error": {
+      "loadRoots": "Falha ao carregar os roots do gerenciador",
+      "loadDir": "Falha ao carregar diretório",
+      "loadFile": "Falha ao carregar arquivo",
+      "save": "Falha ao salvar arquivo",
+      "upload": "Falha no upload",
+      "delete": "Falha ao excluir arquivo",
+      "move": "Falha ao mover arquivo"
+    },
+    "conflict": {
+      "title": "Arquivo modificado em disco",
+      "message": "Outro processo modificou este arquivo desde que você o abriu. Recarregue para obter a versão mais recente (alterações não salvas serão perdidas).",
+      "reload": "Recarregar do disco"
+    }
   },
   "dashboard": {
     "title": "Painel",

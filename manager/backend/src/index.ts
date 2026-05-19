@@ -34,6 +34,7 @@ import notificationsRoutes from './routes/notifications.js';
 import auditRoutes from './routes/audit.js';
 import serversRoutes from './routes/servers.js';
 import ssoRoutes from './routes/sso.js';
+import filesRoutes from './routes/files.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
@@ -269,7 +270,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'"], // Vue.js needs unsafe-eval for template compilation
+      scriptSrc: ["'self'", "'unsafe-eval'", "blob:"], // Vue.js needs unsafe-eval; Monaco loads workers from blob:
+      workerSrc: ["'self'", "blob:"], // Monaco editor uses Web Workers via blob URLs
+      childSrc: ["'self'", "blob:"], // Fallback for older browsers that don't honour workerSrc
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Vue/CSS-in-JS + Google Fonts
       imgSrc: ["'self'", "data:", "blob:", "https://cdn.modtale.net", "https://stackmart.org", "https://hyvatar.io", "https://media.forgecdn.net"], // Allow data URIs, Modtale CDN, StackMart, Hyvatar and CurseForge CDN
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"], // Google Fonts
@@ -382,7 +385,14 @@ app.use((req, res, next) => {
 });
 
 // SECURITY: Limit JSON body size to prevent memory exhaustion attacks
-app.use(express.json({ limit: '100kb' }));
+// The file-manager /api/files/write route has its own parser with a larger
+// limit (~15 MB) because file content payloads can legitimately exceed 100kb.
+app.use((req, res, next) => {
+  if (req.path === '/api/files/write') {
+    return next();
+  }
+  express.json({ limit: '100kb' })(req, res, next);
+});
 
 // ============================================================
 // Setup Routes - MUST be BEFORE auth middleware and other routes
@@ -459,6 +469,7 @@ app.use('/api/roles', rolesRouter);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/me/notifications', notificationsRoutes);
 app.use('/api/audit-log', auditRoutes);
+app.use('/api/files', filesRoutes);
 
 // v3 multi-server registry.
 //
@@ -482,6 +493,7 @@ app.use('/api/servers/:serverId/players',    serverScopeMiddleware, playersRoute
 app.use('/api/servers/:serverId/management', serverScopeMiddleware, managementRoutes);
 app.use('/api/servers/:serverId/scheduler',  serverScopeMiddleware, schedulerRoutes);
 app.use('/api/servers/:serverId/assets',     serverScopeMiddleware, assetsRoutes);
+app.use('/api/servers/:serverId/files',      serverScopeMiddleware, filesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

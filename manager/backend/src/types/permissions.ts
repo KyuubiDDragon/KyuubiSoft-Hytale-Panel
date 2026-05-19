@@ -137,6 +137,7 @@ export const PERMISSIONS = {
   'updates.download': 'Download updates',
   'updates.apply': 'Apply updates (restart server)',
   'updates.config': 'Configure auto-update settings',
+
 } as const;
 
 // Permission type derived from the keys
@@ -198,6 +199,7 @@ export const PERMISSION_CATEGORIES = [
   'hytale_auth',
   'settings',
   'updates',
+  'files',
 ] as const;
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number];
@@ -268,6 +270,8 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
       'plugins.toggle',
       'config.view',
       'config.edit',
+      'files.read',
+      'files.write',
       'activity.view',
     ],
     isSystem: true,
@@ -291,6 +295,7 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
       'plugins.view',
       'config.view',
       'assets.view',
+      'files.read',
       'activity.view',
     ],
     isSystem: true,
