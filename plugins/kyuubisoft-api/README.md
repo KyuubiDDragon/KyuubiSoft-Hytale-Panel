@@ -43,7 +43,21 @@ Connect to `ws://localhost:18085/ws` to receive real-time events:
 { "type": "player_join", "player": "Steve", "uuid": "...", "timestamp": "..." }
 { "type": "player_leave", "player": "Steve", "uuid": "...", "timestamp": "..." }
 { "type": "tps_update", "tps": 19.8, "mspt": 51.2, "timestamp": "..." }
+{ "type": "player_position",
+  "player": "Steve", "uuid": "...",
+  "world": "overworld",
+  "x": 12.5, "y": 64.0, "z": -32.25,
+  "yaw": 90.0, "pitch": 0.0,
+  "latencyMs": 42,
+  "timestamp": "..." }
 ```
+
+`player_position` is emitted periodically (default every 2 s) for every
+online player while at least one WebSocket client is connected. `latencyMs`
+is `null` if the Hytale API does not expose a ping accessor (current
+versions don't — see `PositionTicker` for the reflection probe). Set
+JVM system property `-DKYUUBI_DEBUG_POSITIONS=1` to log every tick on
+stdout for debugging.
 
 ## Configuration
 
@@ -57,9 +71,14 @@ Config file: `config/kyuubisoft-api/config.json`
   "corsEnabled": true,
   "corsOrigin": "*",
   "wsHeartbeatSeconds": 30,
-  "logRequests": false
+  "logRequests": false,
+  "positionBroadcastIntervalMs": 2000
 }
 ```
+
+`positionBroadcastIntervalMs` controls how often the plugin emits a
+`player_position` WebSocket frame per online player. Set to `0` to disable
+the ticker entirely (useful for headless test setups).
 
 ## Installation
 
