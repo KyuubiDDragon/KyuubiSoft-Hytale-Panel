@@ -1,6 +1,7 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
+import type { AuthenticatedRequest } from '../types/index.js';
 import * as schedulerService from '../services/scheduler.js';
 import * as dockerService from '../services/docker.js';
 import { isDemoMode, getDemoSchedulerTasks } from '../services/demoData.js';
@@ -31,26 +32,22 @@ const DEMO_QUICK_COMMANDS = [
 ];
 
 // GET /api/scheduler/config - Get scheduler configuration
-router.get('/config', authMiddleware, requirePermission('scheduler.view'), async (_req: Request, res: Response) => {
-  // Demo mode: return mock config
+router.get('/config', authMiddleware, requirePermission('scheduler.view'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json(DEMO_SCHEDULER_CONFIG);
     return;
   }
-
-  const config = schedulerService.getConfig();
+  const config = schedulerService.getConfig(req.serverId);
   res.json(config);
 });
 
 // PUT /api/scheduler/config - Update scheduler configuration
-router.put('/config', authMiddleware, requirePermission('scheduler.edit'), async (req: Request, res: Response) => {
-  // Demo mode: simulate save
+router.put('/config', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Configuration saved (simulated)' });
     return;
   }
-
-  const success = schedulerService.saveConfig(req.body);
+  const success = schedulerService.saveConfig(req.body, req.serverId);
   if (success) {
     res.json({ success: true, message: 'Configuration saved' });
   } else {
@@ -59,8 +56,7 @@ router.put('/config', authMiddleware, requirePermission('scheduler.edit'), async
 });
 
 // GET /api/scheduler/status - Get scheduler status
-router.get('/status', authMiddleware, requirePermission('scheduler.view'), async (_req: Request, res: Response) => {
-  // Demo mode: return mock status
+router.get('/status', authMiddleware, requirePermission('scheduler.view'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     const tasks = getDemoSchedulerTasks();
     res.json({
@@ -83,15 +79,14 @@ router.get('/status', authMiddleware, requirePermission('scheduler.view'), async
     });
     return;
   }
-
-  const status = await schedulerService.getSchedulerStatus();
+  const status = await schedulerService.getSchedulerStatus(req.serverId);
   res.json(status);
 });
 
 // POST /api/scheduler/backup/run - Run backup now
-router.post('/backup/run', authMiddleware, requirePermission('scheduler.edit'), async (_req: Request, res: Response) => {
+router.post('/backup/run', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   const { createBackup } = await import('../services/backup.js');
-  const result = await createBackup('manual');
+  const result = await createBackup('manual', req.serverId);
   if (result.success) {
     res.json(result);
   } else {
@@ -100,20 +95,17 @@ router.post('/backup/run', authMiddleware, requirePermission('scheduler.edit'), 
 });
 
 // GET /api/scheduler/quick-commands - Get quick commands
-router.get('/quick-commands', authMiddleware, requirePermission('scheduler.view'), async (_req: Request, res: Response) => {
-  // Demo mode: return mock commands
+router.get('/quick-commands', authMiddleware, requirePermission('scheduler.view'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json(DEMO_QUICK_COMMANDS);
     return;
   }
-
-  const commands = schedulerService.getQuickCommands();
+  const commands = schedulerService.getQuickCommands(req.serverId);
   res.json(commands);
 });
 
 // POST /api/scheduler/quick-commands - Add quick command
-router.post('/quick-commands', authMiddleware, requirePermission('scheduler.edit'), async (req: Request, res: Response) => {
-  // Demo mode: simulate add
+router.post('/quick-commands', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     const { name, command, icon, category } = req.body;
     res.json({
@@ -127,7 +119,6 @@ router.post('/quick-commands', authMiddleware, requirePermission('scheduler.edit
   }
 
   const { name, command, icon, category } = req.body;
-
   if (!name || !command) {
     res.status(400).json({ error: 'Name and command are required' });
     return;
@@ -138,20 +129,18 @@ router.post('/quick-commands', authMiddleware, requirePermission('scheduler.edit
     command,
     icon: icon || 'terminal',
     category: category || 'custom',
-  });
+  }, req.serverId);
 
   res.json(newCommand);
 });
 
 // PUT /api/scheduler/quick-commands/:id - Update quick command
-router.put('/quick-commands/:id', authMiddleware, requirePermission('scheduler.edit'), async (req: Request, res: Response) => {
-  // Demo mode: simulate update
+router.put('/quick-commands/:id', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Command updated (simulated)' });
     return;
   }
-
-  const success = schedulerService.updateQuickCommand(req.params.id, req.body);
+  const success = schedulerService.updateQuickCommand(req.params.id, req.body, req.serverId);
   if (success) {
     res.json({ success: true });
   } else {
@@ -160,14 +149,12 @@ router.put('/quick-commands/:id', authMiddleware, requirePermission('scheduler.e
 });
 
 // DELETE /api/scheduler/quick-commands/:id - Delete quick command
-router.delete('/quick-commands/:id', authMiddleware, requirePermission('scheduler.edit'), async (req: Request, res: Response) => {
-  // Demo mode: simulate delete
+router.delete('/quick-commands/:id', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Command deleted (simulated)' });
     return;
   }
-
-  const success = schedulerService.deleteQuickCommand(req.params.id);
+  const success = schedulerService.deleteQuickCommand(req.params.id, req.serverId);
   if (success) {
     res.json({ success: true });
   } else {
@@ -176,54 +163,48 @@ router.delete('/quick-commands/:id', authMiddleware, requirePermission('schedule
 });
 
 // POST /api/scheduler/quick-commands/:id/execute - Execute quick command
-router.post('/quick-commands/:id/execute', authMiddleware, requirePermission('scheduler.edit'), async (req: Request, res: Response) => {
-  // Demo mode: simulate execution
+router.post('/quick-commands/:id/execute', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     const cmd = DEMO_QUICK_COMMANDS.find(c => c.id === req.params.id);
     res.json({ success: true, message: `[DEMO] Command executed: ${cmd?.command || req.params.id}` });
     return;
   }
 
-  const commands = schedulerService.getQuickCommands();
+  const commands = schedulerService.getQuickCommands(req.serverId);
   const command = commands.find(c => c.id === req.params.id);
-
   if (!command) {
     res.status(404).json({ error: 'Command not found' });
     return;
   }
 
-  const result = await dockerService.execCommand(command.command);
+  const result = await dockerService.execCommand(command.command, req.serverId);
   res.json(result);
 });
 
 // POST /api/scheduler/broadcast - Send broadcast message
-router.post('/broadcast', authMiddleware, requirePermission('scheduler.edit'), async (req: Request, res: Response) => {
-  // Demo mode: simulate broadcast
+router.post('/broadcast', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json({ success: true, message: `[DEMO] Broadcast sent: ${req.body.message}` });
     return;
   }
 
   const { message } = req.body;
-
   if (!message) {
     res.status(400).json({ error: 'Message is required' });
     return;
   }
 
-  const result = await dockerService.execCommand(`/broadcast ${message}`);
+  const result = await dockerService.execCommand(`/broadcast ${message}`, req.serverId);
   res.json(result);
 });
 
 // POST /api/scheduler/restart/cancel - Cancel pending restart
-router.post('/restart/cancel', authMiddleware, requirePermission('scheduler.edit'), async (_req: Request, res: Response) => {
-  // Demo mode: simulate cancel
+router.post('/restart/cancel', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Pending restart cancelled (simulated)' });
     return;
   }
-
-  const cancelled = schedulerService.cancelPendingRestart();
+  const cancelled = schedulerService.cancelPendingRestart(req.serverId);
   if (cancelled) {
     res.json({ success: true, message: 'Pending restart cancelled' });
   } else {
@@ -232,14 +213,12 @@ router.post('/restart/cancel', authMiddleware, requirePermission('scheduler.edit
 });
 
 // GET /api/scheduler/restart/status - Get restart status
-router.get('/restart/status', authMiddleware, requirePermission('scheduler.view'), async (_req: Request, res: Response) => {
-  // Demo mode: return empty
+router.get('/restart/status', authMiddleware, requirePermission('scheduler.view'), async (req: AuthenticatedRequest, res: Response) => {
   if (isDemoMode()) {
     res.json({ enabled: true, pending: null });
     return;
   }
-
-  const status = await schedulerService.getSchedulerStatus();
+  const status = await schedulerService.getSchedulerStatus(req.serverId);
   res.json(status.scheduledRestarts);
 });
 
