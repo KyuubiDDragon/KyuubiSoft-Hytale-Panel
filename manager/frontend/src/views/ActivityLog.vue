@@ -110,7 +110,7 @@ onMounted(loadData)
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('activity.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('activity.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('activity.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-3">
@@ -155,7 +155,7 @@ onMounted(loadData)
           </svg>
         </div>
         <div>
-          <h3 class="font-semibold text-white">{{ t('activity.entries', { count: total }) }}</h3>
+          <h3 class="font-semibold text-ink">{{ t('activity.entries', { count: total }) }}</h3>
           <p class="text-sm text-ink-muted">
             {{ selectedCategory === 'all' ? t('activity.categories.all') : t(`activity.categories.${selectedCategory}`) }}
           </p>
@@ -195,7 +195,7 @@ onMounted(loadData)
           <!-- Entry Details -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-1">
-              <span class="font-medium text-white">{{ formatLogMessage(entry.action) }}</span>
+              <span class="font-medium text-ink">{{ formatLogMessage(entry.action) }}</span>
               <span
                 :class="[
                   'px-2 py-0.5 rounded text-xs font-medium',
@@ -216,7 +216,7 @@ onMounted(loadData)
 
           <!-- Meta -->
           <div class="text-right text-sm">
-            <p class="text-white">{{ entry.user }}</p>
+            <p class="text-ink">{{ entry.user }}</p>
             <p class="text-ink-subtle">{{ formatDate(entry.timestamp) }}</p>
           </div>
         </div>

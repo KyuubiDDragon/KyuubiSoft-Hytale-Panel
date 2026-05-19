@@ -138,7 +138,7 @@ onUnmounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('chat.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('chat.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('chat.description') }}</p>
       </div>
       <Button variant="secondary" @click="refresh" :class="{ 'animate-spin': loading }">
@@ -164,7 +164,7 @@ onUnmounted(() => {
             v-model="searchQuery"
             type="text"
             :placeholder="t('chat.searchPlaceholder')"
-            class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+            class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
           />
         </div>
       </div>

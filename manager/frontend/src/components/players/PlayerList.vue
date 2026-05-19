@@ -74,7 +74,7 @@ function sendMessage(name: string) {
 
             <!-- Info -->
             <div>
-              <p class="font-semibold text-white text-lg">{{ player.name }}</p>
+              <p class="font-semibold text-ink text-lg">{{ player.name }}</p>
               <div class="flex items-center gap-3 text-sm text-ink-muted">
                 <span class="flex items-center gap-1">
                   <span class="w-2 h-2 bg-status-success rounded-full"></span>
@@ -155,7 +155,7 @@ function sendMessage(name: string) {
               @keyup.enter="sendMessage(player.name)"
               type="text"
               :placeholder="t('players.messagePlaceholder') || 'Send message...'"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
             />
             <Button
               variant="primary"

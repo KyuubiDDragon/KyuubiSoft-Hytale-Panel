@@ -466,7 +466,7 @@ onUnmounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Page Title -->
-    <h1 class="text-2xl font-bold text-white">{{ t('settings.title') }}</h1>
+    <h1 class="text-2xl font-bold text-ink">{{ t('settings.title') }}</h1>
 
     <!-- Language Settings -->
     <Card :title="t('settings.language')">
@@ -482,7 +482,7 @@ onUnmounted(() => {
         >
           <span class="text-2xl">🇩🇪</span>
           <div class="text-left">
-            <p class="font-medium text-white">{{ t('settings.german') }}</p>
+            <p class="font-medium text-ink">{{ t('settings.german') }}</p>
             <p class="text-sm text-ink-muted">Deutsch</p>
           </div>
           <svg
@@ -507,7 +507,7 @@ onUnmounted(() => {
         >
           <span class="text-2xl">🇬🇧</span>
           <div class="text-left">
-            <p class="font-medium text-white">{{ t('settings.english') }}</p>
+            <p class="font-medium text-ink">{{ t('settings.english') }}</p>
             <p class="text-sm text-ink-muted">English</p>
           </div>
           <svg
@@ -532,7 +532,7 @@ onUnmounted(() => {
         >
           <span class="text-2xl">🇧🇷</span>
           <div class="text-left">
-            <p class="font-medium text-white">Português (Brasil)</p>
+            <p class="font-medium text-ink">Português (Brasil)</p>
             <p class="text-sm text-ink-muted">Portuguese (Brazil)</p>
           </div>
           <svg
@@ -565,7 +565,7 @@ onUnmounted(() => {
         <div class="flex items-center justify-between p-4 bg-surface-muted rounded-lg">
           <div>
             <p class="text-sm text-ink-muted">{{ t('settings.authStatus') }}</p>
-            <p class="text-white font-medium mt-1">
+            <p class="text-ink font-medium mt-1">
               <span v-if="hytaleAuthStatus.authenticated" class="flex items-center gap-2">
                 <svg class="w-5 h-5 text-status-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -620,7 +620,7 @@ onUnmounted(() => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
             <div class="flex-1">
-              <h3 class="text-white font-medium mb-2">{{ t('settings.authInProgress') }}</h3>
+              <h3 class="text-ink font-medium mb-2">{{ t('settings.authInProgress') }}</h3>
               <p class="text-ink-muted text-sm mb-4">{{ t('settings.completeAuth') }}</p>
 
               <!-- Auth Code Display -->
@@ -697,7 +697,7 @@ onUnmounted(() => {
         <div class="flex items-center justify-between p-4 bg-surface-muted rounded-lg">
           <div>
             <p class="text-sm text-ink-muted">{{ t('settings.currentPatchline') }}</p>
-            <p class="text-white font-medium mt-1 font-mono">
+            <p class="text-ink font-medium mt-1 font-mono">
               {{ patchlineData?.patchline || '-' }}
             </p>
           </div>
@@ -716,7 +716,7 @@ onUnmounted(() => {
             ]"
           >
             <div class="text-center">
-              <p class="font-medium text-white">{{ t('config.release') }}</p>
+              <p class="font-medium text-ink">{{ t('config.release') }}</p>
               <p class="text-xs text-ink-muted">{{ t('settings.patchlineReleaseDesc') }}</p>
             </div>
             <svg
@@ -741,7 +741,7 @@ onUnmounted(() => {
             ]"
           >
             <div class="text-center">
-              <p class="font-medium text-white">{{ t('config.preRelease') }}</p>
+              <p class="font-medium text-ink">{{ t('config.preRelease') }}</p>
               <p class="text-xs text-ink-muted">{{ t('settings.patchlinePreReleaseDesc') }}</p>
             </div>
             <svg
@@ -811,7 +811,7 @@ onUnmounted(() => {
               <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
             </label>
             <div>
-              <p class="text-white font-medium">{{ t('settings.acceptEarlyPluginsLabel') }}</p>
+              <p class="text-ink font-medium">{{ t('settings.acceptEarlyPluginsLabel') }}</p>
               <p class="text-sm text-ink-muted">{{ t('settings.acceptEarlyPluginsHint') }}</p>
             </div>
           </div>
@@ -873,7 +873,7 @@ onUnmounted(() => {
               <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
             </label>
             <div>
-              <p class="text-white font-medium">{{ t('settings.disableSentryLabel') }}</p>
+              <p class="text-ink font-medium">{{ t('settings.disableSentryLabel') }}</p>
               <p class="text-sm text-ink-muted">{{ t('settings.disableSentryHint') }}</p>
             </div>
           </div>
@@ -935,7 +935,7 @@ onUnmounted(() => {
               <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
             </label>
             <div>
-              <p class="text-white font-medium">{{ t('settings.allowOpLabel') }}</p>
+              <p class="text-ink font-medium">{{ t('settings.allowOpLabel') }}</p>
               <p class="text-sm text-ink-muted">{{ t('settings.allowOpHint') }}</p>
             </div>
           </div>
@@ -978,7 +978,7 @@ onUnmounted(() => {
         <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">Nitrado:WebServer</p>
+              <p class="text-ink font-medium">Nitrado:WebServer</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginWebServerDesc') }}</p>
             </div>
             <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Nitrado</span>
@@ -988,7 +988,7 @@ onUnmounted(() => {
         <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">Nitrado:Query</p>
+              <p class="text-ink font-medium">Nitrado:Query</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginQueryDesc') }}</p>
             </div>
             <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Nitrado</span>
@@ -998,7 +998,7 @@ onUnmounted(() => {
         <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">Nitrado:PerformanceSaver</p>
+              <p class="text-ink font-medium">Nitrado:PerformanceSaver</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginPerformanceSaverDesc') }}</p>
             </div>
             <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Nitrado</span>
@@ -1008,7 +1008,7 @@ onUnmounted(() => {
         <div class="p-3 bg-surface-muted rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-white font-medium">ApexHosting:PrometheusExporter</p>
+              <p class="text-ink font-medium">ApexHosting:PrometheusExporter</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginPrometheusDesc') }}</p>
             </div>
             <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Apex Hosting</span>
@@ -1055,7 +1055,7 @@ onUnmounted(() => {
                 <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <span class="text-white font-mono text-sm">{{ file.name }}</span>
+                <span class="text-ink font-mono text-sm">{{ file.name }}</span>
               </div>
               <span class="text-ink-subtle text-xs">{{ Math.round(file.size / 1024) }} KB</span>
             </button>
@@ -1084,7 +1084,7 @@ onUnmounted(() => {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
               </button>
-              <span class="text-white font-mono">{{ selectedFile }}</span>
+              <span class="text-ink font-mono">{{ selectedFile }}</span>
               <span v-if="hasChanges" class="text-status-warning text-xs">({{ t('settings.unsavedChanges') }})</span>
             </div>
             <button
@@ -1125,7 +1125,7 @@ onUnmounted(() => {
             <span class="text-dark font-bold text-3xl">H</span>
           </div>
           <div>
-            <h3 class="text-xl font-bold text-white">Hytale Server Manager</h3>
+            <h3 class="text-xl font-bold text-ink">Hytale Server Manager</h3>
             <p class="text-ink-muted">{{ t('settings.version') }}: 2.1.0</p>
           </div>
         </div>
@@ -1140,11 +1140,11 @@ onUnmounted(() => {
           <div class="flex gap-4">
             <div class="flex-1">
               <p class="text-sm text-ink-subtle mb-1">Backend</p>
-              <p class="text-white">Node.js + Express</p>
+              <p class="text-ink">Node.js + Express</p>
             </div>
             <div class="flex-1">
               <p class="text-sm text-ink-subtle mb-1">Frontend</p>
-              <p class="text-white">Vue.js 3 + Tailwind CSS</p>
+              <p class="text-ink">Vue.js 3 + Tailwind CSS</p>
             </div>
           </div>
         </div>

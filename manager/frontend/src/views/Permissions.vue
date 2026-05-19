@@ -183,7 +183,7 @@ onMounted(loadData)
   <div class="space-y-6">
     <!-- Page Title -->
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-white">{{ t('permissions.title') }}</h1>
+      <h1 class="text-2xl font-bold text-ink">{{ t('permissions.title') }}</h1>
       <button
         @click="loadData"
         class="text-ink-muted hover:text-ink transition-colors"
@@ -230,7 +230,7 @@ onMounted(loadData)
     <div v-if="activeTab === 'users'" class="space-y-6">
       <!-- Add/Edit User -->
       <Card>
-        <h3 class="font-semibold text-white mb-4">
+        <h3 class="font-semibold text-ink mb-4">
           {{ editingUser ? t('permissions.editUser') : t('permissions.addUser') }}
         </h3>
         <form @submit.prevent="saveUser" class="space-y-4">
@@ -241,7 +241,7 @@ onMounted(loadData)
               type="text"
               :placeholder="t('permissions.playerName')"
               :disabled="!!editingUser"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
             />
           </div>
 
@@ -292,12 +292,12 @@ onMounted(loadData)
       <!-- Users List -->
       <Card>
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-white">{{ t('permissions.usersList') }} ({{ users.length }})</h3>
+          <h3 class="font-semibold text-ink">{{ t('permissions.usersList') }} ({{ users.length }})</h3>
           <input
             v-model="userSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
@@ -318,7 +318,7 @@ onMounted(loadData)
                 <span class="text-hytale-orange font-medium">{{ user.name[0]?.toUpperCase() }}</span>
               </div>
               <div>
-                <p class="text-white font-medium">{{ user.name }}</p>
+                <p class="text-ink font-medium">{{ user.name }}</p>
                 <p v-if="user.uuid" class="text-xs text-ink-subtle font-mono">{{ user.uuid }}</p>
                 <div class="flex flex-wrap gap-1 mt-1">
                   <span
@@ -361,7 +361,7 @@ onMounted(loadData)
     <div v-if="activeTab === 'groups'" class="space-y-6">
       <!-- Add/Edit Group -->
       <Card>
-        <h3 class="font-semibold text-white mb-4">
+        <h3 class="font-semibold text-ink mb-4">
           {{ editingGroup ? t('permissions.editGroup') : t('permissions.addGroup') }}
         </h3>
         <form @submit.prevent="saveGroup" class="space-y-4">
@@ -372,7 +372,7 @@ onMounted(loadData)
               type="text"
               :placeholder="t('permissions.groupName')"
               :disabled="!!editingGroup"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
             />
           </div>
 
@@ -382,7 +382,7 @@ onMounted(loadData)
               v-model="newGroupPermissions"
               :placeholder="t('permissions.permissionsPlaceholder')"
               rows="4"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange font-mono text-sm"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange font-mono text-sm"
             />
           </div>
 
@@ -430,12 +430,12 @@ onMounted(loadData)
       <!-- Groups List -->
       <Card>
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-white">{{ t('permissions.groupsList') }} ({{ groups.length }})</h3>
+          <h3 class="font-semibold text-ink">{{ t('permissions.groupsList') }} ({{ groups.length }})</h3>
           <input
             v-model="groupSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
@@ -458,7 +458,7 @@ onMounted(loadData)
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
                 </div>
-                <span class="text-white font-medium">{{ group.name }}</span>
+                <span class="text-ink font-medium">{{ group.name }}</span>
               </div>
               <div v-if="authStore.hasPermission('players.permissions')" class="flex gap-2">
                 <button

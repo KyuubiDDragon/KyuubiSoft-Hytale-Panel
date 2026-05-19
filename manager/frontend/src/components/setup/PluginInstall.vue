@@ -84,14 +84,14 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.plugin.title') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.plugin.title') }}</h2>
       <p class="text-ink-muted">{{ t('setup.plugin.description') }}</p>
     </div>
 
     <!-- Plugin Description -->
     <div class="card">
       <div class="card-body">
-        <h3 class="text-lg font-semibold text-white mb-4">{{ t('setup.plugin.featuresTitle') }}</h3>
+        <h3 class="text-lg font-semibold text-ink mb-4">{{ t('setup.plugin.featuresTitle') }}</h3>
 
         <div class="space-y-4">
           <div
@@ -109,7 +109,7 @@ onMounted(() => {
               />
             </div>
             <div>
-              <p class="text-white font-medium">{{ feature.title }}</p>
+              <p class="text-ink font-medium">{{ feature.title }}</p>
               <p class="text-sm text-ink-muted">{{ feature.description }}</p>
             </div>
           </div>
@@ -141,7 +141,7 @@ onMounted(() => {
           </div>
           <div class="flex-1">
             <div class="flex items-center gap-2">
-              <p class="text-white font-medium">{{ t('setup.plugin.optionInstall') }}</p>
+              <p class="text-ink font-medium">{{ t('setup.plugin.optionInstall') }}</p>
               <span class="text-xs px-2 py-0.5 rounded bg-status-success/20 text-status-success">
                 {{ t('setup.recommended') }}
               </span>
@@ -172,7 +172,7 @@ onMounted(() => {
             />
           </div>
           <div class="flex-1">
-            <p class="text-white font-medium">{{ t('setup.plugin.optionSkip') }}</p>
+            <p class="text-ink font-medium">{{ t('setup.plugin.optionSkip') }}</p>
             <p class="text-sm text-ink-muted mt-1">{{ t('setup.plugin.optionSkipDesc') }}</p>
           </div>
         </div>

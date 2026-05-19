@@ -475,7 +475,7 @@ const toolsGrid = computed(() => {
                 </div>
               </div>
               <div>
-                <h3 class="text-lg font-semibold text-white">{{ playerName }}</h3>
+                <h3 class="text-lg font-semibold text-ink">{{ playerName }}</h3>
                 <p v-if="details?.uuid" class="text-xs text-ink-subtle font-mono truncate max-w-[200px]">
                   {{ details.uuid }}
                 </p>
@@ -499,7 +499,7 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'info'
-                  ? 'bg-surface-overlay text-white'
+                  ? 'bg-surface-overlay text-ink'
                   : 'text-ink-muted hover:text-ink'
               ]"
             >
@@ -510,7 +510,7 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'inventory'
-                  ? 'bg-surface-overlay text-white'
+                  ? 'bg-surface-overlay text-ink'
                   : 'text-ink-muted hover:text-ink'
               ]"
             >
@@ -521,7 +521,7 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'stats'
-                  ? 'bg-surface-overlay text-white'
+                  ? 'bg-surface-overlay text-ink'
                   : 'text-ink-muted hover:text-ink'
               ]"
             >
@@ -532,7 +532,7 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'chat'
-                  ? 'bg-surface-overlay text-white'
+                  ? 'bg-surface-overlay text-ink'
                   : 'text-ink-muted hover:text-ink'
               ]"
             >
@@ -543,7 +543,7 @@ const toolsGrid = computed(() => {
               :class="[
                 'px-4 py-2 rounded-t-lg font-medium text-sm transition-colors',
                 activeTab === 'deaths'
-                  ? 'bg-surface-overlay text-white'
+                  ? 'bg-surface-overlay text-ink'
                   : 'text-ink-muted hover:text-ink'
               ]"
             >
@@ -583,7 +583,7 @@ const toolsGrid = computed(() => {
                     </svg>
                     {{ t('players.details.world') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.world || 'Unknown' }}</p>
+                  <p class="text-ink font-medium">{{ details.world || 'Unknown' }}</p>
                 </div>
 
                 <!-- Gamemode -->
@@ -595,7 +595,7 @@ const toolsGrid = computed(() => {
                     </svg>
                     {{ t('players.details.gamemode') }}
                   </div>
-                  <p class="text-white font-medium capitalize">{{ details.gameMode || 'Unknown' }}</p>
+                  <p class="text-ink font-medium capitalize">{{ details.gameMode || 'Unknown' }}</p>
                 </div>
 
                 <!-- Position -->
@@ -607,7 +607,7 @@ const toolsGrid = computed(() => {
                     </svg>
                     {{ t('players.details.position') }}
                   </div>
-                  <p class="text-white font-medium font-mono text-sm">
+                  <p class="text-ink font-medium font-mono text-sm">
                     <span v-if="details.position">
                       {{ details.position.x }}, {{ details.position.y }}, {{ details.position.z }}
                     </span>
@@ -623,7 +623,7 @@ const toolsGrid = computed(() => {
                     </svg>
                     {{ t('players.details.discoveredZones') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.discoveredZones?.length || 0 }}</p>
+                  <p class="text-ink font-medium">{{ details.discoveredZones?.length || 0 }}</p>
                 </div>
 
                 <!-- Memories -->
@@ -634,7 +634,7 @@ const toolsGrid = computed(() => {
                     </svg>
                     {{ t('players.details.memories') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.memoriesCount || 0 }} NPCs</p>
+                  <p class="text-ink font-medium">{{ details.memoriesCount || 0 }} NPCs</p>
                 </div>
 
                 <!-- Unique Items Used -->
@@ -645,7 +645,7 @@ const toolsGrid = computed(() => {
                     </svg>
                     {{ t('players.details.uniqueItems') }}
                   </div>
-                  <p class="text-white font-medium">{{ details.uniqueItemsUsed?.length || 0 }}</p>
+                  <p class="text-ink font-medium">{{ details.uniqueItemsUsed?.length || 0 }}</p>
                 </div>
               </div>
 
@@ -707,7 +707,7 @@ const toolsGrid = computed(() => {
                         <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-lg font-bold', getItemColorClass(item.itemId)]">
                           {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span class="absolute bottom-0.5 right-1 text-[10px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                        <span class="absolute bottom-0.5 right-1 text-[10px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                         <!-- Durability bar -->
@@ -792,7 +792,7 @@ const toolsGrid = computed(() => {
                           <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                             U
                           </div>
-                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                             {{ item.amount }}
                           </span>
                         </template>
@@ -831,7 +831,7 @@ const toolsGrid = computed(() => {
                           <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                             T
                           </div>
-                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                          <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                             {{ item.amount }}
                           </span>
                           <!-- Durability bar -->
@@ -876,7 +876,7 @@ const toolsGrid = computed(() => {
                         <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                           {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                       </template>
@@ -915,7 +915,7 @@ const toolsGrid = computed(() => {
                         <div v-else :class="['w-14 h-14 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                           {{ getFallbackLetter(item.itemId) }}
                         </div>
-                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-white drop-shadow-lg bg-black/50 px-0.5 rounded">
+                        <span class="absolute bottom-0.5 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg bg-black/50 px-0.5 rounded">
                           {{ item.amount }}
                         </span>
                       </template>
@@ -944,7 +944,7 @@ const toolsGrid = computed(() => {
                       </svg>
                       {{ t('players.details.health') }}
                     </div>
-                    <span class="text-white font-mono">
+                    <span class="text-ink font-mono">
                       {{ details.stats.health.toFixed(1) }} / {{ details.stats.maxHealth.toFixed(1) }}
                     </span>
                   </div>
@@ -962,7 +962,7 @@ const toolsGrid = computed(() => {
                       </svg>
                       {{ t('players.details.stamina') }}
                     </div>
-                    <span class="text-white font-mono">
+                    <span class="text-ink font-mono">
                       {{ details.stats.stamina.toFixed(1) }} / {{ details.stats.maxStamina.toFixed(1) }}
                     </span>
                   </div>
@@ -979,7 +979,7 @@ const toolsGrid = computed(() => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                     </svg>
                     <div class="text-ink-muted text-xs mb-1">{{ t('players.details.oxygen') }}</div>
-                    <div class="text-white font-bold">{{ details.stats.oxygen.toFixed(0) }}%</div>
+                    <div class="text-ink font-bold">{{ details.stats.oxygen.toFixed(0) }}%</div>
                   </div>
 
                   <!-- Mana -->
@@ -988,7 +988,7 @@ const toolsGrid = computed(() => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                     <div class="text-ink-muted text-xs mb-1">{{ t('players.details.mana') }}</div>
-                    <div class="text-white font-bold">{{ details.stats.mana.toFixed(0) }}</div>
+                    <div class="text-ink font-bold">{{ details.stats.mana.toFixed(0) }}</div>
                   </div>
 
                   <!-- Immunity -->
@@ -997,7 +997,7 @@ const toolsGrid = computed(() => {
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                     <div class="text-ink-muted text-xs mb-1">{{ t('players.details.immunity') }}</div>
-                    <div class="text-white font-bold">{{ details.stats.immunity.toFixed(0) }}</div>
+                    <div class="text-ink font-bold">{{ details.stats.immunity.toFixed(0) }}</div>
                   </div>
                 </div>
               </div>
@@ -1105,7 +1105,7 @@ const toolsGrid = computed(() => {
                       <div>
                         <!-- Day indicator -->
                         <div class="flex items-center gap-2">
-                          <span class="text-white font-semibold">
+                          <span class="text-ink font-semibold">
                             {{ t('players.details.deathDay', { day: death.day }) }}
                           </span>
                           <span v-if="index === 0" class="text-xs px-2 py-0.5 bg-red-500/30 text-red-300 rounded-full">
@@ -1180,14 +1180,14 @@ const toolsGrid = computed(() => {
               <!-- Amount -->
               <div class="flex justify-between">
                 <span class="text-ink-muted">{{ t('players.tooltip.amount') }}:</span>
-                <span class="text-white font-medium">{{ hoveredItem.amount }}x</span>
+                <span class="text-ink font-medium">{{ hoveredItem.amount }}x</span>
               </div>
 
               <!-- Durability -->
               <div v-if="hoveredItem.maxDurability > 0">
                 <div class="flex justify-between mb-1">
                   <span class="text-ink-muted">{{ t('players.tooltip.durability') }}:</span>
-                  <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-white' : 'text-red-400'" class="font-medium">
+                  <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-ink' : 'text-red-400'" class="font-medium">
                     {{ Math.round(hoveredItem.durability) }} / {{ Math.round(hoveredItem.maxDurability) }}
                   </span>
                 </div>

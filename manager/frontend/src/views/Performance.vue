@@ -233,7 +233,7 @@ onUnmounted(() => {
   <div class="space-y-6">
     <!-- Page Title -->
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-white">{{ t('performance.title') }}</h1>
+      <h1 class="text-2xl font-bold text-ink">{{ t('performance.title') }}</h1>
       <div class="flex items-center gap-3">
         <div class="flex items-center gap-2 text-sm text-ink-muted">
           <span :class="['w-2 h-2 rounded-full', paused ? 'bg-gray-500' : 'bg-status-success animate-pulse']"></span>
@@ -267,7 +267,7 @@ onUnmounted(() => {
           </div>
           <div>
             <p class="text-sm text-ink-muted">{{ t('performance.cpu') }}</p>
-            <p class="text-2xl font-bold text-white">{{ (stats?.cpu_percent || 0).toFixed(1) }}%</p>
+            <p class="text-2xl font-bold text-ink">{{ (stats?.cpu_percent || 0).toFixed(1) }}%</p>
           </div>
         </div>
       </Card>
@@ -285,11 +285,11 @@ onUnmounted(() => {
               {{ hasValidJvmHeap ? t('performance.jvmHeap') : t('performance.memory') }}
             </p>
             <template v-if="hasValidJvmHeap">
-              <p class="text-2xl font-bold text-white">{{ heapUsed?.toFixed(0) }} MB</p>
+              <p class="text-2xl font-bold text-ink">{{ heapUsed?.toFixed(0) }} MB</p>
               <p class="text-xs text-ink-subtle">/ {{ heapMax?.toFixed(0) }} MB ({{ heapPercent?.toFixed(0) }}%)</p>
             </template>
             <template v-else>
-              <p class="text-2xl font-bold text-white">{{ (stats?.memory_mb || 0).toFixed(0) }} MB</p>
+              <p class="text-2xl font-bold text-ink">{{ (stats?.memory_mb || 0).toFixed(0) }} MB</p>
               <p class="text-xs text-ink-subtle">/ {{ (stats?.memory_limit_mb || 0).toFixed(0) }} MB</p>
             </template>
           </div>
@@ -342,7 +342,7 @@ onUnmounted(() => {
           </div>
           <div>
             <p class="text-sm text-ink-muted">{{ t('performance.players') }}</p>
-            <p class="text-2xl font-bold text-white">{{ playerCount }}</p>
+            <p class="text-2xl font-bold text-ink">{{ playerCount }}</p>
             <p v-if="pluginMaxPlayers" class="text-xs text-ink-subtle">/ {{ pluginMaxPlayers }}</p>
           </div>
         </div>
@@ -380,7 +380,7 @@ onUnmounted(() => {
       <!-- CPU Graph -->
       <Card>
         <div class="mb-4 flex items-center justify-between">
-          <h3 class="font-semibold text-white">{{ t('performance.cpuUsage') }}</h3>
+          <h3 class="font-semibold text-ink">{{ t('performance.cpuUsage') }}</h3>
           <div class="flex items-center gap-4 text-sm">
             <span class="text-ink-muted">{{ t('performance.avg') }}: <span class="text-blue-400">{{ avgCpu.toFixed(1) }}%</span></span>
             <span class="text-ink-muted">{{ t('performance.max') }}: <span class="text-blue-400">{{ maxCpu.toFixed(1) }}%</span></span>
@@ -432,7 +432,7 @@ onUnmounted(() => {
       <!-- Memory Graph -->
       <Card>
         <div class="mb-4 flex items-center justify-between">
-          <h3 class="font-semibold text-white">{{ t('performance.memoryUsage') }}</h3>
+          <h3 class="font-semibold text-ink">{{ t('performance.memoryUsage') }}</h3>
           <div class="flex items-center gap-4 text-sm">
             <span class="text-ink-muted">{{ t('performance.avg') }}: <span class="text-purple-400">{{ avgMemory.toFixed(1) }}%</span></span>
             <span class="text-ink-muted">{{ t('performance.max') }}: <span class="text-purple-400">{{ maxMemory.toFixed(1) }}%</span></span>
@@ -484,7 +484,7 @@ onUnmounted(() => {
       <!-- Players Graph -->
       <Card class="lg:col-span-2">
         <div class="mb-4 flex items-center justify-between">
-          <h3 class="font-semibold text-white">{{ t('performance.playersHistory') }}</h3>
+          <h3 class="font-semibold text-ink">{{ t('performance.playersHistory') }}</h3>
           <div class="flex items-center gap-4 text-sm">
             <span class="text-ink-muted">{{ t('performance.current') }}: <span class="text-hytale-orange">{{ playerCount }}</span></span>
             <span class="text-ink-muted">{{ t('performance.max') }}: <span class="text-hytale-orange">{{ maxPlayers }}</span></span>
@@ -526,7 +526,7 @@ onUnmounted(() => {
       <Card v-if="pluginAvailable" class="lg:col-span-2">
         <div class="mb-4 flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <h3 class="font-semibold text-white">{{ t('performance.tpsHistory') }}</h3>
+            <h3 class="font-semibold text-ink">{{ t('performance.tpsHistory') }}</h3>
             <span class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
               {{ t('performance.prometheus') }}
             </span>
@@ -585,23 +585,23 @@ onUnmounted(() => {
 
     <!-- Statistics Summary -->
     <Card>
-      <h3 class="font-semibold text-white mb-4">{{ t('performance.summary') }}</h3>
+      <h3 class="font-semibold text-ink mb-4">{{ t('performance.summary') }}</h3>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="p-4 bg-surface-overlay rounded-lg">
           <p class="text-sm text-ink-muted mb-1">{{ t('performance.containerName') }}</p>
-          <p class="text-white font-mono">{{ status?.name || '-' }}</p>
+          <p class="text-ink font-mono">{{ status?.name || '-' }}</p>
         </div>
         <div class="p-4 bg-surface-overlay rounded-lg">
           <p class="text-sm text-ink-muted mb-1">{{ t('performance.containerId') }}</p>
-          <p class="text-white font-mono text-sm">{{ status?.id || '-' }}</p>
+          <p class="text-ink font-mono text-sm">{{ status?.id || '-' }}</p>
         </div>
         <div class="p-4 bg-surface-overlay rounded-lg">
           <p class="text-sm text-ink-muted mb-1">{{ t('performance.memoryLimit') }}</p>
-          <p class="text-white">{{ (stats?.memory_limit_mb || 0).toFixed(0) }} MB</p>
+          <p class="text-ink">{{ (stats?.memory_limit_mb || 0).toFixed(0) }} MB</p>
         </div>
         <div class="p-4 bg-surface-overlay rounded-lg">
           <p class="text-sm text-ink-muted mb-1">{{ t('performance.dataPoints') }}</p>
-          <p class="text-white">{{ localHistory.length }} / {{ maxLocalHistory }}</p>
+          <p class="text-ink">{{ localHistory.length }} / {{ maxLocalHistory }}</p>
         </div>
       </div>
 
@@ -636,7 +636,7 @@ onUnmounted(() => {
     <!-- JVM Details (when Prometheus available) -->
     <Card v-if="prometheusData">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="font-semibold text-white">{{ t('performance.jvmDetails') }}</h3>
+        <h3 class="font-semibold text-ink">{{ t('performance.jvmDetails') }}</h3>
         <span class="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
           {{ t('performance.prometheus') }}
         </span>
@@ -700,7 +700,7 @@ onUnmounted(() => {
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           <div v-for="pool in prometheusData.memory.pools" :key="pool.name" class="p-3 bg-surface-overlay rounded-lg hover:bg-surface-overlay transition-colors">
             <p class="text-xs text-ink-subtle mb-1 truncate" :title="pool.name">{{ pool.name }}</p>
-            <p class="text-sm font-bold text-white">{{ formatBytes(pool.used) }}</p>
+            <p class="text-sm font-bold text-ink">{{ formatBytes(pool.used) }}</p>
             <div class="mt-1.5 h-1 bg-surface-raised rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-300"

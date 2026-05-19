@@ -98,7 +98,7 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.systemCheckTitle') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.systemCheckTitle') }}</h2>
       <p class="text-ink-muted">{{ t('setup.systemCheckDescription') }}</p>
     </div>
 
@@ -136,7 +136,7 @@ onMounted(() => {
             <!-- Check Info -->
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <p class="text-white font-medium">{{ check.name }}</p>
+                <p class="text-ink font-medium">{{ check.name }}</p>
                 <span
                   v-if="check.required"
                   class="text-xs px-1.5 py-0.5 rounded bg-status-error/20 text-status-error"

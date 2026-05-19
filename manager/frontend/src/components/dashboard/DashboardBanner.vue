@@ -30,7 +30,7 @@ defineEmits<{
         </svg>
       </div>
       <div class="flex-1 min-w-0">
-        <h3 class="text-lg font-semibold text-white mb-1">{{ title }}</h3>
+        <h3 class="text-lg font-semibold text-ink mb-1">{{ title }}</h3>
         <p class="text-ink-muted text-sm mb-3">{{ description }}</p>
         <slot />
       </div>

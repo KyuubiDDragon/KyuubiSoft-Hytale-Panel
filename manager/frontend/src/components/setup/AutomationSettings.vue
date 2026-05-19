@@ -109,7 +109,7 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.automationSettingsTitle') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.automationSettingsTitle') }}</h2>
       <p class="text-ink-muted">{{ t('setup.automationSettingsDescription') }}</p>
     </div>
 
@@ -125,7 +125,7 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h3 class="font-semibold text-white">{{ t('setup.automaticBackups') }}</h3>
+              <h3 class="font-semibold text-ink">{{ t('setup.automaticBackups') }}</h3>
               <p class="text-sm text-ink-muted">{{ t('setup.automaticBackupsDescription') }}</p>
             </div>
           </div>
@@ -134,7 +134,7 @@ onMounted(() => {
         <div class="card-body space-y-4">
           <!-- Enable Toggle -->
           <div class="flex items-center justify-between">
-            <span class="text-white">{{ t('setup.enableBackups') }}</span>
+            <span class="text-ink">{{ t('setup.enableBackups') }}</span>
             <button
               type="button"
               @click="backupEnabled = !backupEnabled"
@@ -213,7 +213,7 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h3 class="font-semibold text-white">{{ t('setup.automaticRestarts') }}</h3>
+              <h3 class="font-semibold text-ink">{{ t('setup.automaticRestarts') }}</h3>
               <p class="text-sm text-ink-muted">{{ t('setup.automaticRestartsDescription') }}</p>
             </div>
           </div>
@@ -222,7 +222,7 @@ onMounted(() => {
         <div class="card-body space-y-4">
           <!-- Enable Toggle -->
           <div class="flex items-center justify-between">
-            <span class="text-white">{{ t('setup.enableRestarts') }}</span>
+            <span class="text-ink">{{ t('setup.enableRestarts') }}</span>
             <button
               type="button"
               @click="restartEnabled = !restartEnabled"
@@ -269,7 +269,7 @@ onMounted(() => {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
                   <div>
-                    <span class="font-medium text-white">{{ t('setup.warnBeforeRestart') }}</span>
+                    <span class="font-medium text-ink">{{ t('setup.warnBeforeRestart') }}</span>
                     <p class="text-xs text-ink-muted">{{ t('setup.warnBeforeRestartDescription') }}</p>
                   </div>
                 </div>

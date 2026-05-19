@@ -149,7 +149,7 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.serverConfigTitle') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.serverConfigTitle') }}</h2>
       <p class="text-ink-muted">{{ t('setup.serverConfigDescription') }}</p>
     </div>
 
@@ -274,7 +274,7 @@ onMounted(() => {
               class="mt-1 w-4 h-4 rounded border-gray-600 bg-surface-muted text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
             />
             <div>
-              <p class="text-white font-medium">{{ t('setup.acceptEarlyPlugins') }}</p>
+              <p class="text-ink font-medium">{{ t('setup.acceptEarlyPlugins') }}</p>
               <p class="text-sm text-ink-muted">{{ t('setup.acceptEarlyPluginsDesc') }}</p>
             </div>
           </label>
@@ -287,7 +287,7 @@ onMounted(() => {
               class="mt-1 w-4 h-4 rounded border-gray-600 bg-surface-muted text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
             />
             <div>
-              <p class="text-white font-medium">{{ t('setup.disableSentry') }}</p>
+              <p class="text-ink font-medium">{{ t('setup.disableSentry') }}</p>
               <p class="text-sm text-ink-muted">{{ t('setup.disableSentryDesc') }}</p>
             </div>
           </label>

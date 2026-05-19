@@ -393,7 +393,7 @@ function handleSearchBlur() {
     <div class="bg-inv-panel border-b border-inv-border/30 px-4 py-2">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-xl font-bold text-white">{{ t('avatarInventory.title') }}</h1>
+          <h1 class="text-xl font-bold text-ink">{{ t('avatarInventory.title') }}</h1>
           <p class="text-ink-muted text-xs">{{ t('avatarInventory.subtitle') }}</p>
         </div>
 
@@ -407,7 +407,7 @@ function handleSearchBlur() {
               v-model="searchQuery"
               type="text"
               :placeholder="t('avatarInventory.searchPlayer')"
-              class="w-full pl-10 pr-4 py-2.5 bg-inv-slot border border-inv-border/50 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50"
+              class="w-full pl-10 pr-4 py-2.5 bg-inv-slot border border-inv-border/50 rounded-lg text-ink placeholder-gray-600 focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50"
               @focus="showPlayerDropdown = true"
               @blur="handleSearchBlur"
             />
@@ -425,7 +425,7 @@ function handleSearchBlur() {
               @click="selectPlayer(player.name)"
             >
               <div :class="['w-2 h-2 rounded-full', player.online ? 'bg-green-500' : 'bg-gray-500']" />
-              <span class="text-white">{{ player.name }}</span>
+              <span class="text-ink">{{ player.name }}</span>
               <span v-if="player.online" class="text-xs text-green-400 ml-auto">{{ t('common.online') }}</span>
             </button>
           </div>
@@ -630,7 +630,7 @@ function handleSearchBlur() {
                       <div v-else :class="['w-6 h-6 rounded flex items-center justify-center text-[9px] font-bold', getItemColorClass(item.itemId)]">
                         {{ getFallbackLetter(item.itemId) }}
                       </div>
-                      <span v-if="item.amount > 1" class="absolute bottom-0 right-0 text-[7px] font-bold text-white drop-shadow-lg">
+                      <span v-if="item.amount > 1" class="absolute bottom-0 right-0 text-[7px] font-bold text-ink drop-shadow-lg">
                         {{ item.amount }}
                       </span>
                     </template>
@@ -849,7 +849,7 @@ function handleSearchBlur() {
                   <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
-                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
+                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg">
                     {{ item.amount }}
                   </span>
                 </template>
@@ -889,7 +889,7 @@ function handleSearchBlur() {
                   <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
-                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
+                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg">
                     {{ item.amount }}
                   </span>
                   <!-- Durability bar -->
@@ -932,7 +932,7 @@ function handleSearchBlur() {
                   <div v-else :class="['w-12 h-12 rounded flex items-center justify-center text-sm font-bold', getItemColorClass(item.itemId)]">
                     {{ getFallbackLetter(item.itemId) }}
                   </div>
-                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-white drop-shadow-lg">
+                  <span v-if="item.amount > 1" class="absolute bottom-0 right-0.5 text-[9px] font-bold text-ink drop-shadow-lg">
                     {{ item.amount }}
                   </span>
                   <!-- Durability bar -->

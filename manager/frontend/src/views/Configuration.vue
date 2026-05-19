@@ -218,7 +218,7 @@ onMounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('config.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('config.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('config.subtitle') }}</p>
       </div>
       <button
@@ -253,7 +253,7 @@ onMounted(() => {
           <input
             v-model="quickSettings.serverName"
             type="text"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.serverNamePlaceholder')"
           />
         </div>
@@ -264,7 +264,7 @@ onMounted(() => {
           <input
             v-model="quickSettings.motd"
             type="text"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.motdPlaceholder')"
           />
         </div>
@@ -275,7 +275,7 @@ onMounted(() => {
           <input
             v-model="quickSettings.password"
             type="password"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.passwordPlaceholder')"
           />
           <p class="text-xs text-ink-subtle mt-1">{{ t('config.passwordHint') }}</p>
@@ -291,7 +291,7 @@ onMounted(() => {
               type="number"
               min="1"
               max="1000"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
           </div>
 
@@ -303,7 +303,7 @@ onMounted(() => {
               type="number"
               min="1"
               max="64"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
           </div>
 
@@ -312,7 +312,7 @@ onMounted(() => {
             <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.defaultGameMode') }}</label>
             <select
               v-model="quickSettings.defaultGameMode"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option v-for="mode in gameModes" :key="mode" :value="mode">
                 {{ t(`players.gamemodes.${mode.toLowerCase()}`) }}
@@ -369,7 +369,7 @@ onMounted(() => {
         <!-- Enable Auto Updates -->
         <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
           <div class="flex-1">
-            <label class="text-sm font-medium text-white">{{ t('config.updateConfig.enabled') }}</label>
+            <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.enabled') }}</label>
             <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.enabledHint') }}</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
@@ -385,7 +385,7 @@ onMounted(() => {
             <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.checkInterval') }}</label>
             <select
               v-model.number="updateConfig.checkIntervalSeconds"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option :value="1800">{{ t('config.updateConfig.interval30min') }}</option>
               <option :value="3600">{{ t('config.updateConfig.interval1hour') }}</option>
@@ -410,7 +410,7 @@ onMounted(() => {
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-sm font-medium text-white">{{ t('config.release') }}</span>
+                  <span class="text-sm font-medium text-ink">{{ t('config.release') }}</span>
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-success/20 text-status-success">{{ t('config.updateConfig.stable') }}</span>
                 </div>
                 <p class="text-xs text-ink-subtle">{{ t('config.updateConfig.releaseHint') }}</p>
@@ -425,7 +425,7 @@ onMounted(() => {
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-sm font-medium text-white">{{ t('config.preRelease') }}</span>
+                  <span class="text-sm font-medium text-ink">{{ t('config.preRelease') }}</span>
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-warning/20 text-status-warning">{{ t('config.updateConfig.beta') }}</span>
                 </div>
                 <p class="text-xs text-ink-subtle">{{ t('config.updateConfig.preReleaseHint') }}</p>
@@ -438,7 +438,7 @@ onMounted(() => {
             <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.autoApplyMode') }}</label>
             <select
               v-model="updateConfig.autoApplyMode"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option value="DISABLED">{{ t('config.updateConfig.modeDisabled') }}</option>
               <option value="WHEN_EMPTY">{{ t('config.updateConfig.modeWhenEmpty') }}</option>
@@ -460,7 +460,7 @@ onMounted(() => {
                 type="number"
                 min="1"
                 max="60"
-                class="w-24 bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+                class="w-24 bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
               <span class="text-ink-muted text-sm">{{ t('config.updateConfig.minutes') }}</span>
             </div>
@@ -469,7 +469,7 @@ onMounted(() => {
           <!-- Notify Players -->
           <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
             <div class="flex-1">
-              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.notifyPlayers') }}</label>
+              <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.notifyPlayers') }}</label>
               <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.notifyPlayersHint') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
@@ -481,7 +481,7 @@ onMounted(() => {
           <!-- Backup Before Update -->
           <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
             <div class="flex-1">
-              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.backupBefore') }}</label>
+              <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.backupBefore') }}</label>
               <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.backupBeforeHint') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
@@ -493,7 +493,7 @@ onMounted(() => {
           <!-- Backup Config Before Update -->
           <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
             <div class="flex-1">
-              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.backupConfigBefore') }}</label>
+              <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.backupConfigBefore') }}</label>
               <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.backupConfigBeforeHint') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
@@ -555,7 +555,7 @@ onMounted(() => {
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="font-medium text-white truncate">{{ file.name }}</p>
+            <p class="font-medium text-ink truncate">{{ file.name }}</p>
             <p class="text-sm text-ink-subtle">{{ Math.round(file.size / 1024) }} KB</p>
           </div>
           <svg class="w-5 h-5 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -581,7 +581,7 @@ onMounted(() => {
             </button>
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-mono text-white">{{ selectedFile }}</span>
+                <span class="font-mono text-ink">{{ selectedFile }}</span>
                 <span class="px-2 py-0.5 bg-surface-overlay rounded text-xs text-ink-muted">{{ fileExtension }}</span>
               </div>
               <span v-if="hasChanges" class="text-xs text-status-warning">{{ t('config.unsaved') }}</span>

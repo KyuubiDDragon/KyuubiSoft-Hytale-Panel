@@ -572,7 +572,7 @@ onUnmounted(() => {
           />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">
+      <h2 class="text-2xl font-bold text-ink mb-2">
         {{ currentAuthStep === 'starting' ? t('setup.firstServerStartTitle') :
            currentAuthStep === 'server-auth' ? t('setup.serverAuthTitle') :
            currentAuthStep === 'persistence' ? t('setup.persistenceTitle') :
@@ -669,7 +669,7 @@ onUnmounted(() => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.serverAuthSuccess') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.serverAuthSuccess') }}</p>
             <p class="text-ink-muted mt-2">{{ t('setup.settingUpPersistence') }}</p>
           </div>
 
@@ -680,7 +680,7 @@ onUnmounted(() => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.authFailed') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.authFailed') }}</p>
             <p class="text-status-error mt-2">{{ serverAuthError }}</p>
             <Button class="mt-4" @click="retryServerAuth">
               {{ t('setup.retryAuth') }}
@@ -746,7 +746,7 @@ onUnmounted(() => {
 
                 <!-- User Code Display -->
                 <div class="bg-dark-400 border-2 border-border rounded-xl p-6 inline-block">
-                  <p class="text-3xl font-mono font-bold text-white tracking-widest">
+                  <p class="text-3xl font-mono font-bold text-ink tracking-widest">
                     {{ formattedServerUserCode }}
                   </p>
                 </div>
@@ -800,7 +800,7 @@ onUnmounted(() => {
           <!-- Progress Bar -->
           <div class="mb-4">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-white font-medium">{{ t('setup.savingToken') }}</span>
+              <span class="text-ink font-medium">{{ t('setup.savingToken') }}</span>
               <span class="text-ink-muted text-sm">{{ persistenceProgress }}%</span>
             </div>
             <div class="h-2 bg-surface-overlay rounded-full overflow-hidden">
@@ -876,7 +876,7 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.downloaderCredentials') }}</span>
+                <span class="text-ink">{{ t('setup.downloaderCredentials') }}</span>
               </div>
               <span
                 class="text-sm"
@@ -916,7 +916,7 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.serverToken') }}</span>
+                <span class="text-ink">{{ t('setup.serverToken') }}</span>
               </div>
               <span
                 class="text-sm"
@@ -956,7 +956,7 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.tokenPersistence') }}</span>
+                <span class="text-ink">{{ t('setup.tokenPersistence') }}</span>
               </div>
               <span
                 class="text-sm"
@@ -996,7 +996,7 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.machineId') }}</span>
+                <span class="text-ink">{{ t('setup.machineId') }}</span>
               </div>
               <span
                 class="text-sm"

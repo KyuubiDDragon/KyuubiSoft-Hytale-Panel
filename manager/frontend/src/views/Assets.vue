@@ -279,13 +279,13 @@ onUnmounted(stopProgressPolling)
     <!-- Page Title -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('assets.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('assets.title') }}</h1>
         <p class="text-ink-muted text-sm">{{ t('assets.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button
           @click="showSearch = !showSearch"
-          class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+          class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-ink rounded-lg transition-colors flex items-center gap-2"
           :class="{ 'bg-hytale-orange': showSearch }"
         >
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -324,7 +324,7 @@ onUnmounted(stopProgressPolling)
     <!-- Search Panel -->
     <div v-else-if="showSearch" class="card">
       <div class="card-header">
-        <h3 class="text-lg font-semibold text-white">{{ t('assets.search') }}</h3>
+        <h3 class="text-lg font-semibold text-ink">{{ t('assets.search') }}</h3>
       </div>
       <div class="card-body space-y-4">
         <!-- Search input row -->
@@ -333,7 +333,7 @@ onUnmounted(stopProgressPolling)
             v-model="searchQuery"
             type="text"
             :placeholder="searchMode === 'glob' ? t('assets.searchPlaceholderGlob') : searchMode === 'regex' ? t('assets.searchPlaceholderRegex') : t('assets.searchPlaceholder')"
-            class="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange font-mono"
+            class="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-ink placeholder-gray-500 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange font-mono"
           />
         </div>
 
@@ -380,7 +380,7 @@ onUnmounted(stopProgressPolling)
             <span class="text-ink-muted text-sm">{{ t('assets.fileType') }}:</span>
             <select
               v-model="searchExtFilter"
-              class="px-3 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+              class="px-3 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-ink text-sm focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
             >
               <option v-for="filter in fileTypeFilters" :key="filter.value" :value="filter.value">
                 {{ filter.label }}
@@ -428,7 +428,7 @@ onUnmounted(stopProgressPolling)
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <div class="flex-1 min-w-0">
-              <p class="text-white font-medium truncate">{{ result.name }}</p>
+              <p class="text-ink font-medium truncate">{{ result.name }}</p>
               <p class="text-ink-subtle text-sm truncate">{{ result.path }}</p>
               <p v-if="result.contentPreview" class="text-ink-muted text-xs mt-1 truncate">{{ result.contentPreview }}</p>
             </div>
@@ -444,7 +444,7 @@ onUnmounted(stopProgressPolling)
     <!-- Extraction Progress Card -->
     <div v-else-if="status && status.extracting" class="card">
       <div class="card-header">
-        <h3 class="text-lg font-semibold text-white">{{ t('assets.extracting') }}</h3>
+        <h3 class="text-lg font-semibold text-ink">{{ t('assets.extracting') }}</h3>
       </div>
       <div class="card-body">
         <div class="text-center py-8">
@@ -452,7 +452,7 @@ onUnmounted(stopProgressPolling)
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           <div v-if="status.extractProgress">
-            <p class="text-2xl font-bold text-white mb-2">
+            <p class="text-2xl font-bold text-ink mb-2">
               {{ status.extractProgress.filesExtracted.toLocaleString() }} files
             </p>
             <p class="text-ink-muted mb-4 font-mono text-sm truncate max-w-md mx-auto">
@@ -473,7 +473,7 @@ onUnmounted(stopProgressPolling)
     <!-- Status Card (when not extracted) -->
     <div v-else-if="status && !status.extracted" class="card">
       <div class="card-header">
-        <h3 class="text-lg font-semibold text-white">{{ t('assets.status') }}</h3>
+        <h3 class="text-lg font-semibold text-ink">{{ t('assets.status') }}</h3>
       </div>
       <div class="card-body">
         <div class="text-center py-8">
@@ -507,13 +507,13 @@ onUnmounted(stopProgressPolling)
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-6 text-sm">
               <span class="text-ink-muted">
-                <span class="text-white font-medium">{{ status.fileCount.toLocaleString() }}</span> {{ t('assets.fileCount') }}
+                <span class="text-ink font-medium">{{ status.fileCount.toLocaleString() }}</span> {{ t('assets.fileCount') }}
               </span>
               <span class="text-ink-muted">
-                <span class="text-white font-medium">{{ formatSize(status.totalSize) }}</span> {{ t('assets.totalSize') }}
+                <span class="text-ink font-medium">{{ formatSize(status.totalSize) }}</span> {{ t('assets.totalSize') }}
               </span>
               <span v-if="status.extractedAt" class="text-ink-muted">
-                {{ t('assets.extractedAt') }}: <span class="text-white">{{ formatDate(status.extractedAt) }}</span>
+                {{ t('assets.extractedAt') }}: <span class="text-ink">{{ formatDate(status.extractedAt) }}</span>
               </span>
               <span v-if="status.needsUpdate" class="text-status-warning flex items-center gap-1">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -526,7 +526,7 @@ onUnmounted(stopProgressPolling)
               <button
                 @click="extractAssets"
                 :disabled="status.extracting"
-                class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-white text-sm rounded-lg transition-colors"
+                class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-ink text-sm rounded-lg transition-colors"
               >
                 {{ status.extracting ? t('assets.extracting') : t('assets.reExtract') }}
               </button>
@@ -547,7 +547,7 @@ onUnmounted(stopProgressPolling)
         <!-- File List -->
         <div class="card lg:col-span-1">
           <div class="card-header">
-            <h3 class="text-lg font-semibold text-white">{{ t('assets.browse') }}</h3>
+            <h3 class="text-lg font-semibold text-ink">{{ t('assets.browse') }}</h3>
           </div>
           <div class="card-body p-0">
             <!-- Breadcrumbs -->
@@ -610,7 +610,7 @@ onUnmounted(stopProgressPolling)
                 </svg>
                 <!-- Name and info -->
                 <div class="flex-1 min-w-0">
-                  <p class="text-white truncate">{{ file.name }}</p>
+                  <p class="text-ink truncate">{{ file.name }}</p>
                   <p v-if="file.type === 'file'" class="text-ink-subtle text-xs">{{ formatSize(file.size) }}</p>
                 </div>
                 <!-- Arrow for folders -->
@@ -635,7 +635,7 @@ onUnmounted(stopProgressPolling)
           <div v-else-if="selectedFile && fileContent" class="card">
             <div class="card-header flex items-center justify-between">
               <div>
-                <h3 class="text-lg font-semibold text-white">{{ selectedFile.name }}</h3>
+                <h3 class="text-lg font-semibold text-ink">{{ selectedFile.name }}</h3>
                 <p class="text-sm text-ink-muted">{{ selectedFile.path }}</p>
               </div>
               <div class="flex items-center gap-2">

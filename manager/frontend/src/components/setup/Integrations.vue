@@ -90,7 +90,7 @@ onMounted(async () => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.integrations.title') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.integrations.title') }}</h2>
       <p class="text-ink-muted">{{ t('setup.integrations.description') }}</p>
     </div>
 
@@ -116,7 +116,7 @@ onMounted(async () => {
               </svg>
             </div>
             <div class="flex-1">
-              <h3 class="text-lg font-semibold text-white">{{ t('setup.integrations.modtale.title') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('setup.integrations.modtale.title') }}</h3>
               <p class="text-sm text-ink-muted mt-1">{{ t('setup.integrations.modtale.description') }}</p>
             </div>
           </div>
@@ -158,7 +158,7 @@ onMounted(async () => {
               </svg>
             </div>
             <div class="flex-1">
-              <h3 class="text-lg font-semibold text-white">{{ t('setup.integrations.stackmart.title') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('setup.integrations.stackmart.title') }}</h3>
               <p class="text-sm text-ink-muted mt-1">{{ t('setup.integrations.stackmart.description') }}</p>
             </div>
           </div>
@@ -202,7 +202,7 @@ onMounted(async () => {
             <div class="flex-1">
               <div class="flex items-center justify-between">
                 <div>
-                  <h3 class="text-lg font-semibold text-white">{{ t('setup.integrations.webmap.title') }}</h3>
+                  <h3 class="text-lg font-semibold text-ink">{{ t('setup.integrations.webmap.title') }}</h3>
                   <p class="text-sm text-ink-muted mt-1">{{ t('setup.integrations.webmap.description') }}</p>
                 </div>
                 <!-- Toggle -->

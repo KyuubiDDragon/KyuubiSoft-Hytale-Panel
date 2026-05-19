@@ -451,7 +451,7 @@ onUnmounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('players.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('players.title') }}</h1>
         <div class="flex items-center gap-2 mt-1">
           <p class="text-ink-muted">
             {{ t('players.playerCount', { count: onlinePlayers.length }) }}
@@ -540,7 +540,7 @@ onUnmounted(() => {
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <p class="font-medium text-white group-hover:text-hytale-orange transition-colors">{{ player.name }}</p>
+                <p class="font-medium text-ink group-hover:text-hytale-orange transition-colors">{{ player.name }}</p>
                 <!-- Gamemode badge when plugin available -->
                 <span
                   v-if="pluginAvailable && player.gameMode"
@@ -738,7 +738,7 @@ onUnmounted(() => {
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <p class="font-medium text-white group-hover:text-hytale-orange transition-colors">{{ player.name }}</p>
+                <p class="font-medium text-ink group-hover:text-hytale-orange transition-colors">{{ player.name }}</p>
                 <span
                   v-if="player.gameMode"
                   class="px-2 py-0.5 text-xs rounded-full bg-surface-overlay text-ink-muted"
@@ -794,7 +794,7 @@ onUnmounted(() => {
     <Modal :open="showKickModal" :title="t('players.kick')" @close="showKickModal = false">
       <p class="text-ink-muted">
         {{ t('players.confirmKick') }}
-        <span class="font-semibold text-white">{{ selectedPlayer }}</span>
+        <span class="font-semibold text-ink">{{ selectedPlayer }}</span>
       </p>
       <template #footer>
         <Button variant="secondary" @click="showKickModal = false">{{ t('common.cancel') }}</Button>
@@ -807,7 +807,7 @@ onUnmounted(() => {
       <div class="space-y-4">
         <p class="text-ink-muted">
           {{ t('players.confirmBan') }}
-          <span class="font-semibold text-white">{{ selectedPlayer }}</span>
+          <span class="font-semibold text-ink">{{ selectedPlayer }}</span>
         </p>
         <p v-if="selectedPlayerUuid" class="text-xs text-ink-subtle font-mono">
           UUID: {{ selectedPlayerUuid }}
@@ -818,7 +818,7 @@ onUnmounted(() => {
             v-model="banReason"
             type="text"
             :placeholder="t('players.noReason')"
-            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
           />
         </div>
       </div>
@@ -832,7 +832,7 @@ onUnmounted(() => {
     <Modal :open="showKillModal" :title="t('players.kill')" @close="showKillModal = false">
       <p class="text-ink-muted">
         {{ t('players.confirmKill') }}
-        <span class="font-semibold text-white">{{ selectedPlayer }}</span>
+        <span class="font-semibold text-ink">{{ selectedPlayer }}</span>
       </p>
       <template #footer>
         <Button variant="secondary" @click="showKillModal = false">{{ t('common.cancel') }}</Button>
@@ -844,7 +844,7 @@ onUnmounted(() => {
     <Modal :open="showClearInventoryModal" :title="t('players.clearInventory')" @close="showClearInventoryModal = false">
       <p class="text-ink-muted">
         {{ t('players.confirmClearInventory') }}
-        <span class="font-semibold text-white">{{ selectedPlayer }}</span>
+        <span class="font-semibold text-ink">{{ selectedPlayer }}</span>
       </p>
       <template #footer>
         <Button variant="secondary" @click="showClearInventoryModal = false">{{ t('common.cancel') }}</Button>
@@ -882,7 +882,7 @@ onUnmounted(() => {
           <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('players.name') }}</label>
           <select
             v-model="teleportTarget"
-            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
           >
             <option value="">-- {{ t('players.name') }} --</option>
             <option v-for="p in onlinePlayers.filter(x => x.name !== selectedPlayer)" :key="p.name" :value="p.name">
@@ -898,7 +898,7 @@ onUnmounted(() => {
             <input
               v-model.number="teleportX"
               type="number"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
             />
           </div>
           <div>
@@ -906,7 +906,7 @@ onUnmounted(() => {
             <input
               v-model.number="teleportY"
               type="number"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
             />
           </div>
           <div>
@@ -914,7 +914,7 @@ onUnmounted(() => {
             <input
               v-model.number="teleportZ"
               type="number"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
             />
           </div>
         </div>
@@ -940,15 +940,15 @@ onUnmounted(() => {
             <div class="grid grid-cols-3 gap-2 text-sm">
               <div class="text-center">
                 <span class="text-ink-subtle">X:</span>
-                <span class="text-white font-mono ml-1">{{ lastDeathPosition.position.x }}</span>
+                <span class="text-ink font-mono ml-1">{{ lastDeathPosition.position.x }}</span>
               </div>
               <div class="text-center">
                 <span class="text-ink-subtle">Y:</span>
-                <span class="text-white font-mono ml-1">{{ lastDeathPosition.position.y }}</span>
+                <span class="text-ink font-mono ml-1">{{ lastDeathPosition.position.y }}</span>
               </div>
               <div class="text-center">
                 <span class="text-ink-subtle">Z:</span>
-                <span class="text-white font-mono ml-1">{{ lastDeathPosition.position.z }}</span>
+                <span class="text-ink font-mono ml-1">{{ lastDeathPosition.position.z }}</span>
               </div>
             </div>
             <div class="text-xs text-ink-subtle text-center">
@@ -976,14 +976,14 @@ onUnmounted(() => {
           @click="setGamemode('creative')"
           class="p-4 bg-surface-overlay hover:bg-surface-overlay rounded-lg text-left transition-colors"
         >
-          <div class="font-medium text-white">{{ t('players.gamemodes.creative') }}</div>
+          <div class="font-medium text-ink">{{ t('players.gamemodes.creative') }}</div>
           <div class="text-xs text-ink-subtle">{{ t('players.gamemodes.creativeDesc') }}</div>
         </button>
         <button
           @click="setGamemode('adventure')"
           class="p-4 bg-surface-overlay hover:bg-surface-overlay rounded-lg text-left transition-colors"
         >
-          <div class="font-medium text-white">{{ t('players.gamemodes.adventure') }}</div>
+          <div class="font-medium text-ink">{{ t('players.gamemodes.adventure') }}</div>
           <div class="text-xs text-ink-subtle">{{ t('players.gamemodes.adventureDesc') }}</div>
         </button>
       </div>
@@ -1007,7 +1007,7 @@ onUnmounted(() => {
             type="number"
             min="1"
             max="64"
-            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
           />
         </div>
       </div>

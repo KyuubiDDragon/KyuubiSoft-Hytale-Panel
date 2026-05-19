@@ -38,7 +38,7 @@ watch(() => props.open, (isOpen) => {
         <div role="dialog" aria-modal="true" class="relative bg-surface-raised rounded-xl border border-border shadow-2xl w-full max-w-md">
           <!-- Header -->
           <div v-if="title" class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <h3 class="text-lg font-semibold text-white">{{ title }}</h3>
+            <h3 class="text-lg font-semibold text-ink">{{ title }}</h3>
             <button
               @click="emit('close')"
               class="text-ink-muted hover:text-ink transition-colors"

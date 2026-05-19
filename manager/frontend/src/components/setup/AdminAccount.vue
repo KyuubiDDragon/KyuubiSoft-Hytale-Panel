@@ -176,7 +176,7 @@ function handleBack() {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.createAdminTitle') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.createAdminTitle') }}</h2>
       <p class="text-ink-muted">{{ t('setup.createAdminDescription') }}</p>
     </div>
 

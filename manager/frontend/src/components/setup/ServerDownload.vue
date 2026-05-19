@@ -462,7 +462,7 @@ watch(deviceCodeState, () => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">
+      <h2 class="text-2xl font-bold text-ink mb-2">
         {{ currentDownloadStep === 'auth' ? t('setup.hytaleAuthTitle') :
            currentDownloadStep === 'downloading' ? t('setup.downloadingTitle') :
            currentDownloadStep === 'verifying' || currentDownloadStep === 'complete' ? t('setup.downloadCompleteTitle') :
@@ -505,7 +505,7 @@ watch(deviceCodeState, () => {
                   />
                 </div>
                 <div>
-                  <p class="text-white font-semibold">{{ t('setup.patchlineRelease') }}</p>
+                  <p class="text-ink font-semibold">{{ t('setup.patchlineRelease') }}</p>
                   <p class="text-xs text-ink-muted">{{ t('setup.patchlineReleaseDesc') }}</p>
                 </div>
               </div>
@@ -533,7 +533,7 @@ watch(deviceCodeState, () => {
                   />
                 </div>
                 <div>
-                  <p class="text-white font-semibold">{{ t('setup.patchlinePreRelease') }}</p>
+                  <p class="text-ink font-semibold">{{ t('setup.patchlinePreRelease') }}</p>
                   <p class="text-xs text-ink-muted">{{ t('setup.patchlinePreReleaseDesc') }}</p>
                 </div>
               </div>
@@ -568,7 +568,7 @@ watch(deviceCodeState, () => {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.downloadMethodOfficial') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.downloadMethodOfficial') }}</p>
               <p class="text-sm text-ink-muted mb-2">{{ t('setup.downloadMethodOfficialDesc') }}</p>
               <div class="flex flex-wrap gap-2">
                 <span class="text-xs px-2 py-1 rounded bg-status-success/20 text-status-success">
@@ -605,7 +605,7 @@ watch(deviceCodeState, () => {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.downloadMethodCustom') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.downloadMethodCustom') }}</p>
               <p class="text-sm text-ink-muted">{{ t('setup.downloadMethodCustomDesc') }}</p>
             </div>
           </div>
@@ -654,7 +654,7 @@ watch(deviceCodeState, () => {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.downloadMethodManual') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.downloadMethodManual') }}</p>
               <p class="text-sm text-ink-muted">{{ t('setup.downloadMethodManualDesc') }}</p>
             </div>
           </div>
@@ -673,7 +673,7 @@ watch(deviceCodeState, () => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.authSuccess') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.authSuccess') }}</p>
             <p class="text-ink-muted mt-2">{{ t('setup.startingDownload') }}</p>
           </div>
 
@@ -684,7 +684,7 @@ watch(deviceCodeState, () => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg text-center">{{ t('setup.envConfigRequired') }}</p>
+            <p class="text-ink font-semibold text-lg text-center">{{ t('setup.envConfigRequired') }}</p>
             <p class="text-status-warning mt-2 text-center">{{ authError }}</p>
 
             <div class="mt-4 bg-surface-muted rounded-lg p-4 text-left">
@@ -709,7 +709,7 @@ watch(deviceCodeState, () => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.authFailed') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.authFailed') }}</p>
             <p class="text-status-error mt-2">{{ authError }}</p>
             <Button class="mt-4" @click="retryAuth">
               {{ t('setup.retryAuth') }}
@@ -775,7 +775,7 @@ watch(deviceCodeState, () => {
 
                 <!-- User Code Display -->
                 <div class="bg-dark-400 border-2 border-border rounded-xl p-6 inline-block">
-                  <p class="text-3xl font-mono font-bold text-white tracking-widest">
+                  <p class="text-3xl font-mono font-bold text-ink tracking-widest">
                     {{ formattedUserCode }}
                   </p>
                 </div>
@@ -832,7 +832,7 @@ watch(deviceCodeState, () => {
             </svg>
           </div>
 
-          <h3 class="text-xl font-semibold text-white mb-2">{{ t('setup.downloadingTitle') }}</h3>
+          <h3 class="text-xl font-semibold text-ink mb-2">{{ t('setup.downloadingTitle') }}</h3>
           <p class="text-ink-muted mb-6">{{ t('setup.downloadingDescription') }}</p>
 
           <!-- Indeterminate Progress Bar -->
@@ -863,7 +863,7 @@ watch(deviceCodeState, () => {
               </svg>
             </div>
             <div>
-              <p class="text-white font-medium text-sm">HytaleServer.jar</p>
+              <p class="text-ink font-medium text-sm">HytaleServer.jar</p>
               <p class="text-xs text-ink-subtle">~80 MB</p>
             </div>
           </div>
@@ -876,7 +876,7 @@ watch(deviceCodeState, () => {
               </svg>
             </div>
             <div>
-              <p class="text-white font-medium text-sm">Assets.zip</p>
+              <p class="text-ink font-medium text-sm">Assets.zip</p>
               <p class="text-xs text-ink-subtle">~3.3 GB</p>
             </div>
           </div>
@@ -928,7 +928,7 @@ watch(deviceCodeState, () => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">HytaleServer.jar</span>
+                <span class="text-ink">HytaleServer.jar</span>
               </div>
               <div class="text-right">
                 <p class="text-sm text-ink-muted">{{ verificationResults.serverJar.size }}</p>
@@ -966,7 +966,7 @@ watch(deviceCodeState, () => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">Assets.zip</span>
+                <span class="text-ink">Assets.zip</span>
               </div>
               <div class="text-right">
                 <p class="text-sm text-ink-muted">{{ verificationResults.assetsZip.size }}</p>
@@ -982,7 +982,7 @@ watch(deviceCodeState, () => {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.version') }}</span>
+                <span class="text-ink">{{ t('setup.version') }}</span>
               </div>
               <div class="text-right">
                 <p class="text-sm text-ink-muted">{{ verificationResults.version }}</p>
@@ -1002,7 +1002,7 @@ watch(deviceCodeState, () => {
                 class="mt-1 w-4 h-4 rounded border-gray-600 bg-surface-muted text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
               />
               <div>
-                <p class="text-white font-medium">{{ t('setup.enableAutoUpdate') }}</p>
+                <p class="text-ink font-medium">{{ t('setup.enableAutoUpdate') }}</p>
                 <p class="text-sm text-ink-muted">{{ t('setup.autoUpdateDescription') }}</p>
               </div>
             </label>

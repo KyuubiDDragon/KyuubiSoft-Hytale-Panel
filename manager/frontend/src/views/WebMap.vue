@@ -56,7 +56,7 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('webmap.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('webmap.title') }}</h1>
         <p class="text-ink-muted text-sm mt-1">{{ t('webmap.subtitle') }}</p>
       </div>
       <div v-if="webMapInstalled" class="flex items-center gap-2">
@@ -97,7 +97,7 @@ onMounted(() => {
         <svg class="w-16 h-16 mb-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
         </svg>
-        <h3 class="text-xl font-semibold text-white mb-2">{{ t('webmap.notInstalled') }}</h3>
+        <h3 class="text-xl font-semibold text-ink mb-2">{{ t('webmap.notInstalled') }}</h3>
         <p class="text-center max-w-md">{{ t('webmap.notInstalledDesc') }}</p>
         <router-link
           to="/mods"

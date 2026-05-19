@@ -119,7 +119,7 @@ defineExpose({ toggle, isOpen })
     >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-border/60">
-        <h2 class="text-lg font-semibold text-white">{{ t('commands.title') }}</h2>
+        <h2 class="text-lg font-semibold text-ink">{{ t('commands.title') }}</h2>
         <button @click="toggle" class="p-1 text-ink-muted hover:text-ink transition-colors">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

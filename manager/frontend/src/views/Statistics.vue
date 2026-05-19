@@ -58,7 +58,7 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('statistics.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('statistics.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('statistics.subtitle') }}</p>
       </div>
       <button
@@ -117,15 +117,15 @@ onMounted(() => {
           <div class="space-y-4">
             <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
               <span class="text-ink-muted">{{ t('statistics.totalPlaytime') }}</span>
-              <span class="font-medium text-white">{{ formatPlaytime(stats.totalPlaytime) }}</span>
+              <span class="font-medium text-ink">{{ formatPlaytime(stats.totalPlaytime) }}</span>
             </div>
             <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
               <span class="text-ink-muted">{{ t('statistics.averagePlaytime') }}</span>
-              <span class="font-medium text-white">{{ formatPlaytime(stats.averagePlaytime) }}</span>
+              <span class="font-medium text-ink">{{ formatPlaytime(stats.averagePlaytime) }}</span>
             </div>
             <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
               <span class="text-ink-muted">{{ t('statistics.avgSessions') }}</span>
-              <span class="font-medium text-white">{{ stats.averageSessionsPerPlayer }}</span>
+              <span class="font-medium text-ink">{{ stats.averageSessionsPerPlayer }}</span>
             </div>
           </div>
         </Card>
@@ -187,7 +187,7 @@ onMounted(() => {
                     <div class="w-8 h-8 bg-surface-overlay rounded-lg flex items-center justify-center">
                       <Icon name="players" class="w-4 h-4 text-ink-muted" />
                     </div>
-                    <span class="font-medium text-white">{{ player.name }}</span>
+                    <span class="font-medium text-ink">{{ player.name }}</span>
                   </div>
                 </td>
                 <td class="py-3 text-right text-ink-muted">{{ formatPlaytime(player.playTime) }}</td>

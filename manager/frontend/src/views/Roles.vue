@@ -211,7 +211,7 @@ onMounted(loadRoles)
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('roles.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('roles.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('roles.subtitle') }}</p>
       </div>
       <div class="flex gap-2">
@@ -266,7 +266,7 @@ onMounted(loadRoles)
               :class="['w-3 h-3 rounded-full', getColorClass(role.color)]"
             ></div>
             <!-- Name -->
-            <h3 class="font-semibold text-white">{{ role.name }}</h3>
+            <h3 class="font-semibold text-ink">{{ role.name }}</h3>
           </div>
           <!-- Badges -->
           <div class="flex items-center gap-2">
@@ -333,7 +333,7 @@ onMounted(loadRoles)
         <div class="p-6 border-b border-border">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <h2 class="text-xl font-bold text-white">
+              <h2 class="text-xl font-bold text-ink">
                 {{ isCreating ? t('roles.createRole') : t('roles.editRole') }}
               </h2>
               <span
@@ -377,7 +377,7 @@ onMounted(loadRoles)
                   v-model="formName"
                   type="text"
                   :disabled="editingRole?.isSystem"
-                  class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50 disabled:cursor-not-allowed"
                   :placeholder="t('roles.namePlaceholder')"
                 />
               </div>
@@ -389,7 +389,7 @@ onMounted(loadRoles)
                   v-model="formDescription"
                   rows="2"
                   :disabled="editingRole?.isSystem"
-                  class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                   :placeholder="t('roles.descriptionPlaceholder')"
                 />
               </div>
@@ -440,7 +440,7 @@ onMounted(loadRoles)
 
               <div class="space-y-4 max-h-64 overflow-y-auto p-3 bg-surface-overlay rounded-lg">
                 <div v-for="(permissions, category) in groupedPermissions" :key="category">
-                  <h4 class="text-sm font-medium text-white mb-2">{{ t('permissionCategories.' + category) }}</h4>
+                  <h4 class="text-sm font-medium text-ink mb-2">{{ t('permissionCategories.' + category) }}</h4>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label
                       v-for="perm in permissions"
@@ -459,7 +459,7 @@ onMounted(loadRoles)
                         </svg>
                       </div>
                       <div class="flex-1 min-w-0">
-                        <span class="text-sm text-white">{{ t('permissionDescriptions.' + perm.key) }}</span>
+                        <span class="text-sm text-ink">{{ t('permissionDescriptions.' + perm.key) }}</span>
                         <p class="text-xs text-ink-subtle font-mono truncate">{{ perm.key }}</p>
                       </div>
                     </label>

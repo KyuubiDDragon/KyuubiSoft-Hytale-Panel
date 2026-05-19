@@ -134,7 +134,7 @@ onMounted(async () => {
               <img src="/logo.png" alt="KyuubiSoft Panel" class="w-full h-full object-cover" />
             </div>
             <div>
-              <h1 class="text-lg font-bold text-white">KyuubiSoft Panel</h1>
+              <h1 class="text-lg font-bold text-ink">KyuubiSoft Panel</h1>
               <p class="text-xs text-ink-muted">{{ t('setup.wizardTitle') }}</p>
             </div>
           </div>
@@ -142,7 +142,7 @@ onMounted(async () => {
           <!-- Step Counter -->
           <div class="hidden sm:flex items-center gap-2 text-sm text-ink-muted">
             <span>{{ t('setup.step') }}</span>
-            <span class="text-white font-medium">{{ setupStore.currentStep + 1 }}</span>
+            <span class="text-ink font-medium">{{ setupStore.currentStep + 1 }}</span>
             <span>/</span>
             <span>{{ setupStore.totalSteps }}</span>
           </div>
@@ -200,7 +200,7 @@ onMounted(async () => {
 
                   <!-- Tooltip on hover -->
                   <div class="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div class="bg-surface-overlay text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                    <div class="bg-surface-overlay text-ink text-xs px-2 py-1 rounded whitespace-nowrap">
                       {{ t(step.titleKey) }}
                     </div>
                   </div>
@@ -221,7 +221,7 @@ onMounted(async () => {
 
             <!-- Current step name -->
             <div class="flex items-center gap-2">
-              <span class="text-sm text-white font-medium">{{ t(setupStore.currentStepConfig?.titleKey || '') }}</span>
+              <span class="text-sm text-ink font-medium">{{ t(setupStore.currentStepConfig?.titleKey || '') }}</span>
               <span v-if="setupStore.currentStepConfig?.skippable" class="text-xs bg-surface-raised text-ink-muted px-2 py-0.5 rounded">
                 {{ t('setup.optional') }}
               </span>

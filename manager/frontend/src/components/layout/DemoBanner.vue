@@ -22,7 +22,7 @@ onMounted(async () => {
     <span class="font-medium">
       {{ t('demo.banner', 'DEMO MODE') }}
     </span>
-    <span class="text-white/90 text-sm hidden sm:inline">
+    <span class="text-ink/90 text-sm hidden sm:inline">
       {{ t('demo.description', 'All data is simulated. No real server connected.') }}
     </span>
     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">

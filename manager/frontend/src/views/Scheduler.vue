@@ -273,7 +273,7 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('scheduler.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('scheduler.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('scheduler.subtitle') }}</p>
       </div>
     </div>
@@ -297,7 +297,7 @@ onMounted(() => {
           <!-- Enable Toggle -->
           <div class="flex items-center justify-between">
             <div>
-              <p class="font-medium text-white">{{ t('scheduler.enableAutoBackups') }}</p>
+              <p class="font-medium text-ink">{{ t('scheduler.enableAutoBackups') }}</p>
               <p class="text-sm text-ink-muted">{{ t('scheduler.autoBackupsDesc') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
@@ -313,7 +313,7 @@ onMounted(() => {
               <input
                 v-model="config.backups.schedule"
                 type="time"
-                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+                class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
             </div>
 
@@ -325,7 +325,7 @@ onMounted(() => {
                 type="number"
                 min="1"
                 max="365"
-                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+                class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
             </div>
 
@@ -368,7 +368,7 @@ onMounted(() => {
           <!-- Enable Toggle -->
           <div class="flex items-center justify-between">
             <div>
-              <p class="font-medium text-white">{{ t('scheduler.enableRestarts') }}</p>
+              <p class="font-medium text-ink">{{ t('scheduler.enableRestarts') }}</p>
               <p class="text-sm text-ink-muted">{{ t('scheduler.restartsDesc') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
@@ -390,7 +390,7 @@ onMounted(() => {
                   <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span class="text-white font-mono">{{ time }}</span>
+                  <span class="text-ink font-mono">{{ time }}</span>
                   <button
                     v-if="authStore.hasPermission('scheduler.edit')"
                     @click="removeRestartTime(time)"
@@ -409,11 +409,11 @@ onMounted(() => {
                 <input
                   v-model="newRestartTime"
                   type="time"
-                  class="bg-dark-400 text-white px-4 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+                  class="bg-dark-400 text-ink px-4 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
                 />
                 <button
                   @click="addRestartTime"
-                  class="px-4 py-2 bg-surface-overlay text-white rounded-lg hover:bg-surface-overlay transition-colors"
+                  class="px-4 py-2 bg-surface-overlay text-ink rounded-lg hover:bg-surface-overlay transition-colors"
                 >
                   {{ t('common.add') }}
                 </button>
@@ -427,7 +427,7 @@ onMounted(() => {
                 v-model="config.scheduledRestarts.warningMinutes"
                 type="text"
                 :placeholder="t('scheduler.warningMinutesPlaceholder')"
-                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none font-mono"
+                class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none font-mono"
                 @change="config.scheduledRestarts.warningMinutes = ($event.target as HTMLInputElement).value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n))"
               />
               <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.warningMinutesHint') }}</p>
@@ -440,7 +440,7 @@ onMounted(() => {
                 v-model="config.scheduledRestarts.warningMessage"
                 type="text"
                 :placeholder="t('scheduler.warningMessagePlaceholder')"
-                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+                class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
               <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.warningMessageHint') }}</p>
             </div>
@@ -452,7 +452,7 @@ onMounted(() => {
                 v-model="config.scheduledRestarts.restartMessage"
                 type="text"
                 :placeholder="t('scheduler.restartMessagePlaceholder')"
-                class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+                class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
             </div>
 
@@ -518,7 +518,7 @@ onMounted(() => {
               v-model="broadcastMessage"
               type="text"
               :placeholder="t('scheduler.broadcastPlaceholder')"
-              class="flex-1 bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="flex-1 bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               @keyup.enter="sendBroadcast"
             />
             <button
@@ -538,7 +538,7 @@ onMounted(() => {
           <!-- Enable Toggle -->
           <div class="flex items-center justify-between">
             <div>
-              <p class="font-medium text-white">{{ t('scheduler.enableAnnouncements') }}</p>
+              <p class="font-medium text-ink">{{ t('scheduler.enableAnnouncements') }}</p>
               <p class="text-sm text-ink-muted">{{ t('scheduler.announcementsDesc') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
@@ -554,7 +554,7 @@ onMounted(() => {
               v-model="config.announcements.welcome"
               type="text"
               :placeholder="t('scheduler.welcomePlaceholder')"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
             <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.welcomeHint') }}</p>
           </div>
@@ -571,7 +571,7 @@ onMounted(() => {
                 <div class="w-9 h-5 bg-surface-overlay rounded-full peer peer-checked:bg-hytale-orange peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
               </label>
               <div class="flex-1">
-                <p class="text-white text-sm">{{ ann.message }}</p>
+                <p class="text-ink text-sm">{{ ann.message }}</p>
                 <p class="text-xs text-ink-subtle">{{ t('scheduler.every') }} {{ ann.intervalMinutes }} {{ t('scheduler.minutes') }}</p>
               </div>
               <button
@@ -592,17 +592,17 @@ onMounted(() => {
               v-model="newAnnouncement.message"
               type="text"
               :placeholder="t('scheduler.announcementPlaceholder')"
-              class="flex-1 bg-dark-400 text-white px-4 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="flex-1 bg-dark-400 text-ink px-4 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
             <input
               v-model.number="newAnnouncement.intervalMinutes"
               type="number"
               min="1"
-              class="w-24 bg-dark-400 text-white px-3 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none text-center"
+              class="w-24 bg-dark-400 text-ink px-3 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none text-center"
             />
             <button
               @click="addAnnouncement"
-              class="px-4 py-2 bg-surface-overlay text-white rounded-lg hover:bg-surface-overlay transition-colors"
+              class="px-4 py-2 bg-surface-overlay text-ink rounded-lg hover:bg-surface-overlay transition-colors"
             >
               {{ t('common.add') }}
             </button>
@@ -654,7 +654,7 @@ onMounted(() => {
                   </svg>
                 </div>
                 <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-white truncate">{{ cmd.name }}</p>
+                  <p class="text-sm font-medium text-ink truncate">{{ cmd.name }}</p>
                   <p class="text-xs text-ink-subtle font-mono truncate">{{ cmd.command }}</p>
                 </div>
                 <div v-if="authStore.hasPermission('scheduler.edit')" class="absolute top-1 right-1 hidden group-hover:flex gap-1">
@@ -694,7 +694,7 @@ onMounted(() => {
           <input
             v-model="commandForm.name"
             type="text"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
           />
         </div>
         <div>
@@ -702,14 +702,14 @@ onMounted(() => {
           <input
             v-model="commandForm.command"
             type="text"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none font-mono"
+            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none font-mono"
           />
         </div>
         <div>
           <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('scheduler.category') }}</label>
           <select
             v-model="commandForm.category"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
           >
             <option value="server">{{ t('scheduler.categories.server') }}</option>
             <option value="players">{{ t('scheduler.categories.players') }}</option>

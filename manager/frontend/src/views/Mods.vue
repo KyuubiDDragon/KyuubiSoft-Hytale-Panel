@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
+import ChangelogModal from '@/components/mods/ChangelogModal.vue'
 import {
   modsApi,
   pluginsApi,
@@ -1155,7 +1156,7 @@ onMounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('mods.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('mods.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('mods.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-3">
@@ -1211,7 +1212,7 @@ onMounted(() => {
         :class="[
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'plugins'
-            ? 'bg-purple-500 text-white'
+            ? 'bg-purple-500 text-ink'
             : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
@@ -1225,7 +1226,7 @@ onMounted(() => {
         :class="[
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'store'
-            ? 'bg-emerald-500 text-white'
+            ? 'bg-emerald-500 text-ink'
             : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
@@ -1305,7 +1306,7 @@ onMounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="font-semibold text-white">{{ enabledCount }} {{ t('mods.active') }}</h3>
+          <h3 class="font-semibold text-ink">{{ enabledCount }} {{ t('mods.active') }}</h3>
           <p class="text-sm text-ink-muted mt-1">{{ t('mods.path') }}: <code class="text-xs bg-surface-overlay px-2 py-0.5 rounded">{{ currentPath }}</code></p>
           <p class="text-sm text-ink-subtle mt-2">{{ t('mods.restartNote') }}</p>
         </div>
@@ -1321,7 +1322,7 @@ onMounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="font-semibold text-white">{{ t('mods.storeTitle') }}</h3>
+          <h3 class="font-semibold text-ink">{{ t('mods.storeTitle') }}</h3>
           <p class="text-sm text-ink-muted mt-1">{{ t('mods.storeDescription') }}</p>
           <p class="text-sm text-ink-subtle mt-2">{{ t('mods.restartNote') }}</p>
         </div>
@@ -1371,7 +1372,7 @@ onMounted(() => {
 
             <!-- Info -->
             <div>
-              <p :class="['font-medium', item.enabled ? 'text-white' : 'text-ink-subtle']">{{ item.name }}</p>
+              <p :class="['font-medium', item.enabled ? 'text-ink' : 'text-ink-subtle']">{{ item.name }}</p>
               <div class="flex items-center gap-3 text-sm text-ink-subtle">
                 <span>{{ formatSize(item.size) }}</span>
                 <span>{{ formatDate(item.lastModified) }}</span>
@@ -1513,7 +1514,7 @@ onMounted(() => {
             <!-- Info -->
             <div class="flex-1">
               <div class="flex items-center gap-2 flex-wrap">
-                <p class="font-medium text-white">{{ mod.name }}</p>
+                <p class="font-medium text-ink">{{ mod.name }}</p>
                 <span :class="['px-2 py-0.5 rounded text-xs', getCategoryColor(mod.category)]">
                   {{ mod.category }}
                 </span>
@@ -1575,7 +1576,7 @@ onMounted(() => {
               v-if="!mod.installed && authStore.hasPermission('mods.install')"
               @click="installStoreMod(mod.id)"
               :disabled="installingMod === mod.id"
-              class="px-4 py-2 bg-emerald-500 text-white font-medium rounded-lg hover:bg-emerald-400 transition-colors flex items-center gap-2 disabled:opacity-50"
+              class="px-4 py-2 bg-emerald-500 text-ink font-medium rounded-lg hover:bg-emerald-400 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <svg v-if="installingMod === mod.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1618,7 +1619,7 @@ onMounted(() => {
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <h3 class="font-semibold text-white">Modtale</h3>
+                <h3 class="font-semibold text-ink">Modtale</h3>
                 <a
                   href="https://modtale.net"
                   target="_blank"
@@ -1678,7 +1679,7 @@ onMounted(() => {
                 v-model="modtaleSearch"
                 type="text"
                 :placeholder="t('mods.searchModtale')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-cyan-500"
               />
             </div>
           </div>
@@ -1686,7 +1687,7 @@ onMounted(() => {
           <!-- Sort -->
           <select
             v-model="modtaleSort"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-cyan-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-cyan-500"
           >
             <option value="downloads">{{ t('mods.sortDownloads') }}</option>
             <option value="updated">{{ t('mods.sortUpdated') }}</option>
@@ -1698,7 +1699,7 @@ onMounted(() => {
           <!-- Classification Filter -->
           <select
             v-model="modtaleClassification"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-cyan-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-cyan-500"
           >
             <option value="">{{ t('mods.allTypes') }}</option>
             <option value="PLUGIN">Plugins</option>
@@ -1752,7 +1753,7 @@ onMounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-medium text-white truncate">{{ mod.title }}</p>
+                  <p class="font-medium text-ink truncate">{{ mod.title }}</p>
                   <span :class="['px-2 py-0.5 rounded text-xs', getClassificationColor(mod.classification)]">
                     {{ mod.classification }}
                   </span>
@@ -1865,7 +1866,7 @@ onMounted(() => {
     <div v-if="showModtaleSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-md">
         <div class="p-4 border-b border-border/60 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.modtaleApiSettings') }}</h2>
+          <h2 class="text-xl font-bold text-ink">{{ t('mods.modtaleApiSettings') }}</h2>
           <button @click="showModtaleSettings = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -1875,7 +1876,7 @@ onMounted(() => {
 
         <div class="p-6 space-y-4">
           <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
@@ -1936,7 +1937,7 @@ onMounted(() => {
     <div v-if="showModtaleDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
         <div class="p-4 border-b border-border/60 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ modtaleDetailProject?.title || t('common.loading') }}</h2>
+          <h2 class="text-xl font-bold text-ink">{{ modtaleDetailProject?.title || t('common.loading') }}</h2>
           <button @click="showModtaleDetail = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -1994,7 +1995,7 @@ onMounted(() => {
 
             <!-- Versions -->
             <div v-if="modtaleDetailProject.versions?.length" class="mb-6">
-              <h3 class="font-semibold text-white mb-3">{{ t('mods.versions') }}</h3>
+              <h3 class="font-semibold text-ink mb-3">{{ t('mods.versions') }}</h3>
               <div class="space-y-2">
                 <div
                   v-for="version in modtaleDetailProject.versions.slice(0, 5)"
@@ -2002,7 +2003,7 @@ onMounted(() => {
                   class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg hover:bg-surface-overlay transition-colors"
                 >
                   <div>
-                    <span class="text-white font-medium">{{ version.versionNumber }}</span>
+                    <span class="text-ink font-medium">{{ version.versionNumber }}</span>
                     <span v-if="version.channel && version.channel !== 'RELEASE'" class="ml-2 px-2 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400">
                       {{ version.channel }}
                     </span>
@@ -2013,7 +2014,7 @@ onMounted(() => {
                   <button
                     v-if="authStore.hasPermission('mods.install')"
                     @click="modtaleApi.install(modtaleDetailProject!.id, version.versionNumber).then(() => { loadData(); showModtaleDetail = false; })"
-                    class="px-3 py-1 bg-cyan-500 text-white rounded hover:bg-cyan-400 transition-colors text-sm"
+                    class="px-3 py-1 bg-cyan-500 text-ink rounded hover:bg-cyan-400 transition-colors text-sm"
                   >
                     {{ t('mods.install') }}
                   </button>
@@ -2023,7 +2024,7 @@ onMounted(() => {
 
             <!-- Description -->
             <div v-if="modtaleDetailProject.about" class="prose prose-invert max-w-none">
-              <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
+              <h3 class="font-semibold text-ink mb-3">{{ t('mods.description') }}</h3>
               <div class="text-ink-muted whitespace-pre-wrap">{{ modtaleDetailProject.about }}</div>
             </div>
           </template>
@@ -2044,7 +2045,7 @@ onMounted(() => {
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <h3 class="font-semibold text-white">StackMart</h3>
+                <h3 class="font-semibold text-ink">StackMart</h3>
                 <a
                   href="https://stackmart.org"
                   target="_blank"
@@ -2101,7 +2102,7 @@ onMounted(() => {
                 v-model="stackmartSearch"
                 type="text"
                 :placeholder="t('mods.searchStackMart')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>
@@ -2109,7 +2110,7 @@ onMounted(() => {
           <!-- Sort -->
           <select
             v-model="stackmartSort"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-amber-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-amber-500"
           >
             <option value="popular">{{ t('mods.sortPopular') }}</option>
             <option value="recent">{{ t('mods.sortRecent') }}</option>
@@ -2119,7 +2120,7 @@ onMounted(() => {
           <!-- Category Filter -->
           <select
             v-model="stackmartCategory"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-amber-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-amber-500"
           >
             <option value="">{{ t('mods.allCategories') }}</option>
             <option value="plugins">Plugins</option>
@@ -2172,7 +2173,7 @@ onMounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-medium text-white truncate">{{ resource.name }}</p>
+                  <p class="font-medium text-ink truncate">{{ resource.name }}</p>
                   <span :class="['px-2 py-0.5 rounded text-xs', getStackMartCategoryColor(resource.category)]">
                     {{ resource.category }}
                   </span>
@@ -2289,7 +2290,7 @@ onMounted(() => {
           </div>
           <div class="flex-1">
             <div class="flex items-center gap-3">
-              <h3 class="font-semibold text-white">CurseForge</h3>
+              <h3 class="font-semibold text-ink">CurseForge</h3>
               <button
                 @click="showCurseForgeSettings = true"
                 class="p-1 text-ink-muted hover:text-ink transition-colors"
@@ -2340,12 +2341,12 @@ onMounted(() => {
                 v-model="curseforgeSearch"
                 type="text"
                 :placeholder="t('mods.searchCurseForge')"
-                class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-orange-500"
               />
             </div>
             <select
               v-model="curseforgeSortField"
-              class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-orange-500"
+              class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-orange-500"
             >
               <option value="Popularity">{{ t('mods.sortPopular') }}</option>
               <option value="TotalDownloads">{{ t('mods.sortDownloads') }}</option>
@@ -2395,7 +2396,7 @@ onMounted(() => {
 
               <!-- Mod Info -->
               <div class="flex-1 min-w-0">
-                <h4 class="font-semibold text-white truncate">{{ mod.name }}</h4>
+                <h4 class="font-semibold text-ink truncate">{{ mod.name }}</h4>
                 <p class="text-sm text-ink-muted line-clamp-2 mt-1">{{ mod.summary }}</p>
                 <div class="flex items-center gap-3 mt-2 text-xs text-ink-subtle">
                   <span class="flex items-center gap-1">
@@ -2494,7 +2495,7 @@ onMounted(() => {
     <div v-if="showCurseForgeSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-md">
         <div class="p-4 border-b border-border/60 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.curseforgeApiSettings') }}</h2>
+          <h2 class="text-xl font-bold text-ink">{{ t('mods.curseforgeApiSettings') }}</h2>
           <button @click="showCurseForgeSettings = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -2504,7 +2505,7 @@ onMounted(() => {
 
         <div class="p-6 space-y-4">
           <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
@@ -2555,7 +2556,7 @@ onMounted(() => {
     <div v-if="showStackMartSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-md">
         <div class="p-4 border-b border-border/60 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-white">StackMart API Settings</h2>
+          <h2 class="text-xl font-bold text-ink">StackMart API Settings</h2>
           <button @click="showStackMartSettings = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -2565,7 +2566,7 @@ onMounted(() => {
 
         <div class="p-6 space-y-4">
           <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
@@ -2622,7 +2623,7 @@ onMounted(() => {
     <div v-if="showStackMartDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
         <div class="p-4 border-b border-border/60 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ stackmartDetailResource?.name || t('common.loading') }}</h2>
+          <h2 class="text-xl font-bold text-ink">{{ stackmartDetailResource?.name || t('common.loading') }}</h2>
           <button @click="showStackMartDetail = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -2688,7 +2689,7 @@ onMounted(() => {
 
             <!-- Features -->
             <div v-if="stackmartDetailResource.features?.length" class="mb-6">
-              <h3 class="font-semibold text-white mb-3">Features</h3>
+              <h3 class="font-semibold text-ink mb-3">Features</h3>
               <ul class="list-disc list-inside text-ink-muted space-y-1">
                 <li v-for="feature in stackmartDetailResource.features" :key="feature">{{ feature }}</li>
               </ul>
@@ -2696,7 +2697,7 @@ onMounted(() => {
 
             <!-- Description -->
             <div v-if="stackmartDetailResource.description" class="mb-6">
-              <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
+              <h3 class="font-semibold text-ink mb-3">{{ t('mods.description') }}</h3>
               <div class="text-ink-muted whitespace-pre-wrap">{{ stackmartDetailResource.description }}</div>
             </div>
 
@@ -2723,7 +2724,7 @@ onMounted(() => {
       <Card>
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-semibold text-white">{{ t('modupdates.status') }}</h2>
+            <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.status') }}</h2>
             <p class="text-sm text-ink-muted mt-1">
               {{ t('modupdates.lastChecked') }}: {{ formatUpdateDate(updateStatus?.lastChecked || null) }}
             </p>
@@ -2768,7 +2769,7 @@ onMounted(() => {
             </div>
             <div>
               <p class="text-ink-muted text-sm">{{ t('modupdates.tracked') }}</p>
-              <p class="text-2xl font-bold text-white">{{ updateStatus.totalTracked }}</p>
+              <p class="text-2xl font-bold text-ink">{{ updateStatus.totalTracked }}</p>
             </div>
           </div>
         </Card>
@@ -2798,7 +2799,7 @@ onMounted(() => {
             </div>
             <div>
               <p class="text-ink-muted text-sm">{{ t('modupdates.autoCheck') }}</p>
-              <p class="text-lg font-medium text-white">1h</p>
+              <p class="text-lg font-medium text-ink">1h</p>
             </div>
           </div>
         </Card>
@@ -2815,7 +2816,7 @@ onMounted(() => {
       <!-- Tracked Mods List -->
       <Card v-else-if="updateStatus">
         <template #header>
-          <h2 class="text-lg font-semibold text-white">{{ t('modupdates.tracked') }}</h2>
+          <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.tracked') }}</h2>
         </template>
 
         <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-ink-muted">
@@ -2847,7 +2848,7 @@ onMounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                  <h3 class="font-medium text-ink truncate">{{ mod.projectTitle || mod.filename }}</h3>
                   <!-- Wishlist item (not installed) -->
                   <span
                     v-if="mod.installed === false"
@@ -2884,7 +2885,7 @@ onMounted(() => {
                 <!-- Install button (for wishlist items) -->
                 <button
                   v-if="mod.installed === false && authStore.hasPermission('mods.install')"
-                  class="btn btn-sm bg-purple-600 hover:bg-purple-700 text-white"
+                  class="btn btn-sm bg-purple-600 hover:bg-purple-700 text-ink"
                   :disabled="installingFilename === mod.filename"
                   :title="t('modupdates.install')"
                   @click="installTrackedMod(mod.filename)"
@@ -2953,7 +2954,7 @@ onMounted(() => {
     <div v-if="showTrackDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div class="bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
         <div class="p-6">
-          <h3 class="text-lg font-semibold text-white mb-4">{{ t('modupdates.trackMod') }}</h3>
+          <h3 class="text-lg font-semibold text-ink mb-4">{{ t('modupdates.trackMod') }}</h3>
 
           <!-- Error -->
           <div v-if="trackError" class="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
@@ -3046,7 +3047,7 @@ onMounted(() => {
       <div class="bg-surface-raised rounded-xl w-full max-w-7xl h-[85vh] flex flex-col">
         <!-- Modal Header -->
         <div class="p-4 border-b border-border/60 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.configEditor') }}: {{ editingItem?.name }}</h2>
+          <h2 class="text-xl font-bold text-ink">{{ t('mods.configEditor') }}: {{ editingItem?.name }}</h2>
           <button @click="showConfigModal = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -3117,7 +3118,7 @@ onMounted(() => {
               <textarea
                 v-else
                 v-model="configContent"
-                class="flex-1 w-full p-4 bg-surface-muted border border-border rounded-lg text-white font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange min-h-[400px]"
+                class="flex-1 w-full p-4 bg-surface-muted border border-border rounded-lg text-ink font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange min-h-[400px]"
                 spellcheck="false"
               />
             </template>
@@ -3126,37 +3127,12 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Changelog Modal -->
-    <div v-if="showChangelogModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="showChangelogModal = false">
-      <div class="bg-surface-raised rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <!-- Modal Header -->
-        <div class="p-4 border-b border-border/60 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.changelog') }}: {{ changelogModalTitle }}</h2>
-          <button @click="showChangelogModal = false" class="text-ink-muted hover:text-ink">
-            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Modal Content -->
-        <div class="flex-1 overflow-y-auto p-4">
-          <div
-            class="prose prose-invert prose-sm max-w-none text-ink-muted"
-            v-html="changelogModalContent"
-          />
-        </div>
-
-        <!-- Modal Footer -->
-        <div class="p-4 border-t border-border/60 shrink-0">
-          <button
-            @click="showChangelogModal = false"
-            class="w-full px-4 py-2 bg-surface-overlay hover:bg-surface-overlay text-white rounded-lg transition-colors"
-          >
-            {{ t('common.close') }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Changelog Modal (extracted) -->
+    <ChangelogModal
+      :show="showChangelogModal"
+      :title="changelogModalTitle"
+      :content="changelogModalContent"
+      @close="showChangelogModal = false"
+    />
   </div>
 </template>

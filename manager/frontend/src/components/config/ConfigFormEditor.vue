@@ -132,7 +132,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
             :value="parsedConfig[key] as string"
             @input="updateValue(key, ($event.target as HTMLInputElement).value)"
             type="text"
-            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-white font-mono text-sm focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-ink font-mono text-sm focus:outline-none focus:border-hytale-orange"
           />
         </div>
 
@@ -143,7 +143,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
             :value="parsedConfig[key] as number"
             @input="updateValue(key, parseFloat(($event.target as HTMLInputElement).value) || 0)"
             type="number"
-            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
           />
         </div>
 
@@ -176,7 +176,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
             :value="arrayEditors[key] || JSON.stringify(parsedConfig[key], null, 2)"
             @input="updateArrayValue(key, ($event.target as HTMLTextAreaElement).value)"
             rows="4"
-            class="w-full px-3 py-2 bg-surface-muted border border-border rounded-lg text-white text-sm font-mono focus:outline-none focus:border-hytale-orange resize-y"
+            class="w-full px-3 py-2 bg-surface-muted border border-border rounded-lg text-ink text-sm font-mono focus:outline-none focus:border-hytale-orange resize-y"
             spellcheck="false"
           ></textarea>
         </div>
@@ -196,7 +196,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
                   :value="childValue as string"
                   @input="updateNestedValue([key, String(childKey)], ($event.target as HTMLInputElement).value)"
                   type="text"
-                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-white text-sm font-mono focus:outline-none focus:border-hytale-orange"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-sm font-mono focus:outline-none focus:border-hytale-orange"
                 />
               </div>
 
@@ -207,7 +207,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
                   :value="childValue as number"
                   @input="updateNestedValue([key, String(childKey)], parseFloat(($event.target as HTMLInputElement).value) || 0)"
                   type="number"
-                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-white text-sm focus:outline-none focus:border-hytale-orange"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-sm focus:outline-none focus:border-hytale-orange"
                 />
               </div>
 
@@ -240,7 +240,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
                   :value="arrayEditors[`${key}.${childKey}`] || JSON.stringify(childValue, null, 2)"
                   @input="updateArrayValue(`${key}.${childKey}`, ($event.target as HTMLTextAreaElement).value)"
                   rows="3"
-                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-white text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
                   spellcheck="false"
                 ></textarea>
               </div>
@@ -255,7 +255,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
                   :value="JSON.stringify(childValue, null, 2)"
                   @input="(() => { try { updateNestedValue([key, String(childKey)], JSON.parse(($event.target as HTMLTextAreaElement).value)) } catch {} })()"
                   rows="4"
-                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-white text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
                   spellcheck="false"
                 ></textarea>
               </div>
@@ -268,7 +268,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
                   @input="updateNestedValue([key, String(childKey)], ($event.target as HTMLInputElement).value || null)"
                   type="text"
                   placeholder="null"
-                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-white text-sm focus:outline-none focus:border-hytale-orange"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-sm focus:outline-none focus:border-hytale-orange"
                 />
               </div>
             </template>
@@ -283,7 +283,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
             @input="updateValue(key, ($event.target as HTMLInputElement).value || null)"
             type="text"
             placeholder="null"
-            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
           />
         </div>
       </div>

@@ -130,7 +130,7 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('modupdates.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('modupdates.title') }}</h1>
         <p class="text-ink-muted text-sm mt-1">
           {{ t('modupdates.lastChecked') }}: {{ formatDate(updateStatus?.lastChecked || null) }}
         </p>
@@ -187,7 +187,7 @@ onMounted(() => {
           </div>
           <div>
             <p class="text-ink-muted text-sm">{{ t('modupdates.tracked') }}</p>
-            <p class="text-2xl font-bold text-white">{{ updateStatus.totalTracked }}</p>
+            <p class="text-2xl font-bold text-ink">{{ updateStatus.totalTracked }}</p>
           </div>
         </div>
       </Card>
@@ -217,7 +217,7 @@ onMounted(() => {
           </div>
           <div>
             <p class="text-ink-muted text-sm">{{ t('modupdates.autoCheck') }}</p>
-            <p class="text-lg font-medium text-white">1h</p>
+            <p class="text-lg font-medium text-ink">1h</p>
           </div>
         </div>
       </Card>
@@ -226,7 +226,7 @@ onMounted(() => {
     <!-- Tracked Mods List -->
     <Card v-if="!loading && updateStatus">
       <template #header>
-        <h2 class="text-lg font-semibold text-white">{{ t('modupdates.tracked') }}</h2>
+        <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.tracked') }}</h2>
       </template>
 
       <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-ink-muted">
@@ -258,7 +258,7 @@ onMounted(() => {
             <!-- Info -->
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                <h3 class="font-medium text-ink truncate">{{ mod.projectTitle || mod.filename }}</h3>
                 <span
                   v-if="mod.hasUpdate"
                   class="px-2 py-0.5 text-xs rounded-full bg-status-warning/20 text-status-warning"
@@ -317,7 +317,7 @@ onMounted(() => {
       <div v-if="showTrackDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
         <div class="bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
           <div class="p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">{{ t('modupdates.trackMod') }}</h3>
+            <h3 class="text-lg font-semibold text-ink mb-4">{{ t('modupdates.trackMod') }}</h3>
 
             <!-- Error -->
             <div v-if="trackError" class="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">

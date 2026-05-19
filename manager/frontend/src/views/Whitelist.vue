@@ -149,7 +149,7 @@ onMounted(loadData)
     <!-- Page Title -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('whitelist.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('whitelist.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('whitelist.subtitle') }}</p>
       </div>
       <button
@@ -198,7 +198,7 @@ onMounted(loadData)
       <Card>
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="font-semibold text-white">{{ t('whitelist.enabled') }}</h3>
+            <h3 class="font-semibold text-ink">{{ t('whitelist.enabled') }}</h3>
             <p class="text-sm text-ink-muted">{{ t('whitelist.enabledDescription') }}</p>
           </div>
           <button
@@ -226,13 +226,13 @@ onMounted(loadData)
 
       <!-- Add Player -->
       <Card v-if="authStore.hasPermission('players.whitelist')">
-        <h3 class="font-semibold text-white mb-4">{{ t('whitelist.addPlayer') }}</h3>
+        <h3 class="font-semibold text-ink mb-4">{{ t('whitelist.addPlayer') }}</h3>
         <form @submit.prevent="addToWhitelist" class="flex gap-3">
           <input
             v-model="newWhitelistPlayer"
             type="text"
             :placeholder="t('whitelist.playerName')"
-            class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+            class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
           />
           <Button type="submit" :disabled="!newWhitelistPlayer.trim()">
             {{ t('common.save') }}
@@ -243,12 +243,12 @@ onMounted(loadData)
       <!-- Whitelist List -->
       <Card>
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-white">{{ t('whitelist.players') }} ({{ whitelistPlayers.length }})</h3>
+          <h3 class="font-semibold text-ink">{{ t('whitelist.players') }} ({{ whitelistPlayers.length }})</h3>
           <input
             v-model="whitelistSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
@@ -272,7 +272,7 @@ onMounted(loadData)
               <div class="w-8 h-8 bg-hytale-orange/20 rounded-full flex items-center justify-center">
                 <span class="text-hytale-orange font-medium">{{ player[0]?.toUpperCase() }}</span>
               </div>
-              <span class="text-white">{{ player }}</span>
+              <span class="text-ink">{{ player }}</span>
             </div>
             <button
               v-if="authStore.hasPermission('players.whitelist')"
@@ -291,14 +291,14 @@ onMounted(loadData)
     <div v-if="activeTab === 'bans'" class="space-y-6">
       <!-- Add Ban -->
       <Card v-if="authStore.hasPermission('players.ban')">
-        <h3 class="font-semibold text-white mb-4">{{ t('whitelist.banPlayer') }}</h3>
+        <h3 class="font-semibold text-ink mb-4">{{ t('whitelist.banPlayer') }}</h3>
         <form @submit.prevent="addBan" class="space-y-3">
           <div class="flex gap-3">
             <input
               v-model="newBanPlayer"
               type="text"
               :placeholder="t('whitelist.playerName')"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
             />
           </div>
           <div class="flex gap-3">
@@ -306,7 +306,7 @@ onMounted(loadData)
               v-model="newBanReason"
               type="text"
               :placeholder="t('whitelist.banReason')"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
             />
             <Button type="submit" variant="danger" :disabled="!newBanPlayer.trim()">
               {{ t('whitelist.ban') }}
@@ -318,12 +318,12 @@ onMounted(loadData)
       <!-- Bans List -->
       <Card>
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-white">{{ t('whitelist.bannedPlayers') }} ({{ bans.length }})</h3>
+          <h3 class="font-semibold text-ink">{{ t('whitelist.bannedPlayers') }} ({{ bans.length }})</h3>
           <input
             v-model="bansSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
@@ -352,7 +352,7 @@ onMounted(loadData)
                 </svg>
               </div>
               <div>
-                <p class="text-white font-medium">{{ ban.player }}</p>
+                <p class="text-ink font-medium">{{ ban.player }}</p>
                 <p v-if="ban.reason" class="text-sm text-ink-muted">{{ ban.reason }}</p>
                 <p class="text-xs text-ink-subtle">{{ formatDate(ban.bannedAt) }}</p>
               </div>

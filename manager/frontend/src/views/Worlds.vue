@@ -230,7 +230,7 @@ onMounted(loadWorlds)
     <!-- Page Title -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('worlds.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('worlds.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('worlds.subtitle') }}</p>
       </div>
       <button @click="loadWorlds" class="p-2 text-ink-muted hover:text-ink transition-colors" :aria-label="t('common.refresh')">
@@ -266,7 +266,7 @@ onMounted(loadWorlds)
       <!-- File tree -->
       <div class="card lg:col-span-1">
         <div class="card-header">
-          <h3 class="text-lg font-semibold text-white">{{ t('worlds.files') || 'Files' }}</h3>
+          <h3 class="text-lg font-semibold text-ink">{{ t('worlds.files') || 'Files' }}</h3>
         </div>
         <div class="card-body p-0 overflow-y-auto" style="max-height: calc(100vh - 200px);">
           <div v-for="world in worlds" :key="world.name">
@@ -285,7 +285,7 @@ onMounted(loadWorlds)
               <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span class="text-white font-medium">{{ world.name }}</span>
+              <span class="text-ink font-medium">{{ world.name }}</span>
               <span class="text-xs text-ink-subtle ml-auto">{{ world.files?.length || 0 }} {{ t('worlds.fileCount') }}</span>
             </button>
 
@@ -338,7 +338,7 @@ onMounted(loadWorlds)
         <!-- Header with save button -->
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-xl font-semibold text-white">{{ selectedFile }}</h2>
+            <h2 class="text-xl font-semibold text-ink">{{ selectedFile }}</h2>
             <p class="text-sm text-ink-muted">{{ selectedWorld }}</p>
           </div>
           <div class="flex items-center gap-3">
@@ -389,7 +389,7 @@ onMounted(loadWorlds)
           <template v-if="configEditMode === 'text'">
             <div class="card">
               <div class="card-header">
-                <h3 class="text-lg font-semibold text-white">{{ t('worlds.rawEditor') }}</h3>
+                <h3 class="text-lg font-semibold text-ink">{{ t('worlds.rawEditor') }}</h3>
               </div>
               <div class="card-body">
                 <textarea
@@ -407,17 +407,17 @@ onMounted(loadWorlds)
           <!-- World Info -->
           <div class="card">
             <div class="card-header">
-              <h3 class="text-lg font-semibold text-white">{{ t('worlds.worldInfo') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('worlds.worldInfo') }}</h3>
             </div>
             <div class="card-body">
               <div class="grid grid-cols-2 gap-4">
                 <div>
                   <span class="text-ink-muted text-sm">{{ t('worlds.seed') }}</span>
-                  <p class="text-white font-mono">{{ worldConfig.seed }}</p>
+                  <p class="text-ink font-mono">{{ worldConfig.seed }}</p>
                 </div>
                 <div>
                   <span class="text-ink-muted text-sm">{{ t('worlds.gameTime') }}</span>
-                  <p class="text-white font-mono text-sm">{{ worldConfig.gameTime || 'N/A' }}</p>
+                  <p class="text-ink font-mono text-sm">{{ worldConfig.gameTime || 'N/A' }}</p>
                 </div>
               </div>
             </div>
@@ -426,29 +426,29 @@ onMounted(loadWorlds)
           <!-- Gameplay Settings -->
           <div class="card">
             <div class="card-header">
-              <h3 class="text-lg font-semibold text-white">{{ t('worlds.gameplay') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('worlds.gameplay') }}</h3>
             </div>
             <div class="card-body">
               <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isPvpEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.pvpEnabled') }}</span>
+                  <span class="text-ink">{{ t('worlds.pvpEnabled') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isFallDamageEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.fallDamage') }}</span>
+                  <span class="text-ink">{{ t('worlds.fallDamage') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isSpawningNPC" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.npcSpawning') }}</span>
+                  <span class="text-ink">{{ t('worlds.npcSpawning') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isAllNPCFrozen" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.freezeNpcs') }}</span>
+                  <span class="text-ink">{{ t('worlds.freezeNpcs') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isCompassUpdating" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.compassUpdating') }}</span>
+                  <span class="text-ink">{{ t('worlds.compassUpdating') }}</span>
                 </label>
               </div>
               <div class="mt-4">
@@ -466,17 +466,17 @@ onMounted(loadWorlds)
           <!-- World Ticking -->
           <div class="card">
             <div class="card-header">
-              <h3 class="text-lg font-semibold text-white">{{ t('worlds.worldTicking') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('worlds.worldTicking') }}</h3>
             </div>
             <div class="card-body">
               <div class="grid grid-cols-2 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.worldTicking') }}</span>
+                  <span class="text-ink">{{ t('worlds.worldTicking') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isBlockTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.blockTicking') }}</span>
+                  <span class="text-ink">{{ t('worlds.blockTicking') }}</span>
                 </label>
               </div>
             </div>
@@ -485,25 +485,25 @@ onMounted(loadWorlds)
           <!-- Storage Settings -->
           <div class="card">
             <div class="card-header">
-              <h3 class="text-lg font-semibold text-white">{{ t('worlds.storageSaving') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('worlds.storageSaving') }}</h3>
             </div>
             <div class="card-body">
               <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isSavingPlayers" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.savePlayers') }}</span>
+                  <span class="text-ink">{{ t('worlds.savePlayers') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isSavingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.saveChunks') }}</span>
+                  <span class="text-ink">{{ t('worlds.saveChunks') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.saveNewChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.saveNewChunks') }}</span>
+                  <span class="text-ink">{{ t('worlds.saveNewChunks') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isUnloadingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-white">{{ t('worlds.unloadChunks') }}</span>
+                  <span class="text-ink">{{ t('worlds.unloadChunks') }}</span>
                 </label>
               </div>
             </div>
@@ -525,7 +525,7 @@ onMounted(loadWorlds)
                     class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-status-error focus:ring-status-error"
                   >
                   <div>
-                    <span class="text-white">{{ t('worlds.dangerZone.deleteOnUniverseStart') }}</span>
+                    <span class="text-ink">{{ t('worlds.dangerZone.deleteOnUniverseStart') }}</span>
                     <p class="text-xs text-ink-subtle">{{ t('worlds.dangerZone.deleteOnUniverseStartDesc') }}</p>
                   </div>
                 </label>
@@ -537,7 +537,7 @@ onMounted(loadWorlds)
                     class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-status-error focus:ring-status-error"
                   >
                   <div>
-                    <span class="text-white">{{ t('worlds.dangerZone.deleteOnRemove') }}</span>
+                    <span class="text-ink">{{ t('worlds.dangerZone.deleteOnRemove') }}</span>
                     <p class="text-xs text-ink-subtle">{{ t('worlds.dangerZone.deleteOnRemoveDesc') }}</p>
                   </div>
                 </label>
@@ -548,7 +548,7 @@ onMounted(loadWorlds)
           <!-- Raw JSON (collapsible) -->
           <details class="card">
             <summary class="card-header cursor-pointer hover:bg-gray-700/50">
-              <h3 class="text-lg font-semibold text-white">{{ t('worlds.rawConfigJson') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('worlds.rawConfigJson') }}</h3>
             </summary>
             <div class="card-body">
               <pre class="bg-gray-900 p-4 rounded-lg text-sm text-ink-muted overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
@@ -561,7 +561,7 @@ onMounted(loadWorlds)
         <template v-else>
           <div class="card">
             <div class="card-header">
-              <h3 class="text-lg font-semibold text-white">{{ t('worlds.jsonEditor') }}</h3>
+              <h3 class="text-lg font-semibold text-ink">{{ t('worlds.jsonEditor') }}</h3>
             </div>
             <div class="card-body">
               <textarea

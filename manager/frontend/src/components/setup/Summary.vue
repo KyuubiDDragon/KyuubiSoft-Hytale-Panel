@@ -156,7 +156,7 @@ function copyToClipboard(text: string) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.summary.successTitle') }}</h2>
+        <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.summary.successTitle') }}</h2>
         <p class="text-ink-muted">{{ t('setup.summary.successDescription') }}</p>
       </div>
 
@@ -167,7 +167,7 @@ function copyToClipboard(text: string) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 class="text-xl font-bold text-white">{{ t('setup.summary.serverReady') }}</h3>
+          <h3 class="text-xl font-bold text-ink">{{ t('setup.summary.serverReady') }}</h3>
         </div>
       </div>
 
@@ -184,7 +184,7 @@ function copyToClipboard(text: string) {
                 <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                <span class="text-white font-mono">{{ finalPanelUrl }}</span>
+                <span class="text-ink font-mono">{{ finalPanelUrl }}</span>
               </div>
               <button
                 @click="copyToClipboard(finalPanelUrl)"
@@ -213,7 +213,7 @@ function copyToClipboard(text: string) {
                 <svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                 </svg>
-                <span class="text-white font-mono">{{ finalServerAddress }}</span>
+                <span class="text-ink font-mono">{{ finalServerAddress }}</span>
               </div>
               <button
                 @click="copyToClipboard(finalServerAddress)"
@@ -282,7 +282,7 @@ function copyToClipboard(text: string) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
         </div>
-        <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.summary.title') }}</h2>
+        <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.summary.title') }}</h2>
         <p class="text-ink-muted">{{ t('setup.summary.description') }}</p>
       </div>
 
@@ -296,7 +296,7 @@ function copyToClipboard(text: string) {
                 <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                <h3 class="text-white font-semibold">{{ t('setup.summary.adminAccount') }}</h3>
+                <h3 class="text-ink font-semibold">{{ t('setup.summary.adminAccount') }}</h3>
               </div>
               <button
                 @click="handleEdit('admin')"
@@ -322,7 +322,7 @@ function copyToClipboard(text: string) {
                 <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z" />
                 </svg>
-                <h3 class="text-white font-semibold">{{ t('setup.summary.plugin') }}</h3>
+                <h3 class="text-ink font-semibold">{{ t('setup.summary.plugin') }}</h3>
               </div>
               <button
                 @click="handleEdit('plugin')"
@@ -356,7 +356,7 @@ function copyToClipboard(text: string) {
                 <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                <h3 class="text-white font-semibold">{{ t('setup.summary.integrations') }}</h3>
+                <h3 class="text-ink font-semibold">{{ t('setup.summary.integrations') }}</h3>
               </div>
               <button
                 @click="handleEdit('integrations')"
@@ -396,7 +396,7 @@ function copyToClipboard(text: string) {
                 <svg class="w-5 h-5 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                 </svg>
-                <h3 class="text-white font-semibold">{{ t('setup.summary.network') }}</h3>
+                <h3 class="text-ink font-semibold">{{ t('setup.summary.network') }}</h3>
               </div>
               <button
                 @click="handleEdit('network')"

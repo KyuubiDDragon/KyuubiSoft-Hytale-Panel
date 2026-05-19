@@ -148,7 +148,7 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.performanceSettingsTitle') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.performanceSettingsTitle') }}</h2>
       <p class="text-ink-muted">{{ t('setup.performanceSettingsDescription') }}</p>
     </div>
 
@@ -162,7 +162,7 @@ onMounted(() => {
         </div>
         <div class="flex-1">
           <p class="text-sm text-ink-muted">{{ t('setup.detectedSystemRam') }}</p>
-          <p class="text-xl font-bold text-white">{{ detectedRam }} GB</p>
+          <p class="text-xl font-bold text-ink">{{ detectedRam }} GB</p>
         </div>
         <div class="text-right">
           <p class="text-sm text-ink-muted">{{ t('setup.performanceRating') }}</p>
@@ -185,7 +185,7 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h3 class="font-semibold text-white">{{ t('setup.serverRam') }}</h3>
+              <h3 class="font-semibold text-ink">{{ t('setup.serverRam') }}</h3>
               <p class="text-sm text-ink-muted">{{ t('setup.serverRamDescription') }}</p>
             </div>
           </div>
@@ -275,7 +275,7 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h3 class="font-semibold text-white">{{ t('setup.viewRadius') }}</h3>
+              <h3 class="font-semibold text-ink">{{ t('setup.viewRadius') }}</h3>
               <p class="text-sm text-ink-muted">{{ t('setup.viewRadiusDescription') }}</p>
             </div>
           </div>
@@ -286,7 +286,7 @@ onMounted(() => {
           <div>
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm text-ink-muted">{{ t('setup.chunks') }}</span>
-              <span class="text-lg font-bold text-white">{{ viewRadius }}</span>
+              <span class="text-lg font-bold text-ink">{{ viewRadius }}</span>
             </div>
             <input
               v-model="viewRadius"
@@ -333,9 +333,9 @@ onMounted(() => {
           <div class="text-sm text-ink-muted">
             <p class="font-medium text-ink-muted mb-2">{{ t('setup.performanceGuideTitle') }}</p>
             <ul class="space-y-1">
-              <li><span class="text-white">10-20 {{ t('setup.players') }}:</span> 4-6 GB RAM, 16 {{ t('setup.chunks') }}</li>
-              <li><span class="text-white">20-50 {{ t('setup.players') }}:</span> 6-8 GB RAM, 12-16 {{ t('setup.chunks') }}</li>
-              <li><span class="text-white">50+ {{ t('setup.players') }}:</span> 8+ GB RAM, 10-12 {{ t('setup.chunks') }}</li>
+              <li><span class="text-ink">10-20 {{ t('setup.players') }}:</span> 4-6 GB RAM, 16 {{ t('setup.chunks') }}</li>
+              <li><span class="text-ink">20-50 {{ t('setup.players') }}:</span> 6-8 GB RAM, 12-16 {{ t('setup.chunks') }}</li>
+              <li><span class="text-ink">50+ {{ t('setup.players') }}:</span> 8+ GB RAM, 10-12 {{ t('setup.chunks') }}</li>
             </ul>
           </div>
         </div>

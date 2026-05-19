@@ -156,7 +156,7 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.network.title') }}</h2>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.network.title') }}</h2>
       <p class="text-ink-muted">{{ t('setup.network.description') }}</p>
     </div>
 
@@ -184,7 +184,7 @@ onMounted(() => {
           </div>
           <div class="flex-1">
             <div class="flex items-center gap-2">
-              <p class="text-white font-medium">{{ t('setup.network.localhost.title') }}</p>
+              <p class="text-ink font-medium">{{ t('setup.network.localhost.title') }}</p>
               <span class="text-xs px-2 py-0.5 rounded bg-status-success/20 text-status-success">
                 {{ t('setup.network.mostSecure') }}
               </span>
@@ -221,7 +221,7 @@ onMounted(() => {
             />
           </div>
           <div class="flex-1">
-            <p class="text-white font-medium">{{ t('setup.network.lan.title') }}</p>
+            <p class="text-ink font-medium">{{ t('setup.network.lan.title') }}</p>
             <p class="text-sm text-ink-muted mt-1">{{ t('setup.network.lan.description') }}</p>
             <div class="mt-2 flex items-center gap-2 text-sm">
               <svg class="w-4 h-4 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -266,7 +266,7 @@ onMounted(() => {
               />
             </div>
             <div class="flex-1">
-              <p class="text-white font-medium">{{ t('setup.network.custom.title') }}</p>
+              <p class="text-ink font-medium">{{ t('setup.network.custom.title') }}</p>
               <p class="text-sm text-ink-muted mt-1">{{ t('setup.network.custom.description') }}</p>
             </div>
           </div>
@@ -286,7 +286,7 @@ onMounted(() => {
           <!-- Trust Proxy Toggle -->
           <div class="mt-4 flex items-center justify-between p-3 bg-surface-muted rounded-lg">
             <div>
-              <p class="text-sm text-white font-medium">{{ t('setup.network.trustProxy.title') }}</p>
+              <p class="text-sm text-ink font-medium">{{ t('setup.network.trustProxy.title') }}</p>
               <p class="text-xs text-ink-muted mt-0.5">{{ t('setup.network.trustProxy.description') }}</p>
             </div>
             <button
@@ -325,7 +325,7 @@ onMounted(() => {
       <div class="card-body py-3">
         <div class="flex items-center justify-between">
           <span class="text-sm text-ink-muted">{{ t('setup.network.panelUrl') }}</span>
-          <span class="text-sm text-white font-mono">{{ panelUrl }}</span>
+          <span class="text-sm text-ink font-mono">{{ panelUrl }}</span>
         </div>
       </div>
     </div>
