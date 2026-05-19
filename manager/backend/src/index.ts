@@ -456,16 +456,26 @@ app.use('/api/audit-log', auditRoutes);
 
 // v3 multi-server registry.
 //
-// /api/servers/*       — registry CRUD (this router)
-// /api/servers/:id/... — reserved for the future per-server router; for v3.0
-//                        alpha the registry only tracks instances. All
-//                        existing /api/server/*, /api/backups/*, /api/players/*
-//                        routes still operate against the single default
-//                        server identified by `servers.json.defaultId` so
-//                        nothing breaks for v2.x clients. Per-server
-//                        scoping is the docker.ts refactor that lands in
-//                        a follow-up alpha.
+//   /api/servers/*                        — registry CRUD (this router)
+//   /api/servers/:serverId/<resource>/... — scoped invocation of any
+//                                           resource router. The serverScope
+//                                           middleware sets req.serverId,
+//                                           the service layer (docker.ts,
+//                                           scheduler.ts, backup.ts, …) uses
+//                                           it. Legacy /api/<resource>/...
+//                                           still works against the default
+//                                           server identified by
+//                                           servers.json.defaultId.
 app.use('/api/servers', serversRoutes);
+
+import { serverScopeMiddleware } from './middleware/serverScope.js';
+app.use('/api/servers/:serverId/server',     serverScopeMiddleware, serverRoutes);
+app.use('/api/servers/:serverId/console',    serverScopeMiddleware, consoleRoutes);
+app.use('/api/servers/:serverId/backups',    serverScopeMiddleware, backupRoutes);
+app.use('/api/servers/:serverId/players',    serverScopeMiddleware, playersRoutes);
+app.use('/api/servers/:serverId/management', serverScopeMiddleware, managementRoutes);
+app.use('/api/servers/:serverId/scheduler',  serverScopeMiddleware, schedulerRoutes);
+app.use('/api/servers/:serverId/assets',     serverScopeMiddleware, assetsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

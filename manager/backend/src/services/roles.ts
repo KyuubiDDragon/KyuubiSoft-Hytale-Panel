@@ -409,12 +409,43 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
   return [];
 }
 
+/**
+ * Permissions effective for a user on a particular server. Resolves the
+ * hybrid model: a global role from users.json plus optional per-server
+ * role overrides in user.serverScopes[serverId].roleId.
+ *
+ * When serverId is omitted only the global role's permissions are returned
+ * — that's the right answer for routes that aren't scoped to one server
+ * (like /api/auth/me or /api/audit-log).
+ */
+export async function getUserPermissionsForServer(
+  username: string,
+  serverId?: string,
+): Promise<PermissionEntry[]> {
+  const global = await getUserPermissions(username);
+  if (!serverId) return global;
+  if (global.includes('*')) return global; // admins bypass scoping
+  const user = await getUser(username);
+  const userAny = user as unknown as { serverScopes?: Record<string, { roleId: string }> } | null;
+  const scopedRoleId = userAny?.serverScopes?.[serverId]?.roleId;
+  if (!scopedRoleId) return global;
+  if (isDemoMode()) return global;
+  const data = await readRoles();
+  const role = data.roles.find(r => r.id === scopedRoleId);
+  if (!role) return global;
+  // Per-server permissions ADD to the global set (least surprise: granting
+  // a scoped operator role to a viewer makes them an operator on that server,
+  // never less).
+  return Array.from(new Set([...global, ...role.permissions])) as PermissionEntry[];
+}
+
 // Check if user has specific permission (handle '*' wildcard for admin)
 export async function hasPermission(
   username: string,
-  permission: Permission
+  permission: Permission,
+  serverId?: string,
 ): Promise<boolean> {
-  const permissions = await getUserPermissions(username);
+  const permissions = await getUserPermissionsForServer(username, serverId);
 
   // Admin wildcard grants all permissions
   if (permissions.includes('*')) {

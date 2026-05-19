@@ -50,19 +50,19 @@ router.get('/demo', (_req: Request, res: Response) => {
 });
 
 // GET /api/server/status
-router.get('/status', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
-  const status = await dockerService.getStatus();
+router.get('/status', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
+  const status = await dockerService.getStatus((req as { serverId?: string }).serverId);
   res.json(status);
 });
 
 // GET /api/server/stats
-router.get('/stats', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
-  const stats = await dockerService.getStats();
+router.get('/stats', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
+  const stats = await dockerService.getStats((req as { serverId?: string }).serverId);
   res.json(stats);
 });
 
 // GET /api/server/memory - Get detailed memory stats from server command
-router.get('/memory', authMiddleware, requirePermission('performance.view'), async (_req: Request, res: Response) => {
+router.get('/memory', authMiddleware, requirePermission('performance.view'), async (req: Request, res: Response) => {
   // Demo mode: return mock memory stats
   if (isDemoMode()) {
     res.json(getDemoMemoryStats());
@@ -130,7 +130,7 @@ router.get('/memory', authMiddleware, requirePermission('performance.view'), asy
 });
 
 // GET /api/server/quick-settings - Get quick settings from config.json
-router.get('/quick-settings', authMiddleware, requirePermission('config.view'), async (_req: Request, res: Response) => {
+router.get('/quick-settings', authMiddleware, requirePermission('config.view'), async (req: Request, res: Response) => {
   // Demo mode: return mock settings
   if (isDemoMode()) {
     res.json(getDemoQuickSettings());
@@ -163,7 +163,7 @@ router.get('/quick-settings', authMiddleware, requirePermission('config.view'), 
 // GET /api/server/config - Read the full server config.json with Zod
 // validation metadata. Returns the parsed config plus a list of validation
 // issues so the UI can flag unexpected fields without throwing them away.
-router.get('/config', authMiddleware, requirePermission('config.view'), async (_req: Request, res: Response) => {
+router.get('/config', authMiddleware, requirePermission('config.view'), async (req: Request, res: Response) => {
   if (isDemoMode()) {
     const demo = getDemoQuickSettings();
     res.json({
@@ -288,7 +288,7 @@ router.put('/quick-settings', authMiddleware, requirePermission('config.edit'), 
 });
 
 // POST /api/server/start
-router.post('/start', authMiddleware, requirePermission('server.start'), async (_req: Request, res: Response) => {
+router.post('/start', authMiddleware, requirePermission('server.start'), async (req: Request, res: Response) => {
   // Demo mode: simulate server start
   if (isDemoMode()) {
     res.json({
@@ -298,7 +298,7 @@ router.post('/start', authMiddleware, requirePermission('server.start'), async (
     return;
   }
 
-  const result = await dockerService.startContainer();
+  const result = await dockerService.startContainer((req as { serverId?: string }).serverId);
   if (!result.success) {
     res.status(500).json(result);
     return;
@@ -307,7 +307,7 @@ router.post('/start', authMiddleware, requirePermission('server.start'), async (
 });
 
 // POST /api/server/stop
-router.post('/stop', authMiddleware, requirePermission('server.stop'), async (_req: Request, res: Response) => {
+router.post('/stop', authMiddleware, requirePermission('server.stop'), async (req: Request, res: Response) => {
   // Demo mode: simulate server stop
   if (isDemoMode()) {
     res.json({
@@ -317,7 +317,7 @@ router.post('/stop', authMiddleware, requirePermission('server.stop'), async (_r
     return;
   }
 
-  const result = await dockerService.stopContainer();
+  const result = await dockerService.stopContainer((req as { serverId?: string }).serverId);
   if (!result.success) {
     res.status(500).json(result);
     return;
@@ -326,7 +326,7 @@ router.post('/stop', authMiddleware, requirePermission('server.stop'), async (_r
 });
 
 // POST /api/server/restart
-router.post('/restart', authMiddleware, requirePermission('server.restart'), async (_req: Request, res: Response) => {
+router.post('/restart', authMiddleware, requirePermission('server.restart'), async (req: Request, res: Response) => {
   // Demo mode: simulate server restart
   if (isDemoMode()) {
     res.json({
@@ -336,7 +336,7 @@ router.post('/restart', authMiddleware, requirePermission('server.restart'), asy
     return;
   }
 
-  const result = await dockerService.restartContainer();
+  const result = await dockerService.restartContainer((req as { serverId?: string }).serverId);
   if (!result.success) {
     res.status(500).json(result);
     return;
@@ -384,7 +384,7 @@ async function writePanelConfig(config: PanelConfig): Promise<void> {
 }
 
 // GET /api/server/patchline - Get current patchline setting
-router.get('/patchline', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/patchline', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   // Demo mode: return demo patchline
   if (isDemoMode()) {
     const demoPatchline = getDemoPatchlineConfig();
@@ -468,7 +468,7 @@ router.put('/patchline', authMiddleware, requirePermission('config.edit'), async
 });
 
 // GET /api/server/accept-early-plugins - Get current acceptEarlyPlugins setting
-router.get('/accept-early-plugins', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/accept-early-plugins', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   // Demo mode: return demo setting
   if (isDemoMode()) {
     res.json({ acceptEarlyPlugins: true });
@@ -530,7 +530,7 @@ router.put('/accept-early-plugins', authMiddleware, requirePermission('config.ed
 });
 
 // GET /api/server/disable-sentry - Get current disableSentry setting
-router.get('/disable-sentry', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/disable-sentry', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   // Demo mode: return demo setting
   if (isDemoMode()) {
     res.json({ disableSentry: false });
@@ -592,7 +592,7 @@ router.put('/disable-sentry', authMiddleware, requirePermission('config.edit'), 
 });
 
 // GET /api/server/allow-op - Get current allowOp setting
-router.get('/allow-op', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/allow-op', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   // Demo mode: return demo setting
   if (isDemoMode()) {
     res.json({ allowOp: true });
@@ -745,7 +745,7 @@ async function getLatestVersion(patchline: string): Promise<VersionCheckResult> 
 }
 
 // GET /api/server/check-update - Check if a Hytale server update is available
-router.get('/check-update', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/check-update', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   // Demo mode: return mock update status
   if (isDemoMode()) {
     const updateStatus = getDemoUpdateStatus();
@@ -832,7 +832,7 @@ router.get('/check-update', authMiddleware, requirePermission('server.view_statu
 });
 
 // GET /api/server/config/files - List config files
-router.get('/config/files', authMiddleware, requirePermission('config.view'), async (_req: Request, res: Response) => {
+router.get('/config/files', authMiddleware, requirePermission('config.view'), async (req: Request, res: Response) => {
   // Demo mode: return demo config files
   if (isDemoMode()) {
     const demoFiles = getDemoConfigFiles();
@@ -954,7 +954,7 @@ router.put('/config/:filename', authMiddleware, requirePermission('config.edit')
 // =============================================
 
 // GET /api/server/plugin/status - Get KyuubiSoft API plugin status
-router.get('/plugin/status', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/plugin/status', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
     const status = await kyuubiApiService.getPluginStatus();
     res.json(status);
@@ -967,7 +967,7 @@ router.get('/plugin/status', authMiddleware, requirePermission('server.view_stat
 });
 
 // GET /api/server/plugin/update-check - Check if plugin update is available
-router.get('/plugin/update-check', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/plugin/update-check', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   // Demo mode: return mock plugin update status
   if (isDemoMode()) {
     const pluginUpdate = getDemoPluginUpdateStatus();
@@ -987,7 +987,7 @@ router.get('/plugin/update-check', authMiddleware, requirePermission('server.vie
 });
 
 // POST /api/server/plugin/install - Install or update the KyuubiSoft API plugin
-router.post('/plugin/install', authMiddleware, requirePermission('mods.install'), async (_req: Request, res: Response) => {
+router.post('/plugin/install', authMiddleware, requirePermission('mods.install'), async (req: Request, res: Response) => {
   // Demo mode: simulate plugin install
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Plugin installed (simulated)', version: '1.0.0' });
@@ -1014,7 +1014,7 @@ router.post('/plugin/install', authMiddleware, requirePermission('mods.install')
 });
 
 // DELETE /api/server/plugin/uninstall - Uninstall the KyuubiSoft API plugin
-router.delete('/plugin/uninstall', authMiddleware, requirePermission('mods.install'), async (_req: Request, res: Response) => {
+router.delete('/plugin/uninstall', authMiddleware, requirePermission('mods.install'), async (req: Request, res: Response) => {
   // Demo mode: simulate plugin uninstall
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Plugin uninstalled (simulated)' });
@@ -1040,7 +1040,7 @@ router.delete('/plugin/uninstall', authMiddleware, requirePermission('mods.insta
 });
 
 // GET /api/server/plugin/players - Get players from plugin API (more accurate)
-router.get('/plugin/players', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/plugin/players', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
     const result = await kyuubiApiService.getPlayersFromPlugin();
     if (!result.success) {
@@ -1057,7 +1057,7 @@ router.get('/plugin/players', authMiddleware, requirePermission('server.view_sta
 });
 
 // GET /api/server/plugin/info - Get server info from plugin API
-router.get('/plugin/info', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/plugin/info', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
     const result = await kyuubiApiService.getServerInfoFromPlugin();
     if (!result.success) {
@@ -1074,7 +1074,7 @@ router.get('/plugin/info', authMiddleware, requirePermission('server.view_status
 });
 
 // GET /api/server/plugin/memory - Get memory stats from plugin API
-router.get('/plugin/memory', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/plugin/memory', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
     const result = await kyuubiApiService.getMemoryFromPlugin();
     if (!result.success) {
@@ -1091,7 +1091,7 @@ router.get('/plugin/memory', authMiddleware, requirePermission('server.view_stat
 });
 
 // GET /api/server/plugin/metrics - Get Prometheus metrics from plugin API
-router.get('/plugin/metrics', authMiddleware, requirePermission('performance.view'), async (_req: Request, res: Response) => {
+router.get('/plugin/metrics', authMiddleware, requirePermission('performance.view'), async (req: Request, res: Response) => {
   try {
     const result = await kyuubiApiService.getPrometheusMetrics();
     if (!result.success) {
@@ -1120,7 +1120,7 @@ router.get('/plugin/metrics', authMiddleware, requirePermission('performance.vie
 });
 
 // GET /api/server/plugin/tps - Get extended TPS metrics from plugin API
-router.get('/plugin/tps', authMiddleware, requirePermission('performance.view'), async (_req: Request, res: Response) => {
+router.get('/plugin/tps', authMiddleware, requirePermission('performance.view'), async (req: Request, res: Response) => {
   try {
     const result = await kyuubiApiService.getPrometheusMetrics();
     if (!result.success) {
@@ -1385,7 +1385,7 @@ router.get('/players/:name/file/inventory', authMiddleware, requirePermission('p
 // ============================================================
 
 // GET /api/server/downloader/auth-status - Check downloader authentication status
-router.get('/downloader/auth-status', authMiddleware, requirePermission('server.view_status'), async (_req: Request, res: Response) => {
+router.get('/downloader/auth-status', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   // Demo mode: return demo downloader status
   if (isDemoMode()) {
     const demoStatus = getDemoDownloaderStatus();
@@ -1436,7 +1436,7 @@ let downloaderOAuthState: {
 } = { active: false };
 
 // POST /api/server/downloader/initiate-auth - Start downloader OAuth flow
-router.post('/downloader/initiate-auth', authMiddleware, requirePermission('server.restart'), async (_req: Request, res: Response) => {
+router.post('/downloader/initiate-auth', authMiddleware, requirePermission('server.restart'), async (req: Request, res: Response) => {
   try {
     console.log('[Server] Initiating downloader OAuth flow...');
 
@@ -1526,7 +1526,7 @@ router.post('/downloader/initiate-auth', authMiddleware, requirePermission('serv
 });
 
 // GET /api/server/downloader/auth-poll - Poll for auth completion
-router.get('/downloader/auth-poll', authMiddleware, requirePermission('server.restart'), async (_req: Request, res: Response) => {
+router.get('/downloader/auth-poll', authMiddleware, requirePermission('server.restart'), async (req: Request, res: Response) => {
   try {
     if (!downloaderOAuthState.active) {
       return res.json({
@@ -1602,7 +1602,7 @@ function getDefaultUpdateConfig(): UpdateConfig {
 }
 
 // GET /api/server/update-config - Get native update configuration
-router.get('/update-config', authMiddleware, requirePermission('updates.view'), async (_req: Request, res: Response) => {
+router.get('/update-config', authMiddleware, requirePermission('updates.view'), async (req: Request, res: Response) => {
   // Demo mode: return demo update config
   if (isDemoMode()) {
     res.json(getDemoUpdateConfig());
@@ -1783,7 +1783,7 @@ function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
 }
 
 // GET /api/server/update-status - Get native update status
-router.get('/update-status', authMiddleware, requirePermission('updates.view'), async (_req: Request, res: Response) => {
+router.get('/update-status', authMiddleware, requirePermission('updates.view'), async (req: Request, res: Response) => {
   // Demo mode: return demo update status
   if (isDemoMode()) {
     res.json({ success: true, data: getDemoUpdateStatus() });
@@ -1814,7 +1814,7 @@ router.get('/update-status', authMiddleware, requirePermission('updates.view'), 
 });
 
 // POST /api/server/update-check - Check for updates
-router.post('/update-check', authMiddleware, requirePermission('updates.check'), async (_req: Request, res: Response) => {
+router.post('/update-check', authMiddleware, requirePermission('updates.check'), async (req: Request, res: Response) => {
   try {
     const result = await dockerService.execCommand('/update check');
 
@@ -1847,7 +1847,7 @@ router.post('/update-check', authMiddleware, requirePermission('updates.check'),
 });
 
 // POST /api/server/update-download - Download available update
-router.post('/update-download', authMiddleware, requirePermission('updates.download'), async (_req: Request, res: Response) => {
+router.post('/update-download', authMiddleware, requirePermission('updates.download'), async (req: Request, res: Response) => {
   // Demo mode: simulate update download
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Update download started (simulated)', data: { state: 'DOWNLOADING', progress: 0 } });
@@ -1879,7 +1879,7 @@ router.post('/update-download', authMiddleware, requirePermission('updates.downl
 });
 
 // POST /api/server/update-apply - Apply downloaded update (restarts server)
-router.post('/update-apply', authMiddleware, requirePermission('updates.apply'), async (_req: Request, res: Response) => {
+router.post('/update-apply', authMiddleware, requirePermission('updates.apply'), async (req: Request, res: Response) => {
   // Demo mode: simulate update apply
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Update applied (simulated)', warning: 'Server would restart in real mode' });
@@ -1917,7 +1917,7 @@ router.post('/update-apply', authMiddleware, requirePermission('updates.apply'),
 });
 
 // POST /api/server/update-cancel - Cancel ongoing download
-router.post('/update-cancel', authMiddleware, requirePermission('updates.download'), async (_req: Request, res: Response) => {
+router.post('/update-cancel', authMiddleware, requirePermission('updates.download'), async (req: Request, res: Response) => {
   // Demo mode: simulate update cancel
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Update cancelled (simulated)' });
@@ -1945,7 +1945,7 @@ router.post('/update-cancel', authMiddleware, requirePermission('updates.downloa
 // ============================================================
 
 // GET /api/server/new-features - Get new features status
-router.get('/new-features', authMiddleware, requirePermission('dashboard.view'), async (_req: Request, res: Response) => {
+router.get('/new-features', authMiddleware, requirePermission('dashboard.view'), async (req: Request, res: Response) => {
   // Demo mode: return demo new features
   if (isDemoMode()) {
     const demoFeatures = getDemoNewFeatures();
@@ -1988,7 +1988,7 @@ router.get('/new-features', authMiddleware, requirePermission('dashboard.view'),
 });
 
 // POST /api/server/new-features/dismiss - Dismiss new features banner
-router.post('/new-features/dismiss', authMiddleware, requirePermission('dashboard.view'), async (_req: Request, res: Response) => {
+router.post('/new-features/dismiss', authMiddleware, requirePermission('dashboard.view'), async (req: Request, res: Response) => {
   // Demo mode: simulate dismiss
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] New features banner dismissed (simulated)' });

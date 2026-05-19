@@ -14,6 +14,13 @@ async function effectivePermissions(req: AuthenticatedRequest): Promise<string[]
     return req.apiKey.scopes;
   }
   if (!req.user) return [];
+  // Hybrid scope: when a route is mounted under /api/servers/:serverId/...
+  // serverScopeMiddleware sets req.serverId and we apply per-server role
+  // overrides. Otherwise only the global role's permissions count.
+  if (req.serverId) {
+    const { getUserPermissionsForServer } = await import('../services/roles.js');
+    return getUserPermissionsForServer(req.user, req.serverId);
+  }
   return getUserPermissions(req.user);
 }
 
