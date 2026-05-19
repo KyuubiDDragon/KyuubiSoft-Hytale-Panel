@@ -155,7 +155,7 @@ function sendMessage(name: string) {
               @keyup.enter="sendMessage(player.name)"
               type="text"
               :placeholder="t('players.messagePlaceholder') || 'Send message...'"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
             />
             <Button
               variant="primary"

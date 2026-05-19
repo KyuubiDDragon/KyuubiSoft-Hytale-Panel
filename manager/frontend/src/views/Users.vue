@@ -309,7 +309,7 @@ onMounted(() => {
             <input
               v-model="formUsername"
               type="text"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
               :placeholder="t('users.usernamePlaceholder')"
             />
           </div>
@@ -319,7 +319,7 @@ onMounted(() => {
             <input
               v-model="formPassword"
               type="password"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
               :placeholder="t('users.passwordPlaceholder')"
             />
           </div>
@@ -359,7 +359,7 @@ onMounted(() => {
             <input
               v-model="formPassword"
               type="password"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
               :placeholder="t('users.newPasswordPlaceholder')"
             />
             <p class="text-xs text-ink-subtle mt-1">{{ t('users.leaveBlank') }}</p>

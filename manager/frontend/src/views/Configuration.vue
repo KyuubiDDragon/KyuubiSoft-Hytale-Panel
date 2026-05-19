@@ -253,7 +253,7 @@ onMounted(() => {
           <input
             v-model="quickSettings.serverName"
             type="text"
-            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.serverNamePlaceholder')"
           />
         </div>
@@ -264,7 +264,7 @@ onMounted(() => {
           <input
             v-model="quickSettings.motd"
             type="text"
-            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.motdPlaceholder')"
           />
         </div>
@@ -275,7 +275,7 @@ onMounted(() => {
           <input
             v-model="quickSettings.password"
             type="password"
-            class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.passwordPlaceholder')"
           />
           <p class="text-xs text-ink-subtle mt-1">{{ t('config.passwordHint') }}</p>
@@ -291,7 +291,7 @@ onMounted(() => {
               type="number"
               min="1"
               max="1000"
-              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
           </div>
 
@@ -303,7 +303,7 @@ onMounted(() => {
               type="number"
               min="1"
               max="64"
-              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
           </div>
 
@@ -312,7 +312,7 @@ onMounted(() => {
             <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.defaultGameMode') }}</label>
             <select
               v-model="quickSettings.defaultGameMode"
-              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option v-for="mode in gameModes" :key="mode" :value="mode">
                 {{ t(`players.gamemodes.${mode.toLowerCase()}`) }}
@@ -385,7 +385,7 @@ onMounted(() => {
             <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.checkInterval') }}</label>
             <select
               v-model.number="updateConfig.checkIntervalSeconds"
-              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option :value="1800">{{ t('config.updateConfig.interval30min') }}</option>
               <option :value="3600">{{ t('config.updateConfig.interval1hour') }}</option>
@@ -438,7 +438,7 @@ onMounted(() => {
             <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.autoApplyMode') }}</label>
             <select
               v-model="updateConfig.autoApplyMode"
-              class="w-full bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option value="DISABLED">{{ t('config.updateConfig.modeDisabled') }}</option>
               <option value="WHEN_EMPTY">{{ t('config.updateConfig.modeWhenEmpty') }}</option>
@@ -460,7 +460,7 @@ onMounted(() => {
                 type="number"
                 min="1"
                 max="60"
-                class="w-24 bg-dark-400 text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+                class="w-24 bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
               <span class="text-ink-muted text-sm">{{ t('config.updateConfig.minutes') }}</span>
             </div>
@@ -655,7 +655,7 @@ onMounted(() => {
       <Card v-else :title="editorMode === 'json' ? t('config.jsonEditor') : t('config.textEditor')">
         <textarea
           v-model="fileContent"
-          class="w-full h-[500px] bg-dark-400 text-ink-muted font-mono text-sm p-4 rounded-lg border border-border focus:border-hytale-orange focus:outline-none resize-y"
+          class="w-full h-[500px] bg-surface text-ink-muted font-mono text-sm p-4 rounded-lg border border-border focus:border-hytale-orange focus:outline-none resize-y"
           spellcheck="false"
         ></textarea>
       </Card>

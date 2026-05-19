@@ -688,7 +688,7 @@ const toolsGrid = computed(() => {
                       :key="`hotbar-${index}`"
                       :class="[
                         'aspect-square rounded border flex flex-col items-center justify-center relative group cursor-pointer',
-                        item ? 'bg-surface-raised border-hytale-orange/30 hover:border-hytale-orange' : 'bg-surface-muted/50 border-dark-100',
+                        item ? 'bg-surface-raised border-hytale-orange/30 hover:border-hytale-orange' : 'bg-surface-muted/50 border-border',
                         index === inventory.activeHotbarSlot ? 'ring-2 ring-hytale-orange' : ''
                       ]"
                       @mouseenter="item && showTooltip(item, $event)"
@@ -735,7 +735,7 @@ const toolsGrid = computed(() => {
                         :key="`armor-${index}`"
                         :class="[
                           'aspect-square rounded border flex flex-col items-center justify-center relative cursor-pointer',
-                          item ? 'bg-surface-raised border-blue-500/30 hover:border-blue-500' : 'bg-surface-muted/50 border-dark-100'
+                          item ? 'bg-surface-raised border-blue-500/30 hover:border-blue-500' : 'bg-surface-muted/50 border-border'
                         ]"
                         @mouseenter="item && showTooltip(item, $event)"
                         @mouseleave="hideTooltip"
@@ -756,7 +756,7 @@ const toolsGrid = computed(() => {
                             <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
                           </div>
                         </template>
-                        <span v-else class="text-[10px] text-gray-600">{{ ['H', 'C', 'G', 'L'][index] }}</span>
+                        <span v-else class="text-[10px] text-ink-subtle">{{ ['H', 'C', 'G', 'L'][index] }}</span>
                       </div>
                     </div>
                   </div>
@@ -776,7 +776,7 @@ const toolsGrid = computed(() => {
                         :key="`utility-${index}`"
                         :class="[
                           'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                          item ? 'bg-surface-raised border-purple-500/30 hover:border-purple-500' : 'bg-surface-muted/50 border-dark-100'
+                          item ? 'bg-surface-raised border-purple-500/30 hover:border-purple-500' : 'bg-surface-muted/50 border-border'
                         ]"
                         @mouseenter="item && showTooltip(item, $event)"
                         @mouseleave="hideTooltip"
@@ -815,7 +815,7 @@ const toolsGrid = computed(() => {
                         :key="`tool-${index}`"
                         :class="[
                           'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                          item ? 'bg-surface-raised border-cyan-500/30 hover:border-cyan-500' : 'bg-surface-muted/50 border-dark-100'
+                          item ? 'bg-surface-raised border-cyan-500/30 hover:border-cyan-500' : 'bg-surface-muted/50 border-border'
                         ]"
                         @mouseenter="item && showTooltip(item, $event)"
                         @mouseleave="hideTooltip"
@@ -839,7 +839,7 @@ const toolsGrid = computed(() => {
                             <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
                           </div>
                         </template>
-                        <span v-else class="text-[10px] text-gray-600">T</span>
+                        <span v-else class="text-[10px] text-ink-subtle">T</span>
                       </div>
                     </div>
                   </div>
@@ -860,7 +860,7 @@ const toolsGrid = computed(() => {
                       :key="`storage-${index}`"
                       :class="[
                         'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                        item ? 'bg-surface-raised border-border hover:border-gray-500' : 'bg-surface-muted/50 border-dark-100'
+                        item ? 'bg-surface-raised border-border hover:border-gray-500' : 'bg-surface-muted/50 border-border'
                       ]"
                       @mouseenter="item && showTooltip(item, $event)"
                       @mouseleave="hideTooltip"
@@ -899,7 +899,7 @@ const toolsGrid = computed(() => {
                       :key="`backpack-${index}`"
                       :class="[
                         'aspect-square rounded border flex items-center justify-center relative cursor-pointer',
-                        item ? 'bg-surface-raised border-amber-500/30 hover:border-amber-500' : 'bg-surface-muted/50 border-dark-100'
+                        item ? 'bg-surface-raised border-amber-500/30 hover:border-amber-500' : 'bg-surface-muted/50 border-border'
                       ]"
                       @mouseenter="item && showTooltip(item, $event)"
                       @mouseleave="hideTooltip"

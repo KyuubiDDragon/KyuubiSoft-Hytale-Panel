@@ -115,15 +115,15 @@ onMounted(() => {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card :title="t('statistics.playtimeStats')">
           <div class="space-y-4">
-            <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
+            <div class="flex justify-between items-center p-3 bg-surface rounded-lg">
               <span class="text-ink-muted">{{ t('statistics.totalPlaytime') }}</span>
               <span class="font-medium text-ink">{{ formatPlaytime(stats.totalPlaytime) }}</span>
             </div>
-            <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
+            <div class="flex justify-between items-center p-3 bg-surface rounded-lg">
               <span class="text-ink-muted">{{ t('statistics.averagePlaytime') }}</span>
               <span class="font-medium text-ink">{{ formatPlaytime(stats.averagePlaytime) }}</span>
             </div>
-            <div class="flex justify-between items-center p-3 bg-dark-400 rounded-lg">
+            <div class="flex justify-between items-center p-3 bg-surface rounded-lg">
               <span class="text-ink-muted">{{ t('statistics.avgSessions') }}</span>
               <span class="font-medium text-ink">{{ stats.averageSessionsPerPlayer }}</span>
             </div>
@@ -135,7 +135,7 @@ onMounted(() => {
           <div class="space-y-2">
             <div v-for="day in activity" :key="day.date" class="flex items-center gap-3">
               <span class="w-12 text-xs text-ink-subtle">{{ formatDate(day.date) }}</span>
-              <div class="flex-1 h-6 bg-dark-400 rounded overflow-hidden">
+              <div class="flex-1 h-6 bg-surface rounded overflow-hidden">
                 <div
                   class="h-full bg-gradient-to-r from-hytale-orange to-hytale-yellow transition-all duration-300"
                   :style="{ width: `${(day.uniquePlayers / maxActivityValue) * 100}%` }"

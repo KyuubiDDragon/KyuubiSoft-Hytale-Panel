@@ -294,7 +294,7 @@ function getCategoryLabel(id: string): string {
               v-model="searchQuery"
               type="text"
               :placeholder="t('help.searchPlaceholder')"
-              class="w-full pl-10 pr-4 py-2.5 bg-surface-overlay border border-border/60 rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50 transition-colors"
+              class="w-full pl-10 pr-4 py-2.5 bg-surface-overlay border border-border/60 rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50 transition-colors"
             />
           </div>
         </div>

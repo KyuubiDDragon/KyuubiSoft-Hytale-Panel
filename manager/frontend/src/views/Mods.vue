@@ -1547,7 +1547,7 @@ onMounted(() => {
                   </svg>
                   GitHub
                 </a>
-                <span v-if="mod.ports" class="text-gray-600">
+                <span v-if="mod.ports" class="text-ink-subtle">
                   {{ t('mods.ports') }}: {{ mod.ports.map(p => p.default).join(', ') }}
                 </span>
               </div>
@@ -1679,7 +1679,7 @@ onMounted(() => {
                 v-model="modtaleSearch"
                 type="text"
                 :placeholder="t('mods.searchModtale')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-cyan-500"
               />
             </div>
           </div>
@@ -1744,7 +1744,7 @@ onMounted(() => {
                   class="w-full h-full object-cover"
                 />
                 <div v-else class="w-full h-full flex items-center justify-center">
-                  <svg class="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-8 h-8 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
                 </div>
@@ -2102,7 +2102,7 @@ onMounted(() => {
                 v-model="stackmartSearch"
                 type="text"
                 :placeholder="t('mods.searchStackMart')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>
@@ -2164,7 +2164,7 @@ onMounted(() => {
                   class="w-full h-full object-cover"
                 />
                 <div v-else class="w-full h-full flex items-center justify-center">
-                  <svg class="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-8 h-8 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                 </div>
@@ -2199,7 +2199,7 @@ onMounted(() => {
                     </svg>
                     {{ resource.rating?.toFixed(1) || '0.0' }}
                   </span>
-                  <span class="text-xs text-gray-600">v{{ resource.version }}</span>
+                  <span class="text-xs text-ink-subtle">v{{ resource.version }}</span>
                 </div>
               </div>
             </div>
@@ -2341,7 +2341,7 @@ onMounted(() => {
                 v-model="curseforgeSearch"
                 type="text"
                 :placeholder="t('mods.searchCurseForge')"
-                class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-orange-500"
               />
             </div>
             <select
@@ -2387,7 +2387,7 @@ onMounted(() => {
                   :alt="mod.name"
                   class="w-full h-full object-cover"
                 />
-                <div v-else class="w-full h-full flex items-center justify-center text-gray-600">
+                <div v-else class="w-full h-full flex items-center justify-center text-ink-subtle">
                   <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>

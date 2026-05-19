@@ -78,7 +78,7 @@ onMounted(() => {
         </div>
 
         <!-- Fix command -->
-        <div class="mt-3 p-2 bg-dark-400/50 rounded-md">
+        <div class="mt-3 p-2 bg-surface/50 rounded-md">
           <p class="text-xs text-ink-muted mb-1">{{ t('health.fixCommand') }}:</p>
           <code class="text-sm text-hytale-orange font-mono select-all">
             sudo chown -R 9999:9999 /opt/hytale

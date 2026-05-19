@@ -232,7 +232,7 @@ onMounted(loadData)
             v-model="newWhitelistPlayer"
             type="text"
             :placeholder="t('whitelist.playerName')"
-            class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+            class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
           />
           <Button type="submit" :disabled="!newWhitelistPlayer.trim()">
             {{ t('common.save') }}
@@ -248,7 +248,7 @@ onMounted(loadData)
             v-model="whitelistSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
@@ -298,7 +298,7 @@ onMounted(loadData)
               v-model="newBanPlayer"
               type="text"
               :placeholder="t('whitelist.playerName')"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
             />
           </div>
           <div class="flex gap-3">
@@ -306,7 +306,7 @@ onMounted(loadData)
               v-model="newBanReason"
               type="text"
               :placeholder="t('whitelist.banReason')"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
             />
             <Button type="submit" variant="danger" :disabled="!newBanPlayer.trim()">
               {{ t('whitelist.ban') }}
@@ -323,7 +323,7 @@ onMounted(loadData)
             v-model="bansSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 

@@ -593,7 +593,7 @@ onUnmounted(() => {
         <div class="card-body p-0">
           <div
             ref="consoleContainer"
-            class="h-64 overflow-y-auto bg-dark-400 rounded-lg p-4 font-mono text-sm"
+            class="h-64 overflow-y-auto bg-surface rounded-lg p-4 font-mono text-sm"
           >
             <div v-if="consoleLines.length === 0 && isServerStarting" class="flex items-center gap-2 text-ink-muted">
               <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -745,7 +745,7 @@ onUnmounted(() => {
                 <p class="text-ink-muted mb-4">{{ t('setup.enterCode') }}</p>
 
                 <!-- User Code Display -->
-                <div class="bg-dark-400 border-2 border-border rounded-xl p-6 inline-block">
+                <div class="bg-surface border-2 border-border rounded-xl p-6 inline-block">
                   <p class="text-3xl font-mono font-bold text-ink tracking-widest">
                     {{ formattedServerUserCode }}
                   </p>
@@ -815,7 +815,7 @@ onUnmounted(() => {
           <!-- Console Output -->
           <div
             ref="consoleContainer"
-            class="h-40 overflow-y-auto bg-dark-400 rounded-lg p-4 font-mono text-sm"
+            class="h-40 overflow-y-auto bg-surface rounded-lg p-4 font-mono text-sm"
           >
             <div
               v-for="(line, index) in consoleLines"

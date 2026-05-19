@@ -553,12 +553,12 @@ onUnmounted(() => {
                 <span v-if="player.playTime">{{ t('players.totalPlayTime') }}: {{ formatPlayTime(player.playTime) }}</span>
                 <!-- Plugin/File-provided details -->
                 <span v-if="player.health !== undefined">
-                  <span class="text-gray-600">{{ t('players.details.health') }}:</span>
+                  <span class="text-ink-subtle">{{ t('players.details.health') }}:</span>
                   <span :class="player.health > 15 ? 'text-green-400' : player.health > 8 ? 'text-yellow-400' : 'text-red-400'">
                     {{ player.health.toFixed(0) }}<span v-if="player.maxHealth">/{{ player.maxHealth }}</span>
                   </span>
                 </span>
-                <span v-if="player.position" class="text-gray-600">
+                <span v-if="player.position" class="text-ink-subtle">
                   {{ Math.floor(player.position.x) }}, {{ Math.floor(player.position.y) }}, {{ Math.floor(player.position.z) }}
                 </span>
                 <span v-if="player.world" class="flex items-center gap-1">
@@ -818,7 +818,7 @@ onUnmounted(() => {
             v-model="banReason"
             type="text"
             :placeholder="t('players.noReason')"
-            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
           />
         </div>
       </div>

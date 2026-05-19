@@ -164,7 +164,7 @@ onUnmounted(() => {
             v-model="searchQuery"
             type="text"
             :placeholder="t('chat.searchPlaceholder')"
-            class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange"
+            class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
           />
         </div>
       </div>
@@ -210,7 +210,7 @@ onUnmounted(() => {
 
       <!-- Empty State -->
       <div v-else-if="messages.length === 0" class="text-center text-ink-subtle p-8">
-        <svg class="w-12 h-12 mx-auto mb-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="w-12 h-12 mx-auto mb-3 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
         <p>{{ t('chat.noMessages') }}</p>
@@ -240,7 +240,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Full timestamp on hover -->
-            <div class="text-xs text-gray-600 flex-shrink-0 hidden sm:block">
+            <div class="text-xs text-ink-subtle flex-shrink-0 hidden sm:block">
               {{ formatDate(msg.timestamp) }}
             </div>
           </div>

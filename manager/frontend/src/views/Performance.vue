@@ -325,7 +325,7 @@ onUnmounted(() => {
             </p>
             <div class="flex items-center gap-2 text-xs text-ink-subtle">
               <span v-if="mspt !== null">{{ mspt.toFixed(1) }} ms/tick</span>
-              <span v-if="displayTpsMin !== null" class="text-gray-600">|</span>
+              <span v-if="displayTpsMin !== null" class="text-ink-subtle">|</span>
               <span v-if="displayTpsMin !== null" class="text-yellow-500">{{ t('performance.min') }}: {{ displayTpsMin.toFixed(1) }}</span>
             </div>
           </div>
@@ -606,7 +606,7 @@ onUnmounted(() => {
       </div>
 
       <!-- TPS Metrics Summary (when Prometheus available) -->
-      <div v-if="tpsMetrics" class="mt-4 pt-4 border-t border-dark-100">
+      <div v-if="tpsMetrics" class="mt-4 pt-4 border-t border-border">
         <h4 class="text-sm font-medium text-ink-muted mb-3">{{ t('performance.prometheusTpsMetrics') }}</h4>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div class="p-3 bg-surface-overlay rounded-lg text-center">
@@ -708,7 +708,7 @@ onUnmounted(() => {
                 :style="{ width: Math.min(pool.percent, 100) + '%' }"
               ></div>
             </div>
-            <p class="text-[10px] text-gray-600 mt-1">{{ pool.max > 0 ? formatBytes(pool.max) : 'unlimited' }}</p>
+            <p class="text-[10px] text-ink-subtle mt-1">{{ pool.max > 0 ? formatBytes(pool.max) : 'unlimited' }}</p>
           </div>
         </div>
       </div>

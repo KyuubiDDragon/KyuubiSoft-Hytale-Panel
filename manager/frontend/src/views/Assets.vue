@@ -333,7 +333,7 @@ onUnmounted(stopProgressPolling)
             v-model="searchQuery"
             type="text"
             :placeholder="searchMode === 'glob' ? t('assets.searchPlaceholderGlob') : searchMode === 'regex' ? t('assets.searchPlaceholderRegex') : t('assets.searchPlaceholder')"
-            class="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-ink placeholder-gray-500 focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange font-mono"
+            class="flex-1 px-4 py-2 bg-gray-900 border border-gray-600 rounded-lg text-ink placeholder-ink-subtle focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange font-mono"
           />
         </div>
 
@@ -477,7 +477,7 @@ onUnmounted(stopProgressPolling)
       </div>
       <div class="card-body">
         <div class="text-center py-8">
-          <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-16 h-16 mx-auto text-ink-subtle mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
           </svg>
           <p class="text-ink-muted mb-2">{{ t('assets.notExtracted') }}</p>
@@ -560,7 +560,7 @@ onUnmounted(stopProgressPolling)
                 >
                   {{ crumb.name }}
                 </button>
-                <span v-if="i < breadcrumbs.length - 1" class="text-gray-600">/</span>
+                <span v-if="i < breadcrumbs.length - 1" class="text-ink-subtle">/</span>
               </template>
             </div>
 
@@ -692,7 +692,7 @@ onUnmounted(stopProgressPolling)
           <!-- No file selected -->
           <div v-else class="card">
             <div class="card-body text-center py-12">
-              <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg class="w-16 h-16 mx-auto text-ink-subtle mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <p class="text-ink-muted">{{ t('assets.preview') }}</p>

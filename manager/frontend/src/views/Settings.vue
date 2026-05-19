@@ -624,7 +624,7 @@ onUnmounted(() => {
               <p class="text-ink-muted text-sm mb-4">{{ t('settings.completeAuth') }}</p>
 
               <!-- Auth Code Display -->
-              <div class="bg-dark-400 p-4 rounded-lg mb-4">
+              <div class="bg-surface p-4 rounded-lg mb-4">
                 <p class="text-xs text-ink-subtle uppercase mb-2">{{ t('settings.authCode') }}</p>
                 <div class="flex items-center justify-between">
                   <p class="text-2xl font-mono text-hytale-orange font-bold">{{ deviceCodeData.userCode }}</p>
@@ -981,7 +981,7 @@ onUnmounted(() => {
               <p class="text-ink font-medium">Nitrado:WebServer</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginWebServerDesc') }}</p>
             </div>
-            <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Nitrado</span>
           </div>
         </div>
 
@@ -991,7 +991,7 @@ onUnmounted(() => {
               <p class="text-ink font-medium">Nitrado:Query</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginQueryDesc') }}</p>
             </div>
-            <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Nitrado</span>
           </div>
         </div>
 
@@ -1001,7 +1001,7 @@ onUnmounted(() => {
               <p class="text-ink font-medium">Nitrado:PerformanceSaver</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginPerformanceSaverDesc') }}</p>
             </div>
-            <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Nitrado</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Nitrado</span>
           </div>
         </div>
 
@@ -1011,7 +1011,7 @@ onUnmounted(() => {
               <p class="text-ink font-medium">ApexHosting:PrometheusExporter</p>
               <p class="text-sm text-ink-muted">{{ t('settings.pluginPrometheusDesc') }}</p>
             </div>
-            <span class="text-xs text-ink-subtle bg-dark-400 px-2 py-1 rounded">Apex Hosting</span>
+            <span class="text-xs text-ink-subtle bg-surface px-2 py-1 rounded">Apex Hosting</span>
           </div>
         </div>
       </div>
@@ -1106,7 +1106,7 @@ onUnmounted(() => {
 
           <textarea
             v-model="fileContent"
-            class="w-full h-96 bg-dark-400 text-ink-muted font-mono text-sm p-4 rounded-lg border border-border focus:border-hytale-orange focus:outline-none resize-y"
+            class="w-full h-96 bg-surface text-ink-muted font-mono text-sm p-4 rounded-lg border border-border focus:border-hytale-orange focus:outline-none resize-y"
             spellcheck="false"
           ></textarea>
 

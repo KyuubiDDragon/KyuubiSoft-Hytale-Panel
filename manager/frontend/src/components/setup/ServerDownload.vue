@@ -691,7 +691,7 @@ watch(deviceCodeState, () => {
               <p class="text-sm text-ink-muted mb-2 font-medium">{{ t('setup.followTheseSteps') }}:</p>
               <ol class="list-decimal list-inside space-y-2 text-sm text-ink-muted">
                 <li v-for="(instruction, index) in envConfigInstructions" :key="index">
-                  <code v-if="instruction.includes('=') || instruction.includes('docker')" class="bg-dark-400 px-1 rounded text-hytale-orange">{{ instruction }}</code>
+                  <code v-if="instruction.includes('=') || instruction.includes('docker')" class="bg-surface px-1 rounded text-hytale-orange">{{ instruction }}</code>
                   <span v-else>{{ instruction }}</span>
                 </li>
               </ol>
@@ -774,7 +774,7 @@ watch(deviceCodeState, () => {
                 <p class="text-ink-muted mb-3">{{ t('setup.enterCode') }}</p>
 
                 <!-- User Code Display -->
-                <div class="bg-dark-400 border-2 border-border rounded-xl p-6 inline-block">
+                <div class="bg-surface border-2 border-border rounded-xl p-6 inline-block">
                   <p class="text-3xl font-mono font-bold text-ink tracking-widest">
                     {{ formattedUserCode }}
                   </p>

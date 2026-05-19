@@ -505,7 +505,7 @@ function handleSearchBlur() {
                       <div :class="['h-full', getDurabilityColor(item)]" :style="{ width: `${getDurabilityPercent(item)}%` }"></div>
                     </div>
                   </template>
-                  <span v-else class="text-gray-600 font-bold text-xs">{{ armorSlotLabels[index] }}</span>
+                  <span v-else class="text-ink-subtle font-bold text-xs">{{ armorSlotLabels[index] }}</span>
                 </div>
               </div>
 

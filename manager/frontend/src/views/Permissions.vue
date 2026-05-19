@@ -241,7 +241,7 @@ onMounted(loadData)
               type="text"
               :placeholder="t('permissions.playerName')"
               :disabled="!!editingUser"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange disabled:opacity-50"
             />
           </div>
 
@@ -297,7 +297,7 @@ onMounted(loadData)
             v-model="userSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
@@ -372,7 +372,7 @@ onMounted(loadData)
               type="text"
               :placeholder="t('permissions.groupName')"
               :disabled="!!editingGroup"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange disabled:opacity-50"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange disabled:opacity-50"
             />
           </div>
 
@@ -382,7 +382,7 @@ onMounted(loadData)
               v-model="newGroupPermissions"
               :placeholder="t('permissions.permissionsPlaceholder')"
               rows="4"
-              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange font-mono text-sm"
+              class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange font-mono text-sm"
             />
           </div>
 
@@ -435,7 +435,7 @@ onMounted(loadData)
             v-model="groupSearch"
             type="text"
             :placeholder="t('common.search')"
-            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-gray-500 focus:outline-none focus:border-hytale-orange text-sm"
+            class="px-3 py-1.5 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange text-sm"
           />
         </div>
 
