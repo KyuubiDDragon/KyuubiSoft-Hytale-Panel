@@ -956,7 +956,7 @@ router.put('/config/:filename', authMiddleware, requirePermission('config.edit')
 // GET /api/server/plugin/status - Get KyuubiSoft API plugin status
 router.get('/plugin/status', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
-    const status = await kyuubiApiService.getPluginStatus();
+    const status = await kyuubiApiService.getPluginStatus(req.serverId);
     res.json(status);
   } catch (error) {
     res.status(500).json({
@@ -976,7 +976,7 @@ router.get('/plugin/update-check', authMiddleware, requirePermission('server.vie
   }
 
   try {
-    const updateInfo = kyuubiApiService.isUpdateAvailable();
+    const updateInfo = await kyuubiApiService.isUpdateAvailable(req.serverId);
     res.json(updateInfo);
   } catch (error) {
     res.status(500).json({
@@ -995,7 +995,7 @@ router.post('/plugin/install', authMiddleware, requirePermission('mods.install')
   }
 
   try {
-    const result = await kyuubiApiService.installPlugin();
+    const result = await kyuubiApiService.installPlugin(req.serverId);
     if (!result.success) {
       res.status(500).json(result);
       return;
@@ -1022,7 +1022,7 @@ router.delete('/plugin/uninstall', authMiddleware, requirePermission('mods.insta
   }
 
   try {
-    const result = await kyuubiApiService.uninstallPlugin();
+    const result = await kyuubiApiService.uninstallPlugin(req.serverId);
     if (!result.success) {
       res.status(500).json(result);
       return;
@@ -1042,7 +1042,7 @@ router.delete('/plugin/uninstall', authMiddleware, requirePermission('mods.insta
 // GET /api/server/plugin/players - Get players from plugin API (more accurate)
 router.get('/plugin/players', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
-    const result = await kyuubiApiService.getPlayersFromPlugin();
+    const result = await kyuubiApiService.getPlayersFromPlugin(req.serverId);
     if (!result.success) {
       res.status(503).json(result);
       return;
@@ -1059,7 +1059,7 @@ router.get('/plugin/players', authMiddleware, requirePermission('server.view_sta
 // GET /api/server/plugin/info - Get server info from plugin API
 router.get('/plugin/info', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
-    const result = await kyuubiApiService.getServerInfoFromPlugin();
+    const result = await kyuubiApiService.getServerInfoFromPlugin(req.serverId);
     if (!result.success) {
       res.status(503).json(result);
       return;
@@ -1076,7 +1076,7 @@ router.get('/plugin/info', authMiddleware, requirePermission('server.view_status
 // GET /api/server/plugin/memory - Get memory stats from plugin API
 router.get('/plugin/memory', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
-    const result = await kyuubiApiService.getMemoryFromPlugin();
+    const result = await kyuubiApiService.getMemoryFromPlugin(req.serverId);
     if (!result.success) {
       res.status(503).json(result);
       return;
@@ -1093,7 +1093,7 @@ router.get('/plugin/memory', authMiddleware, requirePermission('server.view_stat
 // GET /api/server/plugin/metrics - Get Prometheus metrics from plugin API
 router.get('/plugin/metrics', authMiddleware, requirePermission('performance.view'), async (req: Request, res: Response) => {
   try {
-    const result = await kyuubiApiService.getPrometheusMetrics();
+    const result = await kyuubiApiService.getPrometheusMetrics(req.serverId);
     if (!result.success) {
       res.status(503).json({ success: false, error: result.error });
       return;
@@ -1122,7 +1122,7 @@ router.get('/plugin/metrics', authMiddleware, requirePermission('performance.vie
 // GET /api/server/plugin/tps - Get extended TPS metrics from plugin API
 router.get('/plugin/tps', authMiddleware, requirePermission('performance.view'), async (req: Request, res: Response) => {
   try {
-    const result = await kyuubiApiService.getPrometheusMetrics();
+    const result = await kyuubiApiService.getPrometheusMetrics(req.serverId);
     if (!result.success) {
       res.status(503).json({ success: false, error: result.error });
       return;
@@ -1276,7 +1276,7 @@ function parseTpsMetrics(raw: string): Record<string, number> {
 router.get('/plugin/players/:name/details', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
-    const result = await kyuubiApiService.getPlayerDetailsFromPlugin(name);
+    const result = await kyuubiApiService.getPlayerDetailsFromPlugin(name, req.serverId);
     if (!result.success) {
       res.status(503).json(result);
       return;
@@ -1294,7 +1294,7 @@ router.get('/plugin/players/:name/details', authMiddleware, requirePermission('s
 router.get('/plugin/players/:name/inventory', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
-    const result = await kyuubiApiService.getPlayerInventoryFromPlugin(name);
+    const result = await kyuubiApiService.getPlayerInventoryFromPlugin(name, req.serverId);
     if (!result.success) {
       res.status(503).json(result);
       return;
@@ -1312,7 +1312,7 @@ router.get('/plugin/players/:name/inventory', authMiddleware, requirePermission(
 router.get('/plugin/players/:name/appearance', authMiddleware, requirePermission('server.view_status'), async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
-    const result = await kyuubiApiService.getPlayerAppearanceFromPlugin(name);
+    const result = await kyuubiApiService.getPlayerAppearanceFromPlugin(name, req.serverId);
     if (!result.success) {
       res.status(503).json(result);
       return;

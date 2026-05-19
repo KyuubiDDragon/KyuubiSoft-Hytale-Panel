@@ -3,6 +3,12 @@
  *
  * Manages the KyuubiSoft API plugin that provides accurate player data,
  * server statistics, and real-time events via HTTP/WebSocket.
+ *
+ * Multi-server: every public function takes an optional `serverId`. When
+ * omitted, the default server in the registry (services/servers.ts) is used.
+ * The plugin host (container name) and port are pulled from the registry
+ * entry, falling back to legacy env-var config if the registry isn't ready
+ * yet on fresh boot.
  */
 
 import { config } from '../config.js';
@@ -17,6 +23,7 @@ import {
   getDemoPlayerDetails,
   getDemoPlayerInventory,
 } from './demoData.js';
+import { getDefaultId, getServer } from './servers.js';
 
 // Get directory name in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +31,10 @@ const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version)
 export const PLUGIN_VERSION = '1.2.2';
+// Legacy default plugin port. Kept exported for back-compat with callers
+// that read this constant directly (e.g. configService snapshots, status
+// fallbacks). Per-server callers should use `resolvePluginEndpoint(serverId)`
+// which reads the actual port from the registry.
 export const PLUGIN_PORT = 18085;
 export const PLUGIN_JAR_NAME = `KyuubiSoftAPI-${PLUGIN_VERSION}.jar`;
 
@@ -42,16 +53,42 @@ export interface PluginApiResponse {
 }
 
 /**
+ * Resolve the plugin host + port for an explicit or default server id.
+ * Falls back to env-var defaults if the registry isn't loaded yet.
+ */
+export async function resolvePluginEndpoint(serverId?: string): Promise<{ host: string; port: number }> {
+  try {
+    const id = serverId ?? (await getDefaultId());
+    const s = await getServer(id);
+    if (s) return { host: s.containerName, port: s.network.pluginPort };
+  } catch { /* registry not ready yet */ }
+  return { host: config.gameContainerName, port: PLUGIN_PORT };
+}
+
+/**
+ * Resolve the on-disk mods path for an explicit or default server id.
+ * Falls back to legacy env-var config if registry isn't loaded.
+ */
+async function resolveModsPath(serverId?: string): Promise<string> {
+  try {
+    const id = serverId ?? (await getDefaultId());
+    const s = await getServer(id);
+    if (s) return s.paths.mods;
+  } catch { /* registry not ready yet */ }
+  return config.modsPath;
+}
+
+/**
  * Check if the KyuubiSoft API plugin is installed in the mods folder
  */
-export function isPluginInstalled(): boolean {
+export async function isPluginInstalled(serverId?: string): Promise<boolean> {
   // Demo mode: always report plugin as installed
   if (isDemoMode()) {
     return true;
   }
 
   try {
-    const modsPath = config.modsPath;
+    const modsPath = await resolveModsPath(serverId);
     const files = fs.readdirSync(modsPath);
 
     // Check for any KyuubiSoftAPI jar file
@@ -68,14 +105,14 @@ export function isPluginInstalled(): boolean {
 /**
  * Get the installed plugin version
  */
-export function getInstalledVersion(): string | null {
+export async function getInstalledVersion(serverId?: string): Promise<string | null> {
   // Demo mode: return current plugin version
   if (isDemoMode()) {
     return PLUGIN_VERSION;
   }
 
   try {
-    const modsPath = config.modsPath;
+    const modsPath = await resolveModsPath(serverId);
     const files = fs.readdirSync(modsPath);
 
     const pluginFile = files.find(file =>
@@ -97,18 +134,9 @@ export function getInstalledVersion(): string | null {
 }
 
 /**
- * Get the host for connecting to the plugin API
- * Uses the game container name for Docker networking
- * Note: config.gameContainerName already has STACK_NAME fallback built in
- */
-function getPluginHost(): string {
-  return config.gameContainerName;
-}
-
-/**
  * Check if the KyuubiSoft API plugin is running and responding
  */
-export async function isPluginRunning(): Promise<boolean> {
+export async function isPluginRunning(serverId?: string): Promise<boolean> {
   // Demo mode: always report plugin as running
   if (isDemoMode()) {
     return true;
@@ -118,8 +146,8 @@ export async function isPluginRunning(): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const host = getPluginHost();
-    const response = await fetch(`http://${host}:${PLUGIN_PORT}/api/server/info`, {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const response = await fetch(`http://${host}:${port}/api/server/info`, {
       signal: controller.signal,
     });
 
@@ -133,33 +161,34 @@ export async function isPluginRunning(): Promise<boolean> {
 /**
  * Get full plugin status
  */
-export async function getPluginStatus(): Promise<PluginStatus> {
-  const installed = isPluginInstalled();
-  const version = getInstalledVersion();
+export async function getPluginStatus(serverId?: string): Promise<PluginStatus> {
+  const installed = await isPluginInstalled(serverId);
+  const version = await getInstalledVersion(serverId);
+  const { port } = await resolvePluginEndpoint(serverId);
 
   if (!installed) {
     return {
       installed: false,
       running: false,
       version: null,
-      port: PLUGIN_PORT,
+      port,
     };
   }
 
-  const running = await isPluginRunning();
+  const running = await isPluginRunning(serverId);
 
   return {
     installed: true,
     running,
     version,
-    port: PLUGIN_PORT,
+    port,
   };
 }
 
 /**
  * Get data from the KyuubiSoft API plugin
  */
-export async function fetchFromPlugin<T>(endpoint: string): Promise<PluginApiResponse & { data?: T }> {
+export async function fetchFromPlugin<T>(endpoint: string, serverId?: string): Promise<PluginApiResponse & { data?: T }> {
   // Demo mode: return mock data based on endpoint
   if (isDemoMode()) {
     return getDemoPluginResponse<T>(endpoint);
@@ -169,8 +198,8 @@ export async function fetchFromPlugin<T>(endpoint: string): Promise<PluginApiRes
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const host = getPluginHost();
-    const response = await fetch(`http://${host}:${PLUGIN_PORT}${endpoint}`, {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const response = await fetch(`http://${host}:${port}${endpoint}`, {
       signal: controller.signal,
     });
 
@@ -266,7 +295,7 @@ function getDemoPluginResponse<T>(endpoint: string): PluginApiResponse & { data?
 /**
  * POST to the KyuubiSoft API plugin (for actions)
  */
-export async function postToPlugin<T>(endpoint: string, body?: unknown): Promise<PluginApiResponse & { data?: T }> {
+export async function postToPlugin<T>(endpoint: string, body?: unknown, serverId?: string): Promise<PluginApiResponse & { data?: T }> {
   // Demo mode: simulate successful actions
   if (isDemoMode()) {
     return { success: true, data: { message: '[DEMO] Action executed successfully' } as T };
@@ -276,8 +305,8 @@ export async function postToPlugin<T>(endpoint: string, body?: unknown): Promise
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const host = getPluginHost();
-    const response = await fetch(`http://${host}:${PLUGIN_PORT}${endpoint}`, {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const response = await fetch(`http://${host}:${port}${endpoint}`, {
       method: 'POST',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
@@ -303,29 +332,29 @@ export async function postToPlugin<T>(endpoint: string, body?: unknown): Promise
 /**
  * Get players from the plugin API (more accurate than log parsing)
  */
-export async function getPlayersFromPlugin(): Promise<PluginApiResponse> {
-  return fetchFromPlugin('/api/players');
+export async function getPlayersFromPlugin(serverId?: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin('/api/players', serverId);
 }
 
 /**
  * Get server info from the plugin API
  */
-export async function getServerInfoFromPlugin(): Promise<PluginApiResponse> {
-  return fetchFromPlugin('/api/server/info');
+export async function getServerInfoFromPlugin(serverId?: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin('/api/server/info', serverId);
 }
 
 /**
  * Get memory stats from the plugin API
  */
-export async function getMemoryFromPlugin(): Promise<PluginApiResponse> {
-  return fetchFromPlugin('/api/server/memory');
+export async function getMemoryFromPlugin(serverId?: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin('/api/server/memory', serverId);
 }
 
 /**
  * Get Prometheus metrics from the plugin API
  * Returns raw Prometheus text format
  */
-export async function getPrometheusMetrics(): Promise<{ success: boolean; data?: string; error?: string }> {
+export async function getPrometheusMetrics(serverId?: string): Promise<{ success: boolean; data?: string; error?: string }> {
   // Demo mode: return mock Prometheus metrics
   if (isDemoMode()) {
     const metrics = getDemoPerformanceMetrics();
@@ -359,8 +388,8 @@ jvm_threads_current ${jvm.threads}
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const host = getPluginHost();
-    const response = await fetch(`http://${host}:${PLUGIN_PORT}/metrics`, {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const response = await fetch(`http://${host}:${port}/metrics`, {
       signal: controller.signal,
     });
 
@@ -383,57 +412,57 @@ jvm_threads_current ${jvm.threads}
 /**
  * Get player details from the plugin API
  */
-export async function getPlayerDetailsFromPlugin(playerName: string): Promise<PluginApiResponse> {
-  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/details`);
+export async function getPlayerDetailsFromPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/details`, serverId);
 }
 
 /**
  * Get player inventory from the plugin API
  */
-export async function getPlayerInventoryFromPlugin(playerName: string): Promise<PluginApiResponse> {
-  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/inventory`);
+export async function getPlayerInventoryFromPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/inventory`, serverId);
 }
 
 /**
  * Get player appearance from the plugin API
  */
-export async function getPlayerAppearanceFromPlugin(playerName: string): Promise<PluginApiResponse> {
-  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/appearance`);
+export async function getPlayerAppearanceFromPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
+  return fetchFromPlugin(`/api/players/${encodeURIComponent(playerName)}/appearance`, serverId);
 }
 
 /**
  * Heal a player via the plugin API
  */
-export async function healPlayerViaPlugin(playerName: string): Promise<PluginApiResponse> {
-  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/heal`);
+export async function healPlayerViaPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/heal`, undefined, serverId);
 }
 
 /**
  * Clear a player's inventory via the plugin API
  */
-export async function clearInventoryViaPlugin(playerName: string): Promise<PluginApiResponse> {
-  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/inventory/clear`);
+export async function clearInventoryViaPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/inventory/clear`, undefined, serverId);
 }
 
 /**
  * Set a player's gamemode via the plugin API
  */
-export async function setGamemodeViaPlugin(playerName: string, gamemode: string): Promise<PluginApiResponse> {
-  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/gamemode`, { gamemode });
+export async function setGamemodeViaPlugin(playerName: string, gamemode: string, serverId?: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/gamemode`, { gamemode }, serverId);
 }
 
 /**
  * Kill a player via the plugin API
  */
-export async function killPlayerViaPlugin(playerName: string): Promise<PluginApiResponse> {
-  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/kill`);
+export async function killPlayerViaPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/kill`, undefined, serverId);
 }
 
 /**
  * Respawn a player via the plugin API
  */
-export async function respawnPlayerViaPlugin(playerName: string): Promise<PluginApiResponse> {
-  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/respawn`);
+export async function respawnPlayerViaPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/respawn`, undefined, serverId);
 }
 
 /**
@@ -441,16 +470,17 @@ export async function respawnPlayerViaPlugin(playerName: string): Promise<Plugin
  */
 export async function teleportPlayerViaPlugin(
   playerName: string,
-  options: { target?: string; x?: number; y?: number; z?: number }
+  options: { target?: string; x?: number; y?: number; z?: number },
+  serverId?: string,
 ): Promise<PluginApiResponse> {
-  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/teleport`, options);
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/teleport`, options, serverId);
 }
 
 /**
  * Check if plugin update is available
  */
-export function isUpdateAvailable(): { available: boolean; currentVersion: string | null; latestVersion: string } {
-  const currentVersion = getInstalledVersion();
+export async function isUpdateAvailable(serverId?: string): Promise<{ available: boolean; currentVersion: string | null; latestVersion: string }> {
+  const currentVersion = await getInstalledVersion(serverId);
 
   return {
     available: currentVersion !== null && currentVersion !== PLUGIN_VERSION,
@@ -488,10 +518,11 @@ export function getBundledPluginPath(): string {
 /**
  * Install the KyuubiSoft API plugin
  */
-export async function installPlugin(): Promise<{ success: boolean; error?: string }> {
+export async function installPlugin(serverId?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const bundledPath = getBundledPluginPath();
-    const targetPath = path.join(config.modsPath, PLUGIN_JAR_NAME);
+    const modsPath = await resolveModsPath(serverId);
+    const targetPath = path.join(modsPath, PLUGIN_JAR_NAME);
 
     // Check if bundled JAR exists
     if (!fs.existsSync(bundledPath)) {
@@ -499,7 +530,6 @@ export async function installPlugin(): Promise<{ success: boolean; error?: strin
     }
 
     // Remove old versions
-    const modsPath = config.modsPath;
     const files = fs.readdirSync(modsPath);
     for (const file of files) {
       if (file.toLowerCase().startsWith('kyuubisoftapi') && file.endsWith('.jar')) {
@@ -522,9 +552,9 @@ export async function installPlugin(): Promise<{ success: boolean; error?: strin
 /**
  * Uninstall the KyuubiSoft API plugin
  */
-export async function uninstallPlugin(): Promise<{ success: boolean; error?: string }> {
+export async function uninstallPlugin(serverId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const modsPath = config.modsPath;
+    const modsPath = await resolveModsPath(serverId);
     const files = fs.readdirSync(modsPath);
 
     let removed = false;
