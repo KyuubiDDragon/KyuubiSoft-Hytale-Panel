@@ -17,7 +17,7 @@ provide('toggleSidebar', toggleSidebar)
 </script>
 
 <template>
-  <div class="flex h-screen bg-dark overflow-hidden">
+  <div class="flex h-screen bg-surface text-ink overflow-hidden">
     <!-- Mobile overlay -->
     <Transition
       enter-active-class="transition-opacity ease-out duration-200"
