@@ -111,6 +111,24 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/audit',
+      name: 'audit',
+      component: () => import('./views/Audit.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/webhooks',
+      name: 'webhooks',
+      component: () => import('./views/Webhooks.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/security',
+      name: 'security',
+      component: () => import('./views/SecuritySettings.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/scheduler',
       name: 'scheduler',
       component: () => import('./views/Scheduler.vue'),

@@ -53,6 +53,10 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'users', path: '/users', icon: 'users', label: t('nav.users'), group: 'admin', permission: 'users.view' },
   { name: 'roles', path: '/roles', icon: 'roles', label: t('nav.roles'), group: 'admin', permission: 'roles.view' },
   { name: 'activity', path: '/activity', icon: 'activity', label: t('nav.activityLog'), group: 'admin', permission: 'activity.view' },
+  // v3 alpha additions — gated by the new permissions added in services/types.
+  { name: 'audit', path: '/audit', icon: 'activity', label: 'Audit Log', group: 'admin', permission: 'audit.view' },
+  { name: 'webhooks', path: '/webhooks', icon: 'scheduler', label: 'Webhooks', group: 'admin', permission: 'webhooks.view' },
+  { name: 'security', path: '/security', icon: 'settings', label: 'Security', group: 'admin', permission: 'all' },
 ])
 
 // Navigation sections

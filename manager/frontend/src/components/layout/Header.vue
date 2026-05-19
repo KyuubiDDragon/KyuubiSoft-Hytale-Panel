@@ -7,6 +7,7 @@ import { useThemeStore } from '@/stores/theme'
 import { setLocale, getLocale } from '@/i18n'
 import { modStoreApi } from '@/api/management'
 import ServerPicker from './ServerPicker.vue'
+import NotificationBell from './NotificationBell.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -99,6 +100,9 @@ onMounted(() => {
 
     <!-- Right: Actions -->
     <div class="flex items-center gap-2 sm:gap-4">
+      <!-- Notifications -->
+      <NotificationBell />
+
       <!-- Theme toggle (Dark / Light) -->
       <button
         @click="themeStore.toggle()"
