@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import {
@@ -129,7 +130,7 @@ router.get('/status', async (_req: Request, res: Response) => {
     const status = await getSetupStatus();
     res.json(status);
   } catch (error) {
-    console.error('[Setup] Failed to get status:', error);
+    logger.error('[Setup] Failed to get status:', error);
     res.status(500).json({
       error: 'Failed to get setup status',
       detail: error instanceof Error ? error.message : 'Unknown error',
@@ -150,7 +151,7 @@ router.get('/check', async (_req: Request, res: Response) => {
     res.json({ setupComplete: complete });
   } catch (error) {
     // On error, assume setup is not complete
-    console.error('[Setup] Check failed:', error);
+    logger.error('[Setup] Check failed:', error);
     res.json({ setupComplete: false });
   }
 });
@@ -170,7 +171,7 @@ router.get('/system-check', async (_req: Request, res: Response) => {
     const result = await runSystemChecks();
     res.json(result);
   } catch (error) {
-    console.error('[Setup] System check failed:', error);
+    logger.error('[Setup] System check failed:', error);
     res.status(500).json({
       error: 'System check failed',
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -203,7 +204,7 @@ router.get('/system-check/:checkId', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[Setup] Single system check failed:', error);
+    logger.error('[Setup] Single system check failed:', error);
     res.status(500).json({
       error: 'System check failed',
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -298,7 +299,7 @@ router.post('/step/:stepId', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[Setup] Failed to save step data:', error);
+    logger.error('[Setup] Failed to save step data:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to save step data',
@@ -385,7 +386,7 @@ router.post('/admin', async (req: Request, res: Response) => {
       success: true,
     });
   } catch (error) {
-    console.error('[Setup] Failed to create admin account:', error);
+    logger.error('[Setup] Failed to create admin account:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to create admin account',
@@ -429,7 +430,7 @@ router.post('/complete', async (_req: Request, res: Response) => {
       jwtSecretGenerated: true,
     });
   } catch (error) {
-    console.error('[Setup] Failed to complete setup:', error);
+    logger.error('[Setup] Failed to complete setup:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to complete setup',
@@ -503,7 +504,7 @@ function parseOAuthFromLogs(logs: string): {
       // Verify it's not a common word
       if (!excludeWords.includes(potentialCode.toLowerCase())) {
         result.userCode = potentialCode;
-        console.log('[Setup] Found auth code:', potentialCode);
+        logger.info('[Setup] Found auth code:', potentialCode);
         break;
       }
     }
@@ -517,14 +518,14 @@ function parseOAuthFromLogs(logs: string): {
   const directUrlMatch = cleanedLogs.match(/Or\s+visit:\s*(https:\/\/[^\s\n]+user_code=[^\s\n]+)/i);
   if (directUrlMatch) {
     result.verificationUrlDirect = cleanAnsi(directUrlMatch[1]);
-    console.log('[Setup] Found direct URL:', result.verificationUrlDirect);
+    logger.info('[Setup] Found direct URL:', result.verificationUrlDirect);
   }
 
   // Look for base verification URL
   const baseUrlMatch = cleanedLogs.match(/Visit:\s*(https:\/\/oauth\.accounts\.hytale\.com\/[^\s\n?]+)/i);
   if (baseUrlMatch) {
     result.verificationUrl = cleanAnsi(baseUrlMatch[1]);
-    console.log('[Setup] Found base URL:', result.verificationUrl);
+    logger.info('[Setup] Found base URL:', result.verificationUrl);
   }
 
   // Fallback: If we only found direct URL, extract base URL from it
@@ -581,7 +582,7 @@ function parseOAuthFromLogs(logs: string): {
       cleanedLogs.includes('Download successful') ||
       cleanedLogs.includes('Credentials saved')) {
     result.authenticated = true;
-    console.log('[Setup] Authentication success detected in logs');
+    logger.info('[Setup] Authentication success detected in logs');
   }
 
   // Check if download completed
@@ -643,7 +644,7 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
 
     // If container is not running, start it
     if (!containerStatus.running) {
-      console.log('[Setup] Starting game container for download...');
+      logger.info('[Setup] Starting game container for download...');
       await startContainer();
 
       // Wait a bit for container to start
@@ -695,7 +696,7 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
       pollInterval: 3,
     });
   } catch (error) {
-    console.error('[Setup] Failed to start download auth:', error);
+    logger.error('[Setup] Failed to start download auth:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to start download process',
@@ -767,7 +768,7 @@ router.get('/download/auth/status', async (_req: Request, res: Response) => {
       downloadComplete: downloaderAuthState.downloadComplete,
     });
   } catch (error) {
-    console.error('[Setup] Failed to get download auth status:', error);
+    logger.error('[Setup] Failed to get download auth status:', error);
     res.status(500).json({
       authenticated: false,
       error: 'Failed to check download status',
@@ -799,7 +800,7 @@ router.post('/download/start', async (req: Request, res: Response) => {
       return;
     }
 
-    console.log(`[Setup] Download method selected: ${method}`);
+    logger.info(`[Setup] Download method selected: ${method}`);
 
     if (method === 'official') {
       // For official download, the container should already be handling it
@@ -830,7 +831,7 @@ router.post('/download/start', async (req: Request, res: Response) => {
       res.json({ success: true });
     }
   } catch (error) {
-    console.error('[Setup] Failed to start download:', error);
+    logger.error('[Setup] Failed to start download:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to start download',
@@ -897,7 +898,7 @@ router.get('/download/verify', async (_req: Request, res: Response) => {
       patchline: 'release',
     });
   } catch (error) {
-    console.error('[Setup] Failed to verify download:', error);
+    logger.error('[Setup] Failed to verify download:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to verify downloaded files',
@@ -1117,7 +1118,7 @@ router.get('/auth/status', async (_req: Request, res: Response) => {
       machineId: status.machineId.generated,
     });
   } catch (error) {
-    console.error('[Setup] Failed to get auth status:', error);
+    logger.error('[Setup] Failed to get auth status:', error);
     res.status(500).json({
       error: 'Failed to get auth status',
       detail: error instanceof Error ? error.message : 'Unknown error',
@@ -1156,7 +1157,7 @@ router.post('/assets/extract', async (_req: Request, res: Response) => {
       message: 'Asset extraction started',
     });
   } catch (error) {
-    console.error('[Setup] Failed to start asset extraction:', error);
+    logger.error('[Setup] Failed to start asset extraction:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to start asset extraction',
@@ -1283,7 +1284,7 @@ router.get('/detect-ip', async (req: Request, res: Response) => {
       interfaces: Object.keys(interfaces),
     });
   } catch (error) {
-    console.error('[Setup] Failed to detect IP:', error);
+    logger.error('[Setup] Failed to detect IP:', error);
     res.status(500).json({
       error: 'Failed to detect IP address',
       ip: null,
@@ -1312,7 +1313,7 @@ router.get('/server-info', async (_req: Request, res: Response) => {
       hostDataPath: config.hostDataPath,
     });
   } catch (error) {
-    console.error('[Setup] Failed to get server info:', error);
+    logger.error('[Setup] Failed to get server info:', error);
     res.status(500).json({
       error: 'Failed to get server info',
     });
@@ -1350,7 +1351,7 @@ router.post('/reset', async (_req: Request, res: Response) => {
       message: 'Setup has been reset',
     });
   } catch (error) {
-    console.error('[Setup] Failed to reset setup:', error);
+    logger.error('[Setup] Failed to reset setup:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to reset setup',
@@ -1409,7 +1410,7 @@ router.post('/server/start-first', async (_req: Request, res: Response) => {
       message: 'Server starting...',
     });
   } catch (error) {
-    console.error('[Setup] Failed to start server:', error);
+    logger.error('[Setup] Failed to start server:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to start server',
@@ -1443,7 +1444,7 @@ router.post('/server/start', async (_req: Request, res: Response) => {
       message: 'Server started',
     });
   } catch (error) {
-    console.error('[Setup] Failed to start server:', error);
+    logger.error('[Setup] Failed to start server:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to start server',
@@ -1465,7 +1466,7 @@ router.post('/server/stop', async (_req: Request, res: Response) => {
       message: 'Server stopped',
     });
   } catch (error) {
-    console.error('[Setup] Failed to stop server:', error);
+    logger.error('[Setup] Failed to stop server:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to stop server',
@@ -1487,7 +1488,7 @@ router.get('/server/status', async (_req: Request, res: Response) => {
       startedAt: containerStatus.started_at,
     });
   } catch (error) {
-    console.error('[Setup] Failed to get server status:', error);
+    logger.error('[Setup] Failed to get server status:', error);
     res.status(500).json({
       running: false,
       status: 'error',
@@ -1528,7 +1529,7 @@ router.get('/server/logs', async (req: Request, res: Response) => {
       authRequired,
     });
   } catch (error) {
-    console.error('[Setup] Failed to get server logs:', error);
+    logger.error('[Setup] Failed to get server logs:', error);
     res.status(500).json({
       logs: [],
       booted: false,
@@ -1583,22 +1584,22 @@ router.get('/server/console', async (req: Request, res: Response) => {
 
     if (initialStatus.booted) {
       serverBootedDetected = true;
-      console.log('[Setup] Server already booted (detected from historical logs)');
+      logger.info('[Setup] Server already booted (detected from historical logs)');
     }
     if (initialStatus.authRequired) {
       authRequiredDetected = true;
-      console.log('[Setup] Auth already required (detected from historical logs)');
+      logger.info('[Setup] Auth already required (detected from historical logs)');
     }
 
     // If both conditions are already met, send status events immediately
     if (serverBootedDetected && authRequiredDetected && !statusEventSent) {
       statusEventSent = true;
-      console.log('[Setup] Server already started and needs auth - sending events immediately');
+      logger.info('[Setup] Server already started and needs auth - sending events immediately');
       res.write(`data: ${JSON.stringify({ type: 'started', authenticated: false })}\n\n`);
       res.write(`data: ${JSON.stringify({ type: 'auth_required' })}\n\n`);
     }
   } catch (error) {
-    console.error('[Setup] Error checking initial logs:', error);
+    logger.error('[Setup] Error checking initial logs:', error);
   }
 
   const sendLogs = async () => {
@@ -1648,7 +1649,7 @@ router.get('/server/console', async (req: Request, res: Response) => {
           cleanLine.includes('Hytale Server Booted')
         )) {
           serverBootedDetected = true;
-          console.log('[Setup] Server boot detected from live logs');
+          logger.info('[Setup] Server boot detected from live logs');
         }
 
         // Check for authentication required
@@ -1658,23 +1659,23 @@ router.get('/server/console', async (req: Request, res: Response) => {
           cleanLine.includes('AUTHENTICATION REQUIRED')
         )) {
           authRequiredDetected = true;
-          console.log('[Setup] Auth required detected from live logs');
+          logger.info('[Setup] Auth required detected from live logs');
         }
       }
 
       // Send status events (only once) when both conditions are met
       if (serverBootedDetected && authRequiredDetected && !statusEventSent) {
         statusEventSent = true;
-        console.log('[Setup] Sending server started + auth required events');
+        logger.info('[Setup] Sending server started + auth required events');
         res.write(`data: ${JSON.stringify({ type: 'started', authenticated: false })}\n\n`);
         res.write(`data: ${JSON.stringify({ type: 'auth_required' })}\n\n`);
       } else if (serverBootedDetected && serverAuthState?.authenticated && !statusEventSent) {
         statusEventSent = true;
-        console.log('[Setup] Sending server started (authenticated) event');
+        logger.info('[Setup] Sending server started (authenticated) event');
         res.write(`data: ${JSON.stringify({ type: 'started', authenticated: true })}\n\n`);
       }
     } catch (error) {
-      console.error('[Setup] Error in sendLogs:', error);
+      logger.error('[Setup] Error in sendLogs:', error);
     }
   };
 
@@ -1710,12 +1711,12 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
     };
 
     // Send the /auth login device command to initiate authentication
-    console.log('[Setup] Sending /auth login device command...');
+    logger.info('[Setup] Sending /auth login device command...');
     const cmdResult = await execCommand('/auth login device');
     if (!cmdResult.success) {
-      console.error('[Setup] Failed to send auth command:', cmdResult.error);
+      logger.error('[Setup] Failed to send auth command:', cmdResult.error);
     } else {
-      console.log('[Setup] Auth command sent successfully');
+      logger.info('[Setup] Auth command sent successfully');
     }
 
     // Wait a moment for the server to process the command
@@ -1731,13 +1732,13 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
 
       // Check if we found a valid auth code (must be alphanumeric, 4-12 chars)
       if (oauthInfo.userCode && /^[A-Za-z0-9]{4,12}$/.test(oauthInfo.userCode)) {
-        console.log(`[Setup] Found auth code after ${attempt + 1} attempts: ${oauthInfo.userCode}`);
+        logger.info(`[Setup] Found auth code after ${attempt + 1} attempts: ${oauthInfo.userCode}`);
         break;
       }
 
       // Check if already authenticated
       if (oauthInfo.authenticated) {
-        console.log('[Setup] Server already authenticated');
+        logger.info('[Setup] Server already authenticated');
         break;
       }
 
@@ -1759,7 +1760,7 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
 
     // If no valid code found after polling, return error
     if (!serverAuthState.authCode && !serverAuthState.authenticated) {
-      console.log('[Setup] No auth code found in logs after polling');
+      logger.info('[Setup] No auth code found in logs after polling');
       res.json({
         success: false,
         error: 'Auth code not found in server logs. Please ensure the server is running and needs authentication.',
@@ -1789,7 +1790,7 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
       pollInterval: 5,
     });
   } catch (error) {
-    console.error('[Setup] Failed to start server auth:', error);
+    logger.error('[Setup] Failed to start server auth:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to start server authentication',
@@ -1828,13 +1829,13 @@ router.get('/auth/server/status', async (_req: Request, res: Response) => {
 
     // Auto-send persistence command when auth is detected and not yet configured
     if (serverAuthState.authenticated && !serverAuthState.persistenceConfigured) {
-      console.log('[Setup] Auth detected, automatically sending /auth persistence Encrypted...');
+      logger.info('[Setup] Auth detected, automatically sending /auth persistence Encrypted...');
       const cmdResult = await execCommand('/auth persistence Encrypted');
       if (cmdResult.success) {
         serverAuthState.persistenceConfigured = true;
-        console.log('[Setup] Persistence command sent automatically');
+        logger.info('[Setup] Persistence command sent automatically');
       } else {
-        console.error('[Setup] Failed to auto-send persistence command:', cmdResult.error);
+        logger.error('[Setup] Failed to auto-send persistence command:', cmdResult.error);
       }
     }
 
@@ -1846,7 +1847,7 @@ router.get('/auth/server/status', async (_req: Request, res: Response) => {
       expired: new Date() > serverAuthState.expiresAt,
     });
   } catch (error) {
-    console.error('[Setup] Failed to check server auth status:', error);
+    logger.error('[Setup] Failed to check server auth status:', error);
     res.status(500).json({
       authenticated: false,
       error: 'Failed to check authentication status',
@@ -1904,11 +1905,11 @@ router.post('/auth/verify', async (_req: Request, res: Response) => {
 router.post('/auth/persistence', async (_req: Request, res: Response) => {
   try {
     // Send the /auth persistence Encrypted command to make tokens persistent
-    console.log('[Setup] Sending /auth persistence Encrypted command...');
+    logger.info('[Setup] Sending /auth persistence Encrypted command...');
     const cmdResult = await execCommand('/auth persistence Encrypted');
 
     if (!cmdResult.success) {
-      console.error('[Setup] Failed to send persistence command:', cmdResult.error);
+      logger.error('[Setup] Failed to send persistence command:', cmdResult.error);
       res.status(500).json({
         success: false,
         error: 'Failed to send persistence command: ' + cmdResult.error,
@@ -1916,13 +1917,13 @@ router.post('/auth/persistence', async (_req: Request, res: Response) => {
       return;
     }
 
-    console.log('[Setup] Persistence command sent successfully');
+    logger.info('[Setup] Persistence command sent successfully');
     res.json({
       success: true,
       message: 'Persistence configured',
     });
   } catch (error) {
-    console.error('[Setup] Failed to setup persistence:', error);
+    logger.error('[Setup] Failed to setup persistence:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to setup persistence',
@@ -1944,7 +1945,7 @@ router.post('/plugins/install/:pluginId', async (req: Request, res: Response) =>
 
     // For now, just acknowledge the request
     // Actual plugin installation would happen here
-    console.log(`[Setup] Plugin installation requested: ${pluginId}`);
+    logger.info(`[Setup] Plugin installation requested: ${pluginId}`);
 
     res.json({
       success: true,

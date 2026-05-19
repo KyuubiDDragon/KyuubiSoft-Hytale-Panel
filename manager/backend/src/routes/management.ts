@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import { Router, Request, Response } from 'express';
 import { readFile, writeFile, readdir, stat, unlink, realpath } from 'fs/promises';
 import * as fs from 'fs';
@@ -203,7 +204,7 @@ async function cleanupModTracking(filename: string): Promise<void> {
     const cfwidgetMod = cfwidgetData.mods.find((m: { filename: string }) => m.filename === filename);
     if (cfwidgetMod) {
       await cfwidgetUntrackMod(filename);
-      console.log(`[Cleanup] Removed ${filename} from CFWidget tracking`);
+      logger.info(`[Cleanup] Removed ${filename} from CFWidget tracking`);
     }
 
     // 2. Check and remove from Modtale
@@ -211,7 +212,7 @@ async function cleanupModTracking(filename: string): Promise<void> {
     for (const [projectId, info] of Object.entries(modtaleInstalled)) {
       if (info.filename === filename) {
         await modtaleUntrack(projectId);
-        console.log(`[Cleanup] Removed ${filename} from Modtale tracking (project: ${projectId})`);
+        logger.info(`[Cleanup] Removed ${filename} from Modtale tracking (project: ${projectId})`);
         break;
       }
     }
@@ -221,7 +222,7 @@ async function cleanupModTracking(filename: string): Promise<void> {
     for (const [resourceId, info] of Object.entries(stackmartInstalled)) {
       if (info.filename === filename) {
         await stackmartUntrack(resourceId);
-        console.log(`[Cleanup] Removed ${filename} from StackMart tracking (resource: ${resourceId})`);
+        logger.info(`[Cleanup] Removed ${filename} from StackMart tracking (resource: ${resourceId})`);
         break;
       }
     }
@@ -231,12 +232,12 @@ async function cleanupModTracking(filename: string): Promise<void> {
     for (const [modIdStr, info] of Object.entries(curseforgeInstalled)) {
       if (info.filename === filename) {
         await curseforgeUntrack(parseInt(modIdStr));
-        console.log(`[Cleanup] Removed ${filename} from CurseForge tracking (mod: ${modIdStr})`);
+        logger.info(`[Cleanup] Removed ${filename} from CurseForge tracking (mod: ${modIdStr})`);
         break;
       }
     }
   } catch (error) {
-    console.error(`[Cleanup] Error cleaning up tracking for ${filename}:`, error);
+    logger.error(`[Cleanup] Error cleaning up tracking for ${filename}:`, error);
     // Don't throw - deletion should still succeed even if cleanup fails
   }
 }
@@ -569,7 +570,7 @@ router.delete('/bans/:player', authMiddleware, requirePermission('players.unban'
       let result = await execCommand(`/unban ${playerName}`);
       if (result.success) {
         commandSent = true;
-        console.log(`Unban command sent for player name: ${playerName}`);
+        logger.info(`Unban command sent for player name: ${playerName}`);
       }
 
       // Also try with UUID if we have it
@@ -577,7 +578,7 @@ router.delete('/bans/:player', authMiddleware, requirePermission('players.unban'
         result = await execCommand(`/unban ${playerUuid}`);
         if (result.success) {
           commandSent = true;
-          console.log(`Unban command sent for UUID: ${playerUuid}`);
+          logger.info(`Unban command sent for UUID: ${playerUuid}`);
         }
       }
 
@@ -612,7 +613,7 @@ router.delete('/bans/:player', authMiddleware, requirePermission('players.unban'
           // Write back the filtered bans
           await writeFile(bansPath, JSON.stringify(filteredBans, null, 2), 'utf-8');
           fileModified = true;
-          console.log(`Removed ${originalLength - filteredBans.length} ban(s) from bans.json`);
+          logger.info(`Removed ${originalLength - filteredBans.length} ban(s) from bans.json`);
 
           // Also update our name mapping (remove the unbanned player)
           if (playerUuid) {
@@ -622,7 +623,7 @@ router.delete('/bans/:player', authMiddleware, requirePermission('players.unban'
         }
       }
     } catch (fileError) {
-      console.error('Error modifying bans.json:', fileError);
+      logger.error('Error modifying bans.json:', fileError);
     }
 
     // Log activity
@@ -634,7 +635,7 @@ router.delete('/bans/:player', authMiddleware, requirePermission('players.unban'
     const bans = await readBans();
     res.json({ success: true, bans, fileModified, commandSent });
   } catch (error) {
-    console.error('Unban error:', error);
+    logger.error('Unban error:', error);
     res.status(500).json({ error: 'Failed to remove ban' });
   }
 });
@@ -1208,7 +1209,7 @@ router.get('/mods/all-updates', authMiddleware, requirePermission('mods.view'), 
     const status = await getUnifiedUpdateStatus();
     res.json(status);
   } catch (error) {
-    console.error('All mods update status error:', error);
+    logger.error('All mods update status error:', error);
     res.status(500).json({ error: 'Failed to get update status' });
   }
 });
@@ -1370,7 +1371,7 @@ router.post('/mods/upload', authMiddleware, requirePermission('mods.install'), u
     if (!verifyFileMagic(req.file.path, expectedType)) {
       // Delete the uploaded file
       await unlink(req.file.path).catch(() => {});
-      console.warn(`[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`);
+      logger.warn(`[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`);
       res.status(400).json({ error: 'Invalid file content. File does not match expected format.' });
       return;
     }
@@ -1414,7 +1415,7 @@ router.post('/plugins/upload', authMiddleware, requirePermission('plugins.instal
     if (!verifyFileMagic(req.file.path, expectedType)) {
       // Delete the uploaded file
       await unlink(req.file.path).catch(() => {});
-      console.warn(`[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`);
+      logger.warn(`[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`);
       res.status(400).json({ error: 'Invalid file content. File does not match expected format.' });
       return;
     }
@@ -1566,7 +1567,7 @@ async function findConfigDirs(baseDir: string, modName: string): Promise<string[
     }
   } catch (e) {
     // Directory doesn't exist or can't be read
-    console.log(`findConfigDirs: Could not read ${baseDir}:`, e);
+    logger.info(`findConfigDirs: Could not read ${baseDir}:`, e);
   }
 
   return result;
@@ -1579,7 +1580,7 @@ router.get('/mods/:filename/configs', authMiddleware, requirePermission('mods.vi
     const modName = filename.replace(/\.(jar|zip|disabled)$/i, '');
     const baseModName = extractBaseModName(filename);
 
-    console.log(`Looking for configs for mod: ${filename}, baseName: ${baseModName}`);
+    logger.info(`Looking for configs for mod: ${filename}, baseName: ${baseModName}`);
 
     // Priority search locations (mods directory first!)
     const configPaths: string[] = [];
@@ -1587,7 +1588,7 @@ router.get('/mods/:filename/configs', authMiddleware, requirePermission('mods.vi
     // 1. First search in mods directory (highest priority)
     const modsMatches = await findConfigDirs(config.modsPath, baseModName);
     configPaths.push(...modsMatches);
-    console.log(`Found in modsPath (${config.modsPath}):`, modsMatches);
+    logger.info(`Found in modsPath (${config.modsPath}):`, modsMatches);
 
     // 2. Exact matches in common locations
     configPaths.push(
@@ -1632,10 +1633,10 @@ router.get('/mods/:filename/configs', authMiddleware, requirePermission('mods.vi
       }
     }
 
-    console.log(`Found ${configs.length} config files for ${filename}:`, configs.map(c => c.path));
+    logger.info(`Found ${configs.length} config files for ${filename}:`, configs.map(c => c.path));
     res.json({ configs });
   } catch (error) {
-    console.error('Failed to get mod configs:', error);
+    logger.error('Failed to get mod configs:', error);
     res.status(500).json({ error: 'Failed to get mod configs' });
   }
 });
@@ -1647,7 +1648,7 @@ router.get('/plugins/:filename/configs', authMiddleware, requirePermission('plug
     const pluginName = filename.replace(/\.(jar|zip|disabled)$/i, '');
     const basePluginName = extractBaseModName(filename);
 
-    console.log(`Looking for configs for plugin: ${filename}, baseName: ${basePluginName}`);
+    logger.info(`Looking for configs for plugin: ${filename}, baseName: ${basePluginName}`);
 
     // Priority search locations (plugins directory first!)
     const configPaths: string[] = [];
@@ -1699,10 +1700,10 @@ router.get('/plugins/:filename/configs', authMiddleware, requirePermission('plug
       }
     }
 
-    console.log(`Found ${configs.length} config files for plugin ${filename}:`, configs.map(c => c.path));
+    logger.info(`Found ${configs.length} config files for plugin ${filename}:`, configs.map(c => c.path));
     res.json({ configs });
   } catch (error) {
-    console.error('Failed to get plugin configs:', error);
+    logger.error('Failed to get plugin configs:', error);
     res.status(500).json({ error: 'Failed to get plugin configs' });
   }
 });
@@ -1721,7 +1722,7 @@ router.get('/config/read', authMiddleware, requirePermission('config.view'), asy
     const safePath = getRealPathIfSafe(configPath, allowedDirectories);
 
     if (!safePath) {
-      console.warn(`[SECURITY] Blocked path traversal attempt: ${configPath}`);
+      logger.warn(`[SECURITY] Blocked path traversal attempt: ${configPath}`);
       res.status(403).json({ error: 'Access denied - invalid path' });
       return;
     }
@@ -1747,7 +1748,7 @@ router.put('/config/write', authMiddleware, requirePermission('config.edit'), as
     const safePath = getRealPathIfSafe(configPath, allowedDirectories);
 
     if (!safePath) {
-      console.warn(`[SECURITY] Blocked path traversal attempt (write): ${configPath}`);
+      logger.warn(`[SECURITY] Blocked path traversal attempt (write): ${configPath}`);
       res.status(403).json({ error: 'Access denied - invalid path' });
       return;
     }
@@ -2617,7 +2618,7 @@ router.delete('/modtale/uninstall/:projectId', authMiddleware, requirePermission
 
     res.json(result);
   } catch (error) {
-    console.error('Modtale uninstall error:', error);
+    logger.error('Modtale uninstall error:', error);
     res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
   }
 });
@@ -2822,7 +2823,7 @@ router.delete('/stackmart/uninstall/:resourceId', authMiddleware, requirePermiss
 
     res.json(result);
   } catch (error) {
-    console.error('StackMart uninstall error:', error);
+    logger.error('StackMart uninstall error:', error);
     res.status(500).json({ success: false, error: 'Failed to uninstall resource' });
   }
 });
@@ -2904,7 +2905,7 @@ router.get('/curseforge/search', authMiddleware, requirePermission('mods.view'),
       res.status(503).json({ error: 'CurseForge API unavailable' });
     }
   } catch (error) {
-    console.error('CurseForge search error:', error);
+    logger.error('CurseForge search error:', error);
     res.status(500).json({ error: 'Failed to search CurseForge' });
   }
 });
@@ -2951,7 +2952,7 @@ router.get('/curseforge/mods/:modId', authMiddleware, requirePermission('mods.vi
       res.status(404).json({ error: 'Mod not found' });
     }
   } catch (error) {
-    console.error('CurseForge mod details error:', error);
+    logger.error('CurseForge mod details error:', error);
     res.status(500).json({ error: 'Failed to get mod details' });
   }
 });
@@ -2999,7 +3000,7 @@ router.get('/curseforge/mods/:modId/files', authMiddleware, requirePermission('m
       res.status(404).json({ error: 'Files not found' });
     }
   } catch (error) {
-    console.error('CurseForge files error:', error);
+    logger.error('CurseForge files error:', error);
     res.status(500).json({ error: 'Failed to get mod files' });
   }
 });
@@ -3045,7 +3046,7 @@ router.post('/curseforge/install', authMiddleware, requirePermission('mods.insta
 
     res.json(result);
   } catch (error) {
-    console.error('CurseForge install error:', error);
+    logger.error('CurseForge install error:', error);
     res.status(500).json({ success: false, error: 'Failed to install mod' });
   }
 });
@@ -3091,7 +3092,7 @@ router.post('/curseforge/update', authMiddleware, requirePermission('mods.instal
 
     res.json(result);
   } catch (error) {
-    console.error('CurseForge update error:', error);
+    logger.error('CurseForge update error:', error);
     res.status(500).json({ success: false, error: 'Failed to update mod' });
   }
 });
@@ -3122,7 +3123,7 @@ router.get('/curseforge/updates', authMiddleware, requirePermission('mods.view')
     const updates = await curseforgeCheckUpdates();
     res.json({ updates });
   } catch (error) {
-    console.error('CurseForge updates check error:', error);
+    logger.error('CurseForge updates check error:', error);
     res.status(500).json({ error: 'Failed to check for updates' });
   }
 });
@@ -3281,7 +3282,7 @@ router.delete('/curseforge/uninstall/:modId', authMiddleware, requirePermission(
 
     res.json(result);
   } catch (error) {
-    console.error('CurseForge uninstall error:', error);
+    logger.error('CurseForge uninstall error:', error);
     res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
   }
 });
@@ -3320,7 +3321,7 @@ router.get('/modupdates/status', authMiddleware, requirePermission('mods.view'),
     const status = await cfwidgetStatus();
     res.json(status);
   } catch (error) {
-    console.error('Mod updates status error:', error);
+    logger.error('Mod updates status error:', error);
     res.status(500).json({ error: 'Failed to get update status' });
   }
 });
@@ -3343,7 +3344,7 @@ router.post('/modupdates/check', authMiddleware, requirePermission('mods.view'),
     const status = await cfwidgetCheckAll();
     res.json(status);
   } catch (error) {
-    console.error('Mod updates check error:', error);
+    logger.error('Mod updates check error:', error);
     res.status(500).json({ error: 'Failed to check for updates' });
   }
 });
@@ -3391,7 +3392,7 @@ router.post('/modupdates/track', authMiddleware, requirePermission('mods.install
 
     res.json(result);
   } catch (error) {
-    console.error('Track mod error:', error);
+    logger.error('Track mod error:', error);
     res.status(500).json({ success: false, error: 'Failed to track mod' });
   }
 });
@@ -3422,7 +3423,7 @@ router.delete('/modupdates/track/:filename', authMiddleware, requirePermission('
 
     res.json({ success });
   } catch (error) {
-    console.error('Untrack mod error:', error);
+    logger.error('Untrack mod error:', error);
     res.status(500).json({ success: false, error: 'Failed to untrack mod' });
   }
 });
@@ -3450,7 +3451,7 @@ router.get('/modupdates/check/:filename', authMiddleware, requirePermission('mod
       res.status(404).json({ error: 'Mod not tracked' });
     }
   } catch (error) {
-    console.error('Check mod update error:', error);
+    logger.error('Check mod update error:', error);
     res.status(500).json({ error: 'Failed to check mod update' });
   }
 });
@@ -3496,7 +3497,7 @@ router.get('/modupdates/lookup', authMiddleware, requirePermission('mods.view'),
       res.status(404).json({ error: 'Mod not found' });
     }
   } catch (error) {
-    console.error('Lookup mod error:', error);
+    logger.error('Lookup mod error:', error);
     res.status(500).json({ error: 'Failed to lookup mod' });
   }
 });
@@ -3527,7 +3528,7 @@ router.put('/modupdates/version/:filename', authMiddleware, requirePermission('m
     const success = await cfwidgetUpdateVersion(decodeURIComponent(filename), version, fileId);
     res.json({ success });
   } catch (error) {
-    console.error('Update version error:', error);
+    logger.error('Update version error:', error);
     res.status(500).json({ success: false, error: 'Failed to update version' });
   }
 });
@@ -3560,7 +3561,7 @@ router.post('/modupdates/install/:filename', authMiddleware, requirePermission('
 
     res.json(result);
   } catch (error) {
-    console.error('CFWidget install error:', error);
+    logger.error('CFWidget install error:', error);
     res.status(500).json({ success: false, error: 'Failed to install mod' });
   }
 });
@@ -3593,7 +3594,7 @@ router.delete('/modupdates/uninstall/:filename', authMiddleware, requirePermissi
 
     res.json(result);
   } catch (error) {
-    console.error('CFWidget uninstall error:', error);
+    logger.error('CFWidget uninstall error:', error);
     res.status(500).json({ success: false, error: 'Failed to uninstall mod' });
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import { readFile, writeFile, mkdir, access, constants } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
@@ -215,7 +216,7 @@ export async function isSetupComplete(): Promise<boolean> {
     try {
       await access(getConfigFilePath(), constants.F_OK);
     } catch {
-      console.log('[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.');
+      logger.info('[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.');
       await writeSetupConfig({ ...setupConfig, setupComplete: false });
       return false;
     }
@@ -594,7 +595,7 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
       await writeFile(usersFile, JSON.stringify(usersData, null, 2), 'utf-8');
     } catch (error) {
       // User might already exist, which is fine
-      console.log('Note: Admin user creation skipped (may already exist)');
+      logger.info('Note: Admin user creation skipped (may already exist)');
     }
 
     // Write panel config
@@ -605,7 +606,7 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
       allowOp: setupConfig.server?.allowOp ?? false,
     };
     await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
-    console.log('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
+    logger.info('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
 
     // Write server config.json if server path exists.
     // When downloadMethod === 'existing' we treat the on-disk config as the
@@ -676,10 +677,10 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         };
 
         await writeFile(serverConfigPath, JSON.stringify(serverConfig, null, 2), 'utf-8');
-        console.log('[Setup] Wrote server config.json with all settings including UpdateConfig');
+        logger.info('[Setup] Wrote server config.json with all settings including UpdateConfig');
       } catch {
         // Server directory might not exist yet, skip
-        console.log('Note: Server config not written (server directory not ready)');
+        logger.info('Note: Server config not written (server directory not ready)');
       }
     }
 
@@ -713,63 +714,63 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
       plugin: setupConfig.plugin ?? null,
     };
     await writeFile(getConfigFilePath(), JSON.stringify(mainConfig, null, 2), 'utf-8');
-    console.log('[Setup] Wrote config.json with all settings');
+    logger.info('[Setup] Wrote config.json with all settings');
 
     // Install KyuubiAPI plugin if user selected it
     if (setupConfig.plugin?.kyuubiApiInstalled) {
-      console.log('[Setup] Installing KyuubiAPI plugin...');
+      logger.info('[Setup] Installing KyuubiAPI plugin...');
       try {
         const pluginResult = await installKyuubiApiPlugin();
         if (pluginResult.success) {
-          console.log('[Setup] KyuubiAPI plugin installed successfully');
+          logger.info('[Setup] KyuubiAPI plugin installed successfully');
         } else {
-          console.error('[Setup] Failed to install KyuubiAPI plugin:', pluginResult.error);
+          logger.error('[Setup] Failed to install KyuubiAPI plugin:', pluginResult.error);
         }
       } catch (pluginError) {
-        console.error('[Setup] Error installing KyuubiAPI plugin:', pluginError);
+        logger.error('[Setup] Error installing KyuubiAPI plugin:', pluginError);
       }
     }
 
     // Install EasyWebMap plugin if user enabled webmap
     if (setupConfig.integrations?.webmap) {
-      console.log('[Setup] Installing EasyWebMap plugin...');
+      logger.info('[Setup] Installing EasyWebMap plugin...');
       try {
         const webmapResult = await installMod('easywebmap');
         if (webmapResult.success) {
-          console.log('[Setup] EasyWebMap plugin installed successfully:', webmapResult.filename);
+          logger.info('[Setup] EasyWebMap plugin installed successfully:', webmapResult.filename);
           if (webmapResult.configCreated) {
-            console.log('[Setup] EasyWebMap config created at', path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json'));
+            logger.info('[Setup] EasyWebMap config created at', path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json'));
             // Give filesystem time to sync the config file before server restart
             await new Promise(resolve => setTimeout(resolve, 500));
-            console.log('[Setup] EasyWebMap config write confirmed');
+            logger.info('[Setup] EasyWebMap config write confirmed');
           }
         } else {
           // "already installed" is not an error, just info
           if (webmapResult.error?.includes('already installed')) {
-            console.log('[Setup] EasyWebMap already installed:', webmapResult.error);
+            logger.info('[Setup] EasyWebMap already installed:', webmapResult.error);
           } else {
-            console.error('[Setup] Failed to install EasyWebMap:', webmapResult.error);
+            logger.error('[Setup] Failed to install EasyWebMap:', webmapResult.error);
           }
         }
       } catch (webmapError) {
-        console.error('[Setup] Error installing EasyWebMap:', webmapError);
+        logger.error('[Setup] Error installing EasyWebMap:', webmapError);
       }
     }
 
     // Apply automation settings to scheduler
     if (setupConfig.automation) {
-      console.log('[Setup] Applying automation settings to scheduler...');
+      logger.info('[Setup] Applying automation settings to scheduler...');
       try {
         // Convert setup automation format to scheduler format
         const schedulerConfig = convertAutomationToSchedulerConfig(setupConfig.automation);
         const saved = saveSchedulerConfig(schedulerConfig);
         if (saved) {
-          console.log('[Setup] Scheduler configuration applied successfully');
+          logger.info('[Setup] Scheduler configuration applied successfully');
         } else {
-          console.error('[Setup] Failed to save scheduler configuration');
+          logger.error('[Setup] Failed to save scheduler configuration');
         }
       } catch (schedulerError) {
-        console.error('[Setup] Error applying scheduler config:', schedulerError);
+        logger.error('[Setup] Error applying scheduler config:', schedulerError);
       }
     }
 
@@ -779,36 +780,36 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
     // Restart server container so newly installed mods get loaded
     // Run in background to avoid HTTP timeout - setup is already complete at this point
     // Use longer delay to ensure all config files are fully written to disk before restart
-    console.log('[Setup] Scheduling server restart to load installed mods (3 second delay)...');
+    logger.info('[Setup] Scheduling server restart to load installed mods (3 second delay)...');
     setTimeout(async () => {
       try {
-        console.log('[Setup] Restarting server container now...');
+        logger.info('[Setup] Restarting server container now...');
         const restartResult = await dockerService.restartContainer();
         if (restartResult.success) {
-          console.log('[Setup] Server restart completed successfully');
+          logger.info('[Setup] Server restart completed successfully');
 
           // Wait for server to start, then ensure EasyWebMap config has correct port
           // This fixes cases where the mod creates a default config on first startup
           if (setupConfig.integrations?.webmap) {
-            console.log('[Setup] Waiting 10 seconds for mods to initialize...');
+            logger.info('[Setup] Waiting 10 seconds for mods to initialize...');
             await new Promise(resolve => setTimeout(resolve, 10000));
-            console.log('[Setup] Ensuring EasyWebMap config has correct port...');
+            logger.info('[Setup] Ensuring EasyWebMap config has correct port...');
             const configResult = await ensureEasyWebMapConfig();
             if (configResult.updated) {
-              console.log('[Setup] EasyWebMap config was updated with correct port');
+              logger.info('[Setup] EasyWebMap config was updated with correct port');
             } else if (configResult.created) {
-              console.log('[Setup] EasyWebMap config was created');
+              logger.info('[Setup] EasyWebMap config was created');
             } else if (configResult.success) {
-              console.log('[Setup] EasyWebMap config already correct');
+              logger.info('[Setup] EasyWebMap config already correct');
             } else {
-              console.error('[Setup] Failed to ensure EasyWebMap config:', configResult.error);
+              logger.error('[Setup] Failed to ensure EasyWebMap config:', configResult.error);
             }
           }
         } else {
-          console.error('[Setup] Failed to restart server:', restartResult.error);
+          logger.error('[Setup] Failed to restart server:', restartResult.error);
         }
       } catch (restartError) {
-        console.error('[Setup] Error restarting server:', restartError);
+        logger.error('[Setup] Error restarting server:', restartError);
       }
     }, 3000); // 3 second delay to ensure config files are written and HTTP response completes
 
@@ -996,7 +997,7 @@ export async function getAuthStatusForSetup(): Promise<{
       },
     };
   } catch (error) {
-    console.error('[Setup] Failed to get auth status:', error);
+    logger.error('[Setup] Failed to get auth status:', error);
     return {
       downloaderAuth: {
         authenticated: false,

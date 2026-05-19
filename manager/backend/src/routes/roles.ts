@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -31,7 +32,7 @@ router.get(
       const roles = await getAllRoles();
       res.json({ roles });
     } catch (error) {
-      console.error('Failed to get roles:', error);
+      logger.error('Failed to get roles:', error);
       res.status(500).json({ error: 'Failed to get roles' });
     }
   }
@@ -46,7 +47,7 @@ router.get(
     try {
       res.json({ permissions: PERMISSIONS });
     } catch (error) {
-      console.error('Failed to get permissions:', error);
+      logger.error('Failed to get permissions:', error);
       res.status(500).json({ error: 'Failed to get permissions' });
     }
   }
@@ -81,7 +82,7 @@ router.get(
 
       res.json(role);
     } catch (error) {
-      console.error('Failed to get role:', error);
+      logger.error('Failed to get role:', error);
       res.status(500).json({ error: 'Failed to get role' });
     }
   }
@@ -149,7 +150,7 @@ router.post(
 
       res.status(201).json({ success: true, role });
     } catch (error) {
-      console.error('Failed to create role:', error);
+      logger.error('Failed to create role:', error);
       const message = error instanceof Error ? error.message : 'Failed to create role';
       res.status(400).json({ error: message });
     }
@@ -205,7 +206,7 @@ router.put(
 
       res.json({ success: true, role });
     } catch (error) {
-      console.error('Failed to update role:', error);
+      logger.error('Failed to update role:', error);
       const message = error instanceof Error ? error.message : 'Failed to update role';
       res.status(400).json({ error: message });
     }
@@ -263,7 +264,7 @@ router.delete(
 
       res.json({ success: true });
     } catch (error) {
-      console.error('Failed to delete role:', error);
+      logger.error('Failed to delete role:', error);
       const message = error instanceof Error ? error.message : 'Failed to delete role';
       res.status(400).json({ error: message });
     }

@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
@@ -122,12 +123,12 @@ export function loadConfig(): ScheduleConfig {
       const loaded = JSON.parse(data);
       // Use deep merge to preserve default values for missing nested properties
       schedulerConfig = deepMerge(DEFAULT_CONFIG, loaded);
-      console.log('[Scheduler] Config loaded from file:', CONFIG_FILE);
+      logger.info('[Scheduler] Config loaded from file:', CONFIG_FILE);
     } else {
-      console.log('[Scheduler] No config file found, using defaults');
+      logger.info('[Scheduler] No config file found, using defaults');
     }
   } catch (error) {
-    console.error('Failed to load scheduler config:', error);
+    logger.error('Failed to load scheduler config:', error);
   }
   return schedulerConfig;
 }
@@ -138,7 +139,7 @@ export function saveConfig(config: Partial<ScheduleConfig>): boolean {
     // Use deep merge to properly handle partial nested updates
     schedulerConfig = deepMerge(schedulerConfig, config);
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(schedulerConfig, null, 2));
-    console.log('[Scheduler] Config saved to file:', CONFIG_FILE);
+    logger.info('[Scheduler] Config saved to file:', CONFIG_FILE);
 
     // Restart schedulers with new config
     stopSchedulers();
@@ -146,7 +147,7 @@ export function saveConfig(config: Partial<ScheduleConfig>): boolean {
 
     return true;
   } catch (error) {
-    console.error('Failed to save scheduler config:', error);
+    logger.error('Failed to save scheduler config:', error);
     return false;
   }
 }
@@ -177,17 +178,17 @@ function getNextBackupTime(): Date | null {
 
 // Run automatic backup
 async function runAutoBackup(): Promise<void> {
-  console.log('[Scheduler] Running automatic backup...');
+  logger.info('[Scheduler] Running automatic backup...');
 
   const result = await createBackup('auto');
 
   if (result.success) {
-    console.log(`[Scheduler] Backup created: ${result.backup?.filename}`);
+    logger.info(`[Scheduler] Backup created: ${result.backup?.filename}`);
 
     // Clean old backups
     await cleanOldBackups();
   } else {
-    console.error('[Scheduler] Backup failed:', result.error);
+    logger.error('[Scheduler] Backup failed:', result.error);
   }
 }
 
@@ -208,7 +209,7 @@ async function cleanOldBackups(): Promise<void> {
   }
 
   if (deleted > 0) {
-    console.log(`[Scheduler] Cleaned ${deleted} old backup(s)`);
+    logger.info(`[Scheduler] Cleaned ${deleted} old backup(s)`);
   }
 }
 
@@ -218,9 +219,9 @@ async function sendAnnouncement(message: string): Promise<void> {
 
   try {
     await dockerService.execCommand(`/broadcast ${message}`);
-    console.log(`[Scheduler] Sent announcement: ${message}`);
+    logger.info(`[Scheduler] Sent announcement: ${message}`);
   } catch (error) {
-    console.error('[Scheduler] Failed to send announcement:', error);
+    logger.error('[Scheduler] Failed to send announcement:', error);
   }
 }
 
@@ -255,12 +256,12 @@ function getNextRestartTime(): { time: string; date: Date } | null {
 async function sendRestartWarning(minutesLeft: number): Promise<void> {
   const message = schedulerConfig.scheduledRestarts.warningMessage.replace('{minutes}', minutesLeft.toString());
   await sendAnnouncement(message);
-  console.log(`[Scheduler] Sent restart warning: ${minutesLeft} minutes remaining`);
+  logger.info(`[Scheduler] Sent restart warning: ${minutesLeft} minutes remaining`);
 }
 
 // Execute the scheduled restart
 async function executeScheduledRestart(): Promise<void> {
-  console.log('[Scheduler] Executing scheduled restart...');
+  logger.info('[Scheduler] Executing scheduled restart...');
 
   // Send final restart message
   await sendAnnouncement(schedulerConfig.scheduledRestarts.restartMessage);
@@ -270,21 +271,21 @@ async function executeScheduledRestart(): Promise<void> {
 
   // Create backup if enabled
   if (schedulerConfig.scheduledRestarts.createBackup) {
-    console.log('[Scheduler] Creating pre-restart backup...');
+    logger.info('[Scheduler] Creating pre-restart backup...');
     const result = await createBackup('scheduled_restart');
     if (result.success) {
-      console.log(`[Scheduler] Pre-restart backup created: ${result.backup?.filename}`);
+      logger.info(`[Scheduler] Pre-restart backup created: ${result.backup?.filename}`);
     } else {
-      console.error('[Scheduler] Pre-restart backup failed:', result.error);
+      logger.error('[Scheduler] Pre-restart backup failed:', result.error);
     }
   }
 
   // Restart the server
   const restartResult = await dockerService.restartContainer();
   if (restartResult.success) {
-    console.log('[Scheduler] Server restart initiated successfully');
+    logger.info('[Scheduler] Server restart initiated successfully');
   } else {
-    console.error('[Scheduler] Server restart failed:', restartResult.error);
+    logger.error('[Scheduler] Server restart failed:', restartResult.error);
   }
 
   // Clear pending restart
@@ -326,7 +327,7 @@ function scheduleRestartWithWarnings(restartTime: Date, timeStr: string): void {
   // Store pending restart info
   pendingRestart = { time: timeStr, scheduledAt: restartTime };
 
-  console.log(`[Scheduler] Restart scheduled for ${restartTime.toISOString()} (in ${Math.round(msUntilRestart / 60000)} minutes)`);
+  logger.info(`[Scheduler] Restart scheduled for ${restartTime.toISOString()} (in ${Math.round(msUntilRestart / 60000)} minutes)`);
 }
 
 // Schedule the next restart
@@ -370,7 +371,7 @@ export function cancelPendingRestart(): boolean {
   }
   restartWarningTimers = [];
 
-  console.log(`[Scheduler] Cancelled pending restart that was scheduled for ${pendingRestart.scheduledAt.toISOString()}`);
+  logger.info(`[Scheduler] Cancelled pending restart that was scheduled for ${pendingRestart.scheduledAt.toISOString()}`);
   pendingRestart = null;
 
   // Re-schedule for the next time slot
@@ -396,7 +397,7 @@ export function getPendingRestart(): { time: string; scheduledAt: string } | nul
 export function startSchedulers(): void {
   loadConfig();
 
-  console.log('[Scheduler] Starting schedulers with config:', {
+  logger.info('[Scheduler] Starting schedulers with config:', {
     backups: { enabled: schedulerConfig.backups.enabled, schedule: schedulerConfig.backups.schedule },
     announcements: { enabled: schedulerConfig.announcements.enabled },
     scheduledRestarts: {
@@ -417,7 +418,7 @@ export function startSchedulers(): void {
         backupTimer = setInterval(runAutoBackup, 24 * 60 * 60 * 1000);
       }, msUntilBackup);
 
-      console.log(`[Scheduler] Next backup scheduled for ${nextBackup.toISOString()}`);
+      logger.info(`[Scheduler] Next backup scheduled for ${nextBackup.toISOString()}`);
     }
   }
 
@@ -430,7 +431,7 @@ export function startSchedulers(): void {
         }, announcement.intervalMinutes * 60 * 1000);
 
         announcementTimers.set(announcement.id, timer);
-        console.log(`[Scheduler] Announcement "${announcement.id}" scheduled every ${announcement.intervalMinutes} minutes`);
+        logger.info(`[Scheduler] Announcement "${announcement.id}" scheduled every ${announcement.intervalMinutes} minutes`);
       }
     }
   }
@@ -464,7 +465,7 @@ export function stopSchedulers(): void {
   restartWarningTimers = [];
   pendingRestart = null;
 
-  console.log('[Scheduler] All schedulers stopped');
+  logger.info('[Scheduler] All schedulers stopped');
 }
 
 // Create backup before restart (if enabled)
@@ -473,7 +474,7 @@ export async function backupBeforeRestart(): Promise<boolean> {
     return true;
   }
 
-  console.log('[Scheduler] Creating pre-restart backup...');
+  logger.info('[Scheduler] Creating pre-restart backup...');
   const result = await createBackup('pre_restart');
   return result.success;
 }

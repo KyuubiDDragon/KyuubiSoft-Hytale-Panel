@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * CFWidget Service
  * Free CurseForge API proxy for mod update checking
@@ -114,7 +115,7 @@ function setCache<T>(key: string, data: T): void {
 
 export function clearCFWidgetCache(): void {
   cache.clear();
-  console.log('[CFWidget] Cache cleared');
+  logger.info('[CFWidget] Cache cleared');
 }
 
 // ============== Tracked Mods Storage ==============
@@ -146,7 +147,7 @@ async function saveTrackedMods(data: TrackedModsData): Promise<void> {
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, JSON.stringify(data, null, 2));
   } catch (e) {
-    console.error('[CFWidget] Failed to save tracked mods:', e);
+    logger.error('[CFWidget] Failed to save tracked mods:', e);
   }
 }
 
@@ -179,24 +180,24 @@ async function cfwidgetRequest<T>(slug: string): Promise<T | null> {
           if (res.statusCode === 200) {
             resolve(JSON.parse(data));
           } else if (res.statusCode === 404) {
-            console.error(`[CFWidget] Mod not found: ${slug}`);
+            logger.error(`[CFWidget] Mod not found: ${slug}`);
             resolve(null);
           } else if (res.statusCode === 429) {
-            console.error('[CFWidget] Rate limited');
+            logger.error('[CFWidget] Rate limited');
             resolve(null);
           } else {
-            console.error(`[CFWidget] API error: ${res.statusCode}`);
+            logger.error(`[CFWidget] API error: ${res.statusCode}`);
             resolve(null);
           }
         } catch (e) {
-          console.error('[CFWidget] Failed to parse response:', e);
+          logger.error('[CFWidget] Failed to parse response:', e);
           resolve(null);
         }
       });
     });
 
     req.on('error', (e) => {
-      console.error('[CFWidget] Request error:', e);
+      logger.error('[CFWidget] Request error:', e);
       resolve(null);
     });
 
@@ -556,7 +557,7 @@ export async function updateInstalledVersion(
 async function downloadFile(url: string, destPath: string, redirectCount = 0): Promise<boolean> {
   // Prevent infinite redirects
   if (redirectCount > 10) {
-    console.error('[CFWidget] Too many redirects');
+    logger.error('[CFWidget] Too many redirects');
     return false;
   }
 
@@ -580,7 +581,7 @@ async function downloadFile(url: string, destPath: string, redirectCount = 0): P
         },
       };
 
-      console.log(`[CFWidget] Downloading from: ${parsedUrl.hostname}${parsedUrl.pathname}`);
+      logger.info(`[CFWidget] Downloading from: ${parsedUrl.hostname}${parsedUrl.pathname}`);
 
       const request = protocol.request(options, (response) => {
         // Handle redirects
@@ -591,16 +592,16 @@ async function downloadFile(url: string, destPath: string, redirectCount = 0): P
             if (redirectUrl.startsWith('/')) {
               redirectUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}${redirectUrl}`;
             }
-            console.log(`[CFWidget] Redirect (${response.statusCode}) to: ${redirectUrl}`);
+            logger.info(`[CFWidget] Redirect (${response.statusCode}) to: ${redirectUrl}`);
             downloadFile(redirectUrl, destPath, redirectCount + 1).then(resolve);
             return;
           }
         }
 
         if (response.statusCode !== 200) {
-          console.error(`[CFWidget] Download failed with status: ${response.statusCode} from ${parsedUrl.hostname}${parsedUrl.pathname}`);
+          logger.error(`[CFWidget] Download failed with status: ${response.statusCode} from ${parsedUrl.hostname}${parsedUrl.pathname}`);
           // Log response headers for debugging
-          console.error(`[CFWidget] Response headers: ${JSON.stringify(response.headers)}`);
+          logger.error(`[CFWidget] Response headers: ${JSON.stringify(response.headers)}`);
           resolve(false);
           return;
         }
@@ -611,25 +612,25 @@ async function downloadFile(url: string, destPath: string, redirectCount = 0): P
 
         file.on('finish', () => {
           file.close();
-          console.log(`[CFWidget] Download complete: ${destPath}`);
+          logger.info(`[CFWidget] Download complete: ${destPath}`);
           resolve(true);
         });
 
         file.on('error', (err) => {
-          console.error('[CFWidget] File write error:', err);
+          logger.error('[CFWidget] File write error:', err);
           file.close();
           resolve(false);
         });
       });
 
       request.on('error', (err) => {
-        console.error('[CFWidget] Download request error:', err);
+        logger.error('[CFWidget] Download request error:', err);
         resolve(false);
       });
 
       request.end();
     } catch (err) {
-      console.error('[CFWidget] URL parse error:', err);
+      logger.error('[CFWidget] URL parse error:', err);
       resolve(false);
     }
   });
@@ -708,20 +709,20 @@ export async function installTrackedMod(
 
   // Security: Prevent path traversal
   if (!resolvedDest.startsWith(resolvedTarget + path.sep)) {
-    console.error('[CFWidget] Path traversal attempt detected');
+    logger.error('[CFWidget] Path traversal attempt detected');
     return { success: false, error: 'Invalid destination path' };
   }
 
   // Construct proper CDN download URL (CFWidget returns website URL, not CDN URL)
   const downloadUrl = constructDownloadUrl(latestFile.id, latestFile.name);
 
-  console.log(`[CFWidget] Downloading ${modInfo.title} to ${destPath}`);
-  console.log(`[CFWidget] Download URL: ${downloadUrl}`);
+  logger.info(`[CFWidget] Downloading ${modInfo.title} to ${destPath}`);
+  logger.info(`[CFWidget] Download URL: ${downloadUrl}`);
 
   // Download the file
   const downloaded = await downloadFile(downloadUrl, destPath);
   if (!downloaded) {
-    console.error(`[CFWidget] Download failed for URL: ${downloadUrl}`);
+    logger.error(`[CFWidget] Download failed for URL: ${downloadUrl}`);
     return { success: false, error: `Failed to download mod file from ${downloadUrl}` };
   }
 
@@ -734,7 +735,7 @@ export async function installTrackedMod(
     try {
       const oldPath = path.join(config.modsPath, tracked.filename);
       await unlink(oldPath);
-      console.log(`[CFWidget] Deleted old version: ${tracked.filename}`);
+      logger.info(`[CFWidget] Deleted old version: ${tracked.filename}`);
     } catch {
       // Old file might not exist, that's OK
     }
@@ -765,7 +766,7 @@ export async function installTrackedMod(
   data.mods[safeFilename] = updatedMod;
   await saveTrackedMods(data);
 
-  console.log(`[CFWidget] ${isWishlist ? 'Installed' : 'Updated'} ${modInfo.title} (${safeFilename})`);
+  logger.info(`[CFWidget] ${isWishlist ? 'Installed' : 'Updated'} ${modInfo.title} (${safeFilename})`);
 
   return {
     success: true,
@@ -793,9 +794,9 @@ export async function uninstallTrackedMod(
     try {
       const filePath = path.join(config.modsPath, filename);
       await unlink(filePath);
-      console.log(`[CFWidget] Deleted mod file: ${filename}`);
+      logger.info(`[CFWidget] Deleted mod file: ${filename}`);
     } catch (err) {
-      console.error('[CFWidget] Failed to delete mod file:', err);
+      logger.error('[CFWidget] Failed to delete mod file:', err);
       // Continue to untrack even if file deletion fails
     }
   }
@@ -817,11 +818,11 @@ let lastAutoCheck: Date | null = null;
  */
 export function startAutoUpdateCheck(): void {
   if (updateCheckInterval) {
-    console.log('[CFWidget] Auto update check already running');
+    logger.info('[CFWidget] Auto update check already running');
     return;
   }
 
-  console.log('[CFWidget] Starting automatic update check (every hour)');
+  logger.info('[CFWidget] Starting automatic update check (every hour)');
 
   // Run immediately on start
   runAutoCheck();
@@ -837,7 +838,7 @@ export function stopAutoUpdateCheck(): void {
   if (updateCheckInterval) {
     clearInterval(updateCheckInterval);
     updateCheckInterval = null;
-    console.log('[CFWidget] Stopped automatic update check');
+    logger.info('[CFWidget] Stopped automatic update check');
   }
 }
 
@@ -846,17 +847,17 @@ export function stopAutoUpdateCheck(): void {
  */
 async function runAutoCheck(): Promise<void> {
   try {
-    console.log('[CFWidget] Running automatic update check...');
+    logger.info('[CFWidget] Running automatic update check...');
     const status = await checkAllUpdates();
     lastAutoCheck = new Date();
 
     if (status.updatesAvailable > 0) {
-      console.log(`[CFWidget] Found ${status.updatesAvailable} mod update(s) available`);
+      logger.info(`[CFWidget] Found ${status.updatesAvailable} mod update(s) available`);
     } else {
-      console.log('[CFWidget] All tracked mods are up to date');
+      logger.info('[CFWidget] All tracked mods are up to date');
     }
   } catch (e) {
-    console.error('[CFWidget] Auto update check failed:', e);
+    logger.error('[CFWidget] Auto update check failed:', e);
   }
 }
 

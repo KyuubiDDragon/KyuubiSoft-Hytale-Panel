@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Migration Service
  *
@@ -136,7 +137,7 @@ export async function isExistingInstallation(): Promise<boolean> {
     (indicators.hasServerFiles && indicators.hasPanelConfig);
 
   if (isExisting) {
-    console.log('[Migration] Detected existing installation:', indicators);
+    logger.info('[Migration] Detected existing installation:', indicators);
   }
 
   return isExisting;
@@ -250,7 +251,7 @@ function extractDomain(corsOrigins: string): string | undefined {
  * Run the migration process
  */
 export async function runMigration(): Promise<boolean> {
-  console.log('[Migration] Starting migration of existing installation...');
+  logger.info('[Migration] Starting migration of existing installation...');
 
   try {
     // Ensure data directory exists
@@ -262,7 +263,7 @@ export async function runMigration(): Promise<boolean> {
     const existingPanelConfig = await readPanelConfig();
     const hasAdmin = await hasExistingAdmin();
 
-    console.log('[Migration] Environment config:', {
+    logger.info('[Migration] Environment config:', {
       hasJwtSecret: !!envConfig.jwtSecret,
       hasManagerCredentials: !!(envConfig.managerUsername && envConfig.managerPassword),
       patchline: envConfig.patchline,
@@ -277,7 +278,7 @@ export async function runMigration(): Promise<boolean> {
     });
 
     if (serverConfig) {
-      console.log('[Migration] Found server config:', {
+      logger.info('[Migration] Found server config:', {
         serverName: serverConfig.ServerName,
         maxPlayers: serverConfig.MaxPlayers,
         hasPassword: !!serverConfig.Password,
@@ -288,12 +289,12 @@ export async function runMigration(): Promise<boolean> {
     }
 
     if (existingPanelConfig) {
-      console.log('[Migration] Found existing panel config:', existingPanelConfig);
+      logger.info('[Migration] Found existing panel config:', existingPanelConfig);
     }
 
     // 1. Create users.json if needed
     if (!hasAdmin && envConfig.managerUsername && envConfig.managerPassword) {
-      console.log('[Migration] Creating admin user from MANAGER_USERNAME/MANAGER_PASSWORD...');
+      logger.info('[Migration] Creating admin user from MANAGER_USERNAME/MANAGER_PASSWORD...');
 
       const passwordHash = await bcrypt.hash(envConfig.managerPassword, 10);
       const usersData = {
@@ -307,9 +308,9 @@ export async function runMigration(): Promise<boolean> {
       };
 
       await writeFile(USERS_FILE, JSON.stringify(usersData, null, 2), 'utf-8');
-      console.log('[Migration] Admin user created:', envConfig.managerUsername);
+      logger.info('[Migration] Admin user created:', envConfig.managerUsername);
     } else if (hasAdmin) {
-      console.log('[Migration] Admin user already exists, skipping user creation');
+      logger.info('[Migration] Admin user already exists, skipping user creation');
     }
 
     // 2. Create panel-config.json
@@ -321,7 +322,7 @@ export async function runMigration(): Promise<boolean> {
     };
 
     await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
-    console.log('[Migration] Panel config created:', panelConfig);
+    logger.info('[Migration] Panel config created:', panelConfig);
 
     // 3. Create setup-config.json
     const accessMode = determineAccessMode(envConfig.corsOrigins || '');
@@ -385,7 +386,7 @@ export async function runMigration(): Promise<boolean> {
     };
 
     await writeFile(SETUP_CONFIG_FILE, JSON.stringify(setupConfig, null, 2), 'utf-8');
-    console.log('[Migration] Setup config created');
+    logger.info('[Migration] Setup config created');
 
     // 4. Create config.json (main config)
     const mainConfig = {
@@ -409,17 +410,17 @@ export async function runMigration(): Promise<boolean> {
     };
 
     await writeFile(CONFIG_JSON_FILE, JSON.stringify(mainConfig, null, 2), 'utf-8');
-    console.log('[Migration] Main config created');
+    logger.info('[Migration] Main config created');
 
-    console.log('[Migration] Migration completed successfully!');
-    console.log('[Migration] The server will now start normally without requiring setup.');
+    logger.info('[Migration] Migration completed successfully!');
+    logger.info('[Migration] The server will now start normally without requiring setup.');
 
     // Reload config in memory so the rest of the application sees the new values
     reloadConfigFromFile();
 
     return true;
   } catch (error) {
-    console.error('[Migration] Migration failed:', error);
+    logger.error('[Migration] Migration failed:', error);
     return false;
   }
 }
@@ -452,12 +453,12 @@ export async function migrateUpdateConfig(): Promise<{ migrated: boolean; newFea
 
     // If updateConfig already exists, no migration needed
     if (serverConfig.updateConfig) {
-      console.log('[Migration] UpdateConfig already exists, no migration needed');
+      logger.info('[Migration] UpdateConfig already exists, no migration needed');
       return { migrated: false, newFeatures: [] };
     }
 
     // Create default updateConfig
-    console.log('[Migration] Adding UpdateConfig to server config...');
+    logger.info('[Migration] Adding UpdateConfig to server config...');
 
     // Read panel-config to get current patchline setting
     let patchline: 'release' | 'pre-release' = 'release';
@@ -485,12 +486,12 @@ export async function migrateUpdateConfig(): Promise<{ migrated: boolean; newFea
     };
 
     await writeFile(SERVER_CONFIG_FILE, JSON.stringify(serverConfig, null, 2), 'utf-8');
-    console.log('[Migration] UpdateConfig added successfully');
+    logger.info('[Migration] UpdateConfig added successfully');
 
     newFeatures.push('native_update_system');
     return { migrated: true, newFeatures };
   } catch (error) {
-    console.error('[Migration] Failed to migrate UpdateConfig:', error);
+    logger.error('[Migration] Failed to migrate UpdateConfig:', error);
     return { migrated: false, newFeatures: [] };
   }
 }
@@ -546,14 +547,14 @@ export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: str
 
     await writeFile(CONFIG_JSON_FILE, JSON.stringify(mainConfig, null, 2), 'utf-8');
 
-    console.log(`[Migration] Panel updated from ${lastVersion} to ${CURRENT_PANEL_VERSION}`);
+    logger.info(`[Migration] Panel updated from ${lastVersion} to ${CURRENT_PANEL_VERSION}`);
     if (newFeatures.length > 0) {
-      console.log('[Migration] New features available:', newFeatures);
+      logger.info('[Migration] New features available:', newFeatures);
     }
 
     return { newFeatures, showBanner: newFeatures.length > 0 };
   } catch (error) {
-    console.error('[Migration] Failed to check panel version:', error);
+    logger.error('[Migration] Failed to check panel version:', error);
     return { newFeatures: [], showBanner: false };
   }
 }
@@ -592,7 +593,7 @@ export async function checkAndRunMigration(): Promise<boolean> {
       const content = fs.readFileSync(CONFIG_JSON_FILE, 'utf-8');
       const configData = JSON.parse(content);
       if (configData.setupComplete) {
-        console.log('[Migration] Setup already complete, no migration needed');
+        logger.info('[Migration] Setup already complete, no migration needed');
         return true;
       }
     } catch {
@@ -604,7 +605,7 @@ export async function checkAndRunMigration(): Promise<boolean> {
   const isExisting = await isExistingInstallation();
 
   if (!isExisting) {
-    console.log('[Migration] No existing installation detected, setup wizard will be shown');
+    logger.info('[Migration] No existing installation detected, setup wizard will be shown');
     return true;
   }
 

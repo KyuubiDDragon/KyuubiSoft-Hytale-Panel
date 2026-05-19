@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Replay Recorder (V3.1.2)
  *
@@ -101,7 +102,7 @@ export async function setReplayConfig(next: Partial<ReplayConfigSlice>): Promise
     // PanelConfig.replay (kept loosely typed for forward compatibility).
     await updateConfig({ replay: merged } as unknown as Parameters<typeof updateConfig>[0]);
   } catch (err) {
-    console.error('[replay] failed to persist config:', err);
+    logger.error('[replay] failed to persist config:', err);
   }
   await applyReplayConfig();
   return merged;
@@ -180,7 +181,7 @@ async function startSegment(): Promise<ActiveSegment> {
     if (player) seg.uniquePlayers.add(player);
   });
 
-  seg.flushTimer = setInterval(() => { flushSegment(seg).catch((err) => console.error('[replay] flush error:', err)); }, FLUSH_INTERVAL_MS);
+  seg.flushTimer = setInterval(() => { flushSegment(seg).catch((err) => logger.error('[replay] flush error:', err)); }, FLUSH_INTERVAL_MS);
   seg.flushTimer.unref?.();
 
   // Snapshot all player positions every TICK_INTERVAL_MS even when the bus is
@@ -196,7 +197,7 @@ async function startSegment(): Promise<ActiveSegment> {
   seg.tickTimer.unref?.();
 
   await writeManifest(seg);
-  console.log(`[replay] segment started: ${id}`);
+  logger.info(`[replay] segment started: ${id}`);
   return seg;
 }
 
@@ -214,7 +215,7 @@ async function stopSegment(seg: ActiveSegment): Promise<void> {
   if (seg.unsubscribeBus) seg.unsubscribeBus();
   await flushSegment(seg);
   await writeManifest(seg);
-  console.log(`[replay] segment closed: ${seg.id} (events=${seg.totalEvents}, players=${seg.uniquePlayers.size})`);
+  logger.info(`[replay] segment closed: ${seg.id} (events=${seg.totalEvents}, players=${seg.uniquePlayers.size})`);
 }
 
 async function rotateIfNeeded(): Promise<void> {
@@ -230,8 +231,8 @@ async function rotateIfNeeded(): Promise<void> {
 function startBackgroundLoop(): void {
   if (pruneTimer) return;
   pruneTimer = setInterval(() => {
-    rotateIfNeeded().catch((err) => console.error('[replay] rotate error:', err));
-    pruneRetention().catch((err) => console.error('[replay] prune error:', err));
+    rotateIfNeeded().catch((err) => logger.error('[replay] rotate error:', err));
+    pruneRetention().catch((err) => logger.error('[replay] prune error:', err));
   }, 60 * 1000);
   pruneTimer.unref?.();
 }
@@ -290,7 +291,7 @@ export async function listSegments(): Promise<ReplayManifest[]> {
     out.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
     return out;
   } catch (err) {
-    console.error('[replay] listSegments error:', err);
+    logger.error('[replay] listSegments error:', err);
     return [];
   }
 }
@@ -322,7 +323,7 @@ export async function deleteSegment(id: string): Promise<boolean> {
     await rm(dir, { recursive: true, force: true });
     return true;
   } catch (err) {
-    console.error('[replay] deleteSegment error:', err);
+    logger.error('[replay] deleteSegment error:', err);
     return false;
   }
 }
@@ -376,12 +377,12 @@ async function pruneRetention(): Promise<void> {
         const m = JSON.parse(content) as ReplayManifest;
         if (new Date(m.endedAt).getTime() < cutoff) {
           await rm(path.join(REPLAY_ROOT, d), { recursive: true, force: true });
-          console.log(`[replay] pruned segment ${d}`);
+          logger.info(`[replay] pruned segment ${d}`);
         }
       } catch { /* skip */ }
     }
   } catch (err) {
-    console.error('[replay] retention error:', err);
+    logger.error('[replay] retention error:', err);
   }
 }
 

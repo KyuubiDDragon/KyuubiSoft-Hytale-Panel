@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * StackMart Service
  * Integration with the StackMart.org API for browsing and installing resources
@@ -103,7 +104,7 @@ function setCache<T>(key: string, data: T): void {
 
 export function clearStackMartCache(): void {
   cache.clear();
-  console.log('StackMart cache cleared');
+  logger.info('StackMart cache cleared');
 }
 
 // ============== Installed Resources Tracking ==============
@@ -143,7 +144,7 @@ async function saveInstalledResources(data: InstalledResourcesData): Promise<voi
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, JSON.stringify(data, null, 2));
   } catch (e) {
-    console.error('Failed to save installed resources tracking:', e);
+    logger.error('Failed to save installed resources tracking:', e);
   }
 }
 
@@ -215,7 +216,7 @@ function sanitizeForFilename(input: string): string | null {
 function getApiKey(): string | undefined {
   const key = process.env.STACKMART_API_KEY;
   if (key && !apiKeyLogged) {
-    console.log(`[StackMart] API key configured (${key.substring(0, 10)}...)`);
+    logger.info(`[StackMart] API key configured (${key.substring(0, 10)}...)`);
     apiKeyLogged = true;
   }
   return key || undefined;
@@ -240,7 +241,7 @@ async function stackmartRequest<T>(
   const apiKey = getApiKey();
 
   if (requireAuth && !apiKey) {
-    console.error('StackMart API key required but not configured');
+    logger.error('StackMart API key required but not configured');
     return null;
   }
 
@@ -273,15 +274,15 @@ async function stackmartRequest<T>(
       const data = await response.json();
       return data as T;
     } else if (response.status === 429) {
-      console.error('StackMart API rate limit exceeded');
+      logger.error('StackMart API rate limit exceeded');
       return null;
     } else {
       const text = await response.text();
-      console.error(`StackMart API error: ${response.status} - ${text}`);
+      logger.error(`StackMart API error: ${response.status} - ${text}`);
       return null;
     }
   } catch (e) {
-    console.error('StackMart request error:', e);
+    logger.error('StackMart request error:', e);
     return null;
   }
 }
@@ -318,7 +319,7 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
         }
 
         if (res.statusCode !== 200) {
-          console.error(`Download failed: ${res.statusCode}`);
+          logger.error(`Download failed: ${res.statusCode}`);
           resolve(false);
           return;
         }
@@ -332,16 +333,16 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
             await writeFile(destPath, buffer);
             resolve(true);
           } catch (e) {
-            console.error('Failed to write file:', e);
+            logger.error('Failed to write file:', e);
             resolve(false);
           }
         });
         res.on('error', (e) => {
-          console.error('Download error:', e);
+          logger.error('Download error:', e);
           resolve(false);
         });
       }).on('error', (e) => {
-        console.error('Request error:', e);
+        logger.error('Request error:', e);
         resolve(false);
       });
     };
@@ -403,7 +404,7 @@ export async function searchResources(options: {
 export async function getResourceDetails(resourceId: string): Promise<{ resource: StackMartResourceDetails } | null> {
   // Security: Validate resourceId before using in URL
   if (!isValidResourceId(resourceId)) {
-    console.error(`Invalid resource ID format: ${resourceId}`);
+    logger.error(`Invalid resource ID format: ${resourceId}`);
     return null;
   }
 
@@ -537,10 +538,10 @@ export async function installResourceFromStackMart(
     const oldFilePath = path.join(oldBasePath, existingInstall.filename);
     try {
       await unlink(oldFilePath);
-      console.log(`[StackMart] Removed old resource file: ${existingInstall.filename}`);
+      logger.info(`[StackMart] Removed old resource file: ${existingInstall.filename}`);
     } catch (e) {
       // File might not exist, that's ok
-      console.log(`[StackMart] Could not remove old file ${existingInstall.filename}:`, e);
+      logger.info(`[StackMart] Could not remove old file ${existingInstall.filename}:`, e);
     }
   }
 
@@ -550,7 +551,7 @@ export async function installResourceFromStackMart(
   const resolvedTarget = path.resolve(targetPath);
 
   if (!resolvedDest.startsWith(resolvedTarget + path.sep)) {
-    console.error(`Path traversal attempt detected: ${destPath}`);
+    logger.error(`Path traversal attempt detected: ${destPath}`);
     return { success: false, error: 'Invalid destination path' };
   }
 
@@ -625,7 +626,7 @@ export async function uninstallStackMart(resourceId: string): Promise<{ success:
   try {
     await unlink(filePath);
   } catch (e) {
-    console.error('Failed to delete resource file:', e);
+    logger.error('Failed to delete resource file:', e);
     // Continue to untrack even if file doesn't exist
   }
 

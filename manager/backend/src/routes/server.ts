@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import { Router, Request, Response } from 'express';
 import { readdir, readFile, writeFile, stat, access, constants } from 'fs/promises';
 import path from 'path';
@@ -665,14 +666,14 @@ async function checkDownloaderCredentials(): Promise<{ exists: boolean; error?: 
   for (const credPath of credentialPaths) {
     try {
       await access(credPath, constants.R_OK);
-      console.log(`[Server] Found downloader credentials at: ${credPath}`);
+      logger.info(`[Server] Found downloader credentials at: ${credPath}`);
       return { exists: true };
     } catch {
       // Continue checking
     }
   }
 
-  console.log('[Server] No downloader credentials found');
+  logger.info('[Server] No downloader credentials found');
   return { exists: false, error: 'Downloader credentials not found. Re-authentication required.' };
 }
 
@@ -689,7 +690,7 @@ interface VersionCheckResult {
 async function getLatestVersion(patchline: string): Promise<VersionCheckResult> {
   // SECURITY: Validate patchline to prevent command injection
   if (!VALID_PATCHLINES.includes(patchline as typeof VALID_PATCHLINES[number])) {
-    console.error(`Invalid patchline attempted: ${patchline}`);
+    logger.error(`Invalid patchline attempted: ${patchline}`);
     return { version: 'unknown', error: 'Invalid patchline' };
   }
 
@@ -699,7 +700,7 @@ async function getLatestVersion(patchline: string): Promise<VersionCheckResult> 
   );
 
   if (!checkResult.success) {
-    console.error('[Server] Downloader exec failed:', checkResult.error);
+    logger.error('[Server] Downloader exec failed:', checkResult.error);
     return { version: 'unknown', error: checkResult.error };
   }
 
@@ -721,7 +722,7 @@ async function getLatestVersion(patchline: string): Promise<VersionCheckResult> 
 
   for (const pattern of authErrorPatterns) {
     if (pattern.test(output)) {
-      console.log('[Server] Downloader auth error detected:', output.substring(0, 200));
+      logger.info('[Server] Downloader auth error detected:', output.substring(0, 200));
       return { version: 'unknown', authRequired: true, error: 'Authentication required' };
     }
   }
@@ -740,7 +741,7 @@ async function getLatestVersion(patchline: string): Promise<VersionCheckResult> 
   }
 
   // No version found, but credentials exist - might be a network issue
-  console.log('[Server] No version found in output:', output.substring(0, 200));
+  logger.info('[Server] No version found in output:', output.substring(0, 200));
   return { version: 'unknown', error: 'Could not fetch version. Check network connection.' };
 }
 
@@ -1438,7 +1439,7 @@ let downloaderOAuthState: {
 // POST /api/server/downloader/initiate-auth - Start downloader OAuth flow
 router.post('/downloader/initiate-auth', authMiddleware, requirePermission('server.restart'), async (req: Request, res: Response) => {
   try {
-    console.log('[Server] Initiating downloader OAuth flow...');
+    logger.info('[Server] Initiating downloader OAuth flow...');
 
     // First, delete existing credentials to force re-authentication
     await dockerService.execInContainer(
@@ -1452,7 +1453,7 @@ router.post('/downloader/initiate-auth', authMiddleware, requirePermission('serv
     );
 
     const output = authResult.output || '';
-    console.log('[Server] Downloader auth output:', output.substring(0, 1000));
+    logger.info('[Server] Downloader auth output:', output.substring(0, 1000));
 
     // Parse OAuth URLs from output
     // The downloader outputs: "Visit: https://oauth.accounts.hytale.com/oauth2/device/verify"

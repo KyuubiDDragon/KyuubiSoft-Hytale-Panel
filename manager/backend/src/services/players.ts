@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import { getLogs } from './docker.js';
 import { readFile, writeFile, readdir } from 'fs/promises';
 import path from 'path';
@@ -279,10 +280,10 @@ async function loadPlayers(): Promise<void> {
             players.set(entry.name, entry);
           }
         }
-        console.log(`[Players] Loaded ${players.size} players from players.json`);
+        logger.info(`[Players] Loaded ${players.size} players from players.json`);
       }
     } catch {
-      console.log('[Players] No players.json found, starting fresh');
+      logger.info('[Players] No players.json found, starting fresh');
     }
     playersLoaded = true;
   })();
@@ -306,7 +307,7 @@ function debouncedSavePlayers(): void {
         const data = Array.from(players.values());
         await writeFile(await getPlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
       } catch (err) {
-        console.error('[Players] Failed to save players:', err);
+        logger.error('[Players] Failed to save players:', err);
       } finally {
         savePromise = null;
       }
@@ -598,11 +599,11 @@ export function removePlayer(name: string): void {
 
 // Initialize player tracking
 export async function initializePlayerTracking(): Promise<void> {
-  console.log('[Players] Initializing player tracking...');
+  logger.info('[Players] Initializing player tracking...');
   await loadPlayers();
   await scanLogs();
   const onlineCount = Array.from(players.values()).filter(p => p.online).length;
-  console.log(`[Players] Initialized with ${players.size} total players, ${onlineCount} online`);
+  logger.info(`[Players] Initialized with ${players.size} total players, ${onlineCount} online`);
 }
 
 // Clear all online players (server stop/restart)
@@ -612,7 +613,7 @@ export function clearOnlinePlayers(): void {
       setPlayerOffline(player.name);
     }
   }
-  console.log('[Players] Cleared all online players (server stop/restart)');
+  logger.info('[Players] Cleared all online players (server stop/restart)');
 }
 
 // Process log line in real-time
@@ -1165,7 +1166,7 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
               players.delete(oldName);
               players.set(displayName, entry);
               sessionData = entry;
-              console.log(`[Players] Name change detected: "${oldName}" -> "${displayName}" (UUID: ${uuid})`);
+              logger.info(`[Players] Name change detected: "${oldName}" -> "${displayName}" (UUID: ${uuid})`);
               debouncedSavePlayers();
               break;
             }

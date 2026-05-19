@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Modtale Service
  * Integration with the Modtale.net API for browsing and installing mods
@@ -108,7 +109,7 @@ function setCache<T>(key: string, data: T): void {
 
 export function clearModtaleCache(): void {
   cache.clear();
-  console.log('Modtale cache cleared');
+  logger.info('Modtale cache cleared');
 }
 
 // ============== Installed Mods Tracking ==============
@@ -149,7 +150,7 @@ async function saveInstalledMods(data: InstalledModsData): Promise<void> {
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, JSON.stringify(data, null, 2));
   } catch (e) {
-    console.error('Failed to save installed mods tracking:', e);
+    logger.error('Failed to save installed mods tracking:', e);
   }
 }
 
@@ -234,7 +235,7 @@ function getApiKey(): string | undefined {
   const key = process.env.MODTALE_API_KEY || config.modtaleApiKey;
   // Only log on first call
   if (key && !apiKeyLogged) {
-    console.log(`[Modtale] API key configured (${key.substring(0, 6)}...)`);
+    logger.info(`[Modtale] API key configured (${key.substring(0, 6)}...)`);
     apiKeyLogged = true;
   }
   return key || undefined;
@@ -257,7 +258,7 @@ async function modtaleRequest<T>(
   const apiKey = getApiKey();
 
   if (requireAuth && !apiKey) {
-    console.error('Modtale API key required but not configured');
+    logger.error('Modtale API key required but not configured');
     return null;
   }
 
@@ -296,21 +297,21 @@ async function modtaleRequest<T>(
           if (res.statusCode === 200) {
             resolve(JSON.parse(data));
           } else if (res.statusCode === 429) {
-            console.error('Modtale API rate limit exceeded');
+            logger.error('Modtale API rate limit exceeded');
             resolve(null);
           } else {
-            console.error(`Modtale API error: ${res.statusCode} - ${data}`);
+            logger.error(`Modtale API error: ${res.statusCode} - ${data}`);
             resolve(null);
           }
         } catch (e) {
-          console.error('Failed to parse Modtale response:', e);
+          logger.error('Failed to parse Modtale response:', e);
           resolve(null);
         }
       });
     });
 
     req.on('error', (e) => {
-      console.error('Modtale request error:', e);
+      logger.error('Modtale request error:', e);
       resolve(null);
     });
 
@@ -350,7 +351,7 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
         }
 
         if (res.statusCode !== 200) {
-          console.error(`Download failed: ${res.statusCode}`);
+          logger.error(`Download failed: ${res.statusCode}`);
           resolve(false);
           return;
         }
@@ -364,16 +365,16 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
             await writeFile(destPath, buffer);
             resolve(true);
           } catch (e) {
-            console.error('Failed to write file:', e);
+            logger.error('Failed to write file:', e);
             resolve(false);
           }
         });
         res.on('error', (e) => {
-          console.error('Download error:', e);
+          logger.error('Download error:', e);
           resolve(false);
         });
       }).on('error', (e) => {
-        console.error('Request error:', e);
+        logger.error('Request error:', e);
         resolve(false);
       });
     };
@@ -441,7 +442,7 @@ export async function searchMods(options: {
 export async function getModDetails(projectId: string): Promise<ModtaleProjectDetails | null> {
   // Security: Validate projectId before using in URL
   if (!isValidProjectId(projectId)) {
-    console.error(`Invalid project ID format: ${projectId}`);
+    logger.error(`Invalid project ID format: ${projectId}`);
     return null;
   }
 
@@ -644,10 +645,10 @@ export async function installModFromModtale(
     const oldFilePath = path.join(oldBasePath, existingInstall.filename);
     try {
       await unlink(oldFilePath);
-      console.log(`[Modtale] Removed old mod file: ${existingInstall.filename}`);
+      logger.info(`[Modtale] Removed old mod file: ${existingInstall.filename}`);
     } catch (e) {
       // File might not exist, that's ok
-      console.log(`[Modtale] Could not remove old file ${existingInstall.filename}:`, e);
+      logger.info(`[Modtale] Could not remove old file ${existingInstall.filename}:`, e);
     }
   }
 
@@ -657,7 +658,7 @@ export async function installModFromModtale(
   const resolvedTarget = path.resolve(targetPath);
 
   if (!resolvedDest.startsWith(resolvedTarget + path.sep)) {
-    console.error(`Path traversal attempt detected: ${destPath}`);
+    logger.error(`Path traversal attempt detected: ${destPath}`);
     return { success: false, error: 'Invalid destination path' };
   }
 
@@ -784,7 +785,7 @@ export async function uninstallModtale(projectId: string): Promise<{ success: bo
   try {
     await unlink(filePath);
   } catch (e) {
-    console.error('Failed to delete mod file:', e);
+    logger.error('Failed to delete mod file:', e);
     // Continue to untrack even if file doesn't exist
   }
 

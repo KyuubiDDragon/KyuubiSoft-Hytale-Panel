@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Config Service for the Hytale Panel Setup Wizard
  *
@@ -214,9 +215,9 @@ export async function loadConfig(): Promise<PanelConfig> {
   } catch (error) {
     // File doesn't exist or is invalid - return defaults
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      console.log('[ConfigService] config.json not found, using defaults');
+      logger.info('[ConfigService] config.json not found, using defaults');
     } else {
-      console.error('[ConfigService] Error loading config.json:', error);
+      logger.error('[ConfigService] Error loading config.json:', error);
     }
     return getDefaultConfig();
   }
@@ -242,7 +243,7 @@ export async function saveConfig(config: PanelConfig): Promise<void> {
   // Atomically rename temp file to actual config file
   await rename(tempPath, configPath);
 
-  console.log('[ConfigService] Configuration saved successfully');
+  logger.info('[ConfigService] Configuration saved successfully');
 }
 
 /**
@@ -373,7 +374,7 @@ export async function migrateFromEnv(): Promise<PanelConfig> {
     config.assets.extracted = false;
   }
 
-  console.log('[ConfigService] Migrated configuration from environment variables');
+  logger.info('[ConfigService] Migrated configuration from environment variables');
 
   return config;
 }
@@ -534,7 +535,7 @@ export async function getConfig(): Promise<PanelConfig> {
  */
 export async function reloadConfig(): Promise<PanelConfig> {
   cachedConfig = await loadConfig();
-  console.log('[ConfigService] Configuration reloaded');
+  logger.info('[ConfigService] Configuration reloaded');
   return cachedConfig;
 }
 

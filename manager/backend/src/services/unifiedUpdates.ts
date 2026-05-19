@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Unified Updates Service
  * Aggregates mod update information from all sources:
@@ -79,7 +80,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       if (mod.hasUpdate) updatesAvailable++;
     }
   } catch (e) {
-    console.error('[UnifiedUpdates] Failed to get CFWidget status:', e);
+    logger.error('[UnifiedUpdates] Failed to get CFWidget status:', e);
   }
 
   // 2. Get CurseForge API installed mods (not already in CFWidget)
@@ -124,7 +125,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       if (hasUpdate) updatesAvailable++;
     }
   } catch (e) {
-    console.error('[UnifiedUpdates] Failed to get CurseForge API status:', e);
+    logger.error('[UnifiedUpdates] Failed to get CurseForge API status:', e);
   }
 
   // 3. Get Modtale installed mods (not already tracked)
@@ -168,7 +169,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       if (hasUpdate) updatesAvailable++;
     }
   } catch (e) {
-    console.error('[UnifiedUpdates] Failed to get Modtale status:', e);
+    logger.error('[UnifiedUpdates] Failed to get Modtale status:', e);
   }
 
   // 3. Get StackMart installed resources
@@ -205,7 +206,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       if (hasUpdate) updatesAvailable++;
     }
   } catch (e) {
-    console.error('[UnifiedUpdates] Failed to get StackMart status:', e);
+    logger.error('[UnifiedUpdates] Failed to get StackMart status:', e);
   }
 
   // 4. Get Mod Store installed mods
@@ -253,7 +254,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       if (hasUpdate) updatesAvailable++;
     }
   } catch (e) {
-    console.error('[UnifiedUpdates] Failed to get ModStore status:', e);
+    logger.error('[UnifiedUpdates] Failed to get ModStore status:', e);
   }
 
   return {

@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Asset Service
  * Handles extraction, browsing, and reading of Hytale game assets
@@ -230,7 +231,7 @@ export function getAssetStatus(): AssetStatus {
         };
         writeAssetMeta(newMeta);
         meta = newMeta;
-        console.log(`[Assets] Detected manually copied assets: ${fileCount} files`);
+        logger.info(`[Assets] Detected manually copied assets: ${fileCount} files`);
       }
     }
   }
@@ -291,7 +292,7 @@ export function extractAssets(): { success: boolean; error?: string; message?: s
 
   // Run extraction asynchronously
   runExtraction(sourceFile).catch((err) => {
-    console.error('[Assets] Extraction error:', err);
+    logger.error('[Assets] Extraction error:', err);
     if (extractionProgress) {
       extractionProgress.status = 'failed';
       extractionProgress.error = err.message || 'Unknown error';
@@ -360,7 +361,7 @@ async function runExtraction(sourceFile: string): Promise<void> {
       });
 
       unzip.stderr.on('data', (data: Buffer) => {
-        console.error('[Assets] unzip stderr:', data.toString());
+        logger.error('[Assets] unzip stderr:', data.toString());
       });
 
       unzip.on('close', (code) => {
@@ -404,9 +405,9 @@ async function runExtraction(sourceFile: string): Promise<void> {
       extractionProgress.status = 'completed';
     }
 
-    console.log(`[Assets] Extraction complete: ${fileCount} files`);
+    logger.info(`[Assets] Extraction complete: ${fileCount} files`);
   } catch (error) {
-    console.error('[Assets] Extraction failed:', error);
+    logger.error('[Assets] Extraction failed:', error);
     if (extractionProgress) {
       extractionProgress.status = 'failed';
       extractionProgress.error = error instanceof Error ? error.message : 'Unknown error';
@@ -742,7 +743,7 @@ function parseRegexPattern(pattern: string): RegExp | null {
 
     // SECURITY: Check for ReDoS patterns
     if (!isSafeRegex(regexBody)) {
-      console.warn('[SECURITY] Rejected unsafe regex pattern:', regexBody.substring(0, 50));
+      logger.warn('[SECURITY] Rejected unsafe regex pattern:', regexBody.substring(0, 50));
       return null;
     }
 
@@ -781,7 +782,7 @@ export function searchAssets(query: string, options?: {
       // User wants regex but didn't use /.../ format, treat as regex directly
       // SECURITY: Check for ReDoS patterns before creating regex
       if (!isSafeRegex(query)) {
-        console.warn('[SECURITY] Rejected unsafe regex query:', query.substring(0, 50));
+        logger.warn('[SECURITY] Rejected unsafe regex query:', query.substring(0, 50));
         searchMode = 'text';
       } else {
         try {
@@ -944,7 +945,7 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
 
   // Check if assets are extracted
   if (!fs.existsSync(config.assetsPath)) {
-    console.log('[Items] Assets path does not exist:', config.assetsPath);
+    logger.info('[Items] Assets path does not exist:', config.assetsPath);
     return items;
   }
 
@@ -964,13 +965,13 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
     files = listAssetDirectory(iconPath);
     if (files && files.length > 0) {
       foundPath = iconPath;
-      console.log('[Items] Found items in:', iconPath, '- Count:', files.length);
+      logger.info('[Items] Found items in:', iconPath, '- Count:', files.length);
       break;
     }
   }
 
   if (!files || files.length === 0) {
-    console.log('[Items] No items found in any known path');
+    logger.info('[Items] No items found in any known path');
     return items;
   }
 
@@ -1006,7 +1007,7 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
     });
   }
 
-  console.log('[Items] Total items found:', items.length);
+  logger.info('[Items] Total items found:', items.length);
 
   // Sort by name
   items.sort((a, b) => a.name.localeCompare(b.name));

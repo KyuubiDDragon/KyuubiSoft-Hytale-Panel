@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import { Router, Request, Response } from 'express';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
@@ -280,7 +281,7 @@ router.post('/:name/ban', authMiddleware, requirePermission('players.ban'), asyn
         await writeWhitelist(whitelist);
       }
     } catch (err) {
-      console.error('Failed to update ban mapping:', err);
+      logger.error('Failed to update ban mapping:', err);
     }
 
     // Log activity
@@ -368,7 +369,7 @@ router.post('/:name/whitelist', authMiddleware, requirePermission('players.white
         await writeWhitelist(whitelist);
       }
     } catch (err) {
-      console.error('Failed to persist whitelist:', err);
+      logger.error('Failed to persist whitelist:', err);
     }
 
     // Log activity
@@ -415,7 +416,7 @@ router.delete('/:name/whitelist', authMiddleware, requirePermission('players.whi
       whitelist.list = whitelist.list.filter(p => p !== playerName);
       await writeWhitelist(whitelist);
     } catch (err) {
-      console.error('Failed to persist whitelist removal:', err);
+      logger.error('Failed to persist whitelist removal:', err);
     }
 
     // Log activity
@@ -804,7 +805,7 @@ router.post('/:name/give', authMiddleware, requirePermission('players.give'), as
   const username = req.user || 'system';
 
   // DEBUG: Log received values
-  console.log('[Give Debug] Received:', { playerName, item, amount, body: req.body });
+  logger.info('[Give Debug] Received:', { playerName, item, amount, body: req.body });
 
   // SECURITY: Validate player name
   if (!validatePlayerName(res, playerName)) return;
@@ -851,7 +852,7 @@ router.post('/:name/give', authMiddleware, requirePermission('players.give'), as
     : `/give ${playerName} ${item}`;
 
   const result = await dockerService.execCommand(command);
-  console.log('[Give Debug] Command result:', result);
+  logger.info('[Give Debug] Command result:', result);
 
   if (result.success) {
     await logActivity(username, 'give', 'player', true, playerName, `Gave ${amount || 1}x ${item}`);

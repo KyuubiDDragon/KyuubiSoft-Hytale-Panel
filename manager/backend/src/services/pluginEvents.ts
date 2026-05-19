@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Plugin Events Service
  *
@@ -39,13 +40,13 @@ function getPluginHost(): string {
 async function handleEvent(event: PluginEventData): Promise<void> {
   switch (event.type) {
     case 'player_chat':
-      console.log(`[Chat] ${event.player}: ${event.message}`);
+      logger.info(`[Chat] ${event.player}: ${event.message}`);
       await addChatMessage(event.player, event.message, event.uuid);
       eventBus.publish('player_chat', { player: event.player, uuid: event.uuid, message: event.message });
       break;
 
     case 'player_death':
-      console.log(`[Death] ${event.player} died${event.cause ? ` (${event.cause})` : ''}`);
+      logger.info(`[Death] ${event.player} died${event.cause ? ` (${event.cause})` : ''}`);
       if (event.world && event.x !== undefined && event.y !== undefined && event.z !== undefined) {
         await recordDeathPosition(event.player, event.world, event.x, event.y, event.z);
       }
@@ -55,17 +56,17 @@ async function handleEvent(event: PluginEventData): Promise<void> {
       break;
 
     case 'player_join':
-      console.log(`[Join] ${event.player}`);
+      logger.info(`[Join] ${event.player}`);
       eventBus.publish('player_join', { player: event.player, uuid: event.uuid });
       break;
 
     case 'player_leave':
-      console.log(`[Leave] ${event.player}`);
+      logger.info(`[Leave] ${event.player}`);
       eventBus.publish('player_leave', { player: event.player, uuid: event.uuid });
       break;
 
     default:
-      console.log(`[Plugin Event] Unknown event type: ${(event as PluginEvent).type}`);
+      logger.info(`[Plugin Event] Unknown event type: ${(event as PluginEvent).type}`);
   }
 }
 
@@ -81,13 +82,13 @@ export function connectToPluginWebSocket(): void {
   const host = getPluginHost();
   const url = `ws://${host}:${PLUGIN_PORT}/ws`;
 
-  console.log(`Connecting to plugin WebSocket at ${url}...`);
+  logger.info(`Connecting to plugin WebSocket at ${url}...`);
 
   try {
     ws = new WebSocket(url);
 
     ws.on('open', () => {
-      console.log('Connected to plugin WebSocket');
+      logger.info('Connected to plugin WebSocket');
       isConnecting = false;
       currentReconnectDelay = RECONNECT_DELAY; // Reset reconnect delay on successful connection
     });
@@ -97,25 +98,25 @@ export function connectToPluginWebSocket(): void {
       try {
         raw = JSON.parse(data.toString());
       } catch (error) {
-        console.error('[Plugin] Malformed JSON from plugin WebSocket:', error);
+        logger.error('[Plugin] Malformed JSON from plugin WebSocket:', error);
         return;
       }
       const parsed = parsePluginEvent(raw);
       if (!parsed.ok) {
         // Plugin contract drift — surface loudly so it can be fixed instead of
         // silently feeding bad data into chat logs / death tracking.
-        console.warn(`[Plugin] Rejected event: ${parsed.error}`, raw);
+        logger.warn(`[Plugin] Rejected event: ${parsed.error}`, raw);
         return;
       }
       try {
         await handleEvent(parsed.event);
       } catch (error) {
-        console.error('[Plugin] Handler error:', error);
+        logger.error('[Plugin] Handler error:', error);
       }
     });
 
     ws.on('close', () => {
-      console.log('Plugin WebSocket closed');
+      logger.info('Plugin WebSocket closed');
       isConnecting = false;
       ws = null;
       scheduleReconnect();
@@ -124,12 +125,12 @@ export function connectToPluginWebSocket(): void {
     ws.on('error', (error) => {
       // Only log if not a connection refused error (which is expected when plugin is not running)
       if (!(error as NodeJS.ErrnoException).code?.includes('ECONNREFUSED')) {
-        console.error('Plugin WebSocket error:', error.message);
+        logger.error('Plugin WebSocket error:', error.message);
       }
       isConnecting = false;
     });
   } catch (error) {
-    console.error('Failed to create WebSocket connection:', error);
+    logger.error('Failed to create WebSocket connection:', error);
     isConnecting = false;
     scheduleReconnect();
   }
@@ -181,6 +182,6 @@ export function isConnectedToPlugin(): boolean {
  * This should be called on server startup
  */
 export function initializePluginEvents(): void {
-  console.log('Initializing plugin events connection...');
+  logger.info('Initializing plugin events connection...');
   connectToPluginWebSocket();
 }
