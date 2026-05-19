@@ -15,7 +15,7 @@ const statusColor = computed(() => {
     case 'warning': return 'text-status-warning'
     case 'error': return 'text-status-error'
     case 'info': return 'text-status-info'
-    default: return 'text-white'
+    default: return 'text-ink'
   }
 })
 
@@ -35,9 +35,9 @@ const iconBgColor = computed(() => {
     <div class="card-body">
       <div class="flex items-start justify-between">
         <div>
-          <p class="text-sm text-gray-400 mb-1">{{ title }}</p>
+          <p class="text-sm text-ink-muted mb-1">{{ title }}</p>
           <p :class="['text-2xl font-bold', statusColor]">{{ value }}</p>
-          <p v-if="subtitle" class="text-sm text-gray-500 mt-1">{{ subtitle }}</p>
+          <p v-if="subtitle" class="text-sm text-ink-subtle mt-1">{{ subtitle }}</p>
         </div>
         <div :class="['w-12 h-12 rounded-xl flex items-center justify-center', iconBgColor]">
           <!-- Server Icon -->
