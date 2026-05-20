@@ -461,15 +461,15 @@ onBeforeUnmount(() => {
 <template>
   <div class="h-[calc(100vh-4rem)] flex flex-col">
     <!-- Header -->
-    <div class="flex items-center justify-between border-b border-dark-50/50 px-6 py-3">
+    <div class="flex items-center justify-between border-b border-border/50 px-6 py-3">
       <div>
         <h1 class="text-lg font-semibold text-white">{{ t('files.title') }}</h1>
-        <p class="text-xs text-gray-400">{{ t('files.subtitle') }}</p>
+        <p class="text-xs text-ink-muted">{{ t('files.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <select
           v-model="activeRootId"
-          class="bg-dark-100 border border-dark-50 text-sm text-white rounded px-2 py-1"
+          class="bg-surface-overlay border border-border text-sm text-white rounded px-2 py-1"
         >
           <option v-for="r in roots" :key="r.id" :value="r.id">
             {{ r.label }} {{ r.rw ? '' : '(RO)' }}
@@ -502,23 +502,23 @@ onBeforeUnmount(() => {
     <div class="flex-1 flex min-h-0">
       <!-- Tree -->
       <aside
-        class="w-80 border-r border-dark-50/50 bg-dark-200/40 flex flex-col"
+        class="w-80 border-r border-border/50 bg-surface-raised/40 flex flex-col"
         :class="dragActive ? 'ring-2 ring-hytale-orange' : ''"
         @drop="onDrop"
         @dragover="onDragOver"
         @dragleave="onDragLeave"
       >
-        <div class="p-3 border-b border-dark-50/50">
+        <div class="p-3 border-b border-border/50">
           <input
             v-model="searchTerm"
             type="text"
             :placeholder="t('common.search')"
-            class="w-full bg-dark-100 border border-dark-50 text-sm text-white rounded px-2 py-1"
+            class="w-full bg-surface-overlay border border-border text-sm text-white rounded px-2 py-1"
           />
         </div>
         <div class="flex-1 overflow-y-auto p-2 text-sm">
-          <div v-if="loadingTree" class="text-gray-400 p-3">{{ t('common.loading') }}</div>
-          <div v-else-if="filteredTree.length === 0" class="text-gray-500 p-3">
+          <div v-if="loadingTree" class="text-ink-muted p-3">{{ t('common.loading') }}</div>
+          <div v-else-if="filteredTree.length === 0" class="text-ink-subtle p-3">
             {{ t('files.empty.dir') }}
           </div>
           <ul v-else class="space-y-0.5">
@@ -534,7 +534,7 @@ onBeforeUnmount(() => {
             />
           </ul>
         </div>
-        <div v-if="isReadOnly" class="p-2 text-xs text-amber-400 border-t border-dark-50/50 bg-amber-500/5">
+        <div v-if="isReadOnly" class="p-2 text-xs text-amber-400 border-t border-border/50 bg-amber-500/5">
           {{ t('files.readonlyHint') }}
         </div>
       </aside>
@@ -544,17 +544,17 @@ onBeforeUnmount(() => {
         <!-- Toolbar -->
         <div
           v-if="selectedPath"
-          class="flex items-center justify-between px-4 py-2 border-b border-dark-50/50 bg-dark-100/30"
+          class="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-surface-overlay/30"
         >
           <div class="flex items-center gap-3 min-w-0">
-            <span class="text-sm text-gray-300 truncate" :title="selectedPath">{{ selectedPath }}</span>
+            <span class="text-sm text-ink-muted truncate" :title="selectedPath">{{ selectedPath }}</span>
             <span v-if="isModified" class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
               {{ t('files.modified') }}
             </span>
             <span v-if="fileIsBinary" class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
               {{ t('files.binary') }}
             </span>
-            <span class="text-xs text-gray-500">{{ formatBytes(fileSize) }}</span>
+            <span class="text-xs text-ink-subtle">{{ formatBytes(fileSize) }}</span>
           </div>
           <div class="flex items-center gap-2">
             <button
@@ -587,14 +587,14 @@ onBeforeUnmount(() => {
         <!-- Empty state -->
         <div
           v-if="!selectedPath"
-          class="flex-1 flex flex-col items-center justify-center text-gray-500 text-sm"
+          class="flex-1 flex flex-col items-center justify-center text-ink-subtle text-sm"
         >
           <p class="text-base font-medium mb-1">{{ t('files.empty.title') }}</p>
           <p>{{ t('files.empty.subtitle') }}</p>
         </div>
 
         <!-- Binary preview -->
-        <div v-else-if="fileIsBinary" class="flex-1 flex items-center justify-center text-gray-400 text-sm p-6">
+        <div v-else-if="fileIsBinary" class="flex-1 flex items-center justify-center text-ink-muted text-sm p-6">
           {{ t('files.binaryHint') }}
         </div>
 
@@ -612,9 +612,9 @@ onBeforeUnmount(() => {
       v-if="showConflictDialog"
       class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
     >
-      <div class="bg-dark-100 rounded-lg p-6 max-w-md w-full mx-4 border border-dark-50">
+      <div class="bg-surface-overlay rounded-lg p-6 max-w-md w-full mx-4 border border-border">
         <h3 class="text-lg font-semibold text-white mb-2">{{ t('files.conflict.title') }}</h3>
-        <p class="text-sm text-gray-300 mb-4">{{ t('files.conflict.message') }}</p>
+        <p class="text-sm text-ink-muted mb-4">{{ t('files.conflict.message') }}</p>
         <div class="flex justify-end gap-2">
           <button class="btn-secondary text-sm" @click="showConflictDialog = false">
             {{ t('common.cancel') }}

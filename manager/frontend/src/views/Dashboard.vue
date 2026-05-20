@@ -508,7 +508,7 @@ async function tickDashboard() {
       @dismiss="dismissNewFeaturesBanner"
     >
       <ul class="space-y-1 mb-3">
-        <li v-for="(feature, index) in newFeaturesStatus.features" :key="index" class="flex items-center gap-2 text-sm text-gray-200">
+        <li v-for="(feature, index) in newFeaturesStatus.features" :key="index" class="flex items-center gap-2 text-sm text-ink">
           <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>

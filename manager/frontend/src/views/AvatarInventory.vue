@@ -469,7 +469,7 @@ function handleSearchBlur() {
         <div class="w-[360px] flex-shrink-0 flex flex-col gap-2">
           <!-- Player Name Header -->
           <div class="inv-panel-header bg-surface-overlay">
-            <h2 class="text-lg font-bold text-gray-100 uppercase tracking-wide">{{ selectedPlayer }}</h2>
+            <h2 class="text-lg font-bold text-ink uppercase tracking-wide">{{ selectedPlayer }}</h2>
           </div>
 
           <!-- Avatar + Equipment Container -->
@@ -680,7 +680,7 @@ function handleSearchBlur() {
                     <div class="h-full bg-gradient-to-r from-red-700 to-red-400 transition-all" :style="{ width: `${healthPercent}%` }"></div>
                   </div>
                 </div>
-                <span class="text-[11px] text-gray-100 font-mono w-14 text-right">{{ details?.stats?.health?.toFixed(0) || 0 }}/{{ details?.stats?.maxHealth?.toFixed(0) || 0 }}</span>
+                <span class="text-[11px] text-ink font-mono w-14 text-right">{{ details?.stats?.health?.toFixed(0) || 0 }}/{{ details?.stats?.maxHealth?.toFixed(0) || 0 }}</span>
               </div>
 
               <!-- Stamina -->
@@ -693,7 +693,7 @@ function handleSearchBlur() {
                     <div class="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 transition-all" :style="{ width: `${staminaPercent}%` }"></div>
                   </div>
                 </div>
-                <span class="text-[11px] text-gray-100 font-mono w-14 text-right">{{ details?.stats?.stamina?.toFixed(0) || 0 }}/{{ details?.stats?.maxStamina?.toFixed(0) || 0 }}</span>
+                <span class="text-[11px] text-ink font-mono w-14 text-right">{{ details?.stats?.stamina?.toFixed(0) || 0 }}/{{ details?.stats?.maxStamina?.toFixed(0) || 0 }}</span>
               </div>
 
               <!-- Mana -->
@@ -706,7 +706,7 @@ function handleSearchBlur() {
                     <div class="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all" :style="{ width: `${manaPercent}%` }"></div>
                   </div>
                 </div>
-                <span class="text-[11px] text-gray-100 font-mono w-14 text-right">{{ details?.stats?.mana?.toFixed(0) || 0 }}</span>
+                <span class="text-[11px] text-ink font-mono w-14 text-right">{{ details?.stats?.mana?.toFixed(0) || 0 }}</span>
               </div>
 
               <!-- Defense -->
@@ -719,7 +719,7 @@ function handleSearchBlur() {
                     <div class="h-full bg-gradient-to-r from-blue-600 to-blue-300 transition-all" :style="{ width: `${defensePercent}%` }"></div>
                   </div>
                 </div>
-                <span class="text-[11px] text-gray-100 font-mono w-14 text-right">{{ defensePercent }}%</span>
+                <span class="text-[11px] text-ink font-mono w-14 text-right">{{ defensePercent }}%</span>
               </div>
             </div>
           </div>
@@ -734,7 +734,7 @@ function handleSearchBlur() {
               :class="[
                 'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'inventory'
-                  ? 'bg-inv-panel-light text-gray-100 shadow border border-inv-border/40'
+                  ? 'bg-inv-panel-light text-ink shadow border border-inv-border/40'
                   : 'text-ink-subtle hover:text-ink hover:bg-inv-panel-light/50 border border-transparent'
               ]"
             >
@@ -750,7 +750,7 @@ function handleSearchBlur() {
               :class="[
                 'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'info'
-                  ? 'bg-inv-panel-light text-gray-100 shadow border border-inv-border/40'
+                  ? 'bg-inv-panel-light text-ink shadow border border-inv-border/40'
                   : 'text-ink-subtle hover:text-ink hover:bg-inv-panel-light/50 border border-transparent'
               ]"
             >
@@ -766,7 +766,7 @@ function handleSearchBlur() {
               :class="[
                 'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'chat'
-                  ? 'bg-inv-panel-light text-gray-100 shadow border border-inv-border/40'
+                  ? 'bg-inv-panel-light text-ink shadow border border-inv-border/40'
                   : 'text-ink-subtle hover:text-ink hover:bg-inv-panel-light/50 border border-transparent'
               ]"
             >
@@ -782,7 +782,7 @@ function handleSearchBlur() {
               :class="[
                 'flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-all',
                 activeTab === 'deaths'
-                  ? 'bg-inv-panel-light text-gray-100 shadow border border-inv-border/40'
+                  ? 'bg-inv-panel-light text-ink shadow border border-inv-border/40'
                   : 'text-ink-subtle hover:text-ink hover:bg-inv-panel-light/50 border border-transparent'
               ]"
             >
@@ -961,7 +961,7 @@ function handleSearchBlur() {
                     </svg>
                     {{ t('avatarInventory.world') }}
                   </div>
-                  <p class="text-gray-100 font-medium text-xs truncate">{{ details.world || '-' }}</p>
+                  <p class="text-ink font-medium text-xs truncate">{{ details.world || '-' }}</p>
                 </div>
 
                 <!-- Gamemode -->
@@ -973,7 +973,7 @@ function handleSearchBlur() {
                     </svg>
                     {{ t('avatarInventory.gamemode') }}
                   </div>
-                  <p class="text-gray-100 font-medium text-xs capitalize">{{ details.gameMode || '-' }}</p>
+                  <p class="text-ink font-medium text-xs capitalize">{{ details.gameMode || '-' }}</p>
                 </div>
 
                 <!-- Position -->
@@ -984,7 +984,7 @@ function handleSearchBlur() {
                     </svg>
                     {{ t('avatarInventory.position') }}
                   </div>
-                  <p class="text-gray-100 font-medium font-mono text-[10px]">
+                  <p class="text-ink font-medium font-mono text-[10px]">
                     <span v-if="details.position">
                       {{ details.position.x.toFixed(0) }}, {{ details.position.y.toFixed(0) }}, {{ details.position.z.toFixed(0) }}
                     </span>
@@ -1000,7 +1000,7 @@ function handleSearchBlur() {
                     </svg>
                     {{ t('avatarInventory.discoveredZones') }}
                   </div>
-                  <p class="text-gray-100 font-medium text-xs">{{ details.discoveredZones?.length || 0 }}</p>
+                  <p class="text-ink font-medium text-xs">{{ details.discoveredZones?.length || 0 }}</p>
                 </div>
 
                 <!-- Memories -->
@@ -1011,7 +1011,7 @@ function handleSearchBlur() {
                     </svg>
                     {{ t('avatarInventory.memories') }}
                   </div>
-                  <p class="text-gray-100 font-medium text-xs">{{ details.memoriesCount || 0 }} NPCs</p>
+                  <p class="text-ink font-medium text-xs">{{ details.memoriesCount || 0 }} NPCs</p>
                 </div>
 
                 <!-- Unique Items -->
@@ -1022,7 +1022,7 @@ function handleSearchBlur() {
                     </svg>
                     {{ t('avatarInventory.uniqueItems') }}
                   </div>
-                  <p class="text-gray-100 font-medium text-xs">{{ details.uniqueItemsUsed?.length || 0 }}</p>
+                  <p class="text-ink font-medium text-xs">{{ details.uniqueItemsUsed?.length || 0 }}</p>
                 </div>
               </div>
 
@@ -1119,7 +1119,7 @@ function handleSearchBlur() {
                       </div>
                       <div class="min-w-0">
                         <div class="flex items-center gap-1.5">
-                          <span class="text-gray-100 font-semibold text-xs">
+                          <span class="text-ink font-semibold text-xs">
                             {{ t('avatarInventory.day') }} {{ death.day }}
                           </span>
                           <span v-if="index === 0" class="text-[9px] px-1 py-0.5 bg-red-500/30 text-red-300 rounded">
@@ -1177,13 +1177,13 @@ function handleSearchBlur() {
           <div class="space-y-1.5 text-sm border-t border-inv-border/30 pt-2">
             <div class="flex justify-between">
               <span class="text-ink-muted">{{ t('avatarInventory.tooltip.amount') }}:</span>
-              <span class="text-gray-100 font-medium">{{ hoveredItem.amount }}x</span>
+              <span class="text-ink font-medium">{{ hoveredItem.amount }}x</span>
             </div>
 
             <div v-if="hoveredItem.maxDurability > 0">
               <div class="flex justify-between mb-1">
                 <span class="text-ink-muted">{{ t('avatarInventory.tooltip.durability') }}:</span>
-                <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-gray-100' : 'text-red-400'" class="font-medium">
+                <span :class="getDurabilityPercent(hoveredItem) > 30 ? 'text-ink' : 'text-red-400'" class="font-medium">
                   {{ Math.round(hoveredItem.durability) }} / {{ Math.round(hoveredItem.maxDurability) }}
                 </span>
               </div>

@@ -176,25 +176,25 @@ onBeforeUnmount(closePlayer)
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
         <h1 class="text-2xl font-bold text-white">{{ t('replay.title') }}</h1>
-        <p class="text-gray-400 text-sm mt-1">{{ t('replay.subtitle') }}</p>
+        <p class="text-ink-muted text-sm mt-1">{{ t('replay.subtitle') }}</p>
       </div>
     </div>
 
     <!-- Config card -->
-    <div class="bg-dark-200 rounded-xl p-4 mb-4 flex flex-wrap items-center gap-4 shrink-0">
+    <div class="bg-surface-raised rounded-xl p-4 mb-4 flex flex-wrap items-center gap-4 shrink-0">
       <div class="flex items-center gap-2 text-sm">
-        <span class="text-gray-400">{{ t('replay.recording') }}:</span>
-        <span :class="cfg.recordingEnabled ? 'text-green-400' : 'text-gray-500'">
+        <span class="text-ink-muted">{{ t('replay.recording') }}:</span>
+        <span :class="cfg.recordingEnabled ? 'text-green-400' : 'text-ink-subtle'">
           {{ cfg.recordingEnabled ? t('replay.recordingOn') : t('replay.recordingOff') }}
         </span>
       </div>
-      <label class="flex items-center gap-2 text-sm text-gray-300">
+      <label class="flex items-center gap-2 text-sm text-ink-muted">
         <input v-model="cfgDraft.recordingEnabled" type="checkbox" class="accent-hytale-orange" :disabled="!canManage" />
         {{ cfgDraft.recordingEnabled ? t('replay.disableRecording') : t('replay.enableRecording') }}
       </label>
-      <label class="flex items-center gap-2 text-sm text-gray-300">
+      <label class="flex items-center gap-2 text-sm text-ink-muted">
         {{ t('replay.retention') }}:
-        <input v-model.number="cfgDraft.retentionDays" type="number" min="1" max="365" class="w-20 bg-dark-300 text-gray-100 rounded px-2 py-1" :disabled="!canManage" />
+        <input v-model.number="cfgDraft.retentionDays" type="number" min="1" max="365" class="w-20 bg-surface-sunken text-ink rounded px-2 py-1" :disabled="!canManage" />
       </label>
       <button
         v-if="canManage"
@@ -207,15 +207,15 @@ onBeforeUnmount(closePlayer)
     </div>
 
     <!-- Segments table -->
-    <div class="flex-1 bg-dark-200 rounded-xl p-4 min-h-0 overflow-auto">
+    <div class="flex-1 bg-surface-raised rounded-xl p-4 min-h-0 overflow-auto">
       <h2 class="text-lg font-semibold text-white mb-3">{{ t('replay.segments') }}</h2>
       <div v-if="error" class="text-red-400 text-sm mb-2">{{ error }}</div>
-      <div v-if="!loading && segments.length === 0" class="text-gray-500 py-8 text-center">
+      <div v-if="!loading && segments.length === 0" class="text-ink-subtle py-8 text-center">
         {{ t('replay.noSegments') }}
       </div>
       <table v-else class="w-full text-sm">
         <thead>
-          <tr class="text-left text-gray-400 border-b border-dark-50/30">
+          <tr class="text-left text-ink-muted border-b border-border/30">
             <th class="py-2 pr-3">{{ t('replay.tableId') }}</th>
             <th class="py-2 pr-3">{{ t('replay.tableStart') }}</th>
             <th class="py-2 pr-3">{{ t('replay.tableEnd') }}</th>
@@ -227,17 +227,17 @@ onBeforeUnmount(closePlayer)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in segments" :key="s.id" class="border-b border-dark-50/10">
-            <td class="py-2 pr-3 font-mono text-xs text-gray-300">{{ s.id }}</td>
-            <td class="py-2 pr-3 text-gray-300">{{ formatTs(s.startedAt) }}</td>
-            <td class="py-2 pr-3 text-gray-300">{{ formatTs(s.endedAt) }}</td>
-            <td class="py-2 pr-3 text-gray-300">{{ formatDuration(s.durationMs) }}</td>
-            <td class="py-2 pr-3 text-gray-300">{{ s.playerCount }}</td>
-            <td class="py-2 pr-3 text-gray-300">{{ s.eventCount }}</td>
-            <td class="py-2 pr-3 text-gray-300">{{ formatBytes(s.sizeBytes) }}</td>
+          <tr v-for="s in segments" :key="s.id" class="border-b border-border/10">
+            <td class="py-2 pr-3 font-mono text-xs text-ink-muted">{{ s.id }}</td>
+            <td class="py-2 pr-3 text-ink-muted">{{ formatTs(s.startedAt) }}</td>
+            <td class="py-2 pr-3 text-ink-muted">{{ formatTs(s.endedAt) }}</td>
+            <td class="py-2 pr-3 text-ink-muted">{{ formatDuration(s.durationMs) }}</td>
+            <td class="py-2 pr-3 text-ink-muted">{{ s.playerCount }}</td>
+            <td class="py-2 pr-3 text-ink-muted">{{ s.eventCount }}</td>
+            <td class="py-2 pr-3 text-ink-muted">{{ formatBytes(s.sizeBytes) }}</td>
             <td class="py-2 flex gap-2">
-              <button @click="openPlayer(s)" class="px-2 py-1 bg-dark-100 text-gray-200 rounded text-xs">{{ t('replay.play') }}</button>
-              <button v-if="canManage" @click="exportSegment(s.id)" class="px-2 py-1 bg-dark-100 text-gray-200 rounded text-xs">{{ t('replay.export') }}</button>
+              <button @click="openPlayer(s)" class="px-2 py-1 bg-surface-overlay text-ink rounded text-xs">{{ t('replay.play') }}</button>
+              <button v-if="canManage" @click="exportSegment(s.id)" class="px-2 py-1 bg-surface-overlay text-ink rounded text-xs">{{ t('replay.export') }}</button>
               <button v-if="canManage" @click="askDeleteSegment(s.id)" class="px-2 py-1 bg-red-500/20 text-red-300 rounded text-xs">{{ t('common.delete') }}</button>
             </td>
           </tr>
@@ -247,40 +247,40 @@ onBeforeUnmount(closePlayer)
 
     <!-- Player modal -->
     <div v-if="activeSegment" class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" @click.self="closePlayer">
-      <div class="bg-dark-200 rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
-        <div class="flex items-center justify-between p-4 border-b border-dark-50/30">
+      <div class="bg-surface-raised rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-border/30">
           <h3 class="text-lg font-semibold text-white">{{ t('replay.playerModal') }} — {{ activeSegment.id }}</h3>
-          <button @click="closePlayer" class="text-gray-400 hover:text-white">{{ t('common.close') }}</button>
+          <button @click="closePlayer" class="text-ink-muted hover:text-white">{{ t('common.close') }}</button>
         </div>
         <div class="p-4 flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
           <div class="flex flex-col min-h-0">
-            <h4 class="text-sm font-semibold text-gray-300 mb-2">{{ t('replay.events') }}</h4>
-            <div class="flex-1 overflow-auto bg-dark-300 rounded p-2 font-mono text-xs">
-              <div v-for="(e, i) in visibleEvents.slice(-200)" :key="i" class="text-gray-300 mb-0.5">
-                <span class="text-gray-500">{{ new Date(e.ts).toLocaleTimeString() }}</span>
+            <h4 class="text-sm font-semibold text-ink-muted mb-2">{{ t('replay.events') }}</h4>
+            <div class="flex-1 overflow-auto bg-surface-sunken rounded p-2 font-mono text-xs">
+              <div v-for="(e, i) in visibleEvents.slice(-200)" :key="i" class="text-ink-muted mb-0.5">
+                <span class="text-ink-subtle">{{ new Date(e.ts).toLocaleTimeString() }}</span>
                 <span class="text-hytale-orange ml-2">{{ e.name }}</span>
-                <span class="text-gray-400 ml-2">{{ JSON.stringify(e.payload) }}</span>
+                <span class="text-ink-muted ml-2">{{ JSON.stringify(e.payload) }}</span>
               </div>
             </div>
           </div>
           <div class="flex flex-col min-h-0">
-            <h4 class="text-sm font-semibold text-gray-300 mb-2">{{ t('replay.chat') }}</h4>
-            <div class="flex-1 overflow-auto bg-dark-300 rounded p-2 text-sm">
-              <div v-for="(c, i) in chatMessages.slice(-200)" :key="i" class="text-gray-200 mb-0.5">
-                <span class="text-gray-500 text-xs">{{ new Date(c.ts).toLocaleTimeString() }}</span>
+            <h4 class="text-sm font-semibold text-ink-muted mb-2">{{ t('replay.chat') }}</h4>
+            <div class="flex-1 overflow-auto bg-surface-sunken rounded p-2 text-sm">
+              <div v-for="(c, i) in chatMessages.slice(-200)" :key="i" class="text-ink mb-0.5">
+                <span class="text-ink-subtle text-xs">{{ new Date(c.ts).toLocaleTimeString() }}</span>
                 <span class="font-semibold ml-2">{{ String((c.payload as { player?: string }).player ?? '?') }}:</span>
                 <span class="ml-1">{{ String((c.payload as { message?: string }).message ?? '') }}</span>
               </div>
             </div>
           </div>
         </div>
-        <div class="p-4 border-t border-dark-50/30">
+        <div class="p-4 border-t border-border/30">
           <div class="flex items-center gap-3">
             <button @click="isPlaying = !isPlaying" class="px-3 py-1.5 bg-hytale-orange text-dark font-medium rounded-lg">
               {{ isPlaying ? t('replay.pause') : t('replay.play') }}
             </button>
-            <label class="text-sm text-gray-300">{{ t('replay.speed') }}:
-              <select v-model.number="playbackSpeed" class="bg-dark-300 text-gray-100 rounded px-2 py-1 ml-1">
+            <label class="text-sm text-ink-muted">{{ t('replay.speed') }}:
+              <select v-model.number="playbackSpeed" class="bg-surface-sunken text-ink rounded px-2 py-1 ml-1">
                 <option :value="1">1x</option>
                 <option :value="2">2x</option>
                 <option :value="5">5x</option>
@@ -293,7 +293,7 @@ onBeforeUnmount(closePlayer)
               v-model.number="playbackTs"
               class="flex-1 accent-hytale-orange"
             />
-            <span class="text-xs text-gray-400 font-mono">{{ new Date(playbackTs).toLocaleTimeString() }}</span>
+            <span class="text-xs text-ink-muted font-mono">{{ new Date(playbackTs).toLocaleTimeString() }}</span>
           </div>
         </div>
       </div>

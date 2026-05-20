@@ -153,16 +153,16 @@ function projectZ(z: number) { return ((z - viewBox.value.minZ) / viewBox.value.
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
         <h1 class="text-2xl font-bold text-white">{{ t('liveMap.title') }}</h1>
-        <p class="text-gray-400 text-sm mt-1">{{ t('liveMap.subtitle') }}</p>
+        <p class="text-ink-muted text-sm mt-1">{{ t('liveMap.subtitle') }}</p>
       </div>
-      <label class="flex items-center gap-2 text-gray-300 text-sm">
+      <label class="flex items-center gap-2 text-ink-muted text-sm">
         <input v-model="showHeatmap" type="checkbox" class="accent-hytale-orange" />
         {{ t('liveMap.heatmap') }}
       </label>
     </div>
 
-    <div class="flex-1 bg-dark-200 rounded-xl p-4 min-h-0 flex flex-col">
-      <div class="flex-1 relative min-h-0 bg-dark-300 rounded-lg overflow-hidden">
+    <div class="flex-1 bg-surface-raised rounded-xl p-4 min-h-0 flex flex-col">
+      <div class="flex-1 relative min-h-0 bg-surface-sunken rounded-lg overflow-hidden">
         <svg :viewBox="`0 0 1000 1000`" preserveAspectRatio="xMidYMid meet" class="w-full h-full">
           <!-- subtle grid -->
           <defs>
@@ -209,11 +209,11 @@ function projectZ(z: number) { return ((z - viewBox.value.minZ) / viewBox.value.
           </g>
         </svg>
 
-        <div v-if="visibleSamples.length === 0" class="absolute inset-0 flex items-center justify-center text-gray-500">
+        <div v-if="visibleSamples.length === 0" class="absolute inset-0 flex items-center justify-center text-ink-subtle">
           {{ t('liveMap.noPlayers') }}
         </div>
 
-        <div class="absolute top-3 right-3 flex items-center gap-3 text-xs bg-dark-200/90 rounded-lg px-3 py-2">
+        <div class="absolute top-3 right-3 flex items-center gap-3 text-xs bg-surface-raised/90 rounded-lg px-3 py-2">
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-green-500"></span>{{ t('liveMap.latencyGood') }}</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-yellow-500"></span>{{ t('liveMap.latencyOk') }}</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-red-500"></span>{{ t('liveMap.latencyBad') }}</span>
@@ -222,7 +222,7 @@ function projectZ(z: number) { return ((z - viewBox.value.minZ) / viewBox.value.
 
       <!-- Playback slider: 0 = now (right), BUFFER_MS = 10 min ago (left) -->
       <div class="mt-4">
-        <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+        <div class="flex items-center justify-between text-xs text-ink-muted mb-1">
           <span>{{ t('liveMap.playback') }}</span>
           <span>{{ timeLabel() }}</span>
         </div>

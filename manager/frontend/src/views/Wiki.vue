@@ -78,14 +78,14 @@ function renderMarkdown(md: string): string {
   let listBuf: string[] = []
   const flushList = () => {
     if (listBuf.length > 0) {
-      out.push('<ul class="list-disc pl-6 my-2 text-gray-300">' + listBuf.map((l) => `<li>${renderInline(l)}</li>`).join('') + '</ul>')
+      out.push('<ul class="list-disc pl-6 my-2 text-ink-muted">' + listBuf.map((l) => `<li>${renderInline(l)}</li>`).join('') + '</ul>')
       listBuf = []
     }
   }
   for (const rawLine of lines) {
     if (inCode) {
       if (rawLine.startsWith('```')) {
-        out.push(`<pre class="bg-dark-300 rounded p-3 my-2 text-xs text-gray-200 overflow-auto"><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`)
+        out.push(`<pre class="bg-surface-sunken rounded p-3 my-2 text-xs text-ink overflow-auto"><code>${escapeHtml(codeBuf.join('\n'))}</code></pre>`)
         inCode = false
         codeBuf = []
       } else {
@@ -107,7 +107,7 @@ function renderMarkdown(md: string): string {
       out.push(`<h2 class="text-xl font-semibold text-white mt-4 mb-2">${renderInline(rawLine.slice(3))}</h2>`)
     } else if (rawLine.startsWith('### ')) {
       flushList()
-      out.push(`<h3 class="text-lg font-semibold text-gray-100 mt-3 mb-1">${renderInline(rawLine.slice(4))}</h3>`)
+      out.push(`<h3 class="text-lg font-semibold text-ink mt-3 mb-1">${renderInline(rawLine.slice(4))}</h3>`)
     } else if (rawLine.startsWith('- ')) {
       listBuf.push(rawLine.slice(2))
     } else if (rawLine.trim() === '') {
@@ -115,7 +115,7 @@ function renderMarkdown(md: string): string {
       out.push('')
     } else {
       flushList()
-      out.push(`<p class="my-2 text-gray-300">${renderInline(rawLine)}</p>`)
+      out.push(`<p class="my-2 text-ink-muted">${renderInline(rawLine)}</p>`)
     }
   }
   flushList()
@@ -125,7 +125,7 @@ function renderMarkdown(md: string): string {
 function renderInline(s: string): string {
   let h = escapeHtml(s)
   // `inline code`
-  h = h.replace(/`([^`]+)`/g, '<code class="bg-dark-300 px-1 rounded text-hytale-orange text-sm">$1</code>')
+  h = h.replace(/`([^`]+)`/g, '<code class="bg-surface-sunken px-1 rounded text-hytale-orange text-sm">$1</code>')
   // **bold**
   h = h.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
   // *italic*
@@ -193,10 +193,10 @@ onMounted(async () => {
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
         <h1 class="text-2xl font-bold text-white">{{ t('wiki.title') }}</h1>
-        <p class="text-gray-400 text-sm mt-1">{{ t('wiki.subtitle') }}</p>
+        <p class="text-ink-muted text-sm mt-1">{{ t('wiki.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
-        <label v-if="canManage" class="flex items-center gap-2 text-sm text-gray-300">
+        <label v-if="canManage" class="flex items-center gap-2 text-sm text-ink-muted">
           <input :checked="cfg.publicAccess" @change="togglePublic" type="checkbox" class="accent-hytale-orange" />
           {{ t('wiki.publicAccess') }}
         </label>
@@ -212,32 +212,32 @@ onMounted(async () => {
     </div>
 
     <div v-if="message" class="bg-green-500/10 text-green-300 text-sm rounded px-3 py-2 mb-3">{{ message }}</div>
-    <p v-if="canManage" class="text-xs text-gray-500 mb-3">{{ t('wiki.publicHint') }}</p>
+    <p v-if="canManage" class="text-xs text-ink-subtle mb-3">{{ t('wiki.publicHint') }}</p>
 
     <div class="flex-1 grid grid-cols-1 md:grid-cols-[260px_1fr] gap-4 min-h-0">
       <!-- Index sidebar -->
-      <div class="bg-dark-200 rounded-xl p-3 overflow-auto">
-        <div v-if="loading" class="text-gray-500 text-sm">{{ t('common.loading') }}</div>
-        <div v-else-if="(index?.entries.length ?? 0) === 0" class="text-gray-500 text-sm">{{ t('wiki.noEntries') }}</div>
+      <div class="bg-surface-raised rounded-xl p-3 overflow-auto">
+        <div v-if="loading" class="text-ink-subtle text-sm">{{ t('common.loading') }}</div>
+        <div v-else-if="(index?.entries.length ?? 0) === 0" class="text-ink-subtle text-sm">{{ t('wiki.noEntries') }}</div>
         <div v-else>
           <div v-for="[cat, entries] in grouped" :key="cat" class="mb-3">
-            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{{ cat }}</p>
+            <p class="text-xs font-semibold text-ink-subtle uppercase tracking-wider mb-1">{{ cat }}</p>
             <button
               v-for="e in entries"
               :key="e.slug"
               @click="select(e)"
-              :class="['block w-full text-left px-2 py-1 rounded text-sm', selected?.entry.slug === e.slug ? 'bg-dark-100 text-white' : 'text-gray-300 hover:bg-dark-100']"
+              :class="['block w-full text-left px-2 py-1 rounded text-sm', selected?.entry.slug === e.slug ? 'bg-surface-overlay text-white' : 'text-ink-muted hover:bg-surface-overlay']"
             >
               {{ e.name }}
-              <span v-if="e.version" class="text-gray-500 text-xs ml-1">v{{ e.version }}</span>
+              <span v-if="e.version" class="text-ink-subtle text-xs ml-1">v{{ e.version }}</span>
             </button>
           </div>
         </div>
       </div>
 
       <!-- Markdown body -->
-      <div class="bg-dark-200 rounded-xl p-6 overflow-auto">
-        <div v-if="!selected" class="text-gray-500 text-sm">{{ t('wiki.selectEntry') }}</div>
+      <div class="bg-surface-raised rounded-xl p-6 overflow-auto">
+        <div v-if="!selected" class="text-ink-subtle text-sm">{{ t('wiki.selectEntry') }}</div>
         <div v-else>
           <div class="prose-wiki" v-html="renderMarkdown(selected.markdown)"></div>
         </div>
