@@ -27,21 +27,24 @@
   }
 
   .dark {
-    /* Dark theme — maps to existing palette so legacy classes still look correct */
-    --surface: 26 29 35;        /* dark.DEFAULT #1A1D23 */
-    --surface-raised: 36 40 48; /* dark.200    #242830 */
-    --surface-sunken: 21 23 28; /* dark.500    #15171C */
-    --surface-overlay: 40 45 54;/* dark.100    #282D36 */
-    --surface-muted: 31 35 42;  /* dark.300    #1F232A */
+    /* Dark theme v3 — deeper, slightly cool-violet undertones for more depth
+       between layers. Surfaces step from #0F1117 (sunken) → #16191F (base)
+       → #1C2029 (raised) → #232735 (overlay) — visibly stratified vs. the
+       old flat #1A1D23 palette. */
+    --surface: 22 25 31;        /* #16191F */
+    --surface-raised: 28 32 41; /* #1C2029 */
+    --surface-sunken: 15 17 23; /* #0F1117 */
+    --surface-overlay: 35 39 53;/* #232735 */
+    --surface-muted: 24 28 36;  /* #181C24 */
 
-    --ink: 255 255 255;
-    --ink-muted: 156 163 175;   /* gray-400 */
-    --ink-subtle: 107 114 128;  /* gray-500 */
+    --ink: 244 246 250;
+    --ink-muted: 168 175 191;
+    --ink-subtle: 122 130 148;
     --ink-inverse: 15 18 25;
 
-    --border: 45 50 60;         /* dark.50 */
-    --border-strong: 61 67 80;
-    --border-subtle: 36 40 48;
+    --border: 48 54 70;
+    --border-strong: 70 78 98;
+    --border-subtle: 32 36 48;
 
     --accent: 255 107 53;
     --accent-strong: 229 90 43;
@@ -58,6 +61,19 @@
   body {
     @apply bg-surface text-ink;
     transition: background-color 0.2s ease, color 0.2s ease;
+    /* Subtle ambient gradient — orange glow top-right, accent shadow
+       bottom-left — gives the app a visible "lift" instead of a flat fill. */
+    background-image:
+      radial-gradient(1200px 600px at 100% -10%, rgba(255, 107, 53, 0.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(99, 102, 241, 0.05), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  .light body,
+  :root:not(.dark) body {
+    background-image:
+      radial-gradient(1200px 600px at 100% -10%, rgba(255, 107, 53, 0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(99, 102, 241, 0.06), transparent 55%);
   }
 
   /* Scrollbar Styling */

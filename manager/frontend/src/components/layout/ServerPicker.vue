@@ -4,6 +4,7 @@ import { useServersStore } from '@/stores/servers'
 
 const serversStore = useServersStore()
 const open = ref(false)
+const root = ref<HTMLElement | null>(null)
 
 onMounted(() => {
   if (!serversStore.loaded) {
@@ -13,7 +14,12 @@ onMounted(() => {
 })
 onUnmounted(() => document.removeEventListener('click', onDocClick))
 
-function onDocClick() {
+// Close on outside-clicks only. Without the target check the handler fires
+// on the toggle button itself (clicks bubble to document) and closes the
+// dropdown in the same tick the button opened it — the user sees nothing.
+function onDocClick(event: MouseEvent) {
+  if (!open.value) return
+  if (root.value && event.target instanceof Node && root.value.contains(event.target)) return
   open.value = false
 }
 
@@ -24,7 +30,7 @@ function pick(id: string) {
 </script>
 
 <template>
-  <div class="relative">
+  <div ref="root" class="relative">
     <button
       type="button"
       @click="open = !open"

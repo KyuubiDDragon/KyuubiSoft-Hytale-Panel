@@ -76,16 +76,19 @@ function isActive(path: string): boolean {
 </script>
 
 <template>
-  <aside class="w-64 bg-surface-raised border-r border-border/60 flex flex-col">
+  <aside class="w-64 bg-gradient-to-b from-surface-raised via-surface to-surface-sunken border-r border-border/60 flex flex-col">
     <!-- Logo -->
     <div class="h-16 flex items-center px-6 border-b border-border/60">
       <router-link to="/" class="flex items-center gap-3 group">
-        <div class="w-10 h-10 rounded-lg overflow-hidden bg-surface-overlay flex items-center justify-center shadow-md ring-1 ring-border/50 group-hover:ring-hytale-orange/60 transition">
+        <div class="w-10 h-10 rounded-xl overflow-hidden bg-surface-overlay flex items-center justify-center shadow-lg ring-1 ring-border/50 group-hover:ring-hytale-orange/70 group-hover:shadow-glow-orange transition">
           <img src="/logo.png" alt="" class="w-full h-full object-cover" />
         </div>
         <div class="flex flex-col">
-          <span class="text-base font-bold text-ink leading-tight">KyuubiSoft Panel</span>
-          <span class="text-[10px] text-ink-subtle leading-tight">Hytale Server Management</span>
+          <span class="text-base font-bold leading-tight">
+            <span class="text-gradient">KyuubiSoft</span>
+            <span class="text-ink"> Panel</span>
+          </span>
+          <span class="text-[10px] text-ink-subtle leading-tight tracking-wide uppercase">Hytale Server Management</span>
         </div>
       </router-link>
     </div>
@@ -162,7 +165,7 @@ function isActive(path: string): boolean {
       <!-- Credits -->
       <div class="text-center">
         <p class="text-xs text-ink-subtle">by <a href="https://github.com/KyuubiDDragon" target="_blank" rel="noopener noreferrer" class="text-hytale-orange hover:underline font-medium">KyuubiSoft</a></p>
-        <p class="text-xs text-ink-subtle/70 mt-1">v2.1.1</p>
+        <p class="text-xs text-ink-subtle/70 mt-1">v3.0</p>
       </div>
     </div>
   </aside>

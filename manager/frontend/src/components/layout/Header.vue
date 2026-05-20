@@ -76,7 +76,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <header class="h-16 bg-surface-raised border-b border-border/60 flex items-center justify-between px-4 sm:px-6">
+  <header class="h-16 bg-surface-raised/80 backdrop-blur-xl border-b border-border/60 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-20">
     <!-- Left: Hamburger + Page Title -->
     <div class="flex items-center gap-3">
       <!-- Mobile menu toggle -->
