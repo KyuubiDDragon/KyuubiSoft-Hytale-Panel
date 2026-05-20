@@ -16,6 +16,7 @@
     "delete": "Löschen",
     "confirm": "Bestätigen",
     "revoke": "Widerrufen",
+    "uninstall": "Deinstallieren",
     "close": "Schließen",
     "error": "Fehler",
     "success": "Erfolg",
@@ -122,7 +123,8 @@
       "discardTitle": "Änderungen verwerfen?"
     },
     "prompt": {
-      "move": "Neuen Pfad eingeben (relativ zum Root):"
+      "move": "Neuen Pfad eingeben (relativ zum Root):",
+      "moveTitle": "Verschieben / Umbenennen"
     },
     "success": {
       "saved": "Datei gespeichert",
@@ -705,7 +707,9 @@
     "restartNote": "Server-Neustart erforderlich nach Aktivieren/Deaktivieren von Mods oder Plugins.",
     "upload": "Hochladen",
     "confirmDelete": "\"{name}\" wirklich löschen?",
+    "confirmDeleteTitle": "Datei löschen?",
     "confirmUninstall": "\"{name}\" wirklich deinstallieren?",
+    "confirmUninstallTitle": "Mod deinstallieren?",
     "configEditor": "Konfig-Editor",
     "configFiles": "Konfigurationsdateien",
     "noConfigs": "Keine Konfigurationsdateien gefunden",

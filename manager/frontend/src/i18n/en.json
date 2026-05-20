@@ -10,6 +10,7 @@
   },
   "common": {
     "revoke": "Revoke",
+    "uninstall": "Uninstall",
     "loading": "Loading...",
     "save": "Save",
     "saving": "Saving...",
@@ -122,7 +123,8 @@
       "discardTitle": "Discard changes?"
     },
     "prompt": {
-      "move": "Enter the new path (relative to the root):"
+      "move": "Enter the new path (relative to the root):",
+      "moveTitle": "Move / rename"
     },
     "success": {
       "saved": "File saved",
@@ -705,7 +707,9 @@
     "restartNote": "Server restart required after enabling/disabling mods or plugins.",
     "upload": "Upload",
     "confirmDelete": "Really delete \"{name}\"?",
+    "confirmDeleteTitle": "Delete file?",
     "confirmUninstall": "Really uninstall \"{name}\"?",
+    "confirmUninstallTitle": "Uninstall mod?",
     "configEditor": "Config Editor",
     "configFiles": "Config Files",
     "noConfigs": "No config files found",

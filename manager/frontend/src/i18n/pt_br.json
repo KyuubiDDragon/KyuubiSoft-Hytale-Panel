@@ -10,6 +10,7 @@
   },
   "common": {
     "revoke": "Revogar",
+    "uninstall": "Desinstalar",
     "loading": "Carregando...",
     "save": "Salvar",
     "saving": "Salvando...",
@@ -121,7 +122,8 @@
       "discardTitle": "Descartar alterações?"
     },
     "prompt": {
-      "move": "Digite o novo caminho (relativo ao root):"
+      "move": "Digite o novo caminho (relativo ao root):",
+      "moveTitle": "Mover / renomear"
     },
     "success": {
       "saved": "Arquivo salvo",
@@ -638,7 +640,9 @@
     "restartNote": "Reinicialização do servidor necessária após ativar/desativar mods ou plugins.",
     "upload": "Enviar",
     "confirmDelete": "Realmente deseja excluir \"{name}\"?",
+    "confirmDeleteTitle": "Excluir arquivo?",
     "confirmUninstall": "Realmente deseja desinstalar \"{name}\"?",
+    "confirmUninstallTitle": "Desinstalar mod?",
     "configEditor": "Editor de Configuração",
     "configFiles": "Arquivos de Configuração",
     "noConfigs": "Nenhum arquivo de configuração encontrado",

@@ -10,6 +10,8 @@ import {
 } from '@/api/files'
 import TreeItem, { type TreeNode } from '@/components/files/TreeItem.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import Modal from '@/components/ui/Modal.vue'
+import Button from '@/components/ui/Button.vue'
 
 // Monaco is imported dynamically (large bundle)
 type MonacoModule = typeof import('monaco-editor')
@@ -367,12 +369,25 @@ function deleteSelected() {
   })
 }
 
-async function moveSelected() {
+// Move/rename uses a tiny inline Modal instead of window.prompt — closes
+// the final native-dialog gap in the file manager so the UI stays
+// keyboard-trapped and styled like the rest of the panel.
+const movePromptOpen = ref(false)
+const moveTargetInput = ref('')
+
+function moveSelected() {
   if (!selectedPath.value || isReadOnly.value) return
-  const to = prompt(t('files.prompt.move'), selectedPath.value)
-  if (!to || to === selectedPath.value) return
+  moveTargetInput.value = selectedPath.value
+  movePromptOpen.value = true
+}
+
+async function confirmMove() {
+  const from = selectedPath.value
+  const to = moveTargetInput.value.trim()
+  movePromptOpen.value = false
+  if (!from || !to || to === from) return
   try {
-    await filesApi.move(activeRootId.value, selectedPath.value, to)
+    await filesApi.move(activeRootId.value, from, to)
     successMsg.value = t('files.success.moved')
     setTimeout(() => (successMsg.value = ''), 3000)
     resetEditor()
@@ -620,5 +635,31 @@ onBeforeUnmount(() => {
       @confirm="runConfirm"
       @cancel="pendingConfirm = null"
     />
+
+    <!-- Move / rename modal (replaces window.prompt). Submitting via Enter
+         or the Move button calls confirmMove(); Cancel closes without
+         touching the path. -->
+    <Modal :open="movePromptOpen" :title="t('files.prompt.moveTitle')" @close="movePromptOpen = false">
+      <form @submit.prevent="confirmMove" class="space-y-4">
+        <label class="block text-sm text-ink-muted">
+          {{ t('files.prompt.move') }}
+          <input
+            v-model="moveTargetInput"
+            type="text"
+            autofocus
+            class="input mt-2 w-full font-mono"
+            :aria-label="t('files.prompt.move')"
+          />
+        </label>
+        <div class="flex justify-end gap-2">
+          <Button variant="secondary" size="sm" type="button" @click="movePromptOpen = false">
+            {{ t('common.cancel') }}
+          </Button>
+          <Button size="sm" type="submit" :disabled="!moveTargetInput.trim() || moveTargetInput.trim() === selectedPath">
+            {{ t('files.move') }}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   </div>
 </template>

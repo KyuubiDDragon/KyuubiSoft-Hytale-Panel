@@ -6,6 +6,9 @@ import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import ChangelogModal from '@/components/mods/ChangelogModal.vue'
 import { getLocalizedText, getCategoryColor, type ModsTab } from '@/composables/useMods'
+import { useConfirm } from '@/composables/useConfirm'
+
+const { ask: askConfirm } = useConfirm()
 import {
   modsApi,
   pluginsApi,
@@ -224,7 +227,7 @@ async function installStoreMod(modId: string) {
 }
 
 async function uninstallStoreMod(modId: string) {
-  if (!confirm(t('mods.confirmUninstall', { name: modId }))) return
+  if (!(await askConfirm({ title: t("mods.confirmUninstallTitle"), message: t("mods.confirmUninstall", { name: modId }), confirmText: t("common.uninstall"), variant: "danger" }))) return
 
   installingMod.value = modId
   error.value = ''
@@ -425,7 +428,7 @@ async function handleFileUpload(event: Event) {
 }
 
 async function deleteItem(item: ModInfo) {
-  if (!confirm(t('mods.confirmDelete', { name: item.name }))) return
+  if (!(await askConfirm({ title: t("mods.confirmDeleteTitle"), message: t("mods.confirmDelete", { name: item.name }), confirmText: t("common.delete"), variant: "danger" }))) return
 
   try {
     if (activeTab.value === 'mods') {
@@ -639,7 +642,7 @@ async function installFromModtale(project: ModtaleProject) {
 }
 
 async function uninstallFromModtale(project: ModtaleProject) {
-  if (!confirm(t('mods.confirmUninstall', { name: project.title }))) return
+  if (!(await askConfirm({ title: t("mods.confirmUninstallTitle"), message: t("mods.confirmUninstall", { name: project.title }), confirmText: t("common.uninstall"), variant: "danger" }))) return
 
   modtaleUninstallingId.value = project.id
   error.value = ''
@@ -793,7 +796,7 @@ async function installFromStackMart(resource: StackMartResource) {
 }
 
 async function uninstallFromStackMart(resource: StackMartResource) {
-  if (!confirm(t('mods.confirmUninstall', { name: resource.name }))) return
+  if (!(await askConfirm({ title: t("mods.confirmUninstallTitle"), message: t("mods.confirmUninstall", { name: resource.name }), confirmText: t("common.uninstall"), variant: "danger" }))) return
 
   stackmartUninstallingId.value = resource.id
   error.value = ''
@@ -926,7 +929,12 @@ async function installCurseForgeMod(mod: CurseForgeMod) {
 
 async function uninstallCurseForgeMod(modId: number) {
   const modInfo = curseforgeInstalled.value[modId.toString()]
-  if (!confirm(t('mods.confirmUninstall', { name: modInfo?.modName || modId }))) return
+  if (!(await askConfirm({
+    title: t('mods.confirmUninstallTitle'),
+    message: t('mods.confirmUninstall', { name: modInfo?.modName || modId }),
+    confirmText: t('common.uninstall'),
+    variant: 'danger',
+  }))) return
 
   curseforgeUninstallingId.value = modId
   error.value = ''
