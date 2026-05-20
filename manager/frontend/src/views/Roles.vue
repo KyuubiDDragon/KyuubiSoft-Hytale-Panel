@@ -9,6 +9,7 @@ import Skeleton from '@/components/ui/Skeleton.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import EmptyTableState from '@/components/ui/EmptyTableState.vue'
 import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -174,10 +175,19 @@ async function saveRole() {
   }
 }
 
-async function deleteRole(role: Role) {
-  if (role.isSystem) return
-  if (!confirm(t('roles.confirmDelete', { name: role.name }))) return
+// Role deletion uses ConfirmDialog instead of window.confirm — keeps the
+// modal style consistent with the rest of the admin views.
+const pendingDeleteRole = ref<Role | null>(null)
 
+function askDeleteRole(role: Role) {
+  if (role.isSystem) return
+  pendingDeleteRole.value = role
+}
+
+async function confirmDeleteRole() {
+  const role = pendingDeleteRole.value
+  pendingDeleteRole.value = null
+  if (!role) return
   try {
     await rolesApi.delete(role.id)
     await loadRoles()
@@ -285,7 +295,7 @@ onMounted(loadRoles)
           icon-only
           class="!text-ink-muted hover:!text-status-error"
           :aria-label="t('common.delete')"
-          @click="deleteRole(row)"
+          @click="askDeleteRole(row)"
         >
           <Icon name="trash" class="w-5 h-5" />
         </Button>
@@ -455,5 +465,16 @@ onMounted(loadRoles)
         </div>
       </div>
     </div>
+
+    <!-- Role delete confirm (replaces window.confirm). -->
+    <ConfirmDialog
+      :show="!!pendingDeleteRole"
+      :title="t('roles.confirmDeleteTitle')"
+      :message="pendingDeleteRole ? t('roles.confirmDelete', { name: pendingDeleteRole.name }) : ''"
+      :confirm-text="t('common.delete')"
+      variant="danger"
+      @confirm="confirmDeleteRole"
+      @cancel="pendingDeleteRole = null"
+    />
   </div>
 </template>

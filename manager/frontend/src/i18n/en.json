@@ -181,6 +181,7 @@
     "pause": "Pause",
     "export": "Export",
     "deleteConfirm": "Delete this segment?",
+    "deleteTitle": "Delete replay segment?",
     "saveConfig": "Save",
     "playerModal": "Replay player",
     "events": "Events",
@@ -1096,7 +1097,8 @@
     "testResult": "Test",
     "noHooks": "No webhooks configured",
     "noHooksSubtitle": "Add one to receive server events on Discord, Slack or a generic endpoint.",
-    "confirmDelete": "Delete webhook \"{name}\"?"
+    "confirmDelete": "Delete webhook \"{name}\"?",
+    "confirmDeleteTitle": "Delete webhook?"
   },
   "chat": {
     "title": "Chat Log",
@@ -1280,6 +1282,7 @@
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
     "confirmDelete": "Are you sure you want to delete the role \"{name}\"?",
+    "confirmDeleteTitle": "Delete role?",
     "cannotDeleteSystem": "System roles cannot be deleted",
     "noRoles": "No roles found",
     "noRolesSubtitle": "Create a custom role to grant specific permissions.",

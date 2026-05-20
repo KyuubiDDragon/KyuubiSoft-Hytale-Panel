@@ -10,6 +10,7 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 interface ReplayManifest {
   id: string
@@ -97,8 +98,14 @@ async function exportSegment(id: string) {
   }
 }
 
-async function deleteSegment(id: string) {
-  if (!window.confirm(t('replay.deleteConfirm'))) return
+// Segment deletion uses ConfirmDialog instead of window.confirm so the
+// modal style + focus trap matches the rest of the panel.
+const pendingDeleteId = ref<string | null>(null)
+function askDeleteSegment(id: string) { pendingDeleteId.value = id }
+async function confirmDeleteSegment() {
+  const id = pendingDeleteId.value
+  pendingDeleteId.value = null
+  if (!id) return
   await api.delete(`/replay/${id}`)
   await load()
 }
@@ -231,7 +238,7 @@ onBeforeUnmount(closePlayer)
             <td class="py-2 flex gap-2">
               <button @click="openPlayer(s)" class="px-2 py-1 bg-dark-100 text-gray-200 rounded text-xs">{{ t('replay.play') }}</button>
               <button v-if="canManage" @click="exportSegment(s.id)" class="px-2 py-1 bg-dark-100 text-gray-200 rounded text-xs">{{ t('replay.export') }}</button>
-              <button v-if="canManage" @click="deleteSegment(s.id)" class="px-2 py-1 bg-red-500/20 text-red-300 rounded text-xs">{{ t('common.delete') }}</button>
+              <button v-if="canManage" @click="askDeleteSegment(s.id)" class="px-2 py-1 bg-red-500/20 text-red-300 rounded text-xs">{{ t('common.delete') }}</button>
             </td>
           </tr>
         </tbody>
@@ -291,5 +298,16 @@ onBeforeUnmount(closePlayer)
         </div>
       </div>
     </div>
+
+    <!-- Segment delete confirm (replaces window.confirm). -->
+    <ConfirmDialog
+      :show="!!pendingDeleteId"
+      :title="t('replay.deleteTitle')"
+      :message="t('replay.deleteConfirm')"
+      :confirm-text="t('common.delete')"
+      variant="danger"
+      @confirm="confirmDeleteSegment"
+      @cancel="pendingDeleteId = null"
+    />
   </div>
 </template>

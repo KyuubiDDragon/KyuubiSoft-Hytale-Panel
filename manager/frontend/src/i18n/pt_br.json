@@ -180,6 +180,7 @@
     "pause": "Pausar",
     "export": "Exportar",
     "deleteConfirm": "Excluir este segmento?",
+    "deleteTitle": "Excluir segmento de replay?",
     "saveConfig": "Salvar",
     "playerModal": "Player de replay",
     "events": "Eventos",
@@ -966,7 +967,8 @@
     "testResult": "Teste",
     "noHooks": "Nenhum webhook configurado",
     "noHooksSubtitle": "Adicione um para receber eventos do servidor no Discord, Slack ou em um endpoint genérico.",
-    "confirmDelete": "Excluir webhook \"{name}\"?"
+    "confirmDelete": "Excluir webhook \"{name}\"?",
+    "confirmDeleteTitle": "Excluir webhook?"
   },
   "chat": {
     "title": "Log de Chat",
@@ -1144,6 +1146,7 @@
     "selectAll": "Selecionar Tudo",
     "deselectAll": "Desselecionar Tudo",
     "confirmDelete": "Tem certeza de que deseja excluir a função \"{name}\"?",
+    "confirmDeleteTitle": "Excluir função?",
     "cannotDeleteSystem": "Funções do sistema não podem ser excluídas",
     "noRoles": "Nenhuma função encontrada",
     "noRolesSubtitle": "Crie uma função personalizada para conceder permissões específicas.",

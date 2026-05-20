@@ -181,6 +181,7 @@
     "pause": "Pause",
     "export": "Export",
     "deleteConfirm": "Segment wirklich löschen?",
+    "deleteTitle": "Replay-Segment löschen?",
     "saveConfig": "Speichern",
     "playerModal": "Replay-Player",
     "events": "Events",
@@ -1032,6 +1033,7 @@
     "selectAll": "Alle auswählen",
     "deselectAll": "Alle abwählen",
     "confirmDelete": "Sind Sie sicher, dass Sie die Rolle \"{name}\" löschen möchten?",
+    "confirmDeleteTitle": "Rolle löschen?",
     "cannotDeleteSystem": "Systemrollen können nicht gelöscht werden",
     "noRoles": "Keine Rollen gefunden",
     "noRolesSubtitle": "Lege eine eigene Rolle an, um spezifische Berechtigungen zu vergeben.",
@@ -1147,7 +1149,8 @@
     "testResult": "Test",
     "noHooks": "Keine Webhooks konfiguriert",
     "noHooksSubtitle": "Füge einen hinzu, um Server-Events auf Discord, Slack oder einem generischen Endpunkt zu empfangen.",
-    "confirmDelete": "Webhook \"{name}\" löschen?"
+    "confirmDelete": "Webhook \"{name}\" löschen?",
+    "confirmDeleteTitle": "Webhook löschen?"
   },
   "chat": {
     "title": "Chat-Protokoll",

@@ -9,6 +9,7 @@ import Skeleton from '@/components/ui/Skeleton.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import EmptyTableState from '@/components/ui/EmptyTableState.vue'
 import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
 interface Webhook {
   id: string
@@ -68,9 +69,20 @@ async function toggle(h: Webhook) {
   await load()
 }
 
-async function remove(h: Webhook) {
-  if (!confirm(t('webhooks.confirmDelete', { name: h.name }))) return
-  await api.delete(`/webhooks/${h.id}`)
+// Webhook deletion goes through ConfirmDialog rather than window.confirm
+// to match the rest of the panel's modal style and keep keyboard focus
+// trapped correctly inside the dialog.
+const pendingDelete = ref<Webhook | null>(null)
+
+function askRemove(h: Webhook) {
+  pendingDelete.value = h
+}
+
+async function confirmRemove() {
+  const target = pendingDelete.value
+  pendingDelete.value = null
+  if (!target) return
+  await api.delete(`/webhooks/${target.id}`)
   await load()
 }
 
@@ -225,11 +237,22 @@ onMounted(load)
           icon-only
           class="!text-ink-muted hover:!text-status-error"
           :aria-label="t('common.delete')"
-          @click="remove(row)"
+          @click="askRemove(row)"
         >
           <Icon name="trash" class="w-5 h-5" />
         </Button>
       </template>
     </ResponsiveTable>
+
+    <!-- Delete confirm (replaces window.confirm). -->
+    <ConfirmDialog
+      :show="!!pendingDelete"
+      :title="t('webhooks.confirmDeleteTitle')"
+      :message="pendingDelete ? t('webhooks.confirmDelete', { name: pendingDelete.name }) : ''"
+      :confirm-text="t('common.delete')"
+      variant="danger"
+      @confirm="confirmRemove"
+      @cancel="pendingDelete = null"
+    />
   </div>
 </template>
