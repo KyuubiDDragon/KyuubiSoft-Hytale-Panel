@@ -8,12 +8,19 @@ import { logger } from '../utils/logger.js';
  * one structured log line per request/response pair (skipping health
  * checks). Wrapped via RequestHandler so the Express types accept it as a
  * middleware without an additional cast at the use-site.
+ *
+ * IMPORTANT: pino-http reads `logger.levels.values` internally to decide
+ * which custom log levels are valid. Our public `logger` export is a
+ * console-compatible variadic shim around pino — it doesn't carry pino's
+ * own internal fields. Pass the underlying pino instance (`logger.raw`)
+ * to pino-http; calls to logger.info / logger.error from application code
+ * still flow through the shim.
  */
 // pino-http's TS types are looser than what app.use() expects; we narrow
 // once here so callers don't have to.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const _pinoMiddleware = (pinoHttp as any)({
-  logger,
+  logger: logger.raw,
   genReqId: (req: Request, res: Response): string => {
     const existing = (req.headers['x-request-id'] as string | undefined)?.trim();
     const id = existing || randomUUID();
