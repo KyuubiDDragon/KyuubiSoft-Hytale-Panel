@@ -197,7 +197,9 @@ router.get('/plugin/update-check', authMiddleware, requirePermission('server.vie
   }
 
   try {
-    const updateInfo = kyuubiApiService.isUpdateAvailable();
+    // isUpdateAvailable is async — without await this serialized a pending
+    // Promise ({}), so the UI never saw the real version info.
+    const updateInfo = await kyuubiApiService.isUpdateAvailable(req.serverId);
     res.json(updateInfo);
   } catch (error) {
     res.status(500).json({

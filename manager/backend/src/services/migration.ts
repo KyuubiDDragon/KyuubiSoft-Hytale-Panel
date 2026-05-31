@@ -23,6 +23,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile } from '../config.js';
+import { getCurrentVersion } from './panelVersionService.js';
 
 // Paths
 const DATA_DIR = config.dataPath;
@@ -425,12 +426,16 @@ export async function runMigration(): Promise<boolean> {
   }
 }
 
-// Current panel version for feature tracking
-const CURRENT_PANEL_VERSION = '2.1.1';
+// The current panel version is the single source of truth in package.json
+// (read via getCurrentVersion()), NOT a hardcoded constant. The old hardcoded
+// '2.1.1' meant a 3.0 install reported itself as 2.1.1 and the upgrade banner
+// misfired.
 
-// Features introduced in each version
+// Features introduced in each version (pre-release suffixes are stripped before
+// comparison, so '3.0.0' also matches the '3.0.0-alpha' package version).
 const VERSION_FEATURES: Record<string, string[]> = {
   '2.1.0': ['native_update_system', 'update_config'],
+  '3.0.0': ['two_factor_auth', 'api_keys', 'audit_log', 'webhooks', 'sso', 'file_manager', 'notifications', 'multi_server', 'live_map', 'replay', 'wiki'],
 };
 
 /**
@@ -502,6 +507,9 @@ export async function migrateUpdateConfig(): Promise<{ migrated: boolean; newFea
  */
 export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: string[]; showBanner: boolean }> {
   const newFeatures: string[] = [];
+  // Real version from package.json; strip any pre-release suffix ('-alpha') so
+  // the numeric comparison below stays well-defined.
+  const CURRENT_PANEL_VERSION = (await getCurrentVersion()).split('-')[0];
 
   try {
     // Read config.json to get last known version

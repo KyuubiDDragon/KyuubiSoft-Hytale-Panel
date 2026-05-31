@@ -23,9 +23,15 @@ interface UserWithTotp {
   totpEnabled?: boolean;
   totpPendingSecret?: string;
   backupCodeHashes?: string[];
+  // Highest TOTP time-step already accepted for this user. Replay protection:
+  // a code is rejected if its step is <= this, so a captured 6-digit code can't
+  // be reused inside the ±1 drift window (~90 s).
+  totpLastUsedStep?: number;
   // Other user fields exist but we don't touch them here.
   [key: string]: unknown;
 }
+
+const TOTP_STEP_SECONDS = 30;
 
 async function readUsersRaw(): Promise<{ users: UserWithTotp[] }> {
   return JSON.parse(await readFile(USERS_FILE, 'utf-8')) as { users: UserWithTotp[] };
@@ -118,7 +124,18 @@ export async function verifyTotpOrBackup(username: string, code: string): Promis
 
   // 6-digit numeric → TOTP, anything else → backup code
   if (/^\d{6}$/.test(code.trim())) {
-    return authenticator.verify({ token: code.trim(), secret: user.totpSecret });
+    const token = code.trim();
+    // checkDelta returns the matched step offset (−1/0/+1 within the window),
+    // or null if no match. We turn that into an absolute step number so we can
+    // reject reuse of an already-accepted code.
+    const delta = authenticator.checkDelta(token, user.totpSecret);
+    if (delta === null) return false;
+    const usedStep = Math.floor(Date.now() / 1000 / TOTP_STEP_SECONDS) + delta;
+    const lastStep = typeof user.totpLastUsedStep === 'number' ? user.totpLastUsedStep : -1;
+    if (usedStep <= lastStep) return false; // replay within the drift window
+    user.totpLastUsedStep = usedStep;
+    await writeUsersRaw(data);
+    return true;
   }
   const normalized = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   if (!user.backupCodeHashes || user.backupCodeHashes.length === 0) return false;

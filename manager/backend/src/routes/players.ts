@@ -8,6 +8,7 @@ import * as playersService from '../services/players.js';
 import * as dockerService from '../services/docker.js';
 import * as kyuubiApi from '../services/kyuubiApi.js';
 import * as chatLog from '../services/chatLog.js';
+import * as punishments from '../services/punishments.js';
 import { config } from '../config.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoWhitelist } from '../services/demoData.js';
@@ -63,7 +64,7 @@ router.post('/bulk', authMiddleware, async (req: AuthenticatedRequest, res: Resp
       results.push({ name: rawName, success: true });
       continue;
     }
-    const r = await dockerService.execCommand(cmd);
+    const r = await dockerService.execCommand(cmd, req.serverId);
     results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
     if (action === 'kick' && r.success) playersService.removePlayer(rawName);
   }
@@ -129,9 +130,9 @@ async function writeBansMapping(mapping: BanNameMapping): Promise<void> {
 }
 
 // GET /api/players
-router.get('/', authMiddleware, requirePermission('players.view'), async (_req: Request, res: Response) => {
+router.get('/', authMiddleware, requirePermission('players.view'), async (req: AuthenticatedRequest, res: Response) => {
   // Check if server is running - if not, clear stale players and return empty list
-  const status = await dockerService.getStatus();
+  const status = await dockerService.getStatus(req.serverId);
   if (!status.running) {
     playersService.clearOnlinePlayers();
     res.json({
@@ -141,7 +142,7 @@ router.get('/', authMiddleware, requirePermission('players.view'), async (_req: 
     return;
   }
 
-  const players = await playersService.getOnlinePlayers();
+  const players = await playersService.getOnlinePlayers(req.serverId);
 
   res.json({
     players,
@@ -211,11 +212,12 @@ router.post('/:name/kick', authMiddleware, requirePermission('players.kick'), as
 
   // Send kick command to server (with optional reason)
   const command = safeReason ? `/kick ${playerName} ${safeReason}` : `/kick ${playerName}`;
-  const result = await dockerService.execCommand(command);
+  const result = await dockerService.execCommand(command, req.serverId);
 
   if (result.success) {
     playersService.removePlayer(playerName);
 
+    punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'kick', reason: safeReason || undefined, byUser: username });
     // Log activity
     await logActivity(username, 'kick', 'player', true, playerName, reason);
 
@@ -256,11 +258,11 @@ router.post('/:name/ban', authMiddleware, requirePermission('players.ban'), asyn
   const safeReason = reason ? sanitizeMessage(reason, 100) : 'You have been banned';
 
   // First kick the player if online
-  await dockerService.execCommand(`/kick ${playerName} ${safeReason}`);
+  await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
 
   // Then execute ban command - server will update bans.json with UUID
   const command = `/ban ${playerName} ${safeReason}`;
-  const result = await dockerService.execCommand(command);
+  const result = await dockerService.execCommand(command, req.serverId);
 
   if (result.success) {
     playersService.removePlayer(playerName);
@@ -284,6 +286,7 @@ router.post('/:name/ban', authMiddleware, requirePermission('players.ban'), asyn
       logger.error('Failed to update ban mapping:', err);
     }
 
+    punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'ban', reason: safeReason, byUser: username });
     // Log activity
     await logActivity(username, 'ban', 'player', true, playerName, reason);
 
@@ -320,9 +323,10 @@ router.delete('/:name/ban', authMiddleware, requirePermission('players.unban'), 
   }
 
   // Execute unban command - server will update bans.json
-  const result = await dockerService.execCommand(`/unban ${playerName}`);
+  const result = await dockerService.execCommand(`/unban ${playerName}`, req.serverId);
 
   if (result.success) {
+    punishments.deactivateActiveForPlayer(playerName, ['ban', 'tempban'], username);
     // Log activity
     await logActivity(username, 'unban', 'player', true, playerName);
 
@@ -358,7 +362,7 @@ router.post('/:name/whitelist', authMiddleware, requirePermission('players.white
     return;
   }
 
-  const result = await dockerService.execCommand(`/whitelist add ${playerName}`);
+  const result = await dockerService.execCommand(`/whitelist add ${playerName}`, req.serverId);
 
   if (result.success) {
     // Persist to whitelist.json
@@ -407,7 +411,7 @@ router.delete('/:name/whitelist', authMiddleware, requirePermission('players.whi
     return;
   }
 
-  const result = await dockerService.execCommand(`/whitelist remove ${playerName}`);
+  const result = await dockerService.execCommand(`/whitelist remove ${playerName}`, req.serverId);
 
   if (result.success) {
     // Remove from whitelist.json
@@ -454,7 +458,7 @@ router.post('/:name/op', authMiddleware, requirePermission('players.op'), async 
     return;
   }
 
-  const result = await dockerService.execCommand(`/op add ${playerName}`);
+  const result = await dockerService.execCommand(`/op add ${playerName}`, req.serverId);
 
   if (result.success) {
     await logActivity(username, 'op_add', 'player', true, playerName);
@@ -489,7 +493,7 @@ router.delete('/:name/op', authMiddleware, requirePermission('players.op'), asyn
     return;
   }
 
-  const result = await dockerService.execCommand(`/op remove ${playerName}`);
+  const result = await dockerService.execCommand(`/op remove ${playerName}`, req.serverId);
 
   if (result.success) {
     await logActivity(username, 'op_remove', 'player', true, playerName);
@@ -534,7 +538,7 @@ router.post('/:name/message', authMiddleware, requirePermission('players.message
   // SECURITY: Sanitize message
   const safeMessage = sanitizeMessage(message, 256);
 
-  const result = await dockerService.execCommand(`/msg ${playerName} ${safeMessage}`);
+  const result = await dockerService.execCommand(`/msg ${playerName} ${safeMessage}`, req.serverId);
 
   if (result.success) {
     res.json({
@@ -615,7 +619,7 @@ router.post('/:name/teleport', authMiddleware, requirePermission('players.telepo
     ? `/tp ${playerName} ${target}`
     : `/tp ${playerName} ${x} ${y} ${z}`;
 
-  const result = await dockerService.execCommand(command);
+  const result = await dockerService.execCommand(command, req.serverId);
 
   if (result.success) {
     await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
@@ -666,7 +670,7 @@ router.post('/:name/kill', authMiddleware, requirePermission('players.kill'), as
   }
 
   // Fallback: Use console command
-  const result = await dockerService.execCommand(`/kill ${playerName}`);
+  const result = await dockerService.execCommand(`/kill ${playerName}`, req.serverId);
 
   if (result.success) {
     await logActivity(username, 'kill', 'player', true, playerName);
@@ -714,7 +718,7 @@ router.post('/:name/respawn', authMiddleware, requirePermission('players.respawn
   }
 
   // Fallback: Use console command
-  const result = await dockerService.execCommand(`/player respawn --player ${playerName}`);
+  const result = await dockerService.execCommand(`/player respawn --player ${playerName}`, req.serverId);
 
   if (result.success) {
     res.json({
@@ -781,7 +785,7 @@ router.post('/:name/gamemode', authMiddleware, requirePermission('players.gamemo
   }
 
   // Fallback: Use console command
-  const result = await dockerService.execCommand(`/gamemode ${gamemode} ${playerName}`);
+  const result = await dockerService.execCommand(`/gamemode ${gamemode} ${playerName}`, req.serverId);
 
   if (result.success) {
     await logActivity(username, 'gamemode', 'player', true, playerName, `Changed to ${gamemode}`);
@@ -846,12 +850,24 @@ router.post('/:name/give', authMiddleware, requirePermission('players.give'), as
     return;
   }
 
+  // Try the plugin API first (in-process, atomic), fall back to console.
+  try {
+    const pluginResult = await kyuubiApi.givePlayerViaPlugin(playerName, String(item), amount as number | undefined, req.serverId);
+    if (pluginResult.success) {
+      await logActivity(username, 'give', 'player', true, playerName, `Gave ${amount || 1}x ${item}`);
+      res.json({ success: true, message: `Gave ${amount || 1} ${item} to ${playerName}` });
+      return;
+    }
+  } catch {
+    // Plugin not available — fall back to console command.
+  }
+
   // Command format: /give <player> <item> --quantity=<amount>
   const command = amount && amount > 1
     ? `/give ${playerName} ${item} --quantity=${amount}`
     : `/give ${playerName} ${item}`;
 
-  const result = await dockerService.execCommand(command);
+  const result = await dockerService.execCommand(command, req.serverId);
   logger.info('[Give Debug] Command result:', result);
 
   if (result.success) {
@@ -900,7 +916,7 @@ router.post('/:name/heal', authMiddleware, requirePermission('players.heal'), as
   }
 
   // Fallback: Use console command
-  const result = await dockerService.execCommand(`/player stats settomax --player ${playerName}`);
+  const result = await dockerService.execCommand(`/player stats settomax --player ${playerName}`, req.serverId);
 
   if (result.success) {
     res.json({
@@ -956,7 +972,7 @@ router.post('/:name/effect', authMiddleware, requirePermission('players.effects'
   const command = action === 'clear'
     ? `/player effect clear --player ${playerName}`
     : `/player effect apply --player ${playerName} ${effect}`;
-  const result = await dockerService.execCommand(command);
+  const result = await dockerService.execCommand(command, req.serverId);
 
   if (result.success) {
     const effectDetails = action === 'clear' ? 'Cleared all effects' : `Applied ${effect}`;
@@ -1008,7 +1024,7 @@ router.post('/:name/inventory/clear', authMiddleware, requirePermission('players
   }
 
   // Fallback: Use console command
-  const result = await dockerService.execCommand(`/inventory clear ${playerName}`);
+  const result = await dockerService.execCommand(`/inventory clear ${playerName}`, req.serverId);
 
   if (result.success) {
     await logActivity(username, 'inventory_clear', 'player', true, playerName);
@@ -1147,7 +1163,7 @@ router.post('/:name/teleport/death', authMiddleware, requirePermission('players.
 
   // Teleport to death position
   const command = `/tp ${playerName} ${position.position.x} ${position.position.y} ${position.position.z}`;
-  const result = await dockerService.execCommand(command);
+  const result = await dockerService.execCommand(command, req.serverId);
 
   if (result.success) {
     res.json({
@@ -1200,6 +1216,98 @@ router.post('/:name/deaths', authMiddleware, requirePermission('players.edit'), 
       error: 'Failed to record death position',
     });
   }
+});
+
+// ============== PUNISHMENT HISTORY ==============
+
+// GET /api/players/punishments - full, filterable history
+router.get('/punishments', authMiddleware, requirePermission('players.view'), async (req: AuthenticatedRequest, res: Response) => {
+  const player = typeof req.query.player === 'string' ? req.query.player : undefined;
+  const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+  const activeOnly = req.query.active === 'true';
+  const limit = parseInt(req.query.limit as string) || 200;
+  res.json({ punishments: punishments.listPunishments({ player, type, activeOnly, limit }) });
+});
+
+// GET /api/players/:name/punishments - history for one player
+router.get('/:name/punishments', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
+  const playerName = req.params.name;
+  if (!validatePlayerName(res, playerName)) return;
+  res.json({ punishments: punishments.listPunishments({ player: playerName, limit: 200 }) });
+});
+
+// POST /api/players/:name/tempban  { duration: "2h"|7200, reason? }
+router.post('/:name/tempban', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
+  const playerName = req.params.name;
+  const username = req.user || 'system';
+  if (!validatePlayerName(res, playerName)) return;
+
+  const { duration, reason } = req.body as { duration?: string | number; reason?: string };
+  const durationMs = punishments.parseDuration(duration);
+  if (!durationMs) {
+    res.status(400).json({ success: false, error: 'Valid duration required (e.g. 30m, 2h, 7d)' });
+    return;
+  }
+  const safeReason = reason ? sanitizeMessage(reason, 100) : 'Temporarily banned';
+
+  if (isDemoMode()) {
+    const p = punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'tempban', reason: safeReason, byUser: username, durationMs });
+    await logActivity(username, 'tempban', 'player', true, playerName, safeReason);
+    res.json({ success: true, message: `[Demo] Temp-banned ${playerName}`, expiresAt: p.expiresAt });
+    return;
+  }
+
+  await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
+  const result = await dockerService.execCommand(`/ban ${playerName} ${safeReason}`, req.serverId);
+  if (result.success) {
+    playersService.removePlayer(playerName);
+    const p = punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'tempban', reason: safeReason, byUser: username, durationMs });
+    await logActivity(username, 'tempban', 'player', true, playerName, `${safeReason} (until ${p.expiresAt})`);
+    res.json({ success: true, message: `Temp-banned ${playerName}`, expiresAt: p.expiresAt });
+  } else {
+    await logActivity(username, 'tempban', 'player', false, playerName, result.error);
+    res.status(500).json({ success: false, error: result.error || 'Failed to temp-ban player' });
+  }
+});
+
+// POST /api/players/:name/mute  { duration?, reason? }  (duration omitted = permanent)
+router.post('/:name/mute', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
+  const playerName = req.params.name;
+  const username = req.user || 'system';
+  if (!validatePlayerName(res, playerName)) return;
+
+  const { duration, reason } = req.body as { duration?: string | number; reason?: string };
+  const durationMs = punishments.parseDuration(duration);
+  const safeReason = reason ? sanitizeMessage(reason, 100) : '';
+
+  if (!isDemoMode()) {
+    const result = await dockerService.execCommand(`/mute ${playerName}`, req.serverId);
+    if (!result.success) {
+      res.status(500).json({ success: false, error: result.error || 'Failed to mute player' });
+      return;
+    }
+  }
+  const p = punishments.recordPunishment({ serverId: req.serverId, playerName, type: durationMs ? 'tempmute' : 'mute', reason: safeReason || undefined, byUser: username, durationMs });
+  await logActivity(username, 'mute', 'player', true, playerName, durationMs ? `until ${p.expiresAt}` : 'permanent');
+  res.json({ success: true, message: `Muted ${playerName}`, expiresAt: p.expiresAt });
+});
+
+// DELETE /api/players/:name/mute  (unmute)
+router.delete('/:name/mute', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
+  const playerName = req.params.name;
+  const username = req.user || 'system';
+  if (!validatePlayerName(res, playerName)) return;
+
+  if (!isDemoMode()) {
+    const result = await dockerService.execCommand(`/unmute ${playerName}`, req.serverId);
+    if (!result.success) {
+      res.status(500).json({ success: false, error: result.error || 'Failed to unmute player' });
+      return;
+    }
+  }
+  punishments.deactivateActiveForPlayer(playerName, ['mute', 'tempmute'], username);
+  await logActivity(username, 'unmute', 'player', true, playerName);
+  res.json({ success: true, message: `Unmuted ${playerName}` });
 });
 
 export default router;

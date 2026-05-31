@@ -74,6 +74,18 @@ export interface PanelConfig {
     kyuubiApiInstalled: boolean;
     version?: string;
   };
+  // Optional: expose an unauthenticated read-only status page at /api/public/status.
+  publicStatus?: {
+    enabled: boolean;
+  };
+  // Optional Discord bot: chat bridge + slash commands. Off by default; needs a
+  // bot token and a text-channel id to do anything.
+  discord?: {
+    enabled: boolean;
+    token: string;
+    channelId: string;
+    guildId?: string; // register slash commands to one guild (instant vs global)
+  };
 }
 
 // ============================================================
@@ -117,6 +129,8 @@ export function getDefaultConfig(): PanelConfig {
       whitelist: false,
       allowOp: true,
     },
+    publicStatus: { enabled: false },
+    discord: { enabled: false, token: '', channelId: '' },
     performance: {
       minRam: '3G',
       maxRam: '4G',

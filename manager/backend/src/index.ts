@@ -40,6 +40,8 @@ import replayRoutes from './routes/replay.js';
 import wikiRoutes from './routes/wiki.js';
 import metricsRoutes from './routes/metrics.js';
 import settingsRoutes from './routes/settings.js';
+import publicRoutes from './routes/public.js';
+import eventActionsRoutes from './routes/eventActions.js';
 import { metricsMiddleware } from './services/metrics.js';
 
 // Services
@@ -53,6 +55,9 @@ import * as playerLocations from './services/playerLocations.js';
 import { isSetupComplete } from './services/setupService.js';
 import { checkAndRunMigration, migrateUpdateConfig, checkPanelVersionAndFeatures } from './services/migration.js';
 import { startAutoUpdateCheck } from './services/cfwidget.js';
+import { getCurrentVersion } from './services/panelVersionService.js';
+import { startWatchdog } from './services/watchdog.js';
+import { startPunishmentExpiry } from './services/punishments.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -410,9 +415,12 @@ app.use((req, res, next) => {
 
   const allowedOrigins = (config.corsOrigins || '').split(',').map(o => o.trim()).filter(Boolean);
 
-  // Also allow requests from the server's own origin (same-origin)
+  // Also allow requests from the server's own origin (same-origin).
+  // Derive the protocol from req.secure only — Express already resolves it from
+  // a *trusted* X-Forwarded-Proto when TRUST_PROXY is on, so we must never read
+  // the raw header here (it is attacker-controllable without a trusted proxy).
   const host = req.headers.host;
-  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const protocol = req.secure ? 'https' : 'http';
   const serverOrigin = `${protocol}://${host}`;
 
   if (allowedOrigins.includes(requestOrigin) || requestOrigin === serverOrigin) {
@@ -438,6 +446,33 @@ app.use((req, res, next) => {
 // Setup Routes - MUST be BEFORE auth middleware and other routes
 // These routes work without authentication during first-run setup
 // ============================================================
+//
+// SECURITY: The setup router is unauthenticated by design (first-run has no
+// users yet). Once setup is complete it MUST be sealed: its action endpoints
+// (server start/stop, /auth console injection, raw log/SSE streams that leak
+// OAuth device codes) would otherwise stay reachable without any auth. After
+// completion we allow only the two read-only status probes the SPA needs and
+// return 410 for everything else. Fails open during first run so the wizard
+// can never lock itself out.
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith('/api/setup')) return next();
+  const sub = req.path.slice('/api/setup'.length); // '', '/status', '/server/start', …
+  const readOnlyAllowed = req.method === 'GET' && (sub === '/status' || sub === '/check');
+  if (readOnlyAllowed) return next();
+  try {
+    if (await isSetupComplete()) {
+      res.status(410).json({
+        error: 'Setup already completed',
+        detail: 'Setup endpoints are disabled after the panel has been set up.',
+      });
+      return;
+    }
+  } catch (err) {
+    // If we can't determine setup state, fail open so first-run isn't blocked.
+    console.error('[Setup Gate] Could not determine setup state, allowing:', err);
+  }
+  next();
+});
 app.use('/api/setup', setupRoutes);
 
 // ============================================================
@@ -516,6 +551,9 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/replay', replayRoutes);
 app.use('/api/wiki', wikiRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/event-actions', eventActionsRoutes);
+// Public, unauthenticated status (off unless config.publicStatus.enabled).
+app.use('/api/public', publicRoutes);
 
 // v3 multi-server registry.
 //
@@ -688,9 +726,10 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start server
 server.listen(config.port, '0.0.0.0', async () => {
+  const panelVersion = await getCurrentVersion(); // single source of truth: package.json
   console.log(`
 ╔═══════════════════════════════════════════════════╗
-║         KyuubiSoft Panel v2.1.1                   ║
+║         KyuubiSoft Panel ${('v' + panelVersion).padEnd(25)}║
 ║         Hytale Server Management                  ║
 ╠═══════════════════════════════════════════════════╣
 ║  Panel: http://localhost:${config.externalPort.toString().padEnd(23)}║
@@ -741,6 +780,21 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Start CFWidget mod update checker (checks hourly for CurseForge mod updates)
   startAutoUpdateCheck();
+
+  // Start the crash watchdog (monitoring/alerts always; auto-restart opt-in via
+  // WATCHDOG_AUTO_RESTART=true).
+  startWatchdog();
+
+  // Start the punishment-expiry loop (lifts lapsed temp bans/mutes).
+  startPunishmentExpiry();
+
+  // Start the event-action engine (reactive automations bound to the EventBus).
+  const { startEventActions } = await import('./services/eventActions.js');
+  startEventActions();
+
+  // Start the Discord bot if enabled in config (off by default).
+  const { startDiscordBot } = await import('./services/discordBot.js');
+  startDiscordBot().catch((err) => console.error('[Discord] start failed:', err));
 
   // Start the event-bus consumers (webhook dispatcher + notification fanout).
   const { startWebhookDispatcher } = await import('./services/webhooks.js');

@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 export const PanelEventNames = [
   'server.starting', 'server.started',
-  'server.stopping', 'server.stopped', 'server.crashed',
+  'server.stopping', 'server.stopped', 'server.crashed', 'server.restarted', 'server.alert',
   'player.joined', 'player.left', 'player.banned', 'player.kicked', 'player.death',
   'backup.started', 'backup.completed', 'backup.failed',
   'update.available', 'update.applied',

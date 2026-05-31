@@ -4,9 +4,9 @@
  * Maintains an in-memory 10 minute ring buffer of player positions.
  *
  * Data sources (priority order):
- *  1. `player_position` plugin events via {@link eventBus} (none today, see
- *     report — the KyuubiSoft Java plugin currently emits join/leave/chat/
- *     death only).
+ *  1. `player_position` plugin events via {@link eventBus}. The KyuubiSoft Java
+ *     plugin (v1.4.0+) emits these every ~2 s/player; services/pluginEvents.ts
+ *     validates and republishes them onto the bus.
  *  2. Simulated movement when {@link isDemoMode} is true OR when no real
  *     position events arrive for a few seconds (graceful fallback so the
  *     LiveMap view always has something to render).
@@ -175,9 +175,9 @@ function simulationTick(): void {
 // ---------------------------------------------------------------------------
 
 export function initializePlayerLocations(): void {
-  // Subscribe to a (currently hypothetical) player_position plugin event.
-  // The Java plugin does not emit this today; the path is wired so it works
-  // the moment positions are added upstream.
+  // Subscribe to player_position plugin events (emitted by the KyuubiSoft
+  // plugin v1.4.0+ and republished by services/pluginEvents.ts). Real samples
+  // suppress the demo simulator via lastRealSampleAt.
   eventBus.subscribe(['player_position'], (evt: PanelEvent) => {
     const p = evt.payload as Partial<PlayerLocationSample>;
     if (!p.uuid || !p.playerName || p.x === undefined || p.y === undefined || p.z === undefined) {

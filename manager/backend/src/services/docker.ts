@@ -11,15 +11,16 @@
  * and on-disk paths — never read these from `config.*` directly inside
  * Docker calls, because that would silently ignore multi-server setups.
  */
-import Docker from 'dockerode';
+import type Docker from 'dockerode';
 import { config } from '../config.js';
 import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.js';
 import { validateCommand, escapeShellArg } from '../utils/sanitize.js';
 import { clearOnlinePlayers } from './players.js';
 import { isDemoMode, getDemoStatus, getDemoStats, getDemoLogs } from './demoData.js';
 import { ensureLoaded, getDefaultId, getServer } from './servers.js';
+import { createDockerClient } from './dockerClient.js';
 
-const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+const docker = createDockerClient();
 
 /** Resolve the container name for an explicit or default server id. */
 async function resolveContainerName(serverId?: string): Promise<string> {
@@ -94,6 +95,18 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
   }
 }
 
+// Records the last time the panel itself stopped/restarted a server, so the
+// watchdog can tell a deliberate stop from a crash and not "restart" something
+// an operator just stopped (or fight a restart already in progress).
+const intentionalStops = new Map<string, number>();
+export function noteIntentionalStop(serverId?: string): void {
+  intentionalStops.set(serverId ?? '__default__', Date.now());
+}
+export function wasRecentlyStoppedIntentionally(serverId: string | undefined, withinMs: number): boolean {
+  const ts = intentionalStops.get(serverId ?? '__default__');
+  return ts !== undefined && Date.now() - ts < withinMs;
+}
+
 export async function startContainer(serverId?: string): Promise<ActionResponse> {
   if (isDemoMode()) return { success: true, message: '[DEMO] Container started' };
   try {
@@ -111,6 +124,7 @@ export async function stopContainer(serverId?: string): Promise<ActionResponse> 
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
+    noteIntentionalStop(serverId); // tell the watchdog this stop was deliberate
     await container.stop({ t: 30 });
     clearOnlinePlayers();
     return { success: true, message: 'Container stopped' };
@@ -124,6 +138,7 @@ export async function restartContainer(serverId?: string): Promise<ActionRespons
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
+    noteIntentionalStop(serverId); // restart cycles through "stopped"; don't treat as a crash
     await container.restart({ t: 30 });
     clearOnlinePlayers();
     return { success: true, message: 'Container restarted' };

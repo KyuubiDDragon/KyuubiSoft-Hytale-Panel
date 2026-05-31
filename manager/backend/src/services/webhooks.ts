@@ -17,6 +17,7 @@ import crypto from 'crypto';
 import { getDb } from '../db/index.js';
 import { publish as publishEvent, subscribe } from './eventBus.js';
 import { webhookDeliveries } from './metrics.js';
+import { assertSafeResolvedUrl } from '../utils/urlGuard.js';
 import type { PanelEvent, PanelEventName } from '../schemas/events.js';
 
 const RETRY_DELAYS_MS = [30_000, 5 * 60_000, 30 * 60_000, 6 * 3600_000, 24 * 3600_000];
@@ -243,6 +244,11 @@ async function deliverOne(delivery: DeliveryRow, webhook: Webhook): Promise<void
   let bodySnippet: string | null = null;
   let success = false;
   try {
+    // SECURITY: re-validate at delivery time. The create/update guard only
+    // checks the hostname; a name that was public then but now resolves to a
+    // loopback/link-local/RFC1918 address (DNS rebinding) is blocked here,
+    // immediately before the request leaves the process.
+    await assertSafeResolvedUrl(webhook.url);
     const resp = await fetch(webhook.url, { method: 'POST', body, headers, signal: controller.signal });
     code = resp.status;
     success = resp.status >= 200 && resp.status < 300;

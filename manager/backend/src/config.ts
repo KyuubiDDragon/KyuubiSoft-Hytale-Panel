@@ -83,7 +83,21 @@ const securityMode = process.env.SECURITY_MODE || 'strict';
 
 // Demo mode: enables the panel to run without a real Hytale server
 // All data is mocked for demonstration purposes
-const demoMode = process.env.DEMO_MODE === 'true' || process.env.DEMO_MODE === '1';
+let demoMode = process.env.DEMO_MODE === 'true' || process.env.DEMO_MODE === '1';
+
+// SECURITY: never run demo mode on top of a REAL install. Demo mode accepts
+// admin/admin and grants the '*' wildcard, so enabling it where a real
+// users.json exists is a full authentication bypass. Refuse and fall back to
+// normal auth; demo is only for clean throwaway environments.
+if (demoMode) {
+  try {
+    const usersFile = path.join(path.dirname(CONFIG_FILE_PATH), 'users.json');
+    if (fs.existsSync(usersFile)) {
+      console.warn('[Demo Mode] DISABLED: a real users.json exists — demo would bypass authentication. Unset DEMO_MODE or use a clean data volume.');
+      demoMode = false;
+    }
+  } catch { /* fs error — leave demoMode as configured */ }
+}
 
 // ============================================================
 // Configuration Object

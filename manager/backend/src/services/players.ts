@@ -522,17 +522,46 @@ export async function scanLogs(): Promise<void> {
 }
 
 // Get online players
-export async function getOnlinePlayers(): Promise<PlayerInfo[]> {
+export async function getOnlinePlayers(serverId?: string): Promise<PlayerInfo[]> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoOnlinePlayers();
   }
 
   await loadPlayers();
-
   const now = new Date();
-  const result: PlayerInfo[] = [];
 
+  // Prefer the KyuubiSoft plugin's authoritative online list when the plugin is
+  // reachable — it reads the live server player list directly (no log-parsing
+  // lag, no missed/duplicated lines). Each entry is enriched with the locally
+  // tracked session start where we have it. Dynamic import avoids any module
+  // load-order cycle with kyuubiApi → servers → docker → players.
+  try {
+    const kyuubiApi = await import('./kyuubiApi.js');
+    if (await kyuubiApi.isPluginRunning(serverId)) {
+      const resp = await kyuubiApi.getPlayersFromPlugin(serverId);
+      const data = resp.success ? (resp.data as { players?: Array<{ name?: string }> } | undefined) : undefined;
+      if (data && Array.isArray(data.players)) {
+        return data.players
+          .filter((p): p is { name: string } => typeof p?.name === 'string' && p.name.length > 0)
+          .map((p) => {
+            const start = players.get(p.name)?.currentSessionStart;
+            const durationMs = start ? now.getTime() - new Date(start).getTime() : 0;
+            return {
+              name: p.name,
+              joined_at: start ?? now.toISOString(),
+              session_duration_seconds: Math.floor(durationMs / 1000),
+              session_duration: formatDuration(durationMs),
+            };
+          });
+      }
+    }
+  } catch {
+    // Plugin unavailable / errored — fall back to log-based tracking below.
+  }
+
+  // Fallback: log-parsed in-memory tracking.
+  const result: PlayerInfo[] = [];
   for (const player of players.values()) {
     if (player.online && player.currentSessionStart) {
       const sessionStart = new Date(player.currentSessionStart);

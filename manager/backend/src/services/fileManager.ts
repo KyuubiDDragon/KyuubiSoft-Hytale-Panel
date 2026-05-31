@@ -64,7 +64,11 @@ export class FileManagerError extends Error {
 export const MAX_READ_BYTES = 5 * 1024 * 1024;   // 5 MB
 export const MAX_WRITE_BYTES = 10 * 1024 * 1024; // 10 MB
 
-// Default deny patterns applied to ALL roots in addition to per-root deny list
+// Default deny patterns applied to ALL roots in addition to per-root deny list.
+// These cover credential/secret files and anything with a dedicated, validated
+// editor — editing them through the generic file manager would either leak
+// secrets or bypass schema validation. The server JAR is denied because
+// replacing it is arbitrary-code-execution-on-restart.
 const GLOBAL_DENY_PATTERNS: RegExp[] = [
   /(^|\/)\.env(\.|$)/i,
   /(^|\/)users\.json$/i,
@@ -72,6 +76,10 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
   /(^|\/)panel\.sqlite(-journal)?$/i,
   /\.key$/i,
   /\.pem$/i,
+  /(^|\/)HytaleServer\.jar$/i,   // server JAR replace = RCE on restart
+  /\.aot$/i,                     // AOT cache (paired with the JAR)
+  /(^|\/)auth\.enc$/i,           // encrypted Hytale auth credentials
+  /(^|\/)config\.json$/i,        // use the dedicated, schema-validated config editor
 ];
 
 // ============================================================

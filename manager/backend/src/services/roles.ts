@@ -410,6 +410,25 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
 }
 
 /**
+ * Resolve a role id (UUID or legacy name like 'admin') to its permission list.
+ * Mirrors the resolution order in getUserPermissions. Returns [] for unknown
+ * roles. Used to enforce that an actor can only assign roles whose permissions
+ * are a subset of their own (no privilege escalation via user create/update).
+ */
+export async function getRolePermissions(roleId: string): Promise<PermissionEntry[]> {
+  if (!roleId) return [];
+  let role = await getRole(roleId);
+  if (role) return role.permissions;
+  const roles = await getAllRoles();
+  const roleNameMap: Record<string, string> = {
+    admin: 'Administrator', moderator: 'Moderator', operator: 'Operator', viewer: 'Viewer',
+  };
+  const roleName = roleNameMap[roleId] || roleId;
+  role = roles.find(r => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId) ?? null;
+  return role ? role.permissions : [];
+}
+
+/**
  * Permissions effective for a user on a particular server. Resolves the
  * hybrid model: a global role from users.json plus optional per-server
  * role overrides in user.serverScopes[serverId].roleId.

@@ -11,7 +11,14 @@ import { Permission } from '../types/permissions.js';
  */
 async function effectivePermissions(req: AuthenticatedRequest): Promise<string[]> {
   if (req.apiKey) {
-    return req.apiKey.scopes;
+    // Bind the key to its owner's CURRENT rights (req.user is the key owner).
+    // A key minted while the owner was admin must not outlive a demotion or
+    // deletion: intersect the stored scopes with what the owner holds now.
+    // Owner deleted ⇒ getUserPermissions returns [] ⇒ key has no rights.
+    if (!req.user) return [];
+    const ownerPerms = await getUserPermissions(req.user);
+    if (ownerPerms.includes('*')) return req.apiKey.scopes;
+    return req.apiKey.scopes.filter(s => (ownerPerms as string[]).includes(s));
   }
   if (!req.user) return [];
   // Hybrid scope: when a route is mounted under /api/servers/:serverId/...

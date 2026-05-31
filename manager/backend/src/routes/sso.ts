@@ -7,8 +7,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { getProvider, listProviders, issueState, consumeState, discordAuthorizeUrl, discordExchangeAndIdentify } from '../services/sso.js';
-import { createAccessToken, createRefreshToken } from '../services/auth.js';
-import { getUserPermissions } from '../services/roles.js';
+import { createRefreshToken } from '../services/auth.js';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { audit } from '../services/audit.js';
@@ -19,10 +18,12 @@ const router = Router();
 
 const REFRESH_COOKIE = 'kp_refresh';
 
-function refreshCookieOptions(): CookieOptions {
+function refreshCookieOptions(req?: Request): CookieOptions {
   return {
     httpOnly: true,
-    secure: config.trustProxy,
+    // Secure whenever the proxy-resolved connection is HTTPS; trustProxy stays
+    // as a fallback so the flag is never weaker than the operator's intent.
+    secure: (req?.secure ?? false) || config.trustProxy,
     sameSite: 'strict',
     path: '/api/auth',
     maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -30,7 +31,9 @@ function refreshCookieOptions(): CookieOptions {
 }
 
 function callbackUrl(req: Request, providerId: string): string {
-  const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+  // req.protocol reflects a *trusted* X-Forwarded-Proto when TRUST_PROXY is on,
+  // and ignores the spoofable raw header otherwise — never read it directly.
+  const proto = req.protocol;
   const host = req.headers.host;
   return `${proto}://${host}/api/auth/sso/${providerId}/callback`;
 }
@@ -109,22 +112,15 @@ router.get('/:providerId/callback', async (req: Request, res: Response) => {
   }
   if (!user) { res.status(401).send('No linked account; ask an admin to invite you.'); return; }
 
-  const accessToken = await createAccessToken(user.username);
   const refreshToken = await createRefreshToken(user.username);
-  res.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions());
+  res.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions(req));
   audit(req, 'auth.sso_login_success', { actor: user.username, metadata: { providerId: provider.id } });
 
-  // Send the user back to the panel root with a short fragment payload that
-  // the login page picks up to seed the auth store. Simpler than juggling
-  // a one-time exchange code through localStorage.
-  const permissions = await getUserPermissions(user.username);
-  const payload = encodeURIComponent(JSON.stringify({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    role: user.roleId,
-    permissions,
-  }));
-  res.redirect(`/login?sso=${payload}`);
+  // SECURITY: do NOT put access/refresh tokens in the redirect URL — query
+  // strings leak into browser history, proxy/server logs and Referer headers
+  // (CWE-598). Only the HttpOnly refresh cookie (set above) is established;
+  // the SPA exchanges it for an access token via /api/auth/refresh on landing.
+  res.redirect('/login?sso=success');
 });
 
 export default router;

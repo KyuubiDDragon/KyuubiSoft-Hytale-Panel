@@ -36,6 +36,11 @@ const PRIVATE_HOST_PATTERNS: RegExp[] = [
   /metadata\.google\.internal$/i,
 ];
 
+import { lookup } from 'dns';
+import { promisify } from 'util';
+
+const dnsLookup = promisify(lookup);
+
 export class UnsafeUrlError extends Error {
   constructor(message: string, public reason: string) {
     super(message);
@@ -59,6 +64,36 @@ export function assertSafeOutboundUrl(raw: string): URL {
   const host = u.hostname.toLowerCase();
   if (PRIVATE_HOST_PATTERNS.some(p => p.test(host))) {
     throw new UnsafeUrlError(`Hostname ${host} resolves to a private / loopback range`, 'private-host');
+  }
+  return u;
+}
+
+/**
+ * Stronger guard for the moment of delivery: resolve the hostname and reject if
+ * ANY resolved address is loopback / link-local / RFC1918. The syntactic check
+ * in {@link assertSafeOutboundUrl} only sees the hostname, so a name that was
+ * public at create-time but later resolves to 169.254.169.254 / 127.0.0.1
+ * (DNS rebinding) would slip through. Call this immediately before `fetch`.
+ *
+ * Not perfectly TOCTOU-proof (the kernel re-resolves on connect), but it closes
+ * the common rebinding case without a custom connect agent. Honors
+ * ALLOW_INTERNAL_WEBHOOKS for operators that intentionally target internal hosts.
+ */
+export async function assertSafeResolvedUrl(raw: string): Promise<URL> {
+  const u = assertSafeOutboundUrl(raw);
+  if (process.env.ALLOW_INTERNAL_WEBHOOKS === 'true' || process.env.ALLOW_INTERNAL_WEBHOOKS === '1') {
+    return u;
+  }
+  let addresses: Array<{ address: string }>;
+  try {
+    addresses = await dnsLookup(u.hostname, { all: true });
+  } catch {
+    throw new UnsafeUrlError(`Cannot resolve host ${u.hostname}`, 'dns-failure');
+  }
+  for (const { address } of addresses) {
+    if (PRIVATE_HOST_PATTERNS.some(p => p.test(address))) {
+      throw new UnsafeUrlError(`Host ${u.hostname} resolves to private address ${address}`, 'private-ip');
+    }
   }
   return u;
 }

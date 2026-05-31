@@ -13,6 +13,7 @@ import {
   resetSetup,
 } from '../services/setupService.js';
 import { runSystemChecks, runSingleCheck } from '../services/systemCheck.js';
+import { validatePasswordPolicy } from '../services/users.js';
 import {
   getStatus as getDockerStatus,
   getLogs,
@@ -356,11 +357,13 @@ router.post('/admin', async (req: Request, res: Response) => {
       return;
     }
 
-    if (password.length < 12) {
-      res.status(400).json({
-        success: false,
-        error: 'Password must be at least 12 characters',
-      });
+    // Apply the SAME password policy as the regular user API (length +
+    // character classes + no username/common-sequence). The first admin
+    // account is the highest-privilege account on the panel; it must not be
+    // held to a weaker bar than accounts created later via /api/auth/users.
+    const policyError = validatePasswordPolicy(password, username);
+    if (policyError) {
+      res.status(400).json({ success: false, error: policyError });
       return;
     }
 

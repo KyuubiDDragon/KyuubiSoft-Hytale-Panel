@@ -100,6 +100,36 @@ function ensureSchema(conn: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_api_keys_owner ON api_keys(owner_username);
     CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(prefix);
+
+    CREATE TABLE IF NOT EXISTS punishments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id TEXT,
+      player_name TEXT NOT NULL,
+      uuid TEXT,
+      type TEXT NOT NULL,            -- ban | tempban | kick | mute | tempmute | warn
+      reason TEXT,
+      by_user TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT,              -- null = permanent / not applicable
+      active INTEGER NOT NULL DEFAULT 1, -- 1 while in effect; kicks/warns are historical (0)
+      revoked_at TEXT,
+      revoked_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_punish_player ON punishments(player_name, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_punish_active ON punishments(active, expires_at);
+
+    CREATE TABLE IF NOT EXISTS event_actions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      server_id TEXT,                 -- null = all servers
+      event_pattern TEXT NOT NULL,    -- 'player.joined' | 'server.*' | '*'
+      action_type TEXT NOT NULL,      -- command | announce | backup
+      action_payload TEXT,            -- JSON: { command?, message? }
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_actions_enabled ON event_actions(enabled);
   `);
 }
 

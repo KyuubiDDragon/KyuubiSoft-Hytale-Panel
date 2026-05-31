@@ -5,7 +5,7 @@ import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken, 
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { getAllUsers, createUser, updateUser, deleteUser, getUser, invalidateUserTokens, getTokenVersion } from '../services/users.js';
-import { getUserPermissions, hasPermission } from '../services/roles.js';
+import { getUserPermissions, getRolePermissions, hasPermission } from '../services/roles.js';
 import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 import { isDemoMode, getDemoUsers, getDemoRoles } from '../services/demoData.js';
@@ -20,28 +20,30 @@ import { authLogins } from '../services/metrics.js';
 
 // HttpOnly refresh-token cookie. SameSite=Strict because the panel and the
 // API live on the same origin in every supported deployment, so the cookie
-// only needs to ride first-party navigations. `Secure` is auto-enabled when
-// the operator is behind a reverse proxy (TRUST_PROXY=true) — over plain
-// HTTP a Secure cookie would just be dropped silently.
+// only needs to ride first-party navigations. `Secure` is set whenever the
+// actual (proxy-resolved) connection is HTTPS — `req.secure` already reflects
+// a trusted X-Forwarded-Proto when TRUST_PROXY is on, and we keep the
+// trustProxy fallback so the flag is never weaker than the operator's intent.
+// Over plain HTTP a Secure cookie would just be dropped silently.
 const REFRESH_COOKIE_NAME = 'kp_refresh';
 const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches refreshExpiresIn
 
-function refreshCookieOptions(): CookieOptions {
+function refreshCookieOptions(req?: Request): CookieOptions {
   return {
     httpOnly: true,
-    secure: config.trustProxy,
+    secure: (req?.secure ?? false) || config.trustProxy,
     sameSite: 'strict',
     path: '/api/auth',
     maxAge: REFRESH_COOKIE_MAX_AGE_MS,
   };
 }
 
-function setRefreshCookie(res: Response, token: string): void {
-  res.cookie(REFRESH_COOKIE_NAME, token, refreshCookieOptions());
+function setRefreshCookie(res: Response, token: string, req?: Request): void {
+  res.cookie(REFRESH_COOKIE_NAME, token, refreshCookieOptions(req));
 }
 
-function clearRefreshCookie(res: Response): void {
-  res.clearCookie(REFRESH_COOKIE_NAME, { ...refreshCookieOptions(), maxAge: 0 });
+function clearRefreshCookie(res: Response, req?: Request): void {
+  res.clearCookie(REFRESH_COOKIE_NAME, { ...refreshCookieOptions(req), maxAge: 0 });
 }
 
 function readRefreshToken(req: Request): string | undefined {
@@ -59,6 +61,19 @@ const DEMO_ADMIN_USERNAME = 'admin';
 const DEMO_ADMIN_PASSWORD = 'admin';
 
 const router = Router();
+
+/**
+ * Privilege-escalation guard for role assignment: an actor may only grant a
+ * role whose permissions are a subset of their own. Admins ('*') may grant
+ * anything; a target role carrying '*' may only be granted by an admin.
+ */
+async function canAssignRole(actorUsername: string, roleId: string): Promise<boolean> {
+  const ownerPerms = await getUserPermissions(actorUsername);
+  if ((ownerPerms as string[]).includes('*')) return true;
+  const targetPerms = await getRolePermissions(roleId);
+  if ((targetPerms as string[]).includes('*')) return false;
+  return (targetPerms as string[]).every(p => (ownerPerms as string[]).includes(p));
+}
 
 // SECURITY: Rate limiting for authentication endpoints
 const loginLimiter = rateLimit({
@@ -127,7 +142,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     const accessToken = await createAccessToken(username);
     const refreshToken = await createRefreshToken(username);
 
-    setRefreshCookie(res, refreshToken);
+    setRefreshCookie(res, refreshToken, req);
     res.json({
       access_token: accessToken,
       refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
@@ -181,7 +196,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   const refreshToken = await createRefreshToken(username);
   const permissions = await getUserPermissions(username);
 
-  setRefreshCookie(res, refreshToken);
+  setRefreshCookie(res, refreshToken, req);
   audit(req, 'auth.login_success', { actor: username });
   publish('auth.login_success', { username });
   authLogins.inc({ result: 'success' });
@@ -321,7 +336,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
     const newRefreshToken = await createRefreshToken(result.username);
     const permissions = isAdmin ? ['*'] : ['server.view_status', 'players.view', 'console.view', 'performance.view', 'backups.view', 'scheduler.view', 'mods.view', 'plugins.view', 'worlds.view', 'chat.view', 'activity.view'];
 
-    setRefreshCookie(res, newRefreshToken);
+    setRefreshCookie(res, newRefreshToken, req);
     res.json({
       access_token: accessToken,
       refresh_token: newRefreshToken,
@@ -336,7 +351,7 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   const accessToken = await createAccessToken(result.username);
   const newRefreshToken = await createRefreshToken(result.username);
 
-  setRefreshCookie(res, newRefreshToken);
+  setRefreshCookie(res, newRefreshToken, req);
   res.json({
     access_token: accessToken,
     refresh_token: newRefreshToken,
@@ -351,7 +366,7 @@ router.post('/logout', authMiddleware, async (req: Request, res: Response) => {
   if (authReq.user) {
     await invalidateUserTokens(authReq.user);
   }
-  clearRefreshCookie(res);
+  clearRefreshCookie(res, req);
   res.json({ message: 'Logged out successfully' });
 });
 
@@ -448,7 +463,15 @@ router.post('/users', authMiddleware, requirePermission('users.create'), async (
       return;
     }
 
-    const user = await createUser(username, password, roleId || 'viewer');
+    // SECURITY: prevent privilege escalation — a creator can't mint a user with
+    // a role more powerful than their own (e.g. a users.create holder making an admin).
+    const targetRole = roleId || 'viewer';
+    if (!(await canAssignRole(req.user!, targetRole))) {
+      res.status(403).json({ error: 'Cannot assign a role with more permissions than your own' });
+      return;
+    }
+
+    const user = await createUser(username, password, targetRole);
     res.json({ success: true, user });
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -475,6 +498,13 @@ router.put('/users/:username', authMiddleware, requirePermission('users.edit'), 
     // Prevent users from changing their own role (security)
     if (roleId && username === req.user) {
       res.status(400).json({ error: 'Cannot change your own role' });
+      return;
+    }
+
+    // SECURITY: same subset guard as user creation — no escalating another
+    // account into a role beyond the actor's own permissions.
+    if (roleId && !(await canAssignRole(req.user!, roleId))) {
+      res.status(403).json({ error: 'Cannot assign a role with more permissions than your own' });
       return;
     }
 

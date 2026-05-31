@@ -29,8 +29,9 @@ import { getDefaultId, getServer } from './servers.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Plugin version (should match the built JAR version)
-export const PLUGIN_VERSION = '1.2.2';
+// Plugin version (should match the built JAR version in
+// manager/backend/assets/plugins/ and plugins/kyuubisoft-api/build.gradle).
+export const PLUGIN_VERSION = '1.4.0';
 // Legacy default plugin port. Kept exported for back-compat with callers
 // that read this constant directly (e.g. configService snapshots, status
 // fallbacks). Per-server callers should use `resolvePluginEndpoint(serverId)`
@@ -316,10 +317,16 @@ export async function postToPlugin<T>(endpoint: string, body?: unknown, serverId
     clearTimeout(timeoutId);
 
     const data = await response.json() as Record<string, unknown>;
+    // The plugin replies HTTP 200 with a JSON body {success, message|data, error}.
+    // Older code keyed success solely on response.ok, so an action the plugin
+    // declined (body success:false) was reported as a success — and the route's
+    // console-command fallback was silently skipped, making the action a no-op.
+    // Respect the body's success flag so failures correctly fall through.
+    const bodySuccess = typeof data.success === 'boolean' ? (data.success as boolean) : response.ok;
     return {
-      success: response.ok,
+      success: response.ok && bodySuccess,
       data: data.data as T,
-      error: data.error as string | undefined,
+      error: (data.error ?? data.message) as string | undefined,
     };
   } catch (error) {
     return {
@@ -442,6 +449,13 @@ export async function healPlayerViaPlugin(playerName: string, serverId?: string)
  */
 export async function clearInventoryViaPlugin(playerName: string, serverId?: string): Promise<PluginApiResponse> {
   return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/inventory/clear`, undefined, serverId);
+}
+
+/**
+ * Give an item to a player via the plugin API
+ */
+export async function givePlayerViaPlugin(playerName: string, item: string, amount: number | undefined, serverId?: string): Promise<PluginApiResponse> {
+  return postToPlugin(`/api/players/${encodeURIComponent(playerName)}/give`, { item, amount }, serverId);
 }
 
 /**

@@ -161,8 +161,12 @@ export function setupWebSocket(wss: WebSocketServer): void {
           case 'command':
             if (message.payload) {
               const wsUsername = clientUsernames.get(ws);
+              const wsServerId = clientServerId.get(ws);
               const requiredPerm = getCommandRequiredPermission(message.payload) ?? 'console.execute';
-              if (!wsUsername || !(await hasPermission(wsUsername, requiredPerm))) {
+              // Authorize against the SAME server the command will run on, so a
+              // per-server operator role is honoured (global scope alone would
+              // wrongly reject it).
+              if (!wsUsername || !(await hasPermission(wsUsername, requiredPerm, wsServerId))) {
                 ws.send(JSON.stringify({
                   type: 'command_response',
                   command: message.payload,
@@ -172,7 +176,6 @@ export function setupWebSocket(wss: WebSocketServer): void {
                 break;
               }
 
-              const wsServerId = clientServerId.get(ws);
               const result = await execCommand(message.payload, wsServerId);
               ws.send(JSON.stringify({
                 type: 'command_response',

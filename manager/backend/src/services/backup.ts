@@ -275,47 +275,84 @@ export function restoreBackup(backupId: string, serverId?: string): Promise<Acti
       return { success: false, error: 'Invalid backup path' };
     }
 
-    try {
-      // Create a pre-restore backup. We can't call createBackup() here because
-      // it would deadlock on the lock we already hold — inline the tar instead.
+    const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
+    // Stage temp + sidelined dirs NEXT TO paths.data so the final swap is an
+    // atomic same-filesystem rename. (The old code staged under paths.backups,
+    // which is often a different mount → cross-device rename.) safeMove falls
+    // back to copy+remove on EXDEV regardless.
+    const dataParent = path.dirname(paths.data);
+    const tempDir = path.join(dataParent, `_restore_temp_${ts}`);
+    const oldDir = path.join(dataParent, `_restore_old_${ts}`);
+
+    // Move src→dst atomically when possible, else copy across devices.
+    const safeMove = (src: string, dst: string): void => {
       try {
-        const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
-        const preFile = path.join(paths.backups, `manual_pre_restore_${ts}.tar.gz`);
-        if (isPathSafe(preFile, [paths.backups])) {
-          execSync(`tar -czf '${preFile}' -C '${paths.data}' .`, {
-            timeout: 1800000,
-            maxBuffer: 1024 * 1024 * 10,
-          });
+        fs.renameSync(src, dst);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'EXDEV') {
+          fs.cpSync(src, dst, { recursive: true });
+          fs.rmSync(src, { recursive: true, force: true });
+        } else {
+          throw err;
         }
+      }
+    };
+
+    try {
+      // MANDATORY pre-restore backup. We can't call createBackup() here (it would
+      // deadlock on the lock we already hold) so inline the tar. If this fails we
+      // ABORT — proceeding would risk leaving no way back if the restore breaks.
+      const preFile = path.join(paths.backups, `manual_pre_restore_${ts}.tar.gz`);
+      if (!isPathSafe(preFile, [paths.backups])) {
+        return { success: false, error: 'Could not compute a safe pre-restore backup path' };
+      }
+      try {
+        execSync(`tar -czf '${preFile}' -C '${paths.data}' .`, { timeout: 1800000, maxBuffer: 1024 * 1024 * 10 });
       } catch (preErr) {
-        console.warn('[Backup] Pre-restore backup failed, continuing:', preErr instanceof Error ? preErr.message : preErr);
+        return {
+          success: false,
+          error: `Aborted: pre-restore safety backup failed (${preErr instanceof Error ? preErr.message : 'unknown'}). No data was changed.`,
+        };
       }
 
-      // Create temp directory
-      const tempDir = path.join(paths.backups, '_restore_temp');
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true });
-      }
+      // Extract the backup into a temp dir.
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       fs.mkdirSync(tempDir, { recursive: true });
+      execSync(`tar -xzf '${filePath}' -C '${tempDir}'`, { timeout: 1800000, maxBuffer: 1024 * 1024 * 10 });
 
-      // Extract backup (paths are validated, using single quotes for safety)
-      // Timeout increased to 30 minutes for large backups (1GB+)
-      execSync(`tar -xzf '${filePath}' -C '${tempDir}'`, {
-        timeout: 1800000, // 30 minutes
-        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
-      });
-
-      // Clear current data and move restored data
+      // Swap WITHOUT a destructive delete first: move current data aside, move
+      // the restored data in, and only then drop the sidelined copy. If the
+      // swap fails midway the original data is rolled back into place.
+      let movedAside = false;
       if (fs.existsSync(paths.data)) {
-        fs.rmSync(paths.data, { recursive: true });
+        safeMove(paths.data, oldDir);
+        movedAside = true;
       }
-      fs.renameSync(tempDir, paths.data);
+      try {
+        safeMove(tempDir, paths.data);
+      } catch (swapErr) {
+        // Roll back: restore the original data so a failed swap isn't data loss.
+        if (movedAside && !fs.existsSync(paths.data)) {
+          try { safeMove(oldDir, paths.data); } catch { /* leave oldDir for manual recovery */ }
+        }
+        return {
+          success: false,
+          error: `Restore failed during swap; original data preserved (${swapErr instanceof Error ? swapErr.message : 'unknown'}).`,
+        };
+      }
+
+      // Success — discard the sidelined original.
+      if (movedAside) {
+        try { fs.rmSync(oldDir, { recursive: true, force: true }); } catch { /* non-fatal leftover */ }
+      }
 
       return {
         success: true,
         message: `Restored from backup ${backupId}. Server restart required.`,
       };
     } catch (error) {
+      // Best-effort cleanup of the temp dir on any failure before the swap.
+      try { if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
       return { success: false, error: error instanceof Error ? error.message : 'Restore failed' };
     }
   });

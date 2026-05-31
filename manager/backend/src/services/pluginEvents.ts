@@ -90,6 +90,28 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
       publishPanelEvent('player.left', { player: event.player, uuid: event.uuid }, serverId);
       break;
 
+    case 'player_position':
+      // High-frequency (every ~2 s/player) — feed the live-map/replay buffer via
+      // the raw plugin-signal bus. Not logged to avoid flooding stdout. The
+      // consumer (services/playerLocations.ts) keys on playerName/uuid/x/y/z.
+      eventBus.publish('player_position', {
+        playerName: event.player,
+        uuid: event.uuid,
+        x: event.x,
+        y: event.y,
+        z: event.z,
+        world: event.world ?? undefined,
+        yaw: event.yaw ?? undefined,
+        pitch: event.pitch ?? undefined,
+        latencyMs: event.latencyMs ?? undefined,
+        serverId,
+      });
+      break;
+
+    case 'tps_update':
+      eventBus.publish('server_tick', { tps: event.tps, mspt: event.mspt, serverId });
+      break;
+
     default:
       console.log(`[Plugin Event:${serverId}] Unknown event type: ${(event as PluginEvent).type}`);
   }

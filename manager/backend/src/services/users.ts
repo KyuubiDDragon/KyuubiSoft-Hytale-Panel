@@ -35,6 +35,12 @@ export interface User {
   tokenVersion: number;
 }
 
+// A valid bcrypt hash compared against when the supplied username doesn't
+// exist, so "no such user" costs the same time as "wrong password". Without
+// this, a missing account returns instantly (no bcrypt) and leaks via timing
+// which usernames are valid. Computed once at startup.
+const TIMING_DUMMY_HASH = bcrypt.hashSync('timing-equalizer-not-a-real-password', 12);
+
 // Track deleted users for session-based invalidation
 const invalidatedUsers = new Set<string>();
 
@@ -190,6 +196,9 @@ export async function verifyUserCredentials(username: string, password: string):
 
   const user = await getUser(username);
   if (!user) {
+    // Constant-time: still run a bcrypt comparison so a missing account is
+    // indistinguishable from a wrong password by response timing.
+    await bcrypt.compare(password, TIMING_DUMMY_HASH);
     return null;
   }
   const isValid = await bcrypt.compare(password, user.passwordHash);
