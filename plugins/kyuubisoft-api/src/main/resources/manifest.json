@@ -1,8 +1,8 @@
 {
   "Group": "KyuubiDDragon",
   "Name": "KyuubiSoftAPI",
-  "Version": "1.3.0",
-  "Description": "REST API for KyuubiSoft Panel - provides player data, server stats, real-time events (incl. periodic player_position), and Prometheus metrics",
+  "Version": "1.4.0",
+  "Description": "REST API for KyuubiSoft Panel - player data (real health/gamemode), server stats (real TPS), player actions (heal/kill/teleport/gamemode/clear-inventory via in-process commands), real-time events (incl. periodic player_position with real ping), and Prometheus metrics. Built against the Hytale 2026-05 server API.",
   "Author": "KyuubiDDragon",
   "Main": "com.kyuubisoft.api.KyuubiSoftAPI",
   "Dependencies": {},

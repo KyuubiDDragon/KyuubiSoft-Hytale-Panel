@@ -1,5 +1,8 @@
 package com.kyuubisoft.api.metrics;
 
+import com.hypixel.hytale.server.core.universe.Universe;
+import com.hypixel.hytale.server.core.universe.world.World;
+
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -9,6 +12,11 @@ import java.util.logging.Logger;
 /**
  * Tracks TPS (Ticks Per Second) and MSPT (Milliseconds Per Tick) over time.
  * Provides current, average, min, and max values over a rolling window.
+ *
+ * <p><b>Hytale 2026-05:</b> TPS is now derived from the real simulation tick
+ * counter ({@link World#getTick()}) sampled once per second, instead of the
+ * old {@code onTick()} hook that was never wired into the server loop (and thus
+ * always reported the idle default of 20).</p>
  */
 public class TpsTracker {
 
@@ -33,6 +41,8 @@ public class TpsTracker {
     // Tracking tick timing
     private long lastMeasurementTime;
     private long ticksSinceLastMeasurement = 0;
+    // Real simulation tick counter sampled from World.getTick(); -1 until first read.
+    private long lastWorldTick = -1;
 
     public TpsTracker() {
         instance = this;
@@ -97,22 +107,27 @@ public class TpsTracker {
             long elapsed = now - lastMeasurementTime;
             lastMeasurementTime = now;
 
-            // Calculate TPS based on ticks in the last second
+            // Read the real simulation tick counter from the server.
+            long worldTick = readWorldTick();
+            long deltaTicks = (lastWorldTick >= 0 && worldTick >= lastWorldTick)
+                    ? worldTick - lastWorldTick : -1;
+            lastWorldTick = worldTick;
+
             double tps;
             double mspt;
 
-            if (elapsed > 0 && ticksSinceLastMeasurement > 0) {
-                // Ticks per second = ticks / (elapsed ms / 1000)
-                tps = Math.min(TARGET_TPS, (ticksSinceLastMeasurement * 1000.0) / elapsed);
-                // MSPT = elapsed time / ticks
-                mspt = (double) elapsed / ticksSinceLastMeasurement;
+            if (elapsed > 0 && deltaTicks >= 0) {
+                // Ticks per second over the sample interval, capped at the target.
+                tps = Math.min(TARGET_TPS, (deltaTicks * 1000.0) / elapsed);
+                // MSPT = elapsed time / ticks (full interval if the world stalled).
+                mspt = deltaTicks > 0 ? (double) elapsed / deltaTicks : (double) elapsed;
             } else {
-                // No ticks occurred, estimate from current values
+                // World not ready yet (startup) — hold the target until ticks flow.
                 tps = currentTps.get();
                 mspt = currentMspt.get();
             }
 
-            // Reset tick counter
+            // Reset legacy tick counter (kept for the dormant onTick() hook).
             ticksSinceLastMeasurement = 0;
 
             // Store in rolling window
@@ -129,6 +144,23 @@ public class TpsTracker {
 
         } catch (Exception e) {
             LOGGER.warning("Error sampling TPS: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Read the default world's current simulation tick. Returns the previous
+     * sample (no progress) if the universe/world isn't ready, so a startup race
+     * doesn't register as a lag spike.
+     */
+    private long readWorldTick() {
+        try {
+            Universe universe = Universe.get();
+            if (universe == null) return lastWorldTick;
+            World world = universe.getDefaultWorld();
+            if (world == null) return lastWorldTick;
+            return world.getTick();
+        } catch (Throwable t) {
+            return lastWorldTick;
         }
     }
 
