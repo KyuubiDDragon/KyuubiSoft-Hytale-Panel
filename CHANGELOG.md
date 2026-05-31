@@ -2,6 +2,26 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [3.0.0-alpha] - 2026-05-31 - Platform standards, Hytale-API plugin & system review
+
+### Platform features (shipped; previously tracked as "V3 roadmap")
+
+- **2FA / TOTP** with single-use backup codes, **REST API keys** with scopes, **Audit log** (SQLite), **Webhook engine** (Discord/Slack/generic, retried delivery), **Notifications center**, **OIDC/SSO** (Discord), **File manager** (Monaco), **Multi-server registry** with per-server scoping, **Live player map**, **Replay recorder**, **Auto-Wiki**, **Prometheus metrics**.
+
+### New in this release
+
+- **Watchdog**: detects unexpected server stops (crashes), optional auto-restart with a crash-loop guard (`WATCHDOG_AUTO_RESTART`), and memory-threshold alerts — all via the EventBus (webhooks/notifications).
+- **Punishment history**: durable SQLite record of bans/kicks/mutes; **temp-bans / temp-mutes** with automatic expiry; per-player history API.
+- **Event-Action engine**: bind console commands / announcements / backups to panel events (e.g. broadcast on `player.joined`, backup on `server.crashed`).
+- **Public status page** (`/status`, `/api/public/status`): opt-in, unauthenticated read-only server status.
+- **Live player list** now sourced from the KyuubiSoft plugin API when available (log-scraping is the fallback).
+- **KyuubiSoft API plugin v1.4.0**: rebuilt against the 2026-05 Hytale server API (older builds no longer compiled); native player actions, real TPS/health/gamemode, real ping, bearer-auth + CORS.
+
+### Security & correctness (system review 2026-05; see `docs/SYSTEM_REVIEW_2026-05.md`)
+
+- Setup router sealed after completion; HTTP console enforces per-command permission + whitelist; SSO no longer leaks tokens in the URL; webhook delivery re-checks resolved IPs (SSRF/DNS-rebind); WS command auth is server-scoped; TOTP replay protection; constant-time login; user-create role-subset guard; API keys bound to current owner rights; restore is non-destructive with rollback; multi-server `serverId` threaded through player/console actions.
+- Build/tooling: `vue-tsc` upgraded to 2.x (the 1.x line crashed on TS 5.x, so the frontend had never been type-checked); Docker images build from lockfiles via `npm ci`; healthcheck is `SERVER_JAR`-aware; manager `depends_on: service_started` (fixes a fresh-install chicken-and-egg).
+
 ## [2.2.0] - 2026-05-19 - Security, Robustness & Hytale Early Access Alignment
 
 ### Existing-installation support

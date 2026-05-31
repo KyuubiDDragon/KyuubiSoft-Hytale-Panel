@@ -1,8 +1,15 @@
 # Hytale Panel — V3 Roadmap
 
-> **Status:** Konzept-Dokument, Stand 19.05.2026
-> **Bezugsbranch:** `claude/system-review-improvements-XIOIT` (Basis V2.2)
-> **Zielgruppe:** Maintainer + Contributor, die wissen wollen, **wohin sich das Panel entwickelt und warum**.
+> ⚠️ **HISTORISCHES PLANUNGSDOKUMENT (Stand 19.05.2026).** Ein Großteil der hier
+> als „Zukunft" beschriebenen V2.5/V3.0-Arbeit ist **inzwischen ausgeliefert**:
+> 2FA/TOTP, REST-API-Keys, Audit-Log, Webhook-Engine, Notifications, OIDC/SSO,
+> File-Manager (Monaco), Multi-Server-Registry, Live-Player-Map, Replay und
+> Auto-Wiki sind implementiert und in `manager/backend/src/index.ts` gemountet;
+> CI, Husky und Vitest existieren. Dieses Dokument **nicht** mehr als TODO lesen
+> — Ist-Stand siehe `CHANGELOG.md` und `docs/SYSTEM_REVIEW_2026-05.md`.
+>
+> **Bezugsbranch:** `claude/system-review-improvements-XIOIT`
+> **Zielgruppe:** Maintainer + Contributor, die die ursprüngliche Planung nachvollziehen wollen.
 
 ---
 

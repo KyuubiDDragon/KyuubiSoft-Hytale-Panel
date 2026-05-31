@@ -10,6 +10,9 @@
     "build:frontend": "npm --prefix manager/frontend run build",
     "build": "npm run build:backend && npm run build:frontend"
   },
+  "engines": {
+    "node": ">=20 <21"
+  },
   "devDependencies": {
     "husky": "^9.1.6"
   }

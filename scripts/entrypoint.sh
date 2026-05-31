@@ -40,6 +40,12 @@ umask 002
 # Ensure updater directory exists with correct permissions.
 # It is bind-mounted from the host and may be created as root by Docker on first run.
 mkdir -p /opt/hytale/server/updater
+# The prefabs volume is bind-mounted at /opt/hytale/prefabs, but the server
+# looks for them under server/prefabs. Symlink it so the mount is actually used
+# (no-op when the volume isn't mounted).
+if [ -d /opt/hytale/prefabs ]; then
+    ln -snf /opt/hytale/prefabs /opt/hytale/server/prefabs
+fi
 chown -R hytale:hytale /opt/hytale
 # Make existing files group-writable for manager container
 chmod -R g+rw /opt/hytale 2>/dev/null || true

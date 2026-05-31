@@ -1,6 +1,10 @@
 # V3 API Cheatsheet
 
-> Alle in [V3_ROADMAP.md](./V3_ROADMAP.md) genannten neuen Endpoints + Datenmodelle in einer Übersicht. Für Entwickler, die schnell wissen wollen: *„Welche Routen muss ich anlegen?"*
+> ⚠️ **HISTORISCH.** Die meisten hier als „anzulegen" beschriebenen Routen
+> **existieren bereits** (siehe `manager/backend/src/routes/`). Dieses
+> Cheatsheet dokumentiert die ursprüngliche Planung, nicht den Ist-Stand.
+>
+> Alle in [V3_ROADMAP.md](./V3_ROADMAP.md) genannten neuen Endpoints + Datenmodelle in einer Übersicht.
 
 ---
 

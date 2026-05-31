@@ -27,6 +27,11 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: TypeScript build
         run: npx tsc --noEmit
+      # ESLint reports a pre-existing backlog; non-blocking so the build stays
+      # green while it's burned down. Flip to blocking once it reaches zero.
+      - name: Lint (eslint, non-blocking)
+        run: npm run lint
+        continue-on-error: true
       - name: Vitest (if any)
         run: npx vitest run --passWithNoTests
 
@@ -39,6 +44,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20', cache: 'npm', cache-dependency-path: manager/frontend/package-lock.json }
       - run: npm ci --no-audit --no-fund
+      # Frontend type-check (vue-tsc 2.x). The pre-existing backlog has been
+      # cleared, so this is now a blocking gate — keep it green.
+      - name: Type check (vue-tsc)
+        run: npm run type-check
+      # ESLint (vue3-essential) — non-blocking pre-existing backlog.
+      - name: Lint (eslint, non-blocking)
+        run: npm run lint
+        continue-on-error: true
       - name: Vite build
         run: npx vite build
 

@@ -194,7 +194,18 @@ services:
       - "${MANAGER_PORT:-18080}:18080"
 
     volumes:
-      # Docker socket for container management
+      # Docker socket for container management.
+      #
+      # SECURITY: the `:ro` flag does NOT restrict the Docker API — anything that
+      # can reach this socket can fully control the host's Docker daemon (create
+      # privileged containers, read every secret, escape to the host). Mounting
+      # it directly is the single largest attack surface of this stack.
+      #
+      # HARDENING (recommended for internet-exposed panels): route Docker calls
+      # through the locked-down `docker-socket-proxy` service defined at the
+      # bottom of this file. Comment OUT the line below, uncomment that service,
+      # and add `DOCKER_HOST=tcp://docker-socket-proxy:2375` to this service's
+      # environment. The panel then only reaches the few endpoints it needs.
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
       # Shared volumes with game server (HOST_DATA_PATH -> /opt/hytale im Container)
@@ -216,11 +227,15 @@ services:
     networks:
       - internal-net
 
-    # Wait for the game container's healthcheck before booting the manager,
-    # so the manager never tries to talk to a half-started server.
+    # Start the manager as soon as the game container has STARTED, not once it
+    # is "healthy". On a fresh install there is no server JAR yet, so the game
+    # container can never become healthy until the setup wizard (served BY the
+    # manager) downloads it — gating on service_healthy is a chicken-and-egg
+    # that leaves the panel unreachable. The manager already tolerates a
+    # down/half-started server, so service_started is the correct dependency.
     depends_on:
       hytale:
-        condition: service_healthy
+        condition: service_started
 
     # Logging
     logging:
@@ -252,6 +267,66 @@ services:
       - SETUID           # Required for switching to manager user
       - SETGID           # Required for switching to manager group
       - DAC_OVERRIDE     # Required for chmod on bind-mounted volumes (files owned by other UIDs)
+
+  # ============================================================
+  # OPTIONAL: Docker Socket Proxy (security hardening)
+  # ============================================================
+  # Uncomment this service to stop exposing the raw Docker socket to the
+  # manager. It is the only container that touches /var/run/docker.sock and
+  # forwards just the endpoints the panel needs over a private TCP socket;
+  # every write/admin endpoint is denied (0 = blocked, 1 = allowed).
+  #
+  # To enable:
+  #   1. Uncomment this whole `docker-socket-proxy` block.
+  #   2. In the `manager` service above, comment out the docker.sock volume
+  #      mount and add to its environment:
+  #          - DOCKER_HOST=tcp://docker-socket-proxy:2375
+  #   3. Re-create the stack: `docker compose up -d`.
+  #
+  # docker-socket-proxy:
+  #   image: tecnativa/docker-socket-proxy:0.3.0
+  #   container_name: ${STACK_NAME:-hytale}-docker-proxy
+  #   restart: unless-stopped
+  #   environment:
+  #     # --- Allowed (what the panel actually uses) ---
+  #     - CONTAINERS=1        # list/inspect containers + stats
+  #     - POST=1              # required for start/stop/restart/exec
+  #     - EXEC=1              # console command execution via docker exec
+  #     - START=1
+  #     - STOP=1
+  #     - RESTART=1
+  #     - INFO=1              # system-check "Docker Socket" probe (docker.info())
+  #     - VERSION=1
+  #     - IMAGES=1            # multi-server: create containers from the built image
+  #     - NETWORKS=1          # multi-server: attach to the stack network
+  #     # --- Denied (everything dangerous stays 0) ---
+  #     - VOLUMES=0
+  #     - SECRETS=0
+  #     - CONFIGS=0
+  #     - SWARM=0
+  #     - NODES=0
+  #     - SERVICES=0
+  #     - TASKS=0
+  #     - PLUGINS=0
+  #     - SYSTEM=0
+  #     - AUTH=0
+  #     - BUILD=0
+  #     - COMMIT=0
+  #     - DISTRIBUTION=0
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   networks:
+  #     - internal-net
+  #   security_opt:
+  #     - no-new-privileges:true
+  #   read_only: true
+  #   tmpfs:
+  #     - /run
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.25'
+  #         memory: 64M
 
 # ============================================================
 # Networks

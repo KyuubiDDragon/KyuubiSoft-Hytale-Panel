@@ -8,11 +8,9 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy package files
-COPY frontend/package.json ./
-
-# Install dependencies
-RUN npm install
+# Copy manifest + lockfile and install from the lockfile for reproducible builds.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
 # Copy frontend source
 COPY frontend/ ./
@@ -29,11 +27,9 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app/backend
 
-# Copy package files
-COPY backend/package.json ./
-
-# Install dependencies (including dev for build)
-RUN npm install
+# Copy manifest + lockfile and install from the lockfile (dev deps included for build).
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci
 
 # Copy backend source
 COPY backend/ ./
@@ -62,9 +58,9 @@ WORKDIR /app
 # bcrypt native binding needs the build toolchain at install time
 RUN apk add --no-cache --virtual .build-deps python3 make g++
 
-# Copy package files and install production dependencies only
-COPY backend/package.json ./
-RUN npm install --omit=dev && npm cache clean --force \
+# Copy manifest + lockfile and install production dependencies only, from the lockfile.
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force \
     && apk del .build-deps
 
 # Copy built backend from builder
