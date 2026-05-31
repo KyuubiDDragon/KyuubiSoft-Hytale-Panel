@@ -890,6 +890,27 @@
     "resume": "Fortsetzen"
   },
   "settings": {
+    "integrations": {
+      "title": "Integrationen / API-Keys",
+      "desc": "Hinterlege API-Keys von Drittanbietern hier statt in den Umgebungsvariablen. Hier gespeicherte Keys liegen in der Panel-Konfiguration und werden sofort aktiv — kein Neustart nötig.",
+      "loadFailed": "Integrationseinstellungen konnten nicht geladen werden",
+      "saveFailed": "Integrationseinstellungen konnten nicht gespeichert werden",
+      "saved": "Integrationseinstellungen gespeichert",
+      "nothingToSave": "Gib einen neuen Wert ein, bevor du speicherst",
+      "statusUnset": "Nicht konfiguriert",
+      "statusEnv": "Über Umgebungsvariable gesetzt ({hint})",
+      "statusConfig": "Konfiguriert ({hint})",
+      "curseforgeKey": "CurseForge API-Key",
+      "curseforgeGetKey": "CurseForge API-Key erstellen",
+      "curseforgeGameId": "CurseForge Game-ID",
+      "curseforgeGameIdHint": "Hytale ist 70216. Nur ändern, wenn du weißt, was du tust.",
+      "modtaleKey": "Modtale API-Key",
+      "stackmartKey": "StackMart API-Key",
+      "placeholderSet": "Neuen Key eingeben, um den aktuellen zu ersetzen",
+      "placeholderEmpty": "API-Key einfügen…",
+      "clear": "Löschen",
+      "envNote": "Leer lassen, um den aktuellen Wert zu behalten. Beim Löschen wird auf die Umgebungsvariable zurückgegriffen, falls gesetzt."
+    },
     "title": "Einstellungen",
     "language": "Sprache",
     "german": "Deutsch",

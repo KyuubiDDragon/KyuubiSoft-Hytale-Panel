@@ -765,6 +765,27 @@
     "resume": "Retomar"
   },
   "settings": {
+    "integrations": {
+      "title": "Chaves de API / Integrações",
+      "desc": "Armazene chaves de API de terceiros aqui em vez de variáveis de ambiente. As chaves salvas aqui ficam na configuração do painel e entram em vigor imediatamente — sem reiniciar.",
+      "loadFailed": "Falha ao carregar as configurações de integração",
+      "saveFailed": "Falha ao salvar as configurações de integração",
+      "saved": "Configurações de integração salvas",
+      "nothingToSave": "Insira um novo valor antes de salvar",
+      "statusUnset": "Não configurado",
+      "statusEnv": "Definido via ambiente ({hint})",
+      "statusConfig": "Configurado ({hint})",
+      "curseforgeKey": "Chave de API do CurseForge",
+      "curseforgeGetKey": "Obter uma chave de API do CurseForge",
+      "curseforgeGameId": "ID do jogo no CurseForge",
+      "curseforgeGameIdHint": "Hytale é 70216. Altere apenas se souber o que está fazendo.",
+      "modtaleKey": "Chave de API do Modtale",
+      "stackmartKey": "Chave de API do StackMart",
+      "placeholderSet": "Digite uma nova chave para substituir a atual",
+      "placeholderEmpty": "Cole sua chave de API…",
+      "clear": "Limpar",
+      "envNote": "Deixe em branco para manter o valor atual. Limpar uma chave recorre à variável de ambiente, se houver."
+    },
     "title": "Configurações",
     "language": "Idioma",
     "german": "Deutsch",

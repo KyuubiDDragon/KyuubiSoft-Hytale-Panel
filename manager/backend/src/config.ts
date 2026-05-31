@@ -120,6 +120,11 @@ const modtaleApiKeyFromConfig = configJson?.integrations?.modtaleApiKey;
 const modtaleApiKeyFromEnv = process.env.MODTALE_API_KEY || '';
 const effectiveModtaleApiKey = modtaleApiKeyFromConfig || modtaleApiKeyFromEnv;
 
+// Determine StackMart API key: prefer config.json, then env
+const stackmartApiKeyFromConfig = configJson?.integrations?.stackmartApiKey;
+const stackmartApiKeyFromEnv = process.env.STACKMART_API_KEY || '';
+const effectiveStackmartApiKey = stackmartApiKeyFromConfig || stackmartApiKeyFromEnv;
+
 // Determine CurseForge API key: prefer config.json, then env
 const curseforgeApiKeyFromConfig = configJson?.integrations?.curseforgeApiKey;
 const curseforgeApiKeyFromEnv = process.env.CURSEFORGE_API_KEY || '';
@@ -155,6 +160,9 @@ export const config = {
 
   // Modtale Integration - from config.json if available, otherwise from env
   modtaleApiKey: effectiveModtaleApiKey,
+
+  // StackMart Integration - from config.json if available, otherwise from env
+  stackmartApiKey: effectiveStackmartApiKey,
 
   // CurseForge Integration - from config.json if available, otherwise from env
   curseforgeApiKey: effectiveCurseforgeApiKey,
@@ -258,6 +266,9 @@ export function reloadConfigFromFile(): void {
       }
       if (newConfigJson.integrations?.modtaleApiKey !== undefined) {
         (config as { modtaleApiKey: string }).modtaleApiKey = newConfigJson.integrations.modtaleApiKey;
+      }
+      if (newConfigJson.integrations?.stackmartApiKey !== undefined) {
+        (config as { stackmartApiKey: string }).stackmartApiKey = newConfigJson.integrations.stackmartApiKey;
       }
       if (newConfigJson.integrations?.curseforgeApiKey !== undefined) {
         (config as { curseforgeApiKey: string }).curseforgeApiKey = newConfigJson.integrations.curseforgeApiKey;

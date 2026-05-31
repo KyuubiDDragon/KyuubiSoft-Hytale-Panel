@@ -7,6 +7,7 @@ import Card from '@/components/ui/Card.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse } from '@/api/server'
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
+import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate } from '@/api/settings'
 import { useToast } from '@/composables/useToast'
 
 const { t } = useI18n()
@@ -60,9 +61,99 @@ const allowOpError = ref<string | null>(null)
 const allowOpSuccess = ref<string | null>(null)
 const allowOpNeedsRestart = ref(false)
 
+// Integration API keys (CurseForge / Modtale / StackMart)
+const canEditIntegrations = computed(() => authStore.hasPermission('settings.edit'))
+const integrations = ref<IntegrationsStatus | null>(null)
+const integrationsLoading = ref(false)
+const integrationsSaving = ref(false)
+const integrationsError = ref<string | null>(null)
+const integrationsSuccess = ref<string | null>(null)
+// Form holds NEW values the user types. Empty string = leave unchanged.
+const integrationsForm = ref({
+  curseforgeApiKey: '',
+  curseforgeGameId: '' as number | '',
+  modtaleApiKey: '',
+  stackmartApiKey: '',
+})
+
 function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
   currentLocale.value = locale
+}
+
+async function loadIntegrations() {
+  try {
+    integrationsLoading.value = true
+    integrationsError.value = null
+    integrations.value = await settingsApi.getIntegrations()
+    // Pre-fill the (non-secret) game id so the user sees the current value.
+    integrationsForm.value.curseforgeGameId = integrations.value.curseforge.gameId
+  } catch (e) {
+    integrationsError.value = t('settings.integrations.loadFailed')
+  } finally {
+    integrationsLoading.value = false
+  }
+}
+
+async function saveIntegrations() {
+  try {
+    integrationsSaving.value = true
+    integrationsError.value = null
+    integrationsSuccess.value = null
+
+    // Only send fields the user actually changed. Empty secret inputs are
+    // omitted so we never overwrite an existing key with a blank.
+    const payload: IntegrationsUpdate = {}
+    if (integrationsForm.value.curseforgeApiKey.trim()) payload.curseforgeApiKey = integrationsForm.value.curseforgeApiKey.trim()
+    if (integrationsForm.value.modtaleApiKey.trim()) payload.modtaleApiKey = integrationsForm.value.modtaleApiKey.trim()
+    if (integrationsForm.value.stackmartApiKey.trim()) payload.stackmartApiKey = integrationsForm.value.stackmartApiKey.trim()
+    const gameId = integrationsForm.value.curseforgeGameId
+    if (typeof gameId === 'number' && gameId > 0 && gameId !== integrations.value?.curseforge.gameId) {
+      payload.curseforgeGameId = gameId
+    }
+
+    if (Object.keys(payload).length === 0) {
+      integrationsError.value = t('settings.integrations.nothingToSave')
+      return
+    }
+
+    const result = await settingsApi.saveIntegrations(payload)
+    integrations.value = result.data
+    // Clear secret inputs after a successful save; keep the game id visible.
+    integrationsForm.value.curseforgeApiKey = ''
+    integrationsForm.value.modtaleApiKey = ''
+    integrationsForm.value.stackmartApiKey = ''
+    integrationsForm.value.curseforgeGameId = result.data.curseforge.gameId
+    integrationsSuccess.value = t('settings.integrations.saved')
+    setTimeout(() => { integrationsSuccess.value = null }, 3000)
+  } catch (e) {
+    integrationsError.value = t('settings.integrations.saveFailed')
+  } finally {
+    integrationsSaving.value = false
+  }
+}
+
+// Clear a stored secret (reverts to the env var fallback if one is set).
+async function clearIntegration(field: 'curseforgeApiKey' | 'modtaleApiKey' | 'stackmartApiKey') {
+  try {
+    integrationsSaving.value = true
+    integrationsError.value = null
+    integrationsSuccess.value = null
+    const result = await settingsApi.saveIntegrations({ [field]: '' })
+    integrations.value = result.data
+    integrationsSuccess.value = t('settings.integrations.saved')
+    setTimeout(() => { integrationsSuccess.value = null }, 3000)
+  } catch (e) {
+    integrationsError.value = t('settings.integrations.saveFailed')
+  } finally {
+    integrationsSaving.value = false
+  }
+}
+
+function integrationStatusLabel(s: { configured: boolean; source: string; masked: string | null } | undefined): string {
+  if (!s || !s.configured) return t('settings.integrations.statusUnset')
+  if (s.source === 'env') return t('settings.integrations.statusEnv', { hint: s.masked })
+  return t('settings.integrations.statusConfig', { hint: s.masked })
 }
 
 async function loadConfigFiles() {
@@ -446,6 +537,11 @@ onMounted(() => {
   // Only load config files if user has permission
   if (authStore.canManageConfig) {
     loadConfigFiles()
+  }
+
+  // Integration API keys are admin/config-manager territory.
+  if (authStore.hasPermission('settings.view') || authStore.canManageConfig) {
+    loadIntegrations()
   }
 
   // Load Hytale auth status if user can manage server
@@ -1019,6 +1115,143 @@ onUnmounted(() => {
       <p class="text-xs text-ink-subtle mt-4">
         {{ t('settings.recommendedPluginsNote') }}
       </p>
+    </Card>
+
+    <!-- Integration API Keys (CurseForge / Modtale / StackMart) -->
+    <Card v-if="authStore.hasPermission('settings.view') || authStore.canManageConfig" :title="t('settings.integrations.title')">
+      <p class="text-ink-muted text-sm mb-4">{{ t('settings.integrations.desc') }}</p>
+
+      <div v-if="integrationsError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
+        {{ integrationsError }}
+      </div>
+      <div v-if="integrationsSuccess" class="mb-4 p-3 bg-status-success/20 border border-status-success/30 rounded-lg text-status-success text-sm">
+        {{ integrationsSuccess }}
+      </div>
+
+      <div v-if="integrationsLoading" class="text-center py-6 text-ink-muted">{{ t('common.loading') }}...</div>
+
+      <div v-else class="space-y-6">
+        <!-- CurseForge -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <label class="text-sm font-medium text-ink">{{ t('settings.integrations.curseforgeKey') }}</label>
+            <span class="text-xs" :class="integrations?.curseforge.configured ? 'text-status-success' : 'text-ink-subtle'">
+              {{ integrationStatusLabel(integrations?.curseforge) }}
+            </span>
+          </div>
+          <div class="flex gap-2">
+            <input
+              v-model="integrationsForm.curseforgeApiKey"
+              type="password"
+              autocomplete="off"
+              :disabled="!canEditIntegrations"
+              :placeholder="integrations?.curseforge.configured ? t('settings.integrations.placeholderSet') : t('settings.integrations.placeholderEmpty')"
+              class="input flex-1"
+            />
+            <button
+              v-if="integrations?.curseforge.source === 'config' && canEditIntegrations"
+              @click="clearIntegration('curseforgeApiKey')"
+              :disabled="integrationsSaving"
+              class="btn btn-secondary btn-sm whitespace-nowrap"
+            >
+              {{ t('settings.integrations.clear') }}
+            </button>
+          </div>
+          <a href="https://console.curseforge.com/#/api-keys" target="_blank" rel="noopener noreferrer" class="text-xs text-hytale-orange hover:underline inline-block">
+            {{ t('settings.integrations.curseforgeGetKey') }} →
+          </a>
+        </div>
+
+        <!-- CurseForge Game ID -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-ink">{{ t('settings.integrations.curseforgeGameId') }}</label>
+          <input
+            v-model.number="integrationsForm.curseforgeGameId"
+            type="number"
+            min="1"
+            :disabled="!canEditIntegrations"
+            class="input w-40"
+          />
+          <p class="text-xs text-ink-subtle">{{ t('settings.integrations.curseforgeGameIdHint') }}</p>
+        </div>
+
+        <div class="border-t border-border/60"></div>
+
+        <!-- Modtale -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <label class="text-sm font-medium text-ink">{{ t('settings.integrations.modtaleKey') }}</label>
+            <span class="text-xs" :class="integrations?.modtale.configured ? 'text-status-success' : 'text-ink-subtle'">
+              {{ integrationStatusLabel(integrations?.modtale) }}
+            </span>
+          </div>
+          <div class="flex gap-2">
+            <input
+              v-model="integrationsForm.modtaleApiKey"
+              type="password"
+              autocomplete="off"
+              :disabled="!canEditIntegrations"
+              :placeholder="integrations?.modtale.configured ? t('settings.integrations.placeholderSet') : t('settings.integrations.placeholderEmpty')"
+              class="input flex-1"
+            />
+            <button
+              v-if="integrations?.modtale.source === 'config' && canEditIntegrations"
+              @click="clearIntegration('modtaleApiKey')"
+              :disabled="integrationsSaving"
+              class="btn btn-secondary btn-sm whitespace-nowrap"
+            >
+              {{ t('settings.integrations.clear') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="border-t border-border/60"></div>
+
+        <!-- StackMart -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <label class="text-sm font-medium text-ink">{{ t('settings.integrations.stackmartKey') }}</label>
+            <span class="text-xs" :class="integrations?.stackmart.configured ? 'text-status-success' : 'text-ink-subtle'">
+              {{ integrationStatusLabel(integrations?.stackmart) }}
+            </span>
+          </div>
+          <div class="flex gap-2">
+            <input
+              v-model="integrationsForm.stackmartApiKey"
+              type="password"
+              autocomplete="off"
+              :disabled="!canEditIntegrations"
+              :placeholder="integrations?.stackmart.configured ? t('settings.integrations.placeholderSet') : t('settings.integrations.placeholderEmpty')"
+              class="input flex-1"
+            />
+            <button
+              v-if="integrations?.stackmart.source === 'config' && canEditIntegrations"
+              @click="clearIntegration('stackmartApiKey')"
+              :disabled="integrationsSaving"
+              class="btn btn-secondary btn-sm whitespace-nowrap"
+            >
+              {{ t('settings.integrations.clear') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Save -->
+        <div class="flex items-center justify-between pt-2 border-t border-border/60">
+          <p class="text-xs text-ink-subtle max-w-md">{{ t('settings.integrations.envNote') }}</p>
+          <button
+            v-if="canEditIntegrations"
+            @click="saveIntegrations"
+            :disabled="integrationsSaving"
+            class="btn btn-primary"
+          >
+            <svg v-if="integrationsSaving" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ t('common.save') }}
+          </button>
+        </div>
+      </div>
     </Card>
 
     <!-- Server Configuration (only for users with permission) -->

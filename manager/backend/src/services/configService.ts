@@ -63,6 +63,8 @@ export interface PanelConfig {
   integrations: {
     modtaleApiKey: string;
     stackmartApiKey: string;
+    curseforgeApiKey: string;
+    curseforgeGameId: number;
     webmap: boolean;
   };
   network: {
@@ -139,6 +141,8 @@ export function getDefaultConfig(): PanelConfig {
     integrations: {
       modtaleApiKey: '',
       stackmartApiKey: '',
+      curseforgeApiKey: '',
+      curseforgeGameId: 70216, // Hytale on CurseForge
       webmap: false,
     },
     network: {

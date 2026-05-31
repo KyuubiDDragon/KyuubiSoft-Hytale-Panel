@@ -214,7 +214,9 @@ function sanitizeForFilename(input: string): string | null {
  * Get the StackMart API key from config/environment
  */
 function getApiKey(): string | undefined {
-  const key = process.env.STACKMART_API_KEY;
+  // config-first so a key set in the Settings UI (config.json, hot-reloaded)
+  // wins over the env var.
+  const key = config.stackmartApiKey || process.env.STACKMART_API_KEY;
   if (key && !apiKeyLogged) {
     logger.info(`[StackMart] API key configured (${key.substring(0, 10)}...)`);
     apiKeyLogged = true;

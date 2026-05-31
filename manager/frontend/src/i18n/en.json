@@ -890,6 +890,27 @@
     "resume": "Resume"
   },
   "settings": {
+    "integrations": {
+      "title": "Integration API Keys",
+      "desc": "Store third-party API keys here instead of in environment variables. Keys saved here live in the panel configuration and take effect immediately — no restart needed.",
+      "loadFailed": "Failed to load integration settings",
+      "saveFailed": "Failed to save integration settings",
+      "saved": "Integration settings saved",
+      "nothingToSave": "Enter a new value before saving",
+      "statusUnset": "Not configured",
+      "statusEnv": "Set via environment ({hint})",
+      "statusConfig": "Configured ({hint})",
+      "curseforgeKey": "CurseForge API Key",
+      "curseforgeGetKey": "Get a CurseForge API key",
+      "curseforgeGameId": "CurseForge Game ID",
+      "curseforgeGameIdHint": "Hytale is 70216. Only change this if you know what you're doing.",
+      "modtaleKey": "Modtale API Key",
+      "stackmartKey": "StackMart API Key",
+      "placeholderSet": "Enter a new key to replace the current one",
+      "placeholderEmpty": "Paste your API key…",
+      "clear": "Clear",
+      "envNote": "Leave a field blank to keep the current value. Clearing a key falls back to its environment variable if one is set."
+    },
     "title": "Settings",
     "language": "Language",
     "german": "Deutsch",

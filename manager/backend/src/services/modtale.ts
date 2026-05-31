@@ -232,7 +232,9 @@ function sanitizeForFilename(input: string): string | null {
  * Get the Modtale API key from config/environment
  */
 function getApiKey(): string | undefined {
-  const key = process.env.MODTALE_API_KEY || config.modtaleApiKey;
+  // config-first so a key set in the Settings UI (config.json, hot-reloaded)
+  // wins over the env var.
+  const key = config.modtaleApiKey || process.env.MODTALE_API_KEY;
   // Only log on first call
   if (key && !apiKeyLogged) {
     logger.info(`[Modtale] API key configured (${key.substring(0, 6)}...)`);

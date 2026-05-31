@@ -39,6 +39,7 @@ import playerLocationsRoutes from './routes/playerLocations.js';
 import replayRoutes from './routes/replay.js';
 import wikiRoutes from './routes/wiki.js';
 import metricsRoutes from './routes/metrics.js';
+import settingsRoutes from './routes/settings.js';
 import { metricsMiddleware } from './services/metrics.js';
 
 // Services
@@ -514,6 +515,7 @@ app.use('/api/files', filesRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/replay', replayRoutes);
 app.use('/api/wiki', wikiRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // v3 multi-server registry.
 //

@@ -345,7 +345,10 @@ function sanitizeForFilename(input: string): string | null {
  * Get the CurseForge API key from config/environment
  */
 function getApiKey(): string | undefined {
-  const key = process.env.CURSEFORGE_API_KEY || config.curseforgeApiKey;
+  // config-first so a key set in the Settings UI (persisted to config.json and
+  // hot-reloaded into `config`) wins; fall back to the raw env var. `config`
+  // is reload-aware, so UI changes take effect without a restart.
+  const key = config.curseforgeApiKey || process.env.CURSEFORGE_API_KEY;
   // Only log on first call
   if (key && !apiKeyLogged) {
     logger.info(`[CurseForge] API key configured (${key.substring(0, 6)}...)`);
