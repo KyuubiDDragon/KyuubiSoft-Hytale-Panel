@@ -138,6 +138,17 @@ export interface PlayerFileComponents {
   };
   EntityStats?: PlayerFileEntityStats;
   DisplayName?: { DisplayName: { RawText: string } };
+  // 2026-05 saves carry the display name on the Nameplate component instead.
+  Nameplate?: { Text: string };
+  // 2026-05 layout: inventory containers are top-level components, each wrapping
+  // the actual container under `.Inventory` (older saves nested them under
+  // Player.Inventory.{Storage,Armor,...}).
+  StorageInventory?: { Inventory?: PlayerFileInventoryContainer };
+  ArmorInventory?: { Inventory?: PlayerFileInventoryContainer };
+  HotbarInventory?: { Inventory?: PlayerFileInventoryContainer; ActiveSlot?: number };
+  UtilityInventory?: { Inventory?: PlayerFileInventoryContainer; ActiveSlot?: number };
+  BackpackInventory?: { Inventory?: PlayerFileInventoryContainer };
+  ToolInventory?: { Inventory?: PlayerFileInventoryContainer; ActiveSlot?: number };
   PlayerMemories?: { Capacity: number; Memories: PlayerFileMemory[] };
   HeadRotation?: { Rotation: { Pitch: number; Yaw: number; Roll: number } };
   UniqueItemUsages?: { UniqueItemUsed: string[] };
@@ -861,7 +872,7 @@ async function findPlayerUuidByName(playerName: string): Promise<string | null> 
       try {
         const content = await readFile(path.join(playersDir, file), 'utf-8');
         const data: PlayerFileData = JSON.parse(content);
-        const displayName = data.Components?.DisplayName?.DisplayName?.RawText;
+        const displayName = getPlayerNameFromFile(data);
 
         if (displayName?.toLowerCase() === playerName.toLowerCase()) {
           return file.replace('.json', '');
@@ -891,6 +902,16 @@ async function readPlayerFile(uuid: string): Promise<PlayerFileData | null> {
 }
 
 /**
+ * Resolve a player's display name across save layouts.
+ * 2026-05 stores it on Components.Nameplate.Text; older saves used
+ * Components.DisplayName.DisplayName.RawText.
+ */
+function getPlayerNameFromFile(data: PlayerFileData): string | undefined {
+  return data.Components?.Nameplate?.Text
+      || data.Components?.DisplayName?.DisplayName?.RawText;
+}
+
+/**
  * Get player inventory by name
  */
 export async function getPlayerInventoryFromFile(playerName: string): Promise<ParsedPlayerInventory | null> {
@@ -905,17 +926,30 @@ export async function getPlayerInventoryFromFile(playerName: string): Promise<Pa
   const data = await readPlayerFile(uuid);
   if (!data) return null;
 
-  const inventory = data.Components?.Player?.Inventory;
-  if (!inventory) return null;
+  const comps = data.Components;
+  // 2026-05 layout: each container is a top-level component wrapping the actual
+  // container under `.Inventory`. Older saves nested them under Player.Inventory.
+  const legacy = comps?.Player?.Inventory;
+  const storageC = comps?.StorageInventory?.Inventory ?? legacy?.Storage;
+  const armorC = comps?.ArmorInventory?.Inventory ?? legacy?.Armor;
+  const hotbarC = comps?.HotbarInventory?.Inventory ?? legacy?.HotBar;
+  const utilityC = comps?.UtilityInventory?.Inventory ?? legacy?.Utility;
+  const backpackC = comps?.BackpackInventory?.Inventory ?? legacy?.Backpack;
+  const toolsC = comps?.ToolInventory?.Inventory ?? legacy?.Tool;
 
-  const displayName = data.Components?.DisplayName?.DisplayName?.RawText || playerName;
+  // Only bail when the save carries no inventory containers at all.
+  if (!storageC && !armorC && !hotbarC && !utilityC && !backpackC && !toolsC) {
+    return null;
+  }
 
-  const storage = parseInventoryContainer(inventory.Storage);
-  const armor = parseInventoryContainer(inventory.Armor);
-  const hotbar = parseInventoryContainer(inventory.HotBar);
-  const utility = parseInventoryContainer(inventory.Utility);
-  const backpack = parseInventoryContainer(inventory.Backpack);
-  const tools = parseInventoryContainer(inventory.Tool);
+  const displayName = getPlayerNameFromFile(data) || playerName;
+
+  const storage = parseInventoryContainer(storageC);
+  const armor = parseInventoryContainer(armorC);
+  const hotbar = parseInventoryContainer(hotbarC);
+  const utility = parseInventoryContainer(utilityC);
+  const backpack = parseInventoryContainer(backpackC);
+  const tools = parseInventoryContainer(toolsC);
 
   const allItems = [...storage, ...armor, ...hotbar, ...utility, ...backpack, ...tools];
 
@@ -928,20 +962,23 @@ export async function getPlayerInventoryFromFile(playerName: string): Promise<Pa
     utility,
     backpack,
     tools,
-    activeHotbarSlot: inventory.ActiveHotbarSlot || 0,
-    totalSlots: (inventory.Storage?.Capacity || 0) +
-                (inventory.Armor?.Capacity || 0) +
-                (inventory.HotBar?.Capacity || 0) +
-                (inventory.Utility?.Capacity || 0) +
-                (inventory.Backpack?.Capacity || 0),
+    // ActiveSlot now lives on the outer Hotbar component; fall back to the
+    // legacy Player.Inventory field.
+    activeHotbarSlot: comps?.HotbarInventory?.ActiveSlot ?? legacy?.ActiveHotbarSlot ?? 0,
+    totalSlots: (storageC?.Capacity || 0) +
+                (armorC?.Capacity || 0) +
+                (hotbarC?.Capacity || 0) +
+                (utilityC?.Capacity || 0) +
+                (backpackC?.Capacity || 0) +
+                (toolsC?.Capacity || 0),
     usedSlots: allItems.length,
     capacities: {
-      storage: inventory.Storage?.Capacity || 36,
-      armor: inventory.Armor?.Capacity || 4,
-      hotbar: inventory.HotBar?.Capacity || 9,
-      utility: inventory.Utility?.Capacity || 4,
-      backpack: inventory.Backpack?.Capacity || 0,
-      tools: inventory.Tool?.Capacity || 2,
+      storage: storageC?.Capacity || 36,
+      armor: armorC?.Capacity || 4,
+      hotbar: hotbarC?.Capacity || 9,
+      utility: utilityC?.Capacity || 4,
+      backpack: backpackC?.Capacity || 0,
+      tools: toolsC?.Capacity || 2,
     },
   };
 }
@@ -965,7 +1002,7 @@ export async function getPlayerDetailsFromFile(playerName: string): Promise<Pars
   const player = components?.Player;
   const entityStats = components?.EntityStats;
   const transform = components?.Transform;
-  const displayName = components?.DisplayName?.DisplayName?.RawText || playerName;
+  const displayName = getPlayerNameFromFile(data) || playerName;
 
   // Parse stats
   const healthStat = entityStats?.Stats?.Health;
@@ -1038,7 +1075,7 @@ export async function getAllPlayerFiles(): Promise<{ uuid: string; name: string 
       try {
         const content = await readFile(path.join(playersDir, file), 'utf-8');
         const data: PlayerFileData = JSON.parse(content);
-        const displayName = data.Components?.DisplayName?.DisplayName?.RawText;
+        const displayName = getPlayerNameFromFile(data);
 
         if (displayName) {
           result.push({
@@ -1173,7 +1210,7 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
       try {
         const content = await readFile(path.join(playersDir, file), 'utf-8');
         const data: PlayerFileData = JSON.parse(content);
-        const displayName = data.Components?.DisplayName?.DisplayName?.RawText;
+        const displayName = getPlayerNameFromFile(data);
 
         if (!displayName) continue;
 

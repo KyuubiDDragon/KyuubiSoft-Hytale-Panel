@@ -2,6 +2,7 @@ import path from 'path';
 import {
   promises as fsp,
   createReadStream,
+  lstatSync,
   type Stats,
 } from 'fs';
 import type { ReadStream } from 'fs';
@@ -74,12 +75,18 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
   /(^|\/)users\.json$/i,
   /(^|\/)audit\.sqlite(-journal)?$/i,
   /(^|\/)panel\.sqlite(-journal)?$/i,
-  /\.key$/i,
-  /\.pem$/i,
   /(^|\/)HytaleServer\.jar$/i,   // server JAR replace = RCE on restart
-  /\.aot$/i,                     // AOT cache (paired with the JAR)
   /(^|\/)auth\.enc$/i,           // encrypted Hytale auth credentials
   /(^|\/)config\.json$/i,        // use the dedicated, schema-validated config editor
+];
+
+// Extension-based denies target secret/credential FILES only. They must NEVER
+// hide or block a *directory* — a folder named e.g. "cache.aot" is legitimate
+// and must stay listable and navigable. (Applied with isDir=false only.)
+const EXTENSION_DENY_PATTERNS: RegExp[] = [
+  /\.key$/i,
+  /\.pem$/i,
+  /\.aot$/i,                     // AOT cache file (paired with the JAR)
 ];
 
 // ============================================================
@@ -166,22 +173,40 @@ export function resolveSafe(root: FileManagerRoot, relPath: string): string {
     throw new FileManagerError('Path traversal detected', 403, 'PATH_TRAVERSAL');
   }
 
-  // Deny matching - relative is the path inside the root with OS separators
+  // Deny matching - relative is the path inside the root with OS separators.
+  // Extension denies apply to files only, so resolve dir-ness to keep
+  // directories ending in .aot/.key/.pem navigable (name-exact secrets stay
+  // blocked regardless). A non-existent target (create/write path) is treated
+  // as a file.
   const relForCheck = (relative || '').replace(/\\/g, '/');
-  if (isDenied(root, relForCheck)) {
+  let isDirTarget = false;
+  try {
+    isDirTarget = lstatSync(resolved).isDirectory();
+  } catch {
+    isDirTarget = false;
+  }
+  if (isDenied(root, relForCheck, isDirTarget)) {
     throw new FileManagerError('Path is in deny-list', 403, 'PATH_DENIED');
   }
 
   return resolved;
 }
 
-export function isDenied(root: FileManagerRoot, relPath: string): boolean {
+export function isDenied(root: FileManagerRoot, relPath: string, isDir = false): boolean {
   if (!relPath) return false;
   const lower = relPath.toLowerCase();
 
-  // Global deny patterns
+  // Global deny patterns (name-exact secrets) — apply to files AND directories.
   for (const re of GLOBAL_DENY_PATTERNS) {
     if (re.test(lower)) return true;
+  }
+
+  // Extension denies (.key/.pem/.aot) — files only, so a directory whose name
+  // ends in one of these stays listable and navigable.
+  if (!isDir) {
+    for (const re of EXTENSION_DENY_PATTERNS) {
+      if (re.test(lower)) return true;
+    }
   }
 
   // Per-root deny list - exact name or prefix-of-directory
@@ -271,8 +296,9 @@ export async function listDir(rootId: string, relPath: string): Promise<{
       .relative(path.resolve(root.path), full)
       .replace(/\\/g, '/');
 
-    // Honour deny list for listing too
-    if (isDenied(root, relForFile)) continue;
+    // Honour deny list for listing too. Extension denies (.key/.pem/.aot)
+    // apply to files only, so legitimate directories stay visible.
+    if (isDenied(root, relForFile, s.isDirectory())) continue;
 
     entries.push({
       name,

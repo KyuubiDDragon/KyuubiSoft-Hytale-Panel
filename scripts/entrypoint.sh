@@ -130,8 +130,13 @@ run_downloader() {
     if [ "$UPDATE_MODE" = "update" ]; then
         echo "[INFO] Checking for updates..."
 
-        # Get latest version from downloader
-        LATEST_VERSION=$(gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        # Get latest version from downloader. The output carries the real
+        # version (newer builds use a semver like 0.5.0) plus a YYYY.MM.DD
+        # build-date stamp; prefer the non-date version, fall back to the date
+        # only for the older date-based naming scheme.
+        _VER_RAW=$(gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        LATEST_VERSION=$(printf '%s\n' "$_VER_RAW" | grep -vE '^(19|20)[0-9]{2}\.(0[1-9]|1[0-2])\.(0[1-9]|[12][0-9]|3[01])$' | head -1)
+        [ -z "$LATEST_VERSION" ] && LATEST_VERSION=$(printf '%s\n' "$_VER_RAW" | head -1)
 
         if [ -z "$LATEST_VERSION" ]; then
             echo "[WARN] Could not determine latest version, skipping update check"
@@ -284,9 +289,13 @@ run_downloader() {
                 chown hytale:hytale "$VERSION_FILE"
                 echo "[INFO] Saved version $LATEST_VERSION to $VERSION_FILE"
             else
-                # For fresh installs, get and save the version
+                # For fresh installs, get and save the version. Prefer the real
+                # (non-date) version over the YYYY.MM.DD build-date stamp; fall
+                # back to the date only for the older date-based naming.
                 cd "$DOWNLOADER_DIR"
-                INSTALLED_VER=$(gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                _VER_RAW=$(gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                INSTALLED_VER=$(printf '%s\n' "$_VER_RAW" | grep -vE '^(19|20)[0-9]{2}\.(0[1-9]|1[0-2])\.(0[1-9]|[12][0-9]|3[01])$' | head -1)
+                [ -z "$INSTALLED_VER" ] && INSTALLED_VER=$(printf '%s\n' "$_VER_RAW" | head -1)
                 if [ -n "$INSTALLED_VER" ]; then
                     echo "$INSTALLED_VER" > "$VERSION_FILE"
                     chown hytale:hytale "$VERSION_FILE"

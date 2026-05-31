@@ -41,7 +41,6 @@ interface SimulatedPlayerState {
 
 const BUFFER_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 const SIMULATION_TICK_MS = 1500;
-const REAL_DATA_STALE_MS = 8000;
 
 // Ring buffer keyed by uuid -> samples (sorted ascending by ts)
 const buffer = new Map<string, PlayerLocationSample[]>();
@@ -50,7 +49,6 @@ const buffer = new Map<string, PlayerLocationSample[]>();
 type Listener = (s: PlayerLocationSample) => void;
 const listeners = new Set<Listener>();
 
-let lastRealSampleAt = 0;
 let simTimer: NodeJS.Timeout | null = null;
 const simPlayers: SimulatedPlayerState[] = [];
 
@@ -135,9 +133,11 @@ function seedSimulatedPlayers(): void {
 }
 
 function simulationTick(): void {
-  // Only simulate if we're in demo mode OR no real samples have arrived recently.
-  const shouldSimulate = isDemoMode() || Date.now() - lastRealSampleAt > REAL_DATA_STALE_MS;
-  if (!shouldSimulate) return;
+  // Simulated players are a DEMO-ONLY convenience. On a real server an empty
+  // map must honestly mean "no live position data" — we never render fake
+  // players. Real positions require the KyuubiSoft plugin (v1.4.0+) running and
+  // emitting player_position events.
+  if (!isDemoMode()) return;
 
   seedSimulatedPlayers();
   const now = Date.now();
@@ -176,17 +176,17 @@ function simulationTick(): void {
 
 export function initializePlayerLocations(): void {
   // Subscribe to player_position plugin events (emitted by the KyuubiSoft
-  // plugin v1.4.0+ and republished by services/pluginEvents.ts). Real samples
-  // suppress the demo simulator via lastRealSampleAt.
+  // plugin v1.4.0+ and republished by services/pluginEvents.ts).
   eventBus.subscribe(['player_position'], (evt: PanelEvent) => {
     const p = evt.payload as Partial<PlayerLocationSample>;
-    if (!p.uuid || !p.playerName || p.x === undefined || p.y === undefined || p.z === undefined) {
+    // uuid is optional in the plugin schema — fall back to playerName as a
+    // stable id rather than dropping the frame (which would hide the player).
+    if (!p.playerName || p.x === undefined || p.y === undefined || p.z === undefined) {
       return;
     }
-    lastRealSampleAt = Date.now();
     pushSample({
       playerName: String(p.playerName),
-      uuid: String(p.uuid),
+      uuid: String(p.uuid ?? p.playerName),
       x: Number(p.x),
       y: Number(p.y),
       z: Number(p.z),
@@ -201,7 +201,6 @@ export function initializePlayerLocations(): void {
   eventBus.subscribe(['player_death'], (evt: PanelEvent) => {
     const p = evt.payload as { player?: string; world?: string; x?: number; y?: number; z?: number };
     if (!p.player || p.x === undefined || p.y === undefined || p.z === undefined) return;
-    lastRealSampleAt = Date.now();
     pushSample({
       playerName: p.player,
       uuid: p.player, // we don't know UUID here, use name as stable id

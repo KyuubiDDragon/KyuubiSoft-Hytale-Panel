@@ -137,10 +137,24 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
     }
   }
 
-  // Extract version number from output
-  const versionMatch = output.match(/[0-9]+\.[0-9]+\.[0-9]+/);
-  if (versionMatch) {
-    return { version: versionMatch[0] };
+  // Extract version number from output. The downloader prints labeled prose
+  // that can contain BOTH the real version (newer Hytale builds use a semver
+  // like "0.5.0") and a YYYY.MM.DD build-date stamp. The old first-match regex
+  // grabbed the date (e.g. "2026.05.13") instead of the version. Prefer a real,
+  // non-date version; only fall back to a date-style stamp when that's all the
+  // output contains (the older date-based naming scheme).
+  const isDateStamp = (v: string): boolean =>
+    /^(19|20)\d{2}\.(0[1-9]|1[0-2])\.(0[1-9]|[12]\d|3[01])$/.test(v);
+  const versionTokens = output.match(/[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z]+)?/g) || [];
+  // A "version: X" label is the strongest signal — prefer it when present and
+  // not itself a date stamp.
+  const labeled = output.match(/version[^0-9]*([0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z]+)?)/i);
+  const labeledVersion = labeled && !isDateStamp(labeled[1]) ? labeled[1] : undefined;
+  const chosenVersion = labeledVersion
+    ?? versionTokens.find((v) => !isDateStamp(v))
+    ?? versionTokens[0];
+  if (chosenVersion) {
+    return { version: chosenVersion };
   }
 
   // If no version found but also no auth error, credentials might be missing

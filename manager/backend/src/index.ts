@@ -206,6 +206,12 @@ const webMapProxy = createProxyMiddleware({
           }
 
           console.log(`[WebMap Proxy] Body length: ${body.length}, starts with: ${body.substring(0, 100).replace(/\n/g, '\\n')}`);
+          // Strip any <meta http-equiv="Content-Security-Policy"> the map ships
+          // with: EasyWebMap's own policy omits 'unsafe-inline', which blocks
+          // both its inline scripts and the WS-rewrite <script> we inject below
+          // (this is the "Executing inline script violates CSP" error).
+          body = body.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
+
           // Inject our WebSocket rewrite script after <head>
           body = body.replace(/<head>/i, '<head>' + webMapWsRewriteScript);
 
@@ -214,6 +220,16 @@ const webMapProxy = createProxyMiddleware({
           delete newHeaders['content-length'];
           delete newHeaders['content-encoding'];
           delete newHeaders['transfer-encoding'];
+          // This proxied map is a trusted local mod page rendered in an isolated
+          // iframe; give that document a permissive CSP so its (and our injected)
+          // inline scripts run. Scoped to /api/webmap only — the panel shell
+          // keeps its strict helmet CSP.
+          newHeaders['content-security-policy'] =
+            "default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; " +
+            "script-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; " +
+            "connect-src 'self' ws: wss: http: https:; " +
+            "img-src 'self' data: blob: http: https:; " +
+            "style-src 'self' 'unsafe-inline';";
 
           res.writeHead(proxyRes.statusCode || 200, newHeaders);
           res.end(body);
