@@ -66,10 +66,17 @@ router.post('/downloader/initiate-auth', authMiddleware, requirePermission('serv
       `rm -f /opt/hytale/downloader/.hytale-downloader-credentials.json 2>/dev/null || true`
     );
 
-    // Run the downloader - it will start OAuth flow when credentials are missing
-    // Use a timeout since it will wait for user input
+    // Run the downloader - it will start OAuth flow when credentials are missing.
+    // Use a timeout since it will wait for user input.
+    // IMPORTANT: run as `hytale` (uid 9999) via gosu. The OAuth flow writes
+    // .hytale-downloader-credentials.json into /opt/hytale/downloader; if we run
+    // as root those credentials are created root-owned (mode 0600) and the
+    // actual server download — which runs as `gosu hytale` in entrypoint.sh —
+    // cannot read them, so it loops "downloading" forever without ever
+    // succeeding. Authenticating as hytale keeps the credential file usable by
+    // the server process.
     const authResult = await dockerService.execInContainer(
-      `cd /opt/hytale/downloader && timeout 60 ./hytale-downloader-linux-amd64 2>&1 || true`
+      `cd /opt/hytale/downloader && timeout 60 gosu hytale ./hytale-downloader-linux-amd64 2>&1 || true`
     );
 
     const output = authResult.output || '';

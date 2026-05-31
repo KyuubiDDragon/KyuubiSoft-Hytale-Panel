@@ -97,9 +97,16 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
     return { version: 'unknown', error: 'Invalid patchline' };
   }
 
-  // Run downloader and capture both stdout and stderr to detect auth issues
+  // Run downloader and capture both stdout and stderr to detect auth issues.
+  // IMPORTANT: run as the `hytale` user (uid 9999), not root. The container's
+  // default exec user is root, but the actual server download in entrypoint.sh
+  // runs via `gosu hytale`. If we probe the version as root we (a) read a
+  // different credential store than the real download and can report a version
+  // the hytale-user download can't actually fetch, and (b) leave root-owned
+  // cache/credential files in /opt/hytale/downloader that then block the
+  // hytale-user download. Running as hytale keeps probe and download in sync.
   const checkResult = await dockerService.execInContainer(
-    `cd /opt/hytale/downloader && ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>&1`
+    `cd /opt/hytale/downloader && gosu hytale ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>&1`
   );
 
   if (!checkResult.success) {

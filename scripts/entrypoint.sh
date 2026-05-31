@@ -241,37 +241,63 @@ run_downloader() {
     if [ -f "$DOWNLOAD_PATH" ]; then
         echo "[INFO] Extracting game files..."
         cd /opt/hytale/server
-        
+
         # Backup current JAR version info (if updating)
         if [ "$UPDATE_MODE" = "update" ] && [ -f "$SERVER_JAR" ]; then
             echo "[INFO] Updating server files..."
         fi
-        
-        gosu hytale unzip -o game.zip
-        
+
+        # Capture the unzip exit code instead of assuming success. A failed
+        # extraction (bad permissions, truncated zip, disk full) must NOT be
+        # treated as a completed update: otherwise we would stamp the new
+        # version number below while the OLD files remain on disk, and the
+        # panel's update check would report "up to date" when it is not.
+        if gosu hytale unzip -o game.zip; then
+            UNZIP_OK=1
+        else
+            UNZIP_RC=$?
+            UNZIP_OK=0
+            echo "[ERROR] Extraction failed (unzip exit code ${UNZIP_RC})."
+        fi
+
         # Move files to correct locations
         if [ -d "Server" ]; then
             mv Server/* . 2>/dev/null || true
             rm -rf Server
         fi
-        
-        rm -f game.zip
-        echo "[INFO] Extraction complete!"
 
-        # Save installed version to file for future update checks
-        if [ -n "$LATEST_VERSION" ]; then
-            echo "$LATEST_VERSION" > "$VERSION_FILE"
-            chown hytale:hytale "$VERSION_FILE"
-            echo "[INFO] Saved version $LATEST_VERSION to $VERSION_FILE"
-        else
-            # For fresh installs, get and save the version
-            cd "$DOWNLOADER_DIR"
-            INSTALLED_VER=$(./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-            if [ -n "$INSTALLED_VER" ]; then
-                echo "$INSTALLED_VER" > "$VERSION_FILE"
+        # Only treat the update as applied if extraction succeeded AND the
+        # server jar is actually present afterwards.
+        if [ "$UNZIP_OK" = "1" ] && [ -f "$SERVER_JAR" ]; then
+            rm -f game.zip
+            echo "[INFO] Extraction complete!"
+
+            # Save installed version to file for future update checks
+            if [ -n "$LATEST_VERSION" ]; then
+                echo "$LATEST_VERSION" > "$VERSION_FILE"
                 chown hytale:hytale "$VERSION_FILE"
-                echo "[INFO] Saved version $INSTALLED_VER to $VERSION_FILE"
+                echo "[INFO] Saved version $LATEST_VERSION to $VERSION_FILE"
+            else
+                # For fresh installs, get and save the version
+                cd "$DOWNLOADER_DIR"
+                INSTALLED_VER=$(gosu hytale ./hytale-downloader-linux-amd64 -patchline "$PATCHLINE" -print-version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+                if [ -n "$INSTALLED_VER" ]; then
+                    echo "$INSTALLED_VER" > "$VERSION_FILE"
+                    chown hytale:hytale "$VERSION_FILE"
+                    echo "[INFO] Saved version $INSTALLED_VER to $VERSION_FILE"
+                fi
             fi
+        else
+            # Extraction did not produce a usable server. Keep game.zip so the
+            # next start can retry, and DO NOT touch the version file — the
+            # server is still on the previous build. Surface the cause loudly:
+            # the most common reason is wrong ownership/permissions on the
+            # bind-mounted /opt/hytale/server (must be writable by uid 9999).
+            echo "[ERROR] Update NOT applied: HytaleServer.jar missing after extraction."
+            echo "[ERROR] Keeping game.zip for the next retry; staying on the previous version."
+            echo "[ERROR] Check that /opt/hytale/server is owned/writable by uid 9999 (hytale):"
+            ls -la /opt/hytale/server/ || true
+            return 1
         fi
     fi
 
