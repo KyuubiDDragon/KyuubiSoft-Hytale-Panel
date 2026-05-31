@@ -6,7 +6,6 @@ import Card from '@/components/ui/Card.vue'
 import {
   modupdatesApi,
   modsApi,
-  type TrackedMod,
   type ModUpdateStatus,
   type ModInfo,
 } from '@/api/management'

@@ -217,7 +217,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Messages List -->
-      <div v-else class="divide-y divide-dark-50">
+      <div v-else class="divide-y divide-border">
         <div
           v-for="msg in filteredMessages"
           :key="msg.id"

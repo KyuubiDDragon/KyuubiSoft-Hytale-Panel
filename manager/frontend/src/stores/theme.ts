@@ -9,6 +9,11 @@ function readInitial(): Theme {
   if (typeof window === 'undefined') return 'dark'
   const saved = localStorage.getItem(STORAGE_KEY) as Theme | null
   if (saved === 'dark' || saved === 'light') return saved
+  // One-time migration from the old composable's separate key so users who
+  // set a theme under the previous (now-removed) useTheme() implementation
+  // don't get reset. See composables/useTheme.ts.
+  const legacy = localStorage.getItem('panel-theme') as Theme | null
+  if (legacy === 'dark' || legacy === 'light') return legacy
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
 }
 

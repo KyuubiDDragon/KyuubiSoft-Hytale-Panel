@@ -29,9 +29,9 @@ function close(): void {
     class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
     @click.self="close"
   >
-    <div class="bg-dark-200 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+    <div class="bg-surface-raised rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
       <!-- Modal Header -->
-      <div class="p-4 border-b border-dark-50/50 flex items-center justify-between shrink-0">
+      <div class="p-4 border-b border-border/50 flex items-center justify-between shrink-0">
         <h2 class="text-xl font-bold text-white">{{ t('mods.changelog') }}: {{ title }}</h2>
         <button @click="close" class="text-gray-400 hover:text-white">
           <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -49,10 +49,10 @@ function close(): void {
       </div>
 
       <!-- Modal Footer -->
-      <div class="p-4 border-t border-dark-50/50 shrink-0">
+      <div class="p-4 border-t border-border/50 shrink-0">
         <button
           @click="close"
-          class="w-full px-4 py-2 bg-dark-100 hover:bg-dark-50 text-white rounded-lg transition-colors"
+          class="w-full px-4 py-2 bg-surface-overlay hover:bg-surface-overlay text-white rounded-lg transition-colors"
         >
           {{ t('common.close') }}
         </button>

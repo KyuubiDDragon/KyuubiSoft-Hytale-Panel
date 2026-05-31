@@ -21,7 +21,6 @@ import {
   type ModInfo,
   type ConfigFile,
   type ModStoreEntry,
-  type LocalizedString,
   type ModtaleProject,
   type ModtaleProjectDetails,
   type ModtaleStatus,
@@ -38,7 +37,6 @@ import {
   type CurseForgeStatus,
   type CurseForgeSortField,
   type CurseForgeInstalledInfo,
-  type TrackedMod,
   type ModUpdateStatus,
 } from '@/api/management'
 
@@ -259,28 +257,6 @@ async function updateStoreMod(modId: string) {
       updateSuccess.value = modId
       await loadStoreData()
       await loadData()
-      setTimeout(() => { updateSuccess.value = null }, 3000)
-    } else {
-      error.value = result.error || t('errors.serverError')
-    }
-  } catch (e: any) {
-    error.value = e.response?.data?.error || t('errors.serverError')
-  } finally {
-    updatingMod.value = null
-  }
-}
-
-// Update installed mod from the mods list
-async function updateInstalledMod(item: ModInfo) {
-  if (!item.storeId) return
-
-  updatingMod.value = item.storeId
-  error.value = ''
-  try {
-    const result = await modStoreApi.update(item.storeId)
-    if (result.success) {
-      updateSuccess.value = item.storeId
-      await Promise.all([loadData(), loadAllUpdates()]) // Reload mods list and updates
       setTimeout(() => { updateSuccess.value = null }, 3000)
     } else {
       error.value = result.error || t('errors.serverError')
@@ -1317,7 +1293,7 @@ onMounted(() => {
         {{ activeTab === 'mods' ? t('mods.noMods') : t('mods.noPlugins') }}
       </div>
 
-      <div v-else class="divide-y divide-dark-50/30">
+      <div v-else class="divide-y divide-border/30">
         <div
           v-for="item in enrichedItems"
           :key="item.filename"
@@ -1472,7 +1448,7 @@ onMounted(() => {
         {{ t('mods.noStoreMods') }}
       </div>
 
-      <div v-else class="divide-y divide-dark-50/30">
+      <div v-else class="divide-y divide-border/30">
         <div
           v-for="mod in storeMods"
           :key="mod.id"
@@ -1702,7 +1678,7 @@ onMounted(() => {
           {{ t('mods.noModtaleResults') }}
         </div>
 
-        <div v-else class="divide-y divide-dark-50/30">
+        <div v-else class="divide-y divide-border/30">
           <div
             v-for="mod in modtaleMods"
             :key="mod.id"
@@ -2122,7 +2098,7 @@ onMounted(() => {
           {{ t('mods.noStackMartResults') }}
         </div>
 
-        <div v-else class="divide-y divide-dark-50/30">
+        <div v-else class="divide-y divide-border/30">
           <div
             v-for="resource in stackmartResources"
             :key="resource.id"

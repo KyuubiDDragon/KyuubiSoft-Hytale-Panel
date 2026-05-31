@@ -370,14 +370,6 @@ const armorSlotNames = [
   t('avatarInventory.slots.legs')
 ]
 
-// Quick slot toggle
-function toggleQuickSlot(index: number) {
-  if (expandedQuickSlot.value === index) {
-    expandedQuickSlot.value = null
-  } else {
-    expandedQuickSlot.value = index
-  }
-}
 
 // Handle search input blur with delay to allow dropdown click
 function handleSearchBlur() {
@@ -511,7 +503,7 @@ function handleSearchBlur() {
 
               <!-- Avatar Display -->
               <div class="flex-1 relative">
-                <div class="aspect-[3/4] max-h-[280px] bg-gradient-to-b from-dark-100/50 to-dark-500/80 rounded-lg border border-inv-border/30 overflow-hidden relative">
+                <div class="aspect-[3/4] max-h-[280px] bg-gradient-to-b from-surface-overlay/50 to-surface-sunken/80 rounded-lg border border-inv-border/30 overflow-hidden relative">
                   <!-- Loading Spinner -->
                   <div v-if="avatarLoading" class="absolute inset-0 flex items-center justify-center">
                     <svg class="w-10 h-10 animate-spin text-hytale-orange/50" fill="none" viewBox="0 0 24 24">

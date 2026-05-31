@@ -268,8 +268,8 @@ onBeforeUnmount(closePlayer)
             <div class="flex-1 overflow-auto bg-surface-sunken rounded p-2 text-sm">
               <div v-for="(c, i) in chatMessages.slice(-200)" :key="i" class="text-ink mb-0.5">
                 <span class="text-ink-subtle text-xs">{{ new Date(c.ts).toLocaleTimeString() }}</span>
-                <span class="font-semibold ml-2">{{ String((c.payload as { player?: string }).player ?? '?') }}:</span>
-                <span class="ml-1">{{ String((c.payload as { message?: string }).message ?? '') }}</span>
+                <span class="font-semibold ml-2">{{ String(c.payload.player ?? '?') }}:</span>
+                <span class="ml-1">{{ String(c.payload.message ?? '') }}</span>
               </div>
             </div>
           </div>

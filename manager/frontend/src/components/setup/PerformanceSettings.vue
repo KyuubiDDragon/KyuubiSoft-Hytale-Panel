@@ -14,7 +14,6 @@ const emit = defineEmits<{
 
 // System info
 const detectedRam = ref(16) // Will be fetched from system check
-const isLoadingSystemInfo = ref(false)
 
 // Performance settings
 const minRam = ref('3G')
@@ -39,7 +38,6 @@ function getRamValue(ram: string): number {
 
 // Computed for RAM recommendations based on player count
 const ramRecommendation = computed(() => {
-  const systemCheckData = setupStore.setupData.systemCheck
   const maxPlayers = 20 // Default, would be fetched from server config step
 
   if (maxPlayers <= 10) {

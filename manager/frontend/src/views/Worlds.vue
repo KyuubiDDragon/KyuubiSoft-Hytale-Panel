@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { worldsApi, type WorldInfo, type WorldConfig, type WorldFileInfo } from '@/api/management'
+import { worldsApi, type WorldInfo, type WorldConfig } from '@/api/management'
 import { useAuthStore } from '@/stores/auth'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Icon from '@/components/ui/Icon.vue'

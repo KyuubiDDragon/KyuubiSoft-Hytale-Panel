@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
-import { subscribeToDownloadProgress, setupApi, type ProgressEvent } from '@/api/setup'
+import { subscribeToDownloadProgress, setupApi, type ProgressEvent, type DownloadRequest } from '@/api/setup'
 
 const { t } = useI18n()
 const setupStore = useSetupStore()
@@ -109,22 +109,6 @@ const authTimeRemaining = computed(() => {
   return `${minutes} ${t('setup.minutes')}`
 })
 
-// Format bytes to human readable
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-}
-
-// Format seconds to time string
-function formatTime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
-}
 
 // Handle method selection
 function selectMethod(method: DownloadMethod) {
@@ -336,7 +320,7 @@ async function startDownload() {
 
   try {
     // Trigger the download on the backend
-    const downloadRequest = downloadMethod.value === 'custom'
+    const downloadRequest: DownloadRequest = downloadMethod.value === 'custom'
       ? { method: 'custom', serverUrl: customServerUrl.value, assetsUrl: customAssetsUrl.value }
       : { method: 'official', patchline: patchline.value }
 
@@ -459,7 +443,7 @@ function retryAuth() {
 
 // Load saved data on mount
 onMounted(() => {
-  const savedData = setupStore.setupData.serverDownload
+  const savedData = setupStore.setupData.downloadMethod as { patchline?: string; method?: string; autoUpdate?: boolean } | null | undefined
   if (savedData) {
     if (savedData.patchline) patchline.value = savedData.patchline as Patchline
     if (savedData.method) downloadMethod.value = savedData.method as DownloadMethod

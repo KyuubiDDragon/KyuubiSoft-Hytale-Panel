@@ -50,7 +50,7 @@ function glyph(icon: string): string {
 <template>
   <li>
     <div
-      class="flex items-center gap-1 px-2 py-1 rounded cursor-pointer hover:bg-dark-50/40"
+      class="flex items-center gap-1 px-2 py-1 rounded cursor-pointer hover:bg-surface-overlay/40"
       :class="isSelected ? 'bg-hytale-orange/20 text-hytale-orange' : 'text-gray-300'"
       :style="{ paddingLeft: indentPx }"
       @click="onClick"

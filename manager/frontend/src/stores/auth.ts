@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { authApi, type TokenResponse } from '@/api/auth'
+import { authApi } from '@/api/auth'
 
 // Safe localStorage access for SSR/build compatibility
 const getStorageItem = (key: string): string | null => {
@@ -104,6 +104,17 @@ export const useAuthStore = defineStore('auth', () => {
     return response
   }
 
+  // Completes an SSO login. The provider callback set an HttpOnly refresh
+  // cookie (no token is exposed in the URL); exchange it for an access token
+  // here, then load identity from /me. Called by Login.vue on ?sso=success.
+  async function completeSsoLogin() {
+    const tokens = await authApi.refresh('') // empty body → server reads the cookie
+    setTokens(tokens.access_token, tokens.refresh_token || '')
+    const me = await authApi.getMe() as { username: string; role?: UserRole; permissions?: string[] }
+    setUser(me.username, me.role, me.permissions || [])
+    return me
+  }
+
   function logout(message?: string | null) {
     accessToken.value = null
     refreshToken.value = null
@@ -151,6 +162,7 @@ export const useAuthStore = defineStore('auth', () => {
     setUser,
     login,
     refresh,
+    completeSsoLogin,
     logout,
     hasPermission,
     hasAnyPermission,

@@ -403,6 +403,15 @@ export interface FilePlayerInventory {
   activeHotbarSlot: number
   totalSlots: number
   usedSlots: number
+  // Per-container capacities reported by the API (optional; UI falls back to defaults).
+  capacities?: {
+    hotbar?: number
+    armor?: number
+    utility?: number
+    storage?: number
+    backpack?: number
+    tools?: number
+  }
 }
 
 export interface FilePlayerStats {

@@ -53,7 +53,7 @@ function sendMessage(name: string) {
     </div>
 
     <!-- Player Cards -->
-    <div v-else class="divide-y divide-dark-50/30">
+    <div v-else class="divide-y divide-border/30">
       <div
         v-for="player in players"
         :key="player.name"

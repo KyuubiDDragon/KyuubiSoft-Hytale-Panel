@@ -4,7 +4,10 @@ import DOMPurify from 'dompurify'
 // Modtale, plugin authors). Anything not on these lists is dropped. Links
 // are forced to open in a new tab with noopener/noreferrer so injected
 // anchors can't hijack the parent window.
-const SANITIZE_CONFIG: DOMPurify.Config = {
+// No explicit DOMPurify.Config annotation — dompurify v3 no longer exposes it
+// as a namespace type; the object literal is structurally compatible with
+// sanitize()'s config parameter.
+const SANITIZE_CONFIG = {
   ALLOWED_TAGS: [
     'a', 'b', 'blockquote', 'br', 'code', 'div', 'em', 'h1', 'h2', 'h3', 'h4',
     'h5', 'h6', 'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 's', 'span', 'strong',

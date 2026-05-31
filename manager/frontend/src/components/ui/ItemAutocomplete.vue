@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { assetsApi, type ItemInfo } from '@/api/assets'
 
 const props = withDefaults(defineProps<{

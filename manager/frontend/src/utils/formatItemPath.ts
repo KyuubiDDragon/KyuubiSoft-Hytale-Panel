@@ -68,12 +68,12 @@ export function formatLogMessage(message: string): string {
   let result = message
 
   // Replace dot notation paths
-  result = result.replace(dotPattern, (match, _namespace, _category, itemName) => {
+  result = result.replace(dotPattern, (_match, _namespace, _category, itemName) => {
     return formatItemPath(itemName)
   })
 
   // Replace colon notation paths (but preserve common non-item patterns like timestamps)
-  result = result.replace(colonPattern, (match, namespace, itemPath) => {
+  result = result.replace(colonPattern, (match, namespace, _itemPath) => {
     // Skip if it looks like a timestamp (e.g., "12:34:56")
     if (/^\d+$/.test(namespace)) {
       return match

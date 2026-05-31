@@ -41,7 +41,7 @@ function close(): void {
     class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
     @click.self="close"
   >
-    <div class="bg-dark-200 rounded-xl w-full max-w-md p-4 flex flex-col gap-3">
+    <div class="bg-surface-raised rounded-xl w-full max-w-md p-4 flex flex-col gap-3">
       <h2 class="text-lg font-bold text-white">{{ t('mods.confirmUpdate', { name: modName }) }}</h2>
       <div class="text-sm text-gray-300">
         <div>{{ t('mods.installedVersion') }}: <span class="font-mono">{{ installedVersion }}</span></div>
@@ -51,13 +51,13 @@ function close(): void {
         <button
           v-if="changelog"
           @click="emit('show-changelog')"
-          class="px-3 py-1.5 bg-dark-100 hover:bg-dark-50 text-white rounded-lg text-sm"
+          class="px-3 py-1.5 bg-surface-overlay hover:bg-surface-overlay text-white rounded-lg text-sm"
         >
           {{ t('mods.viewChangelog') }}
         </button>
         <button
           @click="close"
-          class="px-3 py-1.5 bg-dark-100 hover:bg-dark-50 text-white rounded-lg text-sm"
+          class="px-3 py-1.5 bg-surface-overlay hover:bg-surface-overlay text-white rounded-lg text-sm"
         >
           {{ t('common.cancel') }}
         </button>

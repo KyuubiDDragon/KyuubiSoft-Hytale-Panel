@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { useSetupStore } from '@/stores/setup'
 import { setupApi } from '@/api/setup'
 import Button from '@/components/ui/Button.vue'
 
 const { t } = useI18n()
-const router = useRouter()
 const setupStore = useSetupStore()
 
 const emit = defineEmits<{

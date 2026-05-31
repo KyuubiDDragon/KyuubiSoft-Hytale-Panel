@@ -99,7 +99,8 @@
     "files": "Gerenciador de Arquivos",
     "liveMap": "Mapa ao Vivo",
     "replay": "Replay",
-    "wiki": "Wiki"
+    "wiki": "Wiki",
+    "modUpdates": "Atualizações de Mods"
   },
   "files": {
     "title": "Gerenciador de Arquivos",
@@ -434,7 +435,43 @@
       "noDeaths": "Nenhuma posição de morte registrada",
       "deathCount": "{count} posições de morte",
       "deathDay": "Dia {day}",
-      "latestDeath": "Mais recente"
+      "latestDeath": "Mais recente",
+      "appearance": "Aparência",
+      "world": "Mundo",
+      "gamemode": "Modo de Jogo",
+      "health": "Vida",
+      "stamina": "Vigor",
+      "oxygen": "Oxigênio",
+      "mana": "Mana",
+      "immunity": "Imunidade",
+      "position": "Posição",
+      "rotation": "Rotação",
+      "discoveredZones": "Zonas Descobertas",
+      "memories": "Memórias",
+      "uniqueItems": "Itens Únicos",
+      "noData": "Nenhum dado do jogador disponível",
+      "noSavedData": "Nenhum dado salvo do jogador encontrado",
+      "noStats": "Nenhuma estatística disponível",
+      "slots": "Espaços",
+      "armor": "Armadura",
+      "utility": "Utilitário",
+      "tools": "Ferramentas",
+      "emptyInventory": "O inventário está vazio",
+      "inventoryUnavailable": "Inventário indisponível",
+      "inventoryHint": "Os dados do inventário estarão disponíveis assim que a API do Hytale oferecer suporte.",
+      "modelPreview": "Pré-visualização do Modelo",
+      "modelType": "Tipo de Modelo",
+      "skinId": "ID da Skin",
+      "customization": "Personalização",
+      "hairStyle": "Estilo de Cabelo",
+      "hairColor": "Cor do Cabelo",
+      "eyeColor": "Cor dos Olhos",
+      "bodyType": "Tipo de Corpo",
+      "noCustomization": "Nenhum dado de personalização disponível",
+      "appearanceUnavailable": "Aparência indisponível",
+      "appearanceHint": "Os dados de aparência estarão disponíveis assim que a API do Hytale oferecer suporte.",
+      "assetsHint": "Extraia os assets para mostrar os ícones dos itens",
+      "goToAssets": "Ir para Assets"
     },
     "kill": "Matar",
     "respawn": "Renascer",
@@ -457,7 +494,37 @@
     "confirmKill": "Realmente deseja matar este jogador?",
     "confirmClearInventory": "Realmente deseja limpar o inventário deste jogador?",
     "moreActions": "Mais Ações",
-    "coordinates": "Coordenadas"
+    "coordinates": "Coordenadas",
+    "viewDetails": "Ver Detalhes",
+    "pluginRequired": "Plugin necessário para informações detalhadas do jogador",
+    "pluginHint": "Instale e inicie o Plugin KyuubiSoft API para ver os detalhes do jogador.",
+    "itemTypes": {
+      "sword": "Espada",
+      "axe": "Machado",
+      "battleaxe": "Machado de Batalha",
+      "mace": "Maça",
+      "pickaxe": "Picareta",
+      "bow": "Arco",
+      "arrow": "Flecha",
+      "shield": "Escudo",
+      "helmet": "Capacete",
+      "chestplate": "Peitoral",
+      "leggings": "Calças",
+      "gloves": "Luvas",
+      "potion": "Poção",
+      "food": "Comida",
+      "torch": "Tocha",
+      "teleporter": "Teleportador",
+      "material": "Material",
+      "tool": "Ferramenta",
+      "block": "Bloco",
+      "plant": "Planta",
+      "item": "Item"
+    },
+    "tooltip": {
+      "amount": "Quantidade",
+      "durability": "Durabilidade"
+    }
   },
   "whitelist": {
     "title": "Lista de Permissões e Banimentos",
@@ -711,7 +778,28 @@
     "stackmartApiKeyInstructions": "Para usar recursos de publicador, crie uma API key no stackmart.org:",
     "stackmartApiKeyStep1": "Vá para",
     "stackmartApiKeyStep2": "Crie uma conta de publicador",
-    "stackmartApiKeyStep3": "Gere uma Publisher API Key"
+    "stackmartApiKeyStep3": "Gere uma Publisher API Key",
+    "curseforgeDescription": "Navegue e instale mods do CurseForge - a maior plataforma de mods para jogos.",
+    "curseforgeUnavailable": "API do CurseForge indisponível. Configure a chave de API.",
+    "searchCurseForge": "Buscar mods no CurseForge...",
+    "curseforgeResults": "Resultados do CurseForge",
+    "noCurseForgeResults": "Nenhum mod encontrado",
+    "curseforgeApiKeyInstructions": "Para usar o CurseForge, você precisa de uma chave de API:",
+    "curseforgeApiKeyStep1": "Acesse",
+    "curseforgeApiKeyStep2": "Solicite uma chave de API de terceiros",
+    "curseforgeApiKeyStep3": "Adicione a chave à sua configuração",
+    "checkingUpdates": "Verificando atualizações...",
+    "updatesAvailable": "Atualizações disponíveis",
+    "noUpdatesAvailable": "Todos os mods estão atualizados",
+    "updateAll": "Atualizar todos",
+    "releaseType": "Tipo de Versão",
+    "release": "Estável",
+    "beta": "Beta",
+    "alpha": "Alpha",
+    "gameVersions": "Versões do Jogo",
+    "curseforgeApiSettings": "Configurações da API do CurseForge",
+    "thirdPartyDisabled": "Este mod não permite downloads de terceiros. Baixe diretamente do CurseForge.",
+    "viewOnCurseforge": "Ver no CurseForge"
   },
   "performance": {
     "title": "Monitor de Desempenho",
@@ -1000,7 +1088,13 @@
     "description": "Ver todas as mensagens de chat dos jogadores",
     "noMessages": "Nenhuma mensagem de chat ainda",
     "searchPlaceholder": "Buscar mensagens ou nomes de jogadores...",
-    "messageCount": "{count} mensagens no total"
+    "messageCount": "{count} mensagens no total",
+    "timeRange": "Período:",
+    "days7": "7 dias",
+    "days14": "14 dias",
+    "days30": "30 dias",
+    "all": "Tudo",
+    "daysAvailable": "{count} dia(s) disponível(is)"
   },
   "commands": {
     "title": "Referência de Comandos",
@@ -1011,44 +1105,120 @@
       "server": "Servidor",
       "world": "Mundo"
     },
-    "kick": { "desc": "Expulsar um jogador do servidor" },
-    "ban": { "desc": "Banir um jogador do servidor" },
-    "unban": { "desc": "Desbanir um jogador" },
-    "op": { "desc": "Dar permissões de operador" },
-    "deop": { "desc": "Remover permissões de operador" },
-    "whitelistAdd": { "desc": "Adicionar jogador à lista de permissões" },
-    "whitelistRemove": { "desc": "Remover jogador da lista de permissões" },
-    "kill": { "desc": "Matar um jogador" },
-    "gamemode": { "desc": "Alterar modo de jogo do jogador" },
-    "give": { "desc": "Dar itens a um jogador" },
-    "heal": { "desc": "Curar um jogador completamente" },
-    "effectApply": { "desc": "Aplicar um efeito a um jogador" },
-    "effectClear": { "desc": "Limpar todos os efeitos de um jogador" },
-    "inventoryClear": { "desc": "Limpar o inventário de um jogador" },
-    "tpPlayer": { "desc": "Teleportar jogador para outro jogador" },
-    "tpCoords": { "desc": "Teleportar jogador para coordenadas" },
-    "tpSelf": { "desc": "Teleportar você para um jogador" },
-    "top": { "desc": "Teleportar para o topo do mundo" },
-    "spawn": { "desc": "Teleportar para o spawn" },
-    "home": { "desc": "Teleportar para casa" },
-    "sethome": { "desc": "Definir localização de casa" },
-    "warp": { "desc": "Teleportar para um ponto de teleporte" },
-    "stop": { "desc": "Parar o servidor" },
-    "restart": { "desc": "Reiniciar o servidor" },
-    "save": { "desc": "Salvar todos os mundos" },
-    "reload": { "desc": "Recarregar configuração do servidor" },
-    "say": { "desc": "Transmitir uma mensagem" },
-    "broadcast": { "desc": "Transmissão para todo o servidor" },
-    "list": { "desc": "Listar jogadores online" },
-    "memory": { "desc": "Mostrar estatísticas de uso de memória" },
-    "tps": { "desc": "Mostrar ticks por segundo" },
-    "gc": { "desc": "Executar coleta de lixo" },
-    "worldList": { "desc": "Listar todos os mundos" },
-    "worldCreate": { "desc": "Criar um novo mundo" },
-    "worldLoad": { "desc": "Carregar um mundo" },
-    "timeSet": { "desc": "Definir horário do mundo" },
-    "weather": { "desc": "Definir clima" },
-    "difficulty": { "desc": "Definir dificuldade do jogo" }
+    "kick": {
+      "desc": "Expulsar um jogador do servidor"
+    },
+    "ban": {
+      "desc": "Banir um jogador do servidor"
+    },
+    "unban": {
+      "desc": "Desbanir um jogador"
+    },
+    "op": {
+      "desc": "Dar permissões de operador"
+    },
+    "deop": {
+      "desc": "Remover permissões de operador"
+    },
+    "whitelistAdd": {
+      "desc": "Adicionar jogador à lista de permissões"
+    },
+    "whitelistRemove": {
+      "desc": "Remover jogador da lista de permissões"
+    },
+    "kill": {
+      "desc": "Matar um jogador"
+    },
+    "gamemode": {
+      "desc": "Alterar modo de jogo do jogador"
+    },
+    "give": {
+      "desc": "Dar itens a um jogador"
+    },
+    "heal": {
+      "desc": "Curar um jogador completamente"
+    },
+    "effectApply": {
+      "desc": "Aplicar um efeito a um jogador"
+    },
+    "effectClear": {
+      "desc": "Limpar todos os efeitos de um jogador"
+    },
+    "inventoryClear": {
+      "desc": "Limpar o inventário de um jogador"
+    },
+    "tpPlayer": {
+      "desc": "Teleportar jogador para outro jogador"
+    },
+    "tpCoords": {
+      "desc": "Teleportar jogador para coordenadas"
+    },
+    "tpSelf": {
+      "desc": "Teleportar você para um jogador"
+    },
+    "top": {
+      "desc": "Teleportar para o topo do mundo"
+    },
+    "spawn": {
+      "desc": "Teleportar para o spawn"
+    },
+    "home": {
+      "desc": "Teleportar para casa"
+    },
+    "sethome": {
+      "desc": "Definir localização de casa"
+    },
+    "warp": {
+      "desc": "Teleportar para um ponto de teleporte"
+    },
+    "stop": {
+      "desc": "Parar o servidor"
+    },
+    "restart": {
+      "desc": "Reiniciar o servidor"
+    },
+    "save": {
+      "desc": "Salvar todos os mundos"
+    },
+    "reload": {
+      "desc": "Recarregar configuração do servidor"
+    },
+    "say": {
+      "desc": "Transmitir uma mensagem"
+    },
+    "broadcast": {
+      "desc": "Transmissão para todo o servidor"
+    },
+    "list": {
+      "desc": "Listar jogadores online"
+    },
+    "memory": {
+      "desc": "Mostrar estatísticas de uso de memória"
+    },
+    "tps": {
+      "desc": "Mostrar ticks por segundo"
+    },
+    "gc": {
+      "desc": "Executar coleta de lixo"
+    },
+    "worldList": {
+      "desc": "Listar todos os mundos"
+    },
+    "worldCreate": {
+      "desc": "Criar um novo mundo"
+    },
+    "worldLoad": {
+      "desc": "Carregar um mundo"
+    },
+    "timeSet": {
+      "desc": "Definir horário do mundo"
+    },
+    "weather": {
+      "desc": "Definir clima"
+    },
+    "difficulty": {
+      "desc": "Definir dificuldade do jogo"
+    }
   },
   "scheduler": {
     "title": "Agendador e Automação",
@@ -1453,7 +1623,9 @@
       "memory": "Mostrar uso de memória",
       "chunkLoad": "Forçar carregamento de chunks",
       "chunkUnload": "Descarregar chunks",
-      "logLevel": "Definir nível de log"
+      "logLevel": "Definir nível de log",
+      "gamemodeSurvival": "Definir modo sobrevivência",
+      "gamemodeSpectator": "Definir modo espectador"
     }
   },
   "setup": {
@@ -1670,7 +1842,6 @@
     "codeValidFor": "Codigo valido por {time}",
     "envConfigRequired": "Configuracao Necessaria",
     "followTheseSteps": "Siga estes passos",
-
     "extractAssetsTitle": "Extracao de Assets",
     "extractAssetsDescription": "Extraia assets do jogo para recursos avancados como icones de itens e pre-visualizacao de texturas",
     "extractingAssetsTitle": "Extraindo Assets",
@@ -1703,7 +1874,6 @@
     "extractionSkippedInfo": "Voce pode extrair assets mais tarde em Configuracoes > Assets",
     "extractionStartFailed": "Falha ao iniciar a extracao",
     "enabledFeatures": "Recursos Ativados",
-
     "firstServerStartTitle": "Primeiro Inicio do Servidor",
     "firstServerStartDescription": "Iniciando o servidor pela primeira vez para iniciar a autenticacao",
     "serverAuthTitle": "Autenticacao do Servidor",
@@ -1739,7 +1909,6 @@
     "autoAuthEnabledDesc": "Seu servidor ira re-autenticar automaticamente ao reiniciar usando as credenciais salvas. Nenhuma intervencao manual necessaria.",
     "serverStartFailed": "Falha ao iniciar servidor",
     "persistenceFailed": "Falha ao configurar persistencia de token",
-
     "download": {
       "title": "Download do Servidor",
       "description": "Escolha como voce quer configurar os arquivos do servidor Hytale",
@@ -1922,7 +2091,14 @@
         "description": "Habilite o recurso de mapa web ao vivo para visualizacao do mundo em tempo real",
         "portRequirements": "As seguintes portas serao usadas:"
       },
-      "learnMore": "Saiba mais"
+      "learnMore": "Saiba mais",
+      "curseforge": {
+        "title": "CurseForge",
+        "description": "Acesse o CurseForge para navegar e instalar mods com verificação de atualizações",
+        "apiKey": "Chave de API",
+        "apiKeyPlaceholder": "Digite sua chave de API do CurseForge...",
+        "hint": "Solicite uma chave de API em docs.curseforge.com"
+      }
     },
     "network": {
       "title": "Configuracao de Rede",
@@ -2050,5 +2226,47 @@
       "amount": "Quantidade",
       "durability": "Durabilidade"
     }
+  },
+  "modupdates": {
+    "title": "Atualizações de Mods",
+    "status": "Status da Atualização",
+    "available": "Atualizações disponíveis",
+    "upToDate": "Todos os mods atualizados",
+    "noTrackedMods": "Nenhum mod sendo monitorado",
+    "tracked": "Mods Monitorados",
+    "checking": "Verificando atualizações...",
+    "checkAll": "Verificar Todos",
+    "checkNow": "Verificar Agora",
+    "lastChecked": "Última verificação",
+    "never": "Nunca",
+    "trackMod": "Monitorar Mod",
+    "untrack": "Parar de Monitorar",
+    "curseforgeUrl": "URL ou Slug do CurseForge",
+    "curseforgeUrlHint": "ex.: https://www.curseforge.com/hytale/mods/nome-do-mod ou nome-do-mod",
+    "installedVersion": "Versão Instalada",
+    "latestVersion": "Versão Mais Recente",
+    "updateAvailable": "Atualização disponível",
+    "noUpdate": "Atualizado",
+    "filename": "Nome do Arquivo",
+    "trackSuccess": "O mod agora está sendo monitorado",
+    "trackError": "Falha ao monitorar o mod",
+    "untrackSuccess": "O mod não está mais sendo monitorado",
+    "modNotFound": "Mod não encontrado no CurseForge",
+    "invalidUrl": "URL ou slug do CurseForge inválido",
+    "autoCheck": "Verificação automática (a cada hora)",
+    "viewOnCurseforge": "Ver no CurseForge",
+    "trackAsWishlist": "Monitorar sem instalar (Lista de Desejos)",
+    "wishlist": "Lista de Desejos",
+    "notInstalled": "Não instalado",
+    "selectFile": "Selecione um arquivo de mod",
+    "install": "Instalar",
+    "update": "Atualizar",
+    "installing": "Instalando...",
+    "updating": "Atualizando..."
+  },
+  "security": {
+    "confirmRevokeTitle": "Revogar chave de API?",
+    "confirmRevokeMessage": "Revogar a chave \"{name}\"? Qualquer ferramenta que a utilize perderá o acesso imediatamente.",
+    "revokeApiKeyAria": "Revogar chave de API {name}"
   }
 }

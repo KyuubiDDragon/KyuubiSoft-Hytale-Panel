@@ -75,11 +75,6 @@ function handleStepBack() {
   setupStore.prevStep()
 }
 
-// Handle skip for optional steps
-function handleStepSkip() {
-  setupStore.skipCurrentStep()
-}
-
 // Navigate to specific step (only if completed)
 function goToStep(index: number) {
   if (index < setupStore.currentStep) {

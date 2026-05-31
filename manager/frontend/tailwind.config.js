@@ -10,19 +10,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Semantic surface colors that read CSS custom properties so the
-        // active theme can be flipped at runtime without rebuilding Tailwind.
-        surface: {
-          base: 'rgb(var(--surface-base) / <alpha-value>)',
-          panel: 'rgb(var(--surface-panel) / <alpha-value>)',
-          elevated: 'rgb(var(--surface-elevated) / <alpha-value>)',
-          muted: 'rgb(var(--surface-muted) / <alpha-value>)',
-        },
-        ink: {
-          primary: 'rgb(var(--ink-primary) / <alpha-value>)',
-          secondary: 'rgb(var(--ink-secondary) / <alpha-value>)',
-          muted: 'rgb(var(--ink-muted) / <alpha-value>)',
-        },
+        // NOTE: `surface` and `ink` are defined ONCE below. A previous duplicate
+        // block here (surface.base/panel/elevated, ink.primary/secondary) read
+        // CSS vars that don't exist in main.css AND was silently overridden by
+        // the canonical block — so `text-ink-primary`/`bg-surface-panel` resolved
+        // to nothing. Removed to keep a single source of truth.
         // Hytale Brand Colors
         hytale: {
           orange: '#FF6B35',

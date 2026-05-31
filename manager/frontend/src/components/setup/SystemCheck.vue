@@ -112,7 +112,7 @@ onMounted(() => {
           <p class="text-ink-muted">{{ t('setup.runningSystemCheck') }}</p>
         </div>
 
-        <div v-else class="divide-y divide-dark-50/30">
+        <div v-else class="divide-y divide-border/30">
           <div
             v-for="check in checks"
             :key="check.id"
@@ -158,8 +158,8 @@ onMounted(() => {
               <p
                 class="text-sm font-medium"
                 :class="{
-                  'text-status-success': check.status === 'ok' || check.status === 'pass',
-                  'text-status-error': check.status === 'error' || check.status === 'fail',
+                  'text-status-success': check.status === 'pass',
+                  'text-status-error': check.status === 'fail',
                   'text-status-warning': check.status === 'warning',
                   'text-ink-muted': check.status === 'checking',
                 }"

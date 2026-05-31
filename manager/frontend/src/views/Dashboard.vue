@@ -3,10 +3,10 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
-import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type PatchlineResponse, type DownloaderAuthStatus, type NewFeaturesStatus, type PanelVersionInfo } from '@/api/server'
+import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type DownloaderAuthStatus, type NewFeaturesStatus, type PanelVersionInfo } from '@/api/server'
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import { schedulerApi, type SchedulerStatus } from '@/api/scheduler'
-import { modupdatesApi, modsApi, type ModUpdateStatus } from '@/api/management'
+import { modsApi, type ModUpdateStatus } from '@/api/management'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 import PluginBanner from '@/components/dashboard/PluginBanner.vue'
@@ -16,7 +16,7 @@ import ErrorState from '@/components/ui/ErrorState.vue'
 
 const { t } = useI18n()
 const router = useRouter()
-const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, mspt, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
+const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
 
 // Server JVM memory stats
 const serverMemory = ref<ServerMemoryStats | null>(null)
@@ -63,7 +63,6 @@ const schedulerStatus = ref<SchedulerStatus | null>(null)
 
 // Mod update status (unified from all sources)
 const modUpdateStatus = ref<ModUpdateStatus | null>(null)
-const checkingModUpdates = ref(false)
 
 // Panel patchline setting (fallback when plugin not available)
 const panelPatchline = ref<string | null>(null)
@@ -163,7 +162,7 @@ async function checkHytaleAuth() {
     // Check if server is running
     if (status.value?.running) {
       // First verify auth status with the backend
-      const checkResult = await authApi.checkHytaleAuthCompletion()
+      await authApi.checkHytaleAuthCompletion()
 
       // Then get the updated status (which may have been modified by checkHytaleAuthCompletion)
       const authStatus = await authApi.getHytaleAuthStatus()
@@ -229,23 +228,6 @@ async function fetchModUpdateStatus() {
   } catch {
     // Silently fail
   }
-}
-
-async function checkModUpdates() {
-  checkingModUpdates.value = true
-  try {
-    // Check all updates and then refresh
-    await modupdatesApi.checkAll()
-    await fetchModUpdateStatus()
-  } catch {
-    // Silently fail
-  } finally {
-    checkingModUpdates.value = false
-  }
-}
-
-function goToMods() {
-  router.push('/mods')
 }
 
 async function fetchPanelPatchline() {
@@ -364,13 +346,11 @@ const cpuValue = computed(() => {
 
 // Show JVM heap memory if available, otherwise fall back to Docker memory
 const memoryValue = computed(() => {
-  // Prefer JVM heap memory from server stats
-  if (serverMemory.value?.available && serverMemory.value.heap?.used !== null) {
-    const used = serverMemory.value.heap.used
-    const max = serverMemory.value.heap.max
-    if (used !== null && max !== null) {
-      return `${used.toFixed(1)} / ${max.toFixed(1)} GiB`
-    }
+  // Prefer JVM heap memory from server stats (narrow `heap` to a local so TS
+  // knows it's defined before reading used/max).
+  const heap = serverMemory.value?.available ? serverMemory.value.heap : undefined
+  if (heap && heap.used !== null && heap.max !== null) {
+    return `${heap.used.toFixed(1)} / ${heap.max.toFixed(1)} GiB`
   }
   // Fall back to Docker container memory
   if (!stats.value?.memory_mb) return '0 MB'
@@ -379,12 +359,9 @@ const memoryValue = computed(() => {
 
 // Memory percent for status color (based on JVM heap or Docker)
 const memoryPercent = computed(() => {
-  if (serverMemory.value?.available && serverMemory.value.heap?.used !== null && serverMemory.value.heap?.max !== null) {
-    const used = serverMemory.value.heap.used
-    const max = serverMemory.value.heap.max
-    if (used !== null && max !== null && max > 0) {
-      return (used / max) * 100
-    }
+  const heap = serverMemory.value?.available ? serverMemory.value.heap : undefined
+  if (heap && heap.used !== null && heap.max !== null && heap.max > 0) {
+    return (heap.used / heap.max) * 100
   }
   return stats.value?.memory_percent || 0
 })

@@ -294,7 +294,7 @@ onUnmounted(stopProgressPolling)
           {{ t('assets.search') }}
         </button>
         <button
-          @click="loadStatus"
+          @click="loadStatus()"
           class="text-ink-muted hover:text-ink transition-colors p-2"
           :class="{ 'animate-spin': loading }"
         >

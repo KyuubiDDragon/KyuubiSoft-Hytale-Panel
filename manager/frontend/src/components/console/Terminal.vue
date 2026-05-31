@@ -308,12 +308,11 @@ function scrollToBottom(retries = 3) {
   }
 }
 
-// Check if user has scrolled up (not at bottom)
-function isScrolledToBottom(): boolean {
-  if (!terminalRef.value) return true
-  const el = terminalRef.value
-  // Allow 50px tolerance
-  return el.scrollHeight - el.scrollTop - el.clientHeight < 50
+// Hide the command suggestions shortly after blur (delayed so a click on a
+// suggestion still registers). Defined as a method because `setTimeout` isn't
+// available on the component instance inside template expressions.
+function hideSuggestionsSoon(): void {
+  setTimeout(() => { showSuggestions.value = false }, 150)
 }
 
 // Auto-scroll interval - more reliable than watchers for continuous updates
@@ -454,7 +453,7 @@ watch(
               ref="inputRef"
               v-model="commandInput"
               @keydown="handleKeyDown"
-              @blur="setTimeout(() => showSuggestions = false, 150)"
+              @blur="hideSuggestionsSoon"
               type="text"
               :placeholder="t('console.commandPlaceholder')"
               class="input w-full font-mono"

@@ -1,45 +1,29 @@
-import { ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useThemeStore } from '@/stores/theme'
 
 export type Theme = 'light' | 'dark'
 
-const STORAGE_KEY = 'panel-theme'
-
-function readInitial(): Theme {
-  if (typeof localStorage === 'undefined') return 'dark'
-  const stored = localStorage.getItem(STORAGE_KEY) as Theme | null
-  if (stored === 'light' || stored === 'dark') return stored
-  return 'dark'
-}
-
-const theme = ref<Theme>(readInitial())
-
-function applyTheme(t: Theme) {
-  if (typeof document === 'undefined') return
-  const root = document.documentElement
-  if (t === 'dark') {
-    root.classList.add('dark')
-  } else {
-    root.classList.remove('dark')
-  }
-}
-
-applyTheme(theme.value)
-
-watch(theme, (t) => {
-  applyTheme(t)
-  try {
-    localStorage.setItem(STORAGE_KEY, t)
-  } catch {
-    // Ignore storage errors
-  }
-})
-
+/**
+ * Backwards-compatible composable that now delegates to the single Pinia theme
+ * store (storage key `kp-theme`, toggles both `dark` and `light` classes on
+ * <html>).
+ *
+ * It used to be a *second*, independent implementation (key `panel-theme`,
+ * dark-only) that fought with the store: toggling the theme in the header
+ * (this composable) did not update the command palette (the store) and vice
+ * versa, and a reload could show a theme different from what was persisted.
+ * One source of truth removes that whole class of bugs.
+ */
 export function useTheme() {
-  function toggle() {
-    theme.value = theme.value === 'dark' ? 'light' : 'dark'
+  const store = useThemeStore()
+  const { theme } = storeToRefs(store)
+
+  function toggle(): void {
+    store.toggle()
   }
-  function setTheme(t: Theme) {
-    theme.value = t
+  function setTheme(t: Theme): void {
+    store.theme = t
   }
+
   return { theme, toggle, setTheme }
 }

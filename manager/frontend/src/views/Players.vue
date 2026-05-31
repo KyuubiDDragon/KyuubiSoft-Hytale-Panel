@@ -524,7 +524,7 @@ onUnmounted(() => {
         {{ t('players.noPlayers') }}
       </div>
 
-      <div v-else class="divide-y divide-dark-50/30">
+      <div v-else class="divide-y divide-border/30">
         <div
           v-for="player in onlinePlayers"
           :key="player.name"
@@ -722,7 +722,7 @@ onUnmounted(() => {
         {{ t('players.noOfflinePlayers') }}
       </div>
 
-      <div v-else class="divide-y divide-dark-50/30">
+      <div v-else class="divide-y divide-border/30">
         <div
           v-for="player in offlinePlayers"
           :key="player.name"

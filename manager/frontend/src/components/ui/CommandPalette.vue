@@ -41,7 +41,7 @@ const navigationCommands = computed<Command[]>(() => {
       title: String(r.name).charAt(0).toUpperCase() + String(r.name).slice(1),
       hint: r.path,
       group: 'Navigation' as const,
-      run: () => router.push(r.path),
+      run: () => { void router.push(r.path) },
     }))
 })
 
@@ -138,18 +138,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       leave-to-class="opacity-0"
     >
       <div v-if="open" class="fixed inset-0 z-[100] flex items-start justify-center pt-24 px-4 bg-black/60 backdrop-blur-sm" @click.self="close">
-        <div class="w-full max-w-xl rounded-xl shadow-2xl border border-dark-50/60 bg-dark-200 light:bg-white light:border-slate-200 overflow-hidden">
-          <div class="flex items-center gap-3 px-4 py-3 border-b border-dark-50/60 light:border-slate-200">
+        <div class="w-full max-w-xl rounded-xl shadow-2xl border border-border bg-surface-raised overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-3 border-b border-border">
             <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input
               ref="inputRef"
               v-model="query"
               type="text"
               :placeholder="t('cmd.placeholder', 'Type a command or search…')"
-              class="flex-1 bg-transparent outline-none text-base text-ink-primary placeholder:text-ink-muted"
+              class="flex-1 bg-transparent outline-none text-base text-ink placeholder:text-ink-muted"
               aria-label="Command palette"
             />
-            <kbd class="hidden sm:block text-xs px-1.5 py-0.5 rounded bg-dark-100 light:bg-slate-100 text-ink-muted border border-dark-50/60 light:border-slate-300">esc</kbd>
+            <kbd class="hidden sm:block text-xs px-1.5 py-0.5 rounded bg-surface-overlay text-ink-muted border border-border">esc</kbd>
           </div>
           <div class="max-h-80 overflow-y-auto p-2" role="listbox">
             <template v-if="results.length === 0">
@@ -163,7 +163,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                   @mouseenter="selectedIndex = i"
                   @click="runSelected"
                   class="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer"
-                  :class="i === selectedIndex ? 'bg-hytale-orange/15 text-ink-primary' : 'text-ink-secondary hover:bg-dark-100 light:hover:bg-slate-100'"
+                  :class="i === selectedIndex ? 'bg-hytale-orange/15 text-ink' : 'text-ink-muted hover:bg-surface-overlay'"
                 >
                   <div class="flex flex-col">
                     <span class="text-sm">{{ cmd.title }}</span>
@@ -174,12 +174,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               </template>
             </template>
           </div>
-          <div class="flex items-center justify-between px-4 py-2 border-t border-dark-50/60 light:border-slate-200 text-xs text-ink-muted">
+          <div class="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-ink-muted">
             <div class="flex gap-3">
-              <span><kbd class="px-1 py-0.5 rounded bg-dark-100 light:bg-slate-100">↑↓</kbd> navigate</span>
-              <span><kbd class="px-1 py-0.5 rounded bg-dark-100 light:bg-slate-100">↵</kbd> run</span>
+              <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">↑↓</kbd> navigate</span>
+              <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">↵</kbd> run</span>
             </div>
-            <span><kbd class="px-1 py-0.5 rounded bg-dark-100 light:bg-slate-100">⌘K</kbd> toggle</span>
+            <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">⌘K</kbd> toggle</span>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps<{
   open: boolean
@@ -10,18 +10,66 @@ const emit = defineEmits<{
   close: []
 }>()
 
-// Close on escape
-watch(() => props.open, (isOpen) => {
-  if (isOpen) {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        emit('close')
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+// Stable, unique id per modal instance so aria-labelledby links the heading.
+let uidCounter = 0
+const titleId = `modal-title-${++uidCounter}`
+
+const dialogRef = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
+
+function focusable(): HTMLElement[] {
+  if (!dialogRef.value) return []
+  return Array.from(
+    dialogRef.value.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function onKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape') {
+    emit('close')
+    return
   }
-})
+  // Trap Tab focus inside the dialog.
+  if (e.key !== 'Tab') return
+  const items = focusable()
+  if (items.length === 0) {
+    e.preventDefault()
+    dialogRef.value?.focus()
+    return
+  }
+  const first = items[0]
+  const last = items[items.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey && active === first) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
+// IMPORTANT: register/clean up via the watcher's onCleanup argument. The old
+// code returned a cleanup function from the callback, which Vue does NOT treat
+// as cleanup — so each open leaked another keydown listener.
+watch(
+  () => props.open,
+  async (isOpen, _prev, onCleanup) => {
+    if (!isOpen) return
+    previouslyFocused = (document.activeElement as HTMLElement) ?? null
+    document.addEventListener('keydown', onKeydown)
+    await nextTick()
+    const items = focusable()
+    ;(items[0] ?? dialogRef.value)?.focus()
+    onCleanup(() => {
+      document.removeEventListener('keydown', onKeydown)
+      // Restore focus to whatever had it before the modal opened.
+      previouslyFocused?.focus?.()
+    })
+  },
+)
 </script>
 
 <template>
@@ -35,12 +83,20 @@ watch(() => props.open, (isOpen) => {
         />
 
         <!-- Modal -->
-        <div role="dialog" aria-modal="true" class="relative bg-surface-raised rounded-xl border border-border shadow-2xl w-full max-w-md">
+        <div
+          ref="dialogRef"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="title ? titleId : undefined"
+          tabindex="-1"
+          class="relative bg-surface-raised rounded-xl border border-border shadow-2xl w-full max-w-md outline-none"
+        >
           <!-- Header -->
           <div v-if="title" class="flex items-center justify-between px-6 py-4 border-b border-border">
-            <h3 class="text-lg font-semibold text-ink">{{ title }}</h3>
+            <h3 :id="titleId" class="text-lg font-semibold text-ink">{{ title }}</h3>
             <button
               @click="emit('close')"
+              aria-label="Close"
               class="text-ink-muted hover:text-ink transition-colors"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

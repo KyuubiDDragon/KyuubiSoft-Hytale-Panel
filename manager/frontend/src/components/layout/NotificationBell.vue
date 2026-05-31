@@ -77,7 +77,7 @@ onUnmounted(() => {
       type="button"
       @click="open = !open"
       :aria-label="unreadCount > 0 ? t('notifications.bellWithCount', { count: unreadCount }) : t('notifications.title')"
-      class="relative p-2 rounded-lg text-gray-400 hover:text-white hover:bg-dark-50 transition-colors flex items-center justify-center"
+      class="relative p-2 rounded-lg text-gray-400 hover:text-white hover:bg-surface-overlay transition-colors flex items-center justify-center"
     >
       <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
       <span
@@ -94,8 +94,8 @@ onUnmounted(() => {
       leave-from-class="opacity-100 scale-100"
       leave-to-class="opacity-0 scale-95"
     >
-      <div v-if="open" class="absolute right-0 top-full mt-2 w-80 rounded-xl bg-dark-200 border border-dark-50/60 shadow-2xl z-50 overflow-hidden">
-        <div class="px-3 py-2 border-b border-dark-50/60 flex items-center justify-between">
+      <div v-if="open" class="absolute right-0 top-full mt-2 w-80 rounded-xl bg-surface-raised border border-border/60 shadow-2xl z-50 overflow-hidden">
+        <div class="px-3 py-2 border-b border-border/60 flex items-center justify-between">
           <span class="text-sm font-medium text-ink">{{ t('notifications.title') }}</span>
           <button v-if="notifications.length" @click="dismissAll" class="text-xs text-ink-muted hover:text-ink">{{ t('notifications.dismissAll') }}</button>
         </div>
@@ -105,8 +105,8 @@ onUnmounted(() => {
             v-for="n in notifications"
             :key="n.id"
             @click="markRead(n.id)"
-            class="w-full text-left px-3 py-2 hover:bg-dark-100 transition-colors border-b border-dark-50/40"
-            :class="!n.readAt ? 'bg-dark-100/40' : ''"
+            class="w-full text-left px-3 py-2 hover:bg-surface-overlay transition-colors border-b border-border/40"
+            :class="!n.readAt ? 'bg-surface-overlay/40' : ''"
           >
             <div class="flex items-center gap-2">
               <span class="text-xs uppercase tracking-wider" :class="levelColor(n.level)">{{ n.level }}</span>

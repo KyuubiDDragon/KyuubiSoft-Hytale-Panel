@@ -8,7 +8,6 @@ import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Skeleton from '@/components/ui/Skeleton.vue'
-import ErrorState from '@/components/ui/ErrorState.vue'
 import EmptyTableState from '@/components/ui/EmptyTableState.vue'
 import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
 

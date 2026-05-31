@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, inject, onMounted } from 'vue'
+import { onKeyStroke } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -16,6 +17,8 @@ const authStore = useAuthStore()
 const { theme, toggle: toggleTheme } = useTheme()
 
 const showUserMenu = ref(false)
+// Close the user menu on Escape (it already closes on outside-click).
+onKeyStroke('Escape', () => { if (showUserMenu.value) showUserMenu.value = false })
 const currentLocale = ref(getLocale())
 const webMapInstalled = ref(false)
 

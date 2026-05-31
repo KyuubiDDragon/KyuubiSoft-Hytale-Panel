@@ -31,6 +31,21 @@ const checkingDemo = ref(true)
 const ssoProviders = ref<SsoProvider[]>([])
 
 onMounted(async () => {
+  // SSO callback returns here with ?sso=success (no tokens in the URL anymore).
+  // The HttpOnly refresh cookie is set; exchange it for an access token.
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('sso') === 'success') {
+    try {
+      await authStore.completeSsoLogin()
+      router.replace('/')
+      return
+    } catch {
+      error.value = t('auth.invalidCredentials')
+      // Drop the query so a reload doesn't loop on a failed exchange.
+      window.history.replaceState({}, '', '/login')
+    }
+  }
+
   const msg = authStore.consumeLogoutMessage()
   if (msg) {
     infoMessage.value = msg

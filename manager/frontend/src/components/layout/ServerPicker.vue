@@ -34,8 +34,8 @@ function pick(id: string) {
     <button
       type="button"
       @click="open = !open"
-      class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-100 hover:bg-dark-50 text-sm text-white transition-colors min-h-9"
-      :class="serversStore.activeServer?.status === 'broken' ? 'border border-status-error' : 'border border-dark-50/40'"
+      class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-overlay hover:bg-surface-overlay text-sm text-white transition-colors min-h-9"
+      :class="serversStore.activeServer?.status === 'broken' ? 'border border-status-error' : 'border border-border/40'"
       :aria-expanded="open"
       :aria-haspopup="true"
     >
@@ -62,7 +62,7 @@ function pick(id: string) {
       <div
         v-if="open"
         @click.stop
-        class="absolute left-0 top-full mt-2 w-72 rounded-xl bg-dark-200 border border-dark-50/60 shadow-2xl z-50 overflow-hidden"
+        class="absolute left-0 top-full mt-2 w-72 rounded-xl bg-surface-raised border border-border/60 shadow-2xl z-50 overflow-hidden"
         role="listbox"
       >
         <div class="max-h-72 overflow-y-auto">
@@ -72,8 +72,8 @@ function pick(id: string) {
             role="option"
             :aria-selected="s.id === serversStore.activeId"
             @click="pick(s.id)"
-            class="w-full flex items-start gap-3 px-3 py-2 text-left hover:bg-dark-100 transition-colors"
-            :class="s.id === serversStore.activeId ? 'bg-dark-100' : ''"
+            class="w-full flex items-start gap-3 px-3 py-2 text-left hover:bg-surface-overlay transition-colors"
+            :class="s.id === serversStore.activeId ? 'bg-surface-overlay' : ''"
           >
             <span
               class="mt-1 inline-block w-2 h-2 rounded-full"
@@ -90,7 +90,7 @@ function pick(id: string) {
             </div>
           </button>
         </div>
-        <div class="border-t border-dark-50/60 px-3 py-2 text-xs text-gray-400">
+        <div class="border-t border-border/60 px-3 py-2 text-xs text-gray-400">
           {{ serversStore.servers.length }} server{{ serversStore.servers.length === 1 ? '' : 's' }} registered
         </div>
       </div>

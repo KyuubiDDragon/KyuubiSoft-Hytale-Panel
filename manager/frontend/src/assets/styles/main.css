@@ -294,10 +294,12 @@
     content: '';
     position: absolute;
     inset: 0;
+    /* Theme-aware shimmer: derived from the ink token so it reads on both the
+       dark and light surfaces (a fixed white highlight was invisible on light). */
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255, 255, 255, 0.06) 50%,
+      rgb(var(--ink) / 0.08) 50%,
       transparent 100%
     );
     background-size: 200% 100%;

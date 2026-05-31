@@ -201,6 +201,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/status',
+      name: 'publicStatus',
+      component: () => import('./views/PublicStatus.vue'),
+      meta: { requiresAuth: false, public: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },
@@ -233,6 +239,12 @@ router.beforeEach(async (to, _from, next) => {
       setupCheckDone = true
       setupRequired = false
     }
+  }
+
+  // Public pages (e.g. the read-only status page) bypass setup/auth gates.
+  if (to.meta.public) {
+    next()
+    return
   }
 
   // If setup is required and not going to setup page, redirect to setup

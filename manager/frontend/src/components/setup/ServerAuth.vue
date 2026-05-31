@@ -358,13 +358,6 @@ async function pollServerAuthStatus() {
   }, pollInterval * 1000)
 }
 
-// Open server verification URL in new tab (prefer direct URL with code)
-function openServerVerificationUrl() {
-  if (!serverDeviceCodeState.value) return
-  const url = serverDeviceCodeState.value.verificationUrlDirect || serverDeviceCodeState.value.verificationUrl
-  window.open(url, '_blank', 'noopener,noreferrer')
-}
-
 // Copy server verification URL to clipboard
 async function copyServerVerificationUrl() {
   if (!serverDeviceCodeState.value) return

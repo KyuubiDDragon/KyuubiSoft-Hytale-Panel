@@ -9,11 +9,14 @@ export interface TokenResponse {
   access_token: string
   refresh_token: string
   token_type: string
+  role?: string
   permissions?: string[]
 }
 
 export interface UserInfo {
   username: string
+  role?: string
+  permissions?: string[]
 }
 
 export interface HytaleAuthStatus {
