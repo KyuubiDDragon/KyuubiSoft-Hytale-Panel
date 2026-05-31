@@ -15,7 +15,7 @@ All notable changes to the Hytale Server Manager will be documented in this file
 - **Event-Action engine**: bind console commands / announcements / backups to panel events (e.g. broadcast on `player.joined`, backup on `server.crashed`).
 - **Public status page** (`/status`, `/api/public/status`): opt-in, unauthenticated read-only server status.
 - **Live player list** now sourced from the KyuubiSoft plugin API when available (log-scraping is the fallback).
-- **KyuubiSoft API plugin v1.4.0**: rebuilt against the 2026-05 Hytale server API (older builds no longer compiled); native player actions, real TPS/health/gamemode, real ping, bearer-auth + CORS.
+- **KyuubiSoft API plugin v1.4.1**: rebuilt against the 2026-05 Hytale server API (older builds no longer compiled); native player actions, real TPS/health/gamemode, real ping, bearer-auth + CORS.
 
 ### Security & correctness (system review 2026-05; see `docs/SYSTEM_REVIEW_2026-05.md`)
 

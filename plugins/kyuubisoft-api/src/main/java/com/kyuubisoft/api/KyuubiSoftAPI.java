@@ -48,7 +48,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
     @Override
     protected void setup() {
         LOGGER.info("╔════════════════════════════════════════╗");
-        LOGGER.info("║       KyuubiSoft API v1.4.0            ║");
+        LOGGER.info("║       KyuubiSoft API v1.4.1            ║");
         LOGGER.info("║       by KyuubiDDragon                 ║");
         LOGGER.info("║       + Prometheus Metrics Support     ║");
         LOGGER.info("╚════════════════════════════════════════╝");

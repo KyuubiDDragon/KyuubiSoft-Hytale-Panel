@@ -107,7 +107,7 @@ the ticker entirely (useful for headless test setups).
 ## Installation
 
 1. Build the plugin (see below).
-2. Copy `build/libs/KyuubiSoftAPI-1.4.0.jar` to your server's `mods/` folder
+2. Copy `build/libs/KyuubiSoftAPI-1.4.1.jar` to your server's `mods/` folder
    (the KyuubiSoft Panel bundles this jar and can install it for you).
 3. Restart the server
 4. API will be available at `http://localhost:18085`
@@ -135,10 +135,10 @@ cd plugins/kyuubisoft-api
 javac --release 21 -encoding UTF-8 -cp lib/HytaleServer.jar -d build/classes \
     $(find src/main/java -name '*.java')
 cp src/main/resources/manifest.json build/classes/
-jar --create --file build/libs/KyuubiSoftAPI-1.4.0.jar -C build/classes .
+jar --create --file build/libs/KyuubiSoftAPI-1.4.1.jar -C build/classes .
 ```
 
-Output: `build/libs/KyuubiSoftAPI-1.4.0.jar`
+Output: `build/libs/KyuubiSoftAPI-1.4.1.jar`
 
 ## Integration with KyuubiSoft Panel
 
