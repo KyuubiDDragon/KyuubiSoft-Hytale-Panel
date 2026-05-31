@@ -53,6 +53,36 @@ const isInRestartGrace = computed(() =>
 const newFeaturesStatus = ref<NewFeaturesStatus | null>(null)
 const showNewFeaturesBanner = ref(false)
 
+// Map each backend feature key to a friendly label + the route that actually
+// configures it. The old banner sent everyone to /configuration (the SERVER
+// config editor), which has nothing to do with these panel features — so the
+// button felt like it did nothing. Now each feature is a direct shortcut.
+const FEATURE_META: Record<string, { label: string; route: string }> = {
+  two_factor_auth: { label: 'Two-Factor Auth', route: '/security' },
+  api_keys: { label: 'API Keys', route: '/security' },
+  audit_log: { label: 'Audit Log', route: '/audit' },
+  webhooks: { label: 'Webhooks', route: '/webhooks' },
+  sso: { label: 'Single Sign-On', route: '/security' },
+  file_manager: { label: 'File Manager', route: '/files' },
+  notifications: { label: 'Notifications', route: '/settings' },
+  multi_server: { label: 'Multi-Server', route: '/servers' },
+  live_map: { label: 'Live Map', route: '/live-map' },
+  replay: { label: 'Replay', route: '/replay' },
+  wiki: { label: 'Wiki', route: '/wiki' },
+}
+
+function humanizeFeature(key: string): string {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+const featureLinks = computed(() =>
+  (newFeaturesStatus.value?.features ?? []).map((key) => ({
+    key,
+    label: FEATURE_META[key]?.label ?? humanizeFeature(key),
+    route: FEATURE_META[key]?.route ?? '/settings',
+  })),
+)
+
 // Panel Version Check (check for panel updates from GitHub)
 const panelVersionInfo = ref<PanelVersionInfo | null>(null)
 const checkingPanelVersion = ref(false)
@@ -485,15 +515,23 @@ async function tickDashboard() {
       @dismiss="dismissNewFeaturesBanner"
     >
       <ul class="space-y-1 mb-3">
-        <li v-for="(feature, index) in newFeaturesStatus.features" :key="index" class="flex items-center gap-2 text-sm text-ink">
-          <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {{ feature }}
+        <li v-for="feature in featureLinks" :key="feature.key">
+          <router-link
+            :to="feature.route"
+            class="flex items-center gap-2 text-sm text-ink hover:text-hytale-orange transition-colors group"
+          >
+            <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="group-hover:underline">{{ feature.label }}</span>
+            <svg class="w-3.5 h-3.5 opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </router-link>
         </li>
       </ul>
       <div class="flex items-center gap-3">
-        <router-link to="/configuration" class="btn btn-primary inline-flex items-center gap-2">
+        <router-link to="/settings" class="btn btn-primary inline-flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

@@ -1625,7 +1625,22 @@
       "chunkUnload": "Descarregar chunks",
       "logLevel": "Definir nível de log",
       "gamemodeSurvival": "Definir modo sobrevivência",
-      "gamemodeSpectator": "Definir modo espectador"
+      "gamemodeSpectator": "Definir modo espectador",
+      "pardon": "Remover um banimento (alias de /unban)",
+      "mute": "Silenciar um jogador no chat",
+      "unmute": "Remover o silêncio de um jogador",
+      "heal": "Restaurar a vida de um jogador ao máximo",
+      "effect": "Aplicar ou modificar um efeito de status",
+      "clear": "Limpar o inventário de um jogador",
+      "saveAll": "Salvar todos os mundos imediatamente",
+      "saveOn": "Ativar o salvamento automático",
+      "saveOff": "Desativar o salvamento automático",
+      "update": "Verificar ou aplicar uma atualização do servidor",
+      "msg": "Enviar mensagem privada a um jogador",
+      "me": "Transmitir uma mensagem de ação",
+      "seed": "Mostrar a seed do mundo",
+      "worldborder": "Configurar a borda do mundo",
+      "setspawn": "Definir o ponto de spawn do mundo"
     }
   },
   "setup": {

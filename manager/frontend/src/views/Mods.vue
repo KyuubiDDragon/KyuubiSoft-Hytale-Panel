@@ -58,6 +58,7 @@ const pluginsPath = ref('')
 const loading = ref(true)
 const error = ref('')
 const uploading = ref(false)
+const uploadProgress = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 
 // Config editor state
@@ -382,24 +383,38 @@ function triggerUpload() {
 
 async function handleFileUpload(event: Event) {
   const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
+  const files = Array.from(target.files ?? [])
+  if (files.length === 0) return
 
   uploading.value = true
   error.value = ''
 
-  try {
-    if (activeTab.value === 'mods') {
-      await modsApi.upload(file)
-    } else {
-      await pluginsApi.upload(file)
+  // Upload each selected file through the existing single-file endpoint so a
+  // single failure doesn't abort the rest. Collect per-file errors and surface
+  // them together at the end.
+  const failures: string[] = []
+  let done = 0
+  for (const file of files) {
+    uploadProgress.value = files.length > 1 ? `${done + 1}/${files.length} · ${file.name}` : ''
+    try {
+      if (activeTab.value === 'mods') {
+        await modsApi.upload(file)
+      } else {
+        await pluginsApi.upload(file)
+      }
+    } catch (e: any) {
+      failures.push(`${file.name}: ${e.response?.data?.error || t('errors.serverError')}`)
     }
-    await loadData()
-  } catch (e: any) {
-    error.value = e.response?.data?.error || t('errors.serverError')
-  } finally {
-    uploading.value = false
-    target.value = ''
+    done++
+  }
+
+  await loadData()
+  uploading.value = false
+  uploadProgress.value = ''
+  target.value = ''
+
+  if (failures.length > 0) {
+    error.value = failures.join(' · ')
   }
 }
 
@@ -1095,10 +1110,11 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <!-- Hidden file input -->
+    <!-- Hidden file input (multiple: upload several mods/plugins at once) -->
     <input
       ref="fileInput"
       type="file"
+      multiple
       accept=".jar,.zip,.js,.lua,.dll,.so"
       class="hidden"
       @change="handleFileUpload"
@@ -1123,7 +1139,7 @@ onMounted(() => {
           <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          {{ t('mods.upload') }}
+          {{ uploadProgress || t('mods.upload') }}
         </button>
         <button
           @click="loadData"

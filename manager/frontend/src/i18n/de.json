@@ -1591,7 +1591,22 @@
       "memory": "Speichernutzung anzeigen",
       "chunkLoad": "Chunks laden erzwingen",
       "chunkUnload": "Chunks entladen",
-      "logLevel": "Log-Level setzen"
+      "logLevel": "Log-Level setzen",
+      "pardon": "Bann aufheben (Alias für /unban)",
+      "mute": "Spieler im Chat stummschalten",
+      "unmute": "Stummschaltung aufheben",
+      "heal": "Gesundheit eines Spielers vollständig auffüllen",
+      "effect": "Statuseffekt anwenden oder ändern",
+      "clear": "Inventar eines Spielers leeren",
+      "saveAll": "Alle Welten sofort speichern",
+      "saveOn": "Automatisches Speichern aktivieren",
+      "saveOff": "Automatisches Speichern deaktivieren",
+      "update": "Nach Server-Update suchen oder es anwenden",
+      "msg": "Private Nachricht an einen Spieler senden",
+      "me": "Aktionsnachricht senden",
+      "seed": "Welt-Seed anzeigen",
+      "worldborder": "Weltgrenze konfigurieren",
+      "setspawn": "Welt-Spawnpunkt setzen"
     }
   },
   "setup": {

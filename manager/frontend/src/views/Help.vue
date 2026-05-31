@@ -32,6 +32,12 @@ const categories: Category[] = [
       { command: '/kick', description: 'help.commands.kick', usage: '/kick <player> [reason]', permission: 'hytale.command.kick' },
       { command: '/ban', description: 'help.commands.ban', usage: '/ban <player> [reason]', permission: 'hytale.command.ban' },
       { command: '/unban', description: 'help.commands.unban', usage: '/unban <player>', permission: 'hytale.command.unban' },
+      { command: '/pardon', description: 'help.commands.pardon', usage: '/pardon <player>', permission: 'hytale.command.pardon' },
+      { command: '/mute', description: 'help.commands.mute', usage: '/mute <player> [duration]', permission: 'hytale.command.mute' },
+      { command: '/unmute', description: 'help.commands.unmute', usage: '/unmute <player>', permission: 'hytale.command.unmute' },
+      { command: '/heal', description: 'help.commands.heal', usage: '/heal [player]', permission: 'hytale.command.heal' },
+      { command: '/effect', description: 'help.commands.effect', usage: '/effect <player> <effect> [duration]', permission: 'hytale.command.effect' },
+      { command: '/clear', description: 'help.commands.clear', usage: '/clear [player]', permission: 'hytale.command.clear' },
       { command: '/op add', description: 'help.commands.opAdd', usage: '/op add <player>', permission: 'hytale.command.op' },
       { command: '/op remove', description: 'help.commands.opRemove', usage: '/op remove <player>', permission: 'hytale.command.op' },
       { command: '/whitelist add', description: 'help.commands.whitelistAdd', usage: '/whitelist add <player>', permission: 'hytale.command.whitelist' },
@@ -57,9 +63,15 @@ const categories: Category[] = [
       { command: '/stop', description: 'help.commands.stop', usage: '/stop', permission: 'hytale.command.stop' },
       { command: '/restart', description: 'help.commands.restart', usage: '/restart', permission: 'hytale.command.restart' },
       { command: '/save', description: 'help.commands.save', usage: '/save', permission: 'hytale.command.save' },
+      { command: '/save-all', description: 'help.commands.saveAll', usage: '/save-all', permission: 'hytale.command.save' },
+      { command: '/save-on', description: 'help.commands.saveOn', usage: '/save-on', permission: 'hytale.command.save' },
+      { command: '/save-off', description: 'help.commands.saveOff', usage: '/save-off', permission: 'hytale.command.save' },
+      { command: '/update', description: 'help.commands.update', usage: '/update [check|apply]', permission: 'hytale.command.update' },
       { command: '/reload', description: 'help.commands.reload', usage: '/reload', permission: 'hytale.command.reload' },
       { command: '/say', description: 'help.commands.say', usage: '/say <message>', permission: 'hytale.command.say' },
       { command: '/tell', description: 'help.commands.tell', usage: '/tell <player> <message>', permission: 'hytale.command.tell' },
+      { command: '/msg', description: 'help.commands.msg', usage: '/msg <player> <message>', permission: 'hytale.command.msg' },
+      { command: '/me', description: 'help.commands.me', usage: '/me <action>', permission: 'hytale.command.me' },
       { command: '/broadcast', description: 'help.commands.broadcast', usage: '/broadcast <message>', permission: 'hytale.command.broadcast' },
       { command: '/list', description: 'help.commands.list', usage: '/list', permission: 'hytale.command.list' },
       { command: '/info', description: 'help.commands.info', usage: '/info', permission: 'hytale.command.info' },
@@ -86,6 +98,8 @@ const categories: Category[] = [
       { command: '/weather storm', description: 'help.commands.weatherStorm', usage: '/weather storm [duration]', permission: 'hytale.command.weather' },
       { command: '/difficulty', description: 'help.commands.difficulty', usage: '/difficulty <peaceful|easy|normal|hard>', permission: 'hytale.command.difficulty' },
       { command: '/gamerule', description: 'help.commands.gamerule', usage: '/gamerule <rule> <value>', permission: 'hytale.command.gamerule' },
+      { command: '/seed', description: 'help.commands.seed', usage: '/seed', permission: 'hytale.command.seed' },
+      { command: '/worldborder', description: 'help.commands.worldborder', usage: '/worldborder <set|add|center> <value>', permission: 'hytale.command.worldborder' },
     ]
   },
   {
@@ -99,6 +113,7 @@ const categories: Category[] = [
       { command: '/tp', description: 'help.commands.tpWorld', usage: '/tp <player> <x> <y> <z> --world <name>', permission: 'hytale.command.teleport' },
       { command: '/top', description: 'help.commands.top', usage: '/top', permission: 'hytale.command.top' },
       { command: '/spawn', description: 'help.commands.spawn', usage: '/spawn [player]', permission: 'hytale.command.spawn' },
+      { command: '/setspawn', description: 'help.commands.setspawn', usage: '/setspawn [x] [y] [z]', permission: 'hytale.command.setspawn' },
       { command: '/home', description: 'help.commands.home', usage: '/home [player]', permission: 'hytale.command.home' },
       { command: '/sethome', description: 'help.commands.sethome', usage: '/sethome [player]', permission: 'hytale.command.sethome' },
       { command: '/warp', description: 'help.commands.warp', usage: '/warp <name> [player]', permission: 'hytale.command.warp' },
@@ -213,7 +228,7 @@ function getCategoryLabel(id: string): string {
 </script>
 
 <template>
-  <div class="h-[calc(100vh-8rem)] flex flex-col">
+  <div class="h-full flex flex-col">
     <!-- Page Title -->
     <div class="mb-6 flex-shrink-0">
       <h1 class="text-2xl font-bold text-ink">{{ t('help.title') }}</h1>

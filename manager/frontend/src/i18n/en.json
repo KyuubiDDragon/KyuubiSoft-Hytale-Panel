@@ -1591,7 +1591,22 @@
       "memory": "Show memory usage",
       "chunkLoad": "Force load chunks",
       "chunkUnload": "Unload chunks",
-      "logLevel": "Set log level"
+      "logLevel": "Set log level",
+      "pardon": "Remove a ban (alias of /unban)",
+      "mute": "Mute a player in chat",
+      "unmute": "Unmute a player",
+      "heal": "Restore a player's health to full",
+      "effect": "Apply or modify a status effect",
+      "clear": "Clear a player's inventory",
+      "saveAll": "Force save all worlds immediately",
+      "saveOn": "Enable automatic world saving",
+      "saveOff": "Disable automatic world saving",
+      "update": "Check for or apply a native server update",
+      "msg": "Send a private message to a player",
+      "me": "Broadcast an action message",
+      "seed": "Show the world seed",
+      "worldborder": "Configure the world border",
+      "setspawn": "Set the world spawn point"
     }
   },
   "setup": {

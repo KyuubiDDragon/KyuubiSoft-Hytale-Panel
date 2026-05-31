@@ -50,7 +50,17 @@ function ingest(sample: LocationSample) {
 
 // Latest sample per uuid, optionally rewound to a target time.
 const visibleSamples = computed<LocationSample[]>(() => {
-  const target = Date.now() - playbackOffsetMs.value
+  const live = playbackOffsetMs.value === 0
+  // Anchor the timeline on the newest sample we actually hold, NOT the browser
+  // clock. The backend stamps samples with server time; any clock skew between
+  // server and browser would otherwise push fresh samples "into the future"
+  // (s.ts > Date.now()) and hide every online player.
+  let newestTs = 0
+  for (const arr of history.values()) {
+    if (arr.length > 0) newestTs = Math.max(newestTs, arr[arr.length - 1].ts)
+  }
+  const anchor = newestTs || Date.now()
+  const target = anchor - playbackOffsetMs.value
   const out: LocationSample[] = []
   for (const arr of history.values()) {
     // Find latest sample with ts <= target.
@@ -59,6 +69,9 @@ const visibleSamples = computed<LocationSample[]>(() => {
       if (s.ts <= target) best = s
       else break
     }
+    // In live mode always surface the latest known position, even if its
+    // timestamp is marginally ahead of the anchor.
+    if (!best && live && arr.length > 0) best = arr[arr.length - 1]
     if (best) out.push(best)
   }
   return out
