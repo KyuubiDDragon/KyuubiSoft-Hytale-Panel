@@ -450,6 +450,21 @@ export interface PerfHistory {
   samples: PerfSample[]
 }
 
+export interface JvmSettings {
+  javaMinRam: string
+  javaMaxRam: string
+  extraJavaArgs: string
+  extraServerArgs: string
+  envDefaults: { javaMinRam: string; javaMaxRam: string }
+}
+
+export interface JvmSettingsUpdate {
+  javaMinRam: string
+  javaMaxRam: string
+  extraJavaArgs: string
+  extraServerArgs: string
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -553,6 +568,16 @@ export const serverApi = {
 
   async setAllowOp(allowOp: boolean): Promise<AllowOpUpdateResponse> {
     const response = await api.put<AllowOpUpdateResponse>('/server/allow-op', { allowOp })
+    return response.data
+  },
+
+  async getJvmSettings(): Promise<JvmSettings> {
+    const response = await api.get<JvmSettings>('/server/jvm')
+    return response.data
+  },
+
+  async saveJvmSettings(payload: JvmSettingsUpdate): Promise<{ success: boolean; changed: boolean; message?: string }> {
+    const response = await api.put('/server/jvm', payload)
     return response.data
   },
 

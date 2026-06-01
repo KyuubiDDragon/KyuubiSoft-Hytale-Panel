@@ -28,6 +28,12 @@ export interface PanelConfig {
   acceptEarlyPlugins: boolean;
   disableSentry: boolean;
   allowOp: boolean;
+  // Optional JVM/startup tuning. When unset, start-server.sh falls back to the
+  // container's env-var defaults (JAVA_MIN_RAM/JAVA_MAX_RAM/EXTRA_*_ARGS).
+  javaMinRam?: string;
+  javaMaxRam?: string;
+  extraJavaArgs?: string;
+  extraServerArgs?: string;
 }
 
 // Helper to read panel config
@@ -41,6 +47,10 @@ export async function readPanelConfig(): Promise<PanelConfig> {
       acceptEarlyPlugins: cfg.acceptEarlyPlugins ?? false,
       disableSentry: cfg.disableSentry ?? false,
       allowOp: cfg.allowOp ?? false,
+      javaMinRam: typeof cfg.javaMinRam === 'string' ? cfg.javaMinRam : undefined,
+      javaMaxRam: typeof cfg.javaMaxRam === 'string' ? cfg.javaMaxRam : undefined,
+      extraJavaArgs: typeof cfg.extraJavaArgs === 'string' ? cfg.extraJavaArgs : undefined,
+      extraServerArgs: typeof cfg.extraServerArgs === 'string' ? cfg.extraServerArgs : undefined,
     };
   } catch {
     // Return defaults if file doesn't exist

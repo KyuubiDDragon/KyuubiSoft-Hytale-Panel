@@ -5,7 +5,7 @@ import { setLocale, getLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
-import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse } from '@/api/server'
+import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse, type JvmSettings } from '@/api/server'
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
 import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate, type AutoModConfig, type DiscordStatus, type OffsiteBackupStatus } from '@/api/settings'
 import { useToast } from '@/composables/useToast'
@@ -62,6 +62,13 @@ const allowOpLoading = ref(false)
 const allowOpError = ref<string | null>(null)
 const allowOpSuccess = ref<string | null>(null)
 const allowOpNeedsRestart = ref(false)
+
+// JVM / startup tuning (RAM + extra args)
+const jvmData = ref<JvmSettings | null>(null)
+const jvmLoading = ref(false)
+const jvmSaving = ref(false)
+const jvmNeedsRestart = ref(false)
+const jvmForm = ref({ javaMinRam: '', javaMaxRam: '', extraJavaArgs: '', extraServerArgs: '' })
 
 // Integration API keys (CurseForge / Modtale / StackMart)
 const canEditIntegrations = computed(() => authStore.hasPermission('settings.edit'))
@@ -630,6 +637,55 @@ async function restartForAllowOp() {
   }
 }
 
+async function loadJvm() {
+  try {
+    jvmLoading.value = true
+    const data = await serverApi.getJvmSettings()
+    jvmData.value = data
+    jvmForm.value.javaMinRam = data.javaMinRam
+    jvmForm.value.javaMaxRam = data.javaMaxRam
+    jvmForm.value.extraJavaArgs = data.extraJavaArgs
+    jvmForm.value.extraServerArgs = data.extraServerArgs
+  } catch {
+    // settings unavailable
+  } finally {
+    jvmLoading.value = false
+  }
+}
+
+async function saveJvm() {
+  try {
+    jvmSaving.value = true
+    const result = await serverApi.saveJvmSettings({
+      javaMinRam: jvmForm.value.javaMinRam.trim(),
+      javaMaxRam: jvmForm.value.javaMaxRam.trim(),
+      extraJavaArgs: jvmForm.value.extraJavaArgs.trim(),
+      extraServerArgs: jvmForm.value.extraServerArgs.trim(),
+    })
+    if (result.changed) jvmNeedsRestart.value = true
+    toast.success(result.message || t('settings.jvm.saved'))
+    await loadJvm()
+  } catch (e) {
+    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    toast.error(msg || t('settings.jvm.saveFailed'))
+  } finally {
+    jvmSaving.value = false
+  }
+}
+
+async function restartForJvm() {
+  try {
+    jvmSaving.value = true
+    await serverApi.restart()
+    jvmNeedsRestart.value = false
+    toast.success(t('settings.jvm.restarting'))
+  } catch {
+    toast.error(t('settings.errors.restartFailed'))
+  } finally {
+    jvmSaving.value = false
+  }
+}
+
 // Hytale Auth Functions
 async function loadHytaleAuthStatus() {
   try {
@@ -771,6 +827,7 @@ onMounted(() => {
     loadAcceptEarlyPlugins()
     loadDisableSentry()
     loadAllowOp()
+    loadJvm()
   }
 })
 
@@ -1283,6 +1340,56 @@ onUnmounted(() => {
         <p v-if="!allowOpNeedsRestart" class="text-xs text-ink-subtle">
           {{ t('settings.allowOpRestartNote') }}
         </p>
+      </div>
+    </Card>
+
+    <!-- JVM / startup tuning (RAM + extra args) -->
+    <Card v-if="authStore.canManageServer" :title="t('settings.jvm.title')">
+      <div v-if="jvmLoading" class="py-6 text-center text-sm text-ink-muted">{{ t('common.loading') }}</div>
+      <div v-else-if="jvmData" class="space-y-5">
+        <p class="text-sm text-ink-muted">{{ t('settings.jvm.description') }}</p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.jvm.minRam') }}</label>
+            <input v-model="jvmForm.javaMinRam" type="text" placeholder="3G"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.jvm.maxRam') }}</label>
+            <input v-model="jvmForm.javaMaxRam" type="text" placeholder="4G"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
+          </div>
+        </div>
+        <p class="text-xs text-ink-subtle">{{ t('settings.jvm.ramHint', { min: jvmData.envDefaults.javaMinRam, max: jvmData.envDefaults.javaMaxRam }) }}</p>
+
+        <div class="space-y-1.5">
+          <label class="text-sm font-medium text-ink">{{ t('settings.jvm.extraJavaArgs') }}</label>
+          <input v-model="jvmForm.extraJavaArgs" type="text" placeholder="-XX:+UseZGC"
+                 class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
+          <p class="text-xs text-ink-subtle">{{ t('settings.jvm.extraJavaArgsHint') }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <label class="text-sm font-medium text-ink">{{ t('settings.jvm.extraServerArgs') }}</label>
+          <input v-model="jvmForm.extraServerArgs" type="text" placeholder="--some-flag"
+                 class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
+          <p class="text-xs text-ink-subtle">{{ t('settings.jvm.extraServerArgsHint') }}</p>
+        </div>
+
+        <div v-if="jvmNeedsRestart" class="flex items-center justify-between gap-3 p-3 rounded-lg bg-status-warning/10 border border-status-warning/20">
+          <span class="text-sm text-status-warning">{{ t('settings.jvm.restartNote') }}</span>
+          <button @click="restartForJvm" :disabled="jvmSaving"
+                  class="px-3 py-1.5 bg-status-warning/20 hover:bg-status-warning/30 disabled:opacity-50 text-status-warning text-xs font-medium rounded-lg transition-colors">
+            {{ t('settings.jvm.restartNow') }}
+          </button>
+        </div>
+
+        <div class="flex justify-end">
+          <button @click="saveJvm" :disabled="jvmSaving"
+                  class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+            {{ jvmSaving ? t('common.saving') : t('common.save') }}
+          </button>
+        </div>
       </div>
     </Card>
 

@@ -360,6 +360,81 @@ router.put('/allow-op', authMiddleware, requirePermission('config.edit'), async 
   }
 });
 
+// RAM like "3G" / "512M"; args allow only safe token characters (the start
+// script word-splits them, never evals — but we still reject shell metachars).
+const RAM_RE = /^\d{1,5}[MmGg]$/;
+const SAFE_ARGS_RE = /^[A-Za-z0-9 _.:=+\-/@]*$/;
+
+// GET /api/server/jvm - current JVM/startup tuning (RAM + extra args).
+router.get('/jvm', authMiddleware, requirePermission('config.view'), async (_req: Request, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ javaMinRam: '3G', javaMaxRam: '4G', extraJavaArgs: '', extraServerArgs: '', envDefaults: { javaMinRam: '3G', javaMaxRam: '4G' } });
+    return;
+  }
+  try {
+    const panelConfig = await readPanelConfig();
+    res.json({
+      // Effective values fall back to the container env defaults when unset.
+      javaMinRam: panelConfig.javaMinRam ?? process.env.JAVA_MIN_RAM ?? '3G',
+      javaMaxRam: panelConfig.javaMaxRam ?? process.env.JAVA_MAX_RAM ?? '4G',
+      extraJavaArgs: panelConfig.extraJavaArgs ?? '',
+      extraServerArgs: panelConfig.extraServerArgs ?? '',
+      envDefaults: { javaMinRam: process.env.JAVA_MIN_RAM ?? '3G', javaMaxRam: process.env.JAVA_MAX_RAM ?? '4G' },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read JVM settings', message: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// PUT /api/server/jvm - persist JVM/startup tuning to panel-config.json.
+router.put('/jvm', authMiddleware, requirePermission('config.edit'), async (req: Request, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ success: true, changed: true, message: '[DEMO] JVM settings changed (simulated)' });
+    return;
+  }
+  try {
+    const body = req.body ?? {};
+    const minRam = String(body.javaMinRam ?? '').trim();
+    const maxRam = String(body.javaMaxRam ?? '').trim();
+    const extraJava = String(body.extraJavaArgs ?? '').trim();
+    const extraServer = String(body.extraServerArgs ?? '').trim();
+
+    if (!RAM_RE.test(minRam) || !RAM_RE.test(maxRam)) {
+      res.status(400).json({ error: 'RAM must look like "3G" or "512M".' });
+      return;
+    }
+    const toMb = (v: string) => (v.toUpperCase().endsWith('G') ? parseInt(v) * 1024 : parseInt(v));
+    if (toMb(minRam) > toMb(maxRam)) {
+      res.status(400).json({ error: 'Minimum RAM cannot exceed maximum RAM.' });
+      return;
+    }
+    for (const [name, val] of [['extraJavaArgs', extraJava], ['extraServerArgs', extraServer]] as const) {
+      if (val.length > 1024 || !SAFE_ARGS_RE.test(val)) {
+        res.status(400).json({ error: `${name} contains invalid characters or is too long.` });
+        return;
+      }
+    }
+
+    const panelConfig = await readPanelConfig();
+    const changed =
+      panelConfig.javaMinRam !== minRam || panelConfig.javaMaxRam !== maxRam ||
+      (panelConfig.extraJavaArgs ?? '') !== extraJava || (panelConfig.extraServerArgs ?? '') !== extraServer;
+    panelConfig.javaMinRam = minRam;
+    panelConfig.javaMaxRam = maxRam;
+    panelConfig.extraJavaArgs = extraJava;
+    panelConfig.extraServerArgs = extraServer;
+    await writePanelConfig(panelConfig);
+
+    res.json({
+      success: true,
+      changed,
+      message: changed ? 'JVM settings saved. Restart the server to apply changes.' : 'Settings unchanged.',
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to save JVM settings', message: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
 // GET /api/server/config/files - List config files
 router.get('/config/files', authMiddleware, requirePermission('config.view'), async (_req: Request, res: Response) => {
   // Demo mode: return demo config files
