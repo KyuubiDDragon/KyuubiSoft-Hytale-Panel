@@ -16,9 +16,10 @@
  * but auto-restart is OFF unless WATCHDOG_AUTO_RESTART=true (an operator must
  * opt in to the panel power-cycling their server).
  */
+import fs from 'fs';
 import { logger } from '../utils/logger.js';
-import { publish } from './eventBus.js';
-import { listServers } from './servers.js';
+import { publish, eventBus, type PanelEvent } from './eventBus.js';
+import { listServers, type ServerInstance } from './servers.js';
 import {
   getStatus,
   getStats,
@@ -45,26 +46,52 @@ const RESTART_WINDOW_MS = envInt('WATCHDOG_RESTART_WINDOW_MS', 10 * 60_000);
 const INTENTIONAL_GRACE_MS = envInt('WATCHDOG_INTENTIONAL_STOP_GRACE_MS', 60_000);
 const MEM_ALERT_PERCENT = envInt('WATCHDOG_MEM_ALERT_PERCENT', 95);
 const MEM_ALERT_COOLDOWN_MS = envInt('WATCHDOG_MEM_ALERT_COOLDOWN_MS', 5 * 60_000);
+// Low-TPS (server lag) alert. TPS arrives from the plugin's server_tick events.
+const TPS_ALERT = envInt('WATCHDOG_TPS_ALERT', 15);          // alert when TPS < this; 0 = off
+const TPS_ALERT_COOLDOWN_MS = envInt('WATCHDOG_TPS_ALERT_COOLDOWN_MS', 5 * 60_000);
+const TPS_STALE_MS = envInt('WATCHDOG_TPS_STALE_MS', 60_000); // ignore TPS readings older than this
+// Low-disk alert on each server's data volume.
+const DISK_ALERT_MIN_GB = envInt('WATCHDOG_DISK_ALERT_MIN_GB', 2); // alert when free < this; 0 = off
+const DISK_ALERT_COOLDOWN_MS = envInt('WATCHDOG_DISK_ALERT_COOLDOWN_MS', 30 * 60_000);
 
 interface WatchState {
   wasRunning: boolean | null; // null until the first observation
   restartTimes: number[];     // epoch-ms of recent auto-restarts (windowed)
   lastMemAlertAt: number;
+  lastTpsAlertAt: number;
+  lastDiskAlertAt: number;
 }
 
 const state = new Map<string, WatchState>();
 let timer: NodeJS.Timeout | null = null;
 
+// Latest TPS/MSPT per server, fed by the plugin's server_tick events.
+const latestTick = new Map<string, { tps: number | null; mspt: number | null; at: number }>();
+let tickSubscribed = false;
+function subscribeTicks(): void {
+  if (tickSubscribed) return;
+  tickSubscribed = true;
+  eventBus.subscribe(['server_tick'], (evt: PanelEvent) => {
+    const p = evt.payload as { tps?: number; mspt?: number; serverId?: string };
+    latestTick.set(p.serverId ?? '__default__', {
+      tps: typeof p.tps === 'number' ? p.tps : null,
+      mspt: typeof p.mspt === 'number' ? p.mspt : null,
+      at: Date.now(),
+    });
+  });
+}
+
 function getState(serverId: string): WatchState {
   let s = state.get(serverId);
   if (!s) {
-    s = { wasRunning: null, restartTimes: [], lastMemAlertAt: 0 };
+    s = { wasRunning: null, restartTimes: [], lastMemAlertAt: 0, lastTpsAlertAt: 0, lastDiskAlertAt: 0 };
     state.set(serverId, s);
   }
   return s;
 }
 
-async function tickServer(serverId: string): Promise<void> {
+async function tickServer(srv: ServerInstance): Promise<void> {
+  const serverId = srv.id;
   const s = getState(serverId);
 
   let running: boolean;
@@ -126,6 +153,38 @@ async function tickServer(serverId: string): Promise<void> {
     } catch { /* stats unavailable — ignore this tick */ }
   }
 
+  // Low-TPS (lag) alert, only while running and only on fresh readings.
+  if (running && TPS_ALERT > 0) {
+    const tick = latestTick.get(serverId) ?? latestTick.get('__default__');
+    if (tick && tick.tps !== null && Date.now() - tick.at < TPS_STALE_MS && tick.tps < TPS_ALERT) {
+      const now = Date.now();
+      if (now - s.lastTpsAlertAt > TPS_ALERT_COOLDOWN_MS) {
+        s.lastTpsAlertAt = now;
+        publish('server.alert', {
+          serverId, reason: 'low_tps', tps: tick.tps, mspt: tick.mspt, threshold: TPS_ALERT,
+        }, serverId);
+      }
+    }
+  }
+
+  // Low-disk alert on the server's data volume, debounced.
+  if (DISK_ALERT_MIN_GB > 0) {
+    try {
+      const st = fs.statfsSync(srv.paths.data);
+      const freeGb = (st.bavail * st.bsize) / (1024 ** 3);
+      if (freeGb < DISK_ALERT_MIN_GB) {
+        const now = Date.now();
+        if (now - s.lastDiskAlertAt > DISK_ALERT_COOLDOWN_MS) {
+          s.lastDiskAlertAt = now;
+          publish('server.alert', {
+            serverId, reason: 'low_disk',
+            freeGb: Math.round(freeGb * 100) / 100, threshold: DISK_ALERT_MIN_GB, path: srv.paths.data,
+          }, serverId);
+        }
+      }
+    } catch { /* statfs unsupported on this fs — skip */ }
+  }
+
   s.wasRunning = running;
 }
 
@@ -133,7 +192,7 @@ async function tick(): Promise<void> {
   try {
     const servers = await listServers();
     for (const srv of servers) {
-      await tickServer(srv.id);
+      await tickServer(srv);
     }
   } catch (err) {
     logger.error('[Watchdog] tick failed:', err);
@@ -146,7 +205,8 @@ export function startWatchdog(): void {
     return;
   }
   if (timer) return;
-  logger.info(`[Watchdog] started (poll=${POLL_MS}ms, autoRestart=${AUTO_RESTART}, maxRestarts=${MAX_RESTARTS}/${Math.round(RESTART_WINDOW_MS / 60000)}min, memAlert=${MEM_ALERT_PERCENT}%)`);
+  subscribeTicks();
+  logger.info(`[Watchdog] started (poll=${POLL_MS}ms, autoRestart=${AUTO_RESTART}, maxRestarts=${MAX_RESTARTS}/${Math.round(RESTART_WINDOW_MS / 60000)}min, memAlert=${MEM_ALERT_PERCENT}%, tpsAlert=${TPS_ALERT}, diskAlert=${DISK_ALERT_MIN_GB}GB)`);
   timer = setInterval(() => { void tick(); }, POLL_MS);
   timer.unref?.();
 }

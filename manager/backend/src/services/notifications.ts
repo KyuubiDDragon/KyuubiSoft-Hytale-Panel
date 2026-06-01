@@ -127,6 +127,7 @@ function describeEvent(event: PanelEvent): string {
     case 'server.started': return 'Server started';
     case 'server.stopped': return 'Server stopped';
     case 'server.crashed': return 'Server crashed';
+    case 'server.alert': return 'Server alert';
     case 'backup.completed': return 'Backup completed';
     case 'backup.failed': return 'Backup failed';
     case 'panel.update_available': return 'Panel update available';
