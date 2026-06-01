@@ -17,6 +17,7 @@ import {
   FileManagerError,
   MAX_WRITE_BYTES,
 } from '../services/fileManager.js';
+import { verifyUploadMagic } from '../services/managementHelpers.js';
 
 const router = Router();
 
@@ -218,6 +219,14 @@ router.post(
     }
     if (!file) {
       res.status(400).json({ error: 'file is required' });
+      return;
+    }
+
+    // Reject content that doesn't match a claimed binary/archive extension
+    // (e.g. a script renamed to .zip/.jar). Unknown extensions pass through.
+    const magic = verifyUploadMagic(file.buffer, file.originalname);
+    if (!magic.ok) {
+      res.status(400).json({ error: magic.error });
       return;
     }
 

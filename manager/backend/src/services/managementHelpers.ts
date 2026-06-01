@@ -55,6 +55,41 @@ export function verifyFileMagic(filePath: string, expectedType: 'zip' | 'lua' | 
   }
 }
 
+// Extension → acceptable leading-byte signatures. Enforced ONLY for these
+// "this file claims a specific binary/archive format" extensions; every other
+// extension (text, configs, world data, unknown types) is allowed because this
+// is a general-purpose file manager.
+const UPLOAD_MAGIC: Record<string, number[][]> = {
+  '.zip': [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]],
+  '.jar': [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]],
+  '.gz': [[0x1f, 0x8b]],
+  '.tgz': [[0x1f, 0x8b]],
+  '.png': [[0x89, 0x50, 0x4e, 0x47]],
+  '.jpg': [[0xff, 0xd8, 0xff]],
+  '.jpeg': [[0xff, 0xd8, 0xff]],
+  '.gif': [[0x47, 0x49, 0x46, 0x38]],
+  '.pdf': [[0x25, 0x50, 0x44, 0x46]],
+  '.7z': [[0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]],
+  '.rar': [[0x52, 0x61, 0x72, 0x21]],
+  '.class': [[0xca, 0xfe, 0xba, 0xbe]],
+  '.exe': [[0x4d, 0x5a]],
+  '.dll': [[0x4d, 0x5a]],
+};
+
+/**
+ * For a known binary/archive extension, confirm the buffer's leading bytes
+ * match the claimed format. Stops a mislabeled payload (e.g. a script renamed
+ * to .zip/.jar) from being stored where another tool might mishandle it on
+ * extraction. Unknown extensions pass through unchanged.
+ */
+export function verifyUploadMagic(buffer: Buffer, filename: string): { ok: boolean; error?: string } {
+  const ext = path.extname(filename).toLowerCase();
+  const sigs = UPLOAD_MAGIC[ext];
+  if (!sigs) return { ok: true };
+  const matches = sigs.some((sig) => sig.every((b, i) => buffer[i] === b));
+  return matches ? { ok: true } : { ok: false, error: `File content does not match its ${ext} extension` };
+}
+
 // SECURITY: Generate safe filename with unique prefix
 export function generateSafeFilename(originalName: string): string {
   const ext = path.extname(originalName).toLowerCase();
