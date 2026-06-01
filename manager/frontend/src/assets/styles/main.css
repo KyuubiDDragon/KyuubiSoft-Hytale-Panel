@@ -380,3 +380,17 @@
   opacity: 0;
   transform: translateX(16px);
 }
+
+/* Accessibility: respect the user's reduced-motion preference. Disables the
+   pervasive spin/pulse/Transition animations and instant-scrolls for users
+   who are motion-sensitive, without changing any layout. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

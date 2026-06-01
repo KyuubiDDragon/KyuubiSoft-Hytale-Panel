@@ -9,6 +9,7 @@
     "noRealData": "Todos os dados sao simulados. Nenhuma alteracao real possivel."
   },
   "common": {
+    "skipToContent": "Pular para o conteúdo principal",
     "revoke": "Revogar",
     "uninstall": "Desinstalar",
     "loading": "Carregando...",

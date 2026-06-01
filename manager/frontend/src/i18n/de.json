@@ -9,6 +9,7 @@
     "noRealData": "Alle Daten sind simuliert. Keine echten Änderungen möglich."
   },
   "common": {
+    "skipToContent": "Zum Hauptinhalt springen",
     "loading": "Laden...",
     "save": "Speichern",
     "saving": "Speichern...",

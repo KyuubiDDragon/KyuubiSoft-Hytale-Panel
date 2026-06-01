@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, provide } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Sidebar from './Sidebar.vue'
 import MobileNav from './MobileNav.vue'
 import Header from './Header.vue'
@@ -7,6 +8,7 @@ import PermissionBanner from './PermissionBanner.vue'
 import DemoBanner from './DemoBanner.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 
+const { t } = useI18n()
 const sidebarOpen = ref(false)
 
 function toggleSidebar() {
@@ -19,6 +21,14 @@ provide('toggleSidebar', toggleSidebar)
 
 <template>
   <div class="flex h-screen bg-surface text-ink overflow-hidden">
+    <!-- Keyboard skip link: jumps past the 20+ sidebar items straight to the page. -->
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-hytale-orange focus:text-dark focus:font-medium focus:shadow-lg"
+    >
+      {{ t('common.skipToContent') }}
+    </a>
+
     <!-- Mobile overlay -->
     <Transition
       enter-active-class="transition-opacity ease-out duration-200"
@@ -55,7 +65,7 @@ provide('toggleSidebar', toggleSidebar)
       <Header />
 
       <!-- Page Content (extra bottom padding on mobile clears the bottom nav) -->
-      <main class="flex-1 overflow-auto p-4 sm:p-6 pb-24 lg:pb-6">
+      <main id="main-content" tabindex="-1" class="flex-1 overflow-auto p-4 sm:p-6 pb-24 lg:pb-6 focus:outline-none">
         <slot />
       </main>
     </div>
