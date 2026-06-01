@@ -9,6 +9,8 @@ import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPlu
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
 import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate, type AutoModConfig, type DiscordStatus, type OffsiteBackupStatus } from '@/api/settings'
 import { useToast } from '@/composables/useToast'
+import { pushApi, type WebPushSettings } from '@/api/push'
+import { usePush } from '@/composables/usePush'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -87,6 +89,13 @@ const discord = ref<DiscordStatus | null>(null)
 const discordLoading = ref(false)
 const discordSaving = ref(false)
 const discordForm = ref({ enabled: false, token: '', channelId: '', guildId: '' })
+
+// Web Push (PWA notifications)
+const webpush = ref<WebPushSettings | null>(null)
+const webpushLoading = ref(false)
+const webpushSaving = ref(false)
+const webpushForm = ref({ enabled: false, subject: 'mailto:admin@example.com' })
+const push = usePush()
 
 // Off-site backup (S3-compatible)
 const offsite = ref<OffsiteBackupStatus | null>(null)
@@ -243,6 +252,61 @@ async function saveDiscord() {
   } finally {
     discordSaving.value = false
   }
+}
+
+async function loadWebPush() {
+  try {
+    webpushLoading.value = true
+    webpush.value = await pushApi.getSettings()
+    webpushForm.value.enabled = webpush.value.enabled
+    webpushForm.value.subject = webpush.value.subject
+    await push.refresh()
+  } catch {
+    // web-push settings unavailable
+  } finally {
+    webpushLoading.value = false
+  }
+}
+
+async function saveWebPush() {
+  try {
+    webpushSaving.value = true
+    const result = await pushApi.saveSettings({
+      enabled: webpushForm.value.enabled,
+      subject: webpushForm.value.subject.trim(),
+    })
+    webpush.value = result.data
+    webpushForm.value.enabled = result.data.enabled
+    await push.refresh()
+    toast.success(t('settings.webpush.saved'))
+  } catch (e) {
+    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    toast.error(msg || t('settings.webpush.saveFailed'))
+  } finally {
+    webpushSaving.value = false
+  }
+}
+
+async function subscribeThisDevice() {
+  const res = await push.enable()
+  if (res.ok) {
+    toast.success(t('settings.webpush.subscribed'))
+  } else if (res.error === 'denied') {
+    toast.error(t('settings.webpush.permissionDenied'))
+  } else {
+    toast.error(t('settings.webpush.subscribeFailed'))
+  }
+}
+
+async function unsubscribeThisDevice() {
+  await push.disable()
+  toast.success(t('settings.webpush.unsubscribed'))
+}
+
+async function testWebPush() {
+  const ok = await push.test()
+  if (ok) toast.success(t('settings.webpush.testSent'))
+  else toast.error(t('settings.webpush.testFailed'))
 }
 
 async function loadOffsite() {
@@ -697,6 +761,7 @@ onMounted(() => {
     loadAutoMod()
     loadDiscord()
     loadOffsite()
+    loadWebPush()
   }
 
   // Load Hytale auth status if user can manage server
@@ -1617,6 +1682,66 @@ onUnmounted(() => {
                   class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
             {{ offsiteSaving ? t('common.saving') : t('common.save') }}
           </button>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Web Push (PWA notifications) -->
+    <Card v-if="authStore.hasPermission('settings.view') || authStore.canManageConfig" :title="t('settings.webpush.title')">
+      <div v-if="webpushLoading" class="py-6 text-center text-sm text-ink-muted">{{ t('common.loading') }}</div>
+      <div v-else-if="webpush" class="space-y-5">
+        <p class="text-sm text-ink-muted">{{ t('settings.webpush.description') }}</p>
+
+        <label class="flex items-center justify-between gap-4 cursor-pointer">
+          <span class="text-sm font-medium text-ink">{{ t('settings.webpush.enabled') }}</span>
+          <input type="checkbox" v-model="webpushForm.enabled" :disabled="!canEditIntegrations"
+                 class="h-5 w-5 rounded accent-hytale-orange" />
+        </label>
+
+        <div class="space-y-1.5" :class="{ 'opacity-50 pointer-events-none': !webpushForm.enabled }">
+          <label class="text-sm font-medium text-ink">{{ t('settings.webpush.subject') }}</label>
+          <input type="text" v-model="webpushForm.subject" :disabled="!canEditIntegrations" placeholder="mailto:admin@example.com"
+                 class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+          <p class="text-xs text-ink-subtle">{{ t('settings.webpush.subjectHint') }}</p>
+        </div>
+
+        <div class="flex justify-end">
+          <button v-if="canEditIntegrations" @click="saveWebPush" :disabled="webpushSaving"
+                  class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+            {{ webpushSaving ? t('common.saving') : t('common.save') }}
+          </button>
+        </div>
+
+        <!-- This-device subscription -->
+        <div class="pt-4 border-t border-edge space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-sm font-medium text-ink">{{ t('settings.webpush.thisDevice') }}</p>
+              <p class="text-xs text-ink-subtle">
+                <span v-if="!push.supported.value">{{ t('settings.webpush.unsupported') }}</span>
+                <span v-else-if="!webpush.enabled">{{ t('settings.webpush.enableFirst') }}</span>
+                <span v-else-if="push.subscribed.value">{{ t('settings.webpush.deviceOn') }}</span>
+                <span v-else>{{ t('settings.webpush.deviceOff') }}</span>
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button v-if="webpush.enabled && push.supported.value && !push.subscribed.value"
+                      @click="subscribeThisDevice" :disabled="push.busy.value"
+                      class="px-3 py-1.5 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors">
+                {{ t('settings.webpush.subscribe') }}
+              </button>
+              <template v-if="push.subscribed.value">
+                <button @click="testWebPush" :disabled="push.busy.value"
+                        class="px-3 py-1.5 bg-surface-overlay hover:bg-surface-overlay/80 disabled:opacity-50 text-ink text-xs font-medium rounded-lg border border-edge transition-colors">
+                  {{ t('settings.webpush.test') }}
+                </button>
+                <button @click="unsubscribeThisDevice" :disabled="push.busy.value"
+                        class="px-3 py-1.5 bg-status-error/15 hover:bg-status-error/25 disabled:opacity-50 text-status-error text-xs font-medium rounded-lg transition-colors">
+                  {{ t('settings.webpush.unsubscribe') }}
+                </button>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
     </Card>

@@ -28,6 +28,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Layer the Web Push handlers (push / notificationclick) onto the
+        // generated precache SW. public/push-sw.js is copied to the output root.
+        importScripts: ['push-sw.js'],
         // The panel UI is a single page app + assets. /api/* is always
         // network-first because mutations must reach the backend.
         navigateFallback: '/index.html',

@@ -40,6 +40,7 @@ import replayRoutes from './routes/replay.js';
 import wikiRoutes from './routes/wiki.js';
 import metricsRoutes from './routes/metrics.js';
 import settingsRoutes from './routes/settings.js';
+import pushRoutes from './routes/push.js';
 import publicRoutes from './routes/public.js';
 import eventActionsRoutes from './routes/eventActions.js';
 import { metricsMiddleware } from './services/metrics.js';
@@ -573,6 +574,7 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/replay', replayRoutes);
 app.use('/api/wiki', wikiRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/push', pushRoutes);
 app.use('/api/event-actions', eventActionsRoutes);
 // Public, unauthenticated status (off unless config.publicStatus.enabled).
 app.use('/api/public', publicRoutes);

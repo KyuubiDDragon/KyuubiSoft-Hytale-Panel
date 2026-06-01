@@ -8,6 +8,7 @@
 import { getDb } from '../db/index.js';
 import { subscribe } from './eventBus.js';
 import type { PanelEvent } from '../schemas/events.js';
+import { pushToUserAsync } from './webPush.js';
 
 export type NotificationLevel = 'info' | 'warning' | 'error' | 'success';
 
@@ -49,6 +50,8 @@ export function notify(recipient: string, opts: { title: string; body?: string; 
     INSERT INTO notifications (recipient_username, title, body, level, link, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(recipient, opts.title, opts.body ?? null, opts.level ?? 'info', opts.link ?? null, now);
+  // Mirror to the recipient's PWA devices (no-op unless Web Push is enabled).
+  pushToUserAsync(recipient, { title: opts.title, body: opts.body ?? null, level: opts.level ?? 'info', link: opts.link ?? null });
   return rowToNotification(
     getDb().prepare('SELECT * FROM notifications WHERE id = ?').get(info.lastInsertRowid) as NotificationRow
   );

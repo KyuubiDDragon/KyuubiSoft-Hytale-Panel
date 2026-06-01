@@ -86,6 +86,14 @@ export interface PanelConfig {
     channelId: string;
     guildId?: string; // register slash commands to one guild (instant vs global)
   };
+  // Optional Web Push (PWA) notifications. Off by default. VAPID keys are
+  // auto-generated the first time it is enabled.
+  webPush?: {
+    enabled: boolean;
+    vapidPublicKey: string;
+    vapidPrivateKey: string;
+    subject: string; // mailto: or https: contact, per RFC 8292
+  };
   // Optional off-site backup target (S3-compatible: AWS S3, Backblaze B2,
   // Cloudflare R2, Wasabi, MinIO…). Off by default. Uploads use native
   // AWS SigV4 signing — no extra dependencies.
@@ -157,6 +165,7 @@ export function getDefaultConfig(): PanelConfig {
     },
     publicStatus: { enabled: false },
     discord: { enabled: false, token: '', channelId: '' },
+    webPush: { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: 'mailto:admin@example.com' },
     offsiteBackup: {
       enabled: false,
       endpoint: '',
