@@ -7,6 +7,7 @@ import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe } from '../utils/pathSecurity.js';
 import { getDefaultId, getServer } from './servers.js';
 import { publish } from './eventBus.js';
+import { uploadBackupAsync } from './offsiteBackup.js';
 
 /**
  * Resolve the backup/data paths for a specific server id. Falls back to the
@@ -206,6 +207,10 @@ export function createBackup(name?: string, serverId?: string): Promise<ActionRe
       // Fire-and-forget off-host backup. The hook is a no-op stub by default;
       // see scripts/backup-hook.sh for restic / rclone / borg / s3 examples.
       runBackupHookAsync(backupFile);
+
+      // Fire-and-forget off-site upload to S3-compatible storage (no-op unless
+      // config.offsiteBackup is enabled with uploadOnBackup on).
+      uploadBackupAsync(backupFile);
 
       publish('backup.completed', {
         name: backupName, file: backupFile, sizeMb: Math.round(stat.size / (1024 * 1024) * 100) / 100,

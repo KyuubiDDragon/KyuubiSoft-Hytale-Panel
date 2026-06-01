@@ -175,4 +175,26 @@ router.get('/:id/download', authMiddleware, requirePermission('backups.download'
   readStream.pipe(res);
 });
 
+// POST /api/backups/:id/offsite — upload an existing backup to off-site storage.
+router.post('/:id/offsite', authMiddleware, requirePermission('backups.create'), async (req: Request, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Off-site upload (simulated)' });
+    return;
+  }
+
+  const filePath = await backupService.getBackupPath(req.params.id, (req as { serverId?: string }).serverId);
+  if (!filePath) {
+    res.status(404).json({ success: false, error: 'Backup not found' });
+    return;
+  }
+
+  const { uploadBackup } = await import('../services/offsiteBackup.js');
+  const result = await uploadBackup(filePath);
+  if (!result.success) {
+    res.status(502).json(result);
+    return;
+  }
+  res.json({ success: true, message: 'Backup uploaded off-site', key: result.key });
+});
+
 export default router;

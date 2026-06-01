@@ -86,6 +86,19 @@ export interface PanelConfig {
     channelId: string;
     guildId?: string; // register slash commands to one guild (instant vs global)
   };
+  // Optional off-site backup target (S3-compatible: AWS S3, Backblaze B2,
+  // Cloudflare R2, Wasabi, MinIO…). Off by default. Uploads use native
+  // AWS SigV4 signing — no extra dependencies.
+  offsiteBackup?: {
+    enabled: boolean;
+    endpoint: string;        // e.g. https://s3.us-west-002.backblazeb2.com (blank = AWS)
+    region: string;          // e.g. us-east-1
+    bucket: string;
+    prefix: string;          // key prefix, e.g. "hytale-backups/"
+    accessKeyId: string;
+    secretAccessKey: string;
+    uploadOnBackup: boolean;  // auto-upload each new backup
+  };
   // Optional auto-moderation of in-game chat. Off by default. Reacts to
   // player_chat events from the plugin and applies the configured action.
   automod?: {
@@ -144,6 +157,16 @@ export function getDefaultConfig(): PanelConfig {
     },
     publicStatus: { enabled: false },
     discord: { enabled: false, token: '', channelId: '' },
+    offsiteBackup: {
+      enabled: false,
+      endpoint: '',
+      region: 'us-east-1',
+      bucket: '',
+      prefix: 'hytale-backups/',
+      accessKeyId: '',
+      secretAccessKey: '',
+      uploadOnBackup: true,
+    },
     automod: {
       enabled: false,
       bannedWords: [],

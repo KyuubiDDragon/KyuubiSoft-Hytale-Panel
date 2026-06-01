@@ -72,6 +72,44 @@ export const settingsApi = {
     const { data } = await api.put('/settings/discord', payload)
     return data
   },
+
+  async getOffsiteBackup(): Promise<OffsiteBackupStatus> {
+    const { data } = await api.get<OffsiteBackupStatus>('/settings/offsite-backup')
+    return data
+  },
+
+  async saveOffsiteBackup(payload: OffsiteBackupUpdate): Promise<{ success: boolean; message?: string }> {
+    const { data } = await api.put('/settings/offsite-backup', payload)
+    return data
+  },
+
+  async testOffsiteBackup(): Promise<{ success: boolean; message?: string; error?: string }> {
+    const { data } = await api.post('/settings/offsite-backup/test')
+    return data
+  },
+}
+
+export interface OffsiteBackupStatus {
+  enabled: boolean
+  endpoint: string
+  region: string
+  bucket: string
+  prefix: string
+  accessKeyId: string
+  uploadOnBackup: boolean
+  secretConfigured: boolean
+  secretMasked: string | null
+}
+
+export interface OffsiteBackupUpdate {
+  enabled?: boolean
+  endpoint?: string
+  region?: string
+  bucket?: string
+  prefix?: string
+  accessKeyId?: string
+  secretAccessKey?: string
+  uploadOnBackup?: boolean
 }
 
 export interface DiscordStatus {

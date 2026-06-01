@@ -7,7 +7,7 @@ import Card from '@/components/ui/Card.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse } from '@/api/server'
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
-import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate, type AutoModConfig, type DiscordStatus } from '@/api/settings'
+import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate, type AutoModConfig, type DiscordStatus, type OffsiteBackupStatus } from '@/api/settings'
 import { useToast } from '@/composables/useToast'
 
 const { t } = useI18n()
@@ -87,6 +87,16 @@ const discord = ref<DiscordStatus | null>(null)
 const discordLoading = ref(false)
 const discordSaving = ref(false)
 const discordForm = ref({ enabled: false, token: '', channelId: '', guildId: '' })
+
+// Off-site backup (S3-compatible)
+const offsite = ref<OffsiteBackupStatus | null>(null)
+const offsiteLoading = ref(false)
+const offsiteSaving = ref(false)
+const offsiteTesting = ref(false)
+const offsiteForm = ref({
+  enabled: false, endpoint: '', region: 'us-east-1', bucket: '', prefix: 'hytale-backups/',
+  accessKeyId: '', secretAccessKey: '', uploadOnBackup: true,
+})
 
 function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
@@ -232,6 +242,63 @@ async function saveDiscord() {
     toast.error(msg || t('settings.discord.saveFailed'))
   } finally {
     discordSaving.value = false
+  }
+}
+
+async function loadOffsite() {
+  try {
+    offsiteLoading.value = true
+    offsite.value = await settingsApi.getOffsiteBackup()
+    offsiteForm.value.enabled = offsite.value.enabled
+    offsiteForm.value.endpoint = offsite.value.endpoint
+    offsiteForm.value.region = offsite.value.region
+    offsiteForm.value.bucket = offsite.value.bucket
+    offsiteForm.value.prefix = offsite.value.prefix
+    offsiteForm.value.accessKeyId = offsite.value.accessKeyId
+    offsiteForm.value.uploadOnBackup = offsite.value.uploadOnBackup
+    offsiteForm.value.secretAccessKey = ''
+  } catch {
+    // off-site settings unavailable (permission / older backend)
+  } finally {
+    offsiteLoading.value = false
+  }
+}
+
+async function saveOffsite() {
+  try {
+    offsiteSaving.value = true
+    const payload: Record<string, unknown> = {
+      enabled: offsiteForm.value.enabled,
+      endpoint: offsiteForm.value.endpoint.trim(),
+      region: offsiteForm.value.region.trim(),
+      bucket: offsiteForm.value.bucket.trim(),
+      prefix: offsiteForm.value.prefix.trim(),
+      accessKeyId: offsiteForm.value.accessKeyId.trim(),
+      uploadOnBackup: offsiteForm.value.uploadOnBackup,
+    }
+    if (offsiteForm.value.secretAccessKey.trim()) payload.secretAccessKey = offsiteForm.value.secretAccessKey.trim()
+    await settingsApi.saveOffsiteBackup(payload)
+    await loadOffsite()
+    toast.success(t('settings.offsite.saved'))
+  } catch (e) {
+    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    toast.error(msg || t('settings.offsite.saveFailed'))
+  } finally {
+    offsiteSaving.value = false
+  }
+}
+
+async function testOffsite() {
+  try {
+    offsiteTesting.value = true
+    const result = await settingsApi.testOffsiteBackup()
+    if (result.success) toast.success(t('settings.offsite.testOk'))
+    else toast.error(result.error || t('settings.offsite.testFailed'))
+  } catch (e) {
+    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    toast.error(msg || t('settings.offsite.testFailed'))
+  } finally {
+    offsiteTesting.value = false
   }
 }
 
@@ -629,6 +696,7 @@ onMounted(() => {
     loadIntegrations()
     loadAutoMod()
     loadDiscord()
+    loadOffsite()
   }
 
   // Load Hytale auth status if user can manage server
@@ -1481,6 +1549,73 @@ onUnmounted(() => {
           <button v-if="canEditIntegrations" @click="saveDiscord" :disabled="discordSaving"
                   class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
             {{ discordSaving ? t('common.saving') : t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Off-site Backups (S3-compatible) -->
+    <Card v-if="authStore.hasPermission('settings.view') || authStore.canManageConfig" :title="t('settings.offsite.title')">
+      <div v-if="offsiteLoading" class="py-6 text-center text-sm text-ink-muted">{{ t('common.loading') }}</div>
+      <div v-else-if="offsite" class="space-y-5">
+        <p class="text-sm text-ink-muted">{{ t('settings.offsite.description') }}</p>
+
+        <label class="flex items-center justify-between gap-4 cursor-pointer">
+          <span class="text-sm font-medium text-ink">{{ t('settings.offsite.enabled') }}</span>
+          <input type="checkbox" v-model="offsiteForm.enabled" :disabled="!canEditIntegrations"
+                 class="h-5 w-5 rounded accent-hytale-orange" />
+        </label>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5" :class="{ 'opacity-50 pointer-events-none': !offsiteForm.enabled }">
+          <div class="space-y-1.5 md:col-span-2">
+            <label class="text-sm font-medium text-ink">{{ t('settings.offsite.endpoint') }}</label>
+            <input type="text" v-model="offsiteForm.endpoint" :disabled="!canEditIntegrations"
+                   placeholder="https://s3.us-west-002.backblazeb2.com"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+            <p class="text-xs text-ink-subtle">{{ t('settings.offsite.endpointHint') }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.offsite.bucket') }}</label>
+            <input type="text" v-model="offsiteForm.bucket" :disabled="!canEditIntegrations" placeholder="my-backups"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.offsite.region') }}</label>
+            <input type="text" v-model="offsiteForm.region" :disabled="!canEditIntegrations" placeholder="us-east-1"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+          </div>
+          <div class="space-y-1.5 md:col-span-2">
+            <label class="text-sm font-medium text-ink">{{ t('settings.offsite.prefix') }}</label>
+            <input type="text" v-model="offsiteForm.prefix" :disabled="!canEditIntegrations" placeholder="hytale-backups/"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+            <p class="text-xs text-ink-subtle">{{ t('settings.offsite.prefixHint') }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.offsite.accessKeyId') }}</label>
+            <input type="text" v-model="offsiteForm.accessKeyId" :disabled="!canEditIntegrations" autocomplete="off"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.offsite.secretAccessKey') }}</label>
+            <input type="password" v-model="offsiteForm.secretAccessKey" :disabled="!canEditIntegrations" autocomplete="off"
+                   :placeholder="offsite.secretConfigured ? t('settings.offsite.secretSetPlaceholder', { hint: offsite.secretMasked }) : t('settings.offsite.secretPlaceholder')"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+          </div>
+          <label class="flex items-center justify-between gap-4 cursor-pointer md:col-span-2">
+            <span class="text-sm font-medium text-ink">{{ t('settings.offsite.uploadOnBackup') }}</span>
+            <input type="checkbox" v-model="offsiteForm.uploadOnBackup" :disabled="!canEditIntegrations"
+                   class="h-5 w-5 rounded accent-hytale-orange" />
+          </label>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button v-if="canEditIntegrations" @click="testOffsite" :disabled="offsiteTesting || offsiteSaving"
+                  class="px-4 py-2 bg-surface-overlay hover:bg-surface-overlay/80 disabled:opacity-50 text-ink text-sm font-medium rounded-lg border border-edge transition-colors">
+            {{ offsiteTesting ? t('settings.offsite.testing') : t('settings.offsite.test') }}
+          </button>
+          <button v-if="canEditIntegrations" @click="saveOffsite" :disabled="offsiteSaving"
+                  class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+            {{ offsiteSaving ? t('common.saving') : t('common.save') }}
           </button>
         </div>
       </div>
