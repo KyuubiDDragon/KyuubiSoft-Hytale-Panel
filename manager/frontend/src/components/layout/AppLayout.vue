@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, provide } from 'vue'
 import Sidebar from './Sidebar.vue'
+import MobileNav from './MobileNav.vue'
 import Header from './Header.vue'
 import PermissionBanner from './PermissionBanner.vue'
 import DemoBanner from './DemoBanner.vue'
@@ -53,11 +54,14 @@ provide('toggleSidebar', toggleSidebar)
       <!-- Header -->
       <Header />
 
-      <!-- Page Content -->
-      <main class="flex-1 overflow-auto p-4 sm:p-6">
+      <!-- Page Content (extra bottom padding on mobile clears the bottom nav) -->
+      <main class="flex-1 overflow-auto p-4 sm:p-6 pb-24 lg:pb-6">
         <slot />
       </main>
     </div>
+
+    <!-- Mobile bottom navigation (hidden at lg+) -->
+    <MobileNav />
 
     <!-- Global Toast Notifications -->
     <ToastContainer />

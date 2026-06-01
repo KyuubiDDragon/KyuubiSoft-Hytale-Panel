@@ -74,6 +74,7 @@
   "nav": {
     "admin": "Admin",
     "dashboard": "Dashboard",
+    "menu": "Menü",
     "console": "Konsole",
     "backups": "Backups",
     "players": "Spieler",

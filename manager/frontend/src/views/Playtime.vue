@@ -66,29 +66,31 @@ onBeforeUnmount(() => {
       <div v-if="error" class="p-4 text-status-error text-sm">{{ error }}</div>
       <div v-else-if="loading" class="p-8 text-center text-ink-subtle">{{ t('common.loading') }}</div>
       <div v-else-if="leaderboard.length === 0" class="p-8 text-center text-ink-subtle">{{ t('playtime.empty') }}</div>
-      <table v-else class="table">
-        <thead>
-          <tr>
-            <th class="w-16">#</th>
-            <th>{{ t('playtime.player') }}</th>
-            <th>{{ t('playtime.total') }}</th>
-            <th class="hidden sm:table-cell">{{ t('playtime.sessions') }}</th>
-            <th>{{ t('playtime.status') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(entry, i) in leaderboard" :key="entry.uuid">
-            <td class="font-mono text-ink-subtle">{{ i + 1 }}</td>
-            <td class="font-medium text-ink">{{ entry.playerName }}</td>
-            <td class="font-mono">{{ formatDuration(entry.totalMs) }}</td>
-            <td class="hidden sm:table-cell text-ink-muted">{{ entry.sessions }}</td>
-            <td>
-              <span v-if="entry.online" class="badge badge-success">{{ t('playtime.online') }}</span>
-              <span v-else class="text-ink-subtle text-xs">{{ formatLastSeen(entry.lastSeen) }}</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else class="overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="w-16">#</th>
+              <th>{{ t('playtime.player') }}</th>
+              <th>{{ t('playtime.total') }}</th>
+              <th class="hidden sm:table-cell">{{ t('playtime.sessions') }}</th>
+              <th>{{ t('playtime.status') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(entry, i) in leaderboard" :key="entry.uuid">
+              <td class="font-mono text-ink-subtle">{{ i + 1 }}</td>
+              <td class="font-medium text-ink">{{ entry.playerName }}</td>
+              <td class="font-mono">{{ formatDuration(entry.totalMs) }}</td>
+              <td class="hidden sm:table-cell text-ink-muted">{{ entry.sessions }}</td>
+              <td>
+                <span v-if="entry.online" class="badge badge-success">{{ t('playtime.online') }}</span>
+                <span v-else class="text-ink-subtle text-xs">{{ formatLastSeen(entry.lastSeen) }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </Card>
   </div>
 </template>
