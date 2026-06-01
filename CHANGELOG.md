@@ -2,6 +2,98 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [3.0.0] - 2026-06-01 - New operator features, reliability hardening & DR
+
+Builds on `3.0.0-alpha` with a wave of operator-facing features and a focused
+reliability/security/disaster-recovery hardening pass. Every change is type-checked
+(`tsc`/`vue-tsc`), the backend suite is green (87 tests), and the frontend builds
+clean with full en/de/pt_br i18n parity.
+
+### New operator features
+
+- **Performance history charts**: an in-memory ring buffer samples TPS/MSPT (from
+  the plugin's `server_tick` events) plus container CPU/RAM and renders
+  dependency-free inline SVG line charts on the Performance page (survives reloads,
+  ~1h window). New `GET /api/server/perf-history`.
+- **Playtime tracking + leaderboard**: per-player session tracking (`play_sessions`)
+  with a leaderboard view and per-player totals.
+- **Crash report capture**: the watchdog snapshots a container log tail on every
+  detected crash into `crash_reports`, surfaced in a new Crashes view with an
+  expandable log.
+- **Player profiles**: a per-player page with staff notes (CRUD) and a punishment
+  timeline, reachable from the Players list.
+- **Chat auto-moderation** (off by default): reacts to in-game chat and enforces
+  banned words, link blocking, excessive caps, max length and anti-spam flood —
+  applying warn / mute / kick via the existing plugin-or-console path.
+- **Discord 2-way chat bridge**: the existing bot is now fully configurable from
+  the UI (token/channel/guild, redacted token) and restarts live on save — no panel
+  restart. In-game ↔ Discord mirroring plus `/status` and `/players` slash commands.
+- **Off-site backups** to any S3-compatible store (AWS S3, Backblaze B2, Cloudflare
+  R2, Wasabi, MinIO): native AWS SigV4 signing with **no SDK dependency**, streamed
+  from disk; auto-upload on backup + a "Test connection" button.
+- **PWA web-push notifications**: panel alerts (crashes, backups, updates, …) are
+  delivered to subscribed devices even with the tab closed; VAPID keys auto-generated,
+  per-device subscribe/test, off by default.
+- **JVM / startup tuning from the UI**: edit heap (`-Xms`/`-Xmx`) and extra JVM/server
+  arguments in Settings, persisted via the existing `panel-config.json` channel and
+  applied on the next server restart (no container recreation).
+- **Live inventory editing**: give items to / clear a player's inventory directly
+  from the Avatar & Inventory view (permission-gated; uses the plugin-or-console path).
+- **Drag-and-drop mod/plugin upload**: drop files anywhere on the Mods page; reuses
+  the existing upload handler, scoped + permission-aware, with a full-window overlay.
+- **Mobile bottom navigation**: a phone-friendly bottom bar (hidden at `lg+`) for the
+  most-used destinations, plus assorted responsive fixes.
+
+### Reliability & disaster recovery
+
+- **Docker API timeouts**: every one-shot Docker call (inspect/stats/start/stop/
+  restart/logs/exec) is raced against a timeout so a hung daemon can no longer freeze
+  operator requests.
+- **Panel self-backup**: backups now also capture a consistent online snapshot of the
+  manager's own state (`panel.sqlite` + config/users/servers JSON) into a `_panel/`
+  subdir and off-site — a manager-volume loss is now recoverable.
+- **Restore hardening**: pre-swap archive integrity check (`tar -tzf`), disk-space
+  preflight, empty-extraction guard, and a boot-time sweep of orphaned restore staging
+  dirs; clearer disk-full messages.
+- **Schema migration framework**: a `schema_migrations` table + versioned runner
+  replaces ad-hoc `CREATE TABLE IF NOT EXISTS`, so future schema changes apply
+  deterministically across installs (existing schema becomes the idempotent v1 baseline).
+- **Data-retention sweeps**: a daily job prunes `audit_events`, `notifications`,
+  `crash_reports` and `webhook_deliveries` by age (the previously orphaned audit-prune
+  is now wired); `play_sessions` are kept for the leaderboard.
+- **TPS & disk-space watchdog alerts**: in addition to memory, the watchdog now emits
+  `server.alert` on low TPS (server lag) and low free disk, into the existing
+  notification/webhook pipeline. Env-tunable thresholds.
+
+### Security & quality
+
+- **File-manager upload magic-byte validation**: uploads with a known binary/archive
+  extension must match the format's signature (mods/plugins already did this).
+- **Tests for the security perimeter**: `requirePermission`/effective-permission
+  resolution (incl. the API-key scope ∩ owner-rights rule), the migration runner, and
+  upload magic-byte checks — suite now at 87 passing.
+- **Console reliability fix**: command failures (permission denied, validation, server
+  down) and "not connected" are now surfaced in the terminal instead of vanishing
+  silently; a closed socket triggers a reconnect and the typed command is preserved.
+- **Accessibility**: a skip-to-content link and a `prefers-reduced-motion` baseline.
+- **Performance**: native off-screen virtualization (`content-visibility`) for the
+  console log, player rows and asset/file lists.
+
+### Notable bug fixes
+
+- Asset Explorer surfaces the real unzip/permission/disk error instead of a bare
+  "code 50".
+- Live map heatmap reactivity + correct ping unit (µs→ms); WebMap iframe CSP relaxed
+  to load Leaflet from external CDNs.
+- "Update available" no longer flaps when the installed version is the newest
+  (date-stamped releases with a hash suffix are recognized).
+- Multi-mod upload, command-help links and live-map wiring fixed.
+
+### Plugin
+
+- **KyuubiSoft API plugin** bumped through v1.4.x for the 2026-05 Hytale ECS API
+  (older builds no longer compile against the current `HytaleServer.jar`).
+
 ## [3.0.0-alpha] - 2026-05-31 - Platform standards, Hytale-API plugin & system review
 
 ### Platform features (shipped; previously tracked as "V3 roadmap")
