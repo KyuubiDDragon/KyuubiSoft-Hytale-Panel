@@ -2299,6 +2299,21 @@
   "avatarInventory": {
     "title": "Avatar & Inventar",
     "subtitle": "Spieler-Avatar und Inventar im Hytale-Stil anzeigen",
+    "edit": {
+      "title": "Inventar bearbeiten",
+      "giveItem": "Item geben",
+      "clear": "Inventar leeren",
+      "itemId": "Item-ID",
+      "itemIdPlaceholder": "z. B. adamantite_sword",
+      "amount": "Menge",
+      "give": "Geben",
+      "hint": "Items werden dem Live-Spieler gegeben (über das Plugin oder die Server-Konsole). Die gespeicherte Ansicht aktualisiert sich, sobald der Server speichert.",
+      "gaveItem": "{amount}× {item} gegeben",
+      "giveFailed": "Item konnte nicht gegeben werden",
+      "clearConfirm": "Das gesamte Inventar von {player} leeren? Das kann nicht rückgängig gemacht werden.",
+      "cleared": "Inventar geleert",
+      "clearFailed": "Inventar konnte nicht geleert werden"
+    },
     "searchPlayer": "Spieler suchen...",
     "selectPrompt": "Wähle einen Spieler aus",
     "selectHint": "Benutze die Suche oben, um einen Spieler auszuwählen",

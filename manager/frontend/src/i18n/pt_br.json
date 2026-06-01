@@ -2330,6 +2330,21 @@
   "avatarInventory": {
     "title": "Avatar e Inventário",
     "subtitle": "Ver avatar e inventário do jogador no estilo Hytale",
+    "edit": {
+      "title": "Editar inventário",
+      "giveItem": "Dar item",
+      "clear": "Limpar inventário",
+      "itemId": "ID do item",
+      "itemIdPlaceholder": "ex.: adamantite_sword",
+      "amount": "Quantidade",
+      "give": "Dar",
+      "hint": "Os itens são dados ao jogador ao vivo (via plugin ou console do servidor). A visualização salva é atualizada após o servidor gravar.",
+      "gaveItem": "{amount}× {item} dado(s)",
+      "giveFailed": "Falha ao dar o item",
+      "clearConfirm": "Limpar todo o inventário de {player}? Isso não pode ser desfeito.",
+      "cleared": "Inventário limpo",
+      "clearFailed": "Falha ao limpar o inventário"
+    },
     "searchPlayer": "Buscar jogador...",
     "selectPrompt": "Selecione um Jogador",
     "selectHint": "Use a busca acima para selecionar um jogador",

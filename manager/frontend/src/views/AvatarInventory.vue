@@ -6,10 +6,22 @@ import { playersApi, type UnifiedPlayerEntry, type ChatMessage, type DeathPositi
 import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
 import { assetsApi } from '@/api/assets'
 import Button from '@/components/ui/Button.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
+const toast = useToast()
+
+// Live inventory editing (give item / clear) — gated by player permissions.
+const canGiveItems = computed(() => authStore.hasPermission('players.give'))
+const canClearInventory = computed(() => authStore.hasPermission('players.clear_inventory'))
+const showGiveForm = ref(false)
+const giveItemId = ref('')
+const giveAmount = ref<number>(1)
+const editBusy = ref(false)
 
 // Player search state
 const searchQuery = ref('')
@@ -115,18 +127,7 @@ async function selectPlayer(playerName: string) {
   error.value = ''
 
   try {
-    const [detailsRes, inventoryRes] = await Promise.all([
-      serverApi.getFilePlayerDetails(playerName).catch(() => null),
-      serverApi.getFilePlayerInventory(playerName).catch(() => null)
-    ])
-
-    if (detailsRes?.success && detailsRes.data) {
-      details.value = detailsRes.data
-    }
-    if (inventoryRes?.success && inventoryRes.data) {
-      inventory.value = inventoryRes.data
-    }
-
+    await reloadInventoryData(playerName)
     if (!details.value && !inventory.value) {
       error.value = t('avatarInventory.noData')
     }
@@ -134,6 +135,66 @@ async function selectPlayer(playerName: string) {
     error.value = t('errors.connectionFailed')
   } finally {
     loading.value = false
+  }
+}
+
+// Fetch (or re-fetch) the selected player's saved details + inventory. Used on
+// selection and after a live edit so the panel reflects the new state.
+async function reloadInventoryData(playerName: string) {
+  const [detailsRes, inventoryRes] = await Promise.all([
+    serverApi.getFilePlayerDetails(playerName).catch(() => null),
+    serverApi.getFilePlayerInventory(playerName).catch(() => null)
+  ])
+  if (detailsRes?.success && detailsRes.data) details.value = detailsRes.data
+  if (inventoryRes?.success && inventoryRes.data) inventory.value = inventoryRes.data
+}
+
+// Give an item to the selected player (online: live via plugin/console;
+// the saved inventory is re-read afterwards so the change is reflected).
+async function submitGiveItem() {
+  const player = selectedPlayer.value
+  const item = giveItemId.value.trim()
+  if (!player || !item) return
+  const amount = Math.min(Math.max(Math.trunc(giveAmount.value || 1), 1), 9999)
+  editBusy.value = true
+  try {
+    const res = await playersApi.give(player, item, amount)
+    if (res.success) {
+      toast.success(t('avatarInventory.edit.gaveItem', { amount, item }))
+      giveItemId.value = ''
+      giveAmount.value = 1
+      showGiveForm.value = false
+      // Saved file updates only when the server flushes; reload best-effort.
+      await reloadInventoryData(player).catch(() => {})
+    } else {
+      toast.error(res.error || t('avatarInventory.edit.giveFailed'))
+    }
+  } catch (e) {
+    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    toast.error(msg || t('avatarInventory.edit.giveFailed'))
+  } finally {
+    editBusy.value = false
+  }
+}
+
+async function clearSelectedInventory() {
+  const player = selectedPlayer.value
+  if (!player) return
+  if (!window.confirm(t('avatarInventory.edit.clearConfirm', { player }))) return
+  editBusy.value = true
+  try {
+    const res = await playersApi.clearInventory(player)
+    if (res.success) {
+      toast.success(t('avatarInventory.edit.cleared'))
+      await reloadInventoryData(player).catch(() => {})
+    } else {
+      toast.error(res.error || t('avatarInventory.edit.clearFailed'))
+    }
+  } catch (e) {
+    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    toast.error(msg || t('avatarInventory.edit.clearFailed'))
+  } finally {
+    editBusy.value = false
   }
 }
 
@@ -789,6 +850,58 @@ function handleSearchBlur() {
 
           <!-- Tab Content: Inventory -->
           <div v-if="activeTab === 'inventory'" class="flex-1 flex flex-col gap-2 overflow-auto">
+            <!-- Live edit toolbar (give / clear) -->
+            <div v-if="selectedPlayer && (canGiveItems || canClearInventory)" class="inv-panel p-2">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-xs font-semibold text-ink-muted uppercase tracking-wider">{{ t('avatarInventory.edit.title') }}</h3>
+                <div class="flex items-center gap-2">
+                  <button
+                    v-if="canGiveItems"
+                    @click="showGiveForm = !showGiveForm"
+                    class="px-2.5 py-1 text-xs font-medium rounded-lg bg-hytale-orange/15 text-hytale-orange hover:bg-hytale-orange/25 transition-colors"
+                  >
+                    {{ t('avatarInventory.edit.giveItem') }}
+                  </button>
+                  <button
+                    v-if="canClearInventory"
+                    @click="clearSelectedInventory"
+                    :disabled="editBusy"
+                    class="px-2.5 py-1 text-xs font-medium rounded-lg bg-status-error/15 text-status-error hover:bg-status-error/25 disabled:opacity-50 transition-colors"
+                  >
+                    {{ t('avatarInventory.edit.clear') }}
+                  </button>
+                </div>
+              </div>
+              <!-- Give-item inline form -->
+              <form v-if="showGiveForm && canGiveItems" @submit.prevent="submitGiveItem" class="mt-2 flex flex-wrap items-end gap-2">
+                <div class="flex-1 min-w-[140px]">
+                  <label class="block text-[10px] uppercase tracking-wide text-ink-subtle mb-0.5">{{ t('avatarInventory.edit.itemId') }}</label>
+                  <input
+                    v-model="giveItemId"
+                    type="text"
+                    :placeholder="t('avatarInventory.edit.itemIdPlaceholder')"
+                    class="w-full px-2.5 py-1.5 bg-inv-slot border border-inv-border/50 rounded-lg text-sm text-ink placeholder-gray-600 focus:outline-none focus:border-hytale-orange/50"
+                  />
+                </div>
+                <div class="w-20">
+                  <label class="block text-[10px] uppercase tracking-wide text-ink-subtle mb-0.5">{{ t('avatarInventory.edit.amount') }}</label>
+                  <input
+                    v-model.number="giveAmount"
+                    type="number" min="1" max="9999"
+                    class="w-full px-2.5 py-1.5 bg-inv-slot border border-inv-border/50 rounded-lg text-sm text-ink focus:outline-none focus:border-hytale-orange/50"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  :disabled="editBusy || !giveItemId.trim()"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white transition-colors"
+                >
+                  {{ editBusy ? t('common.saving') : t('avatarInventory.edit.give') }}
+                </button>
+              </form>
+              <p class="mt-1.5 text-[10px] text-ink-subtle">{{ t('avatarInventory.edit.hint') }}</p>
+            </div>
+
             <!-- Backpack Section -->
             <div class="inv-panel p-2">
             <div class="flex items-center justify-between mb-1.5">

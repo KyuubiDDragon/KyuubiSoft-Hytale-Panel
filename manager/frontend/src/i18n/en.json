@@ -2299,6 +2299,21 @@
   "avatarInventory": {
     "title": "Avatar & Inventory",
     "subtitle": "View player avatar and inventory in Hytale style",
+    "edit": {
+      "title": "Edit inventory",
+      "giveItem": "Give item",
+      "clear": "Clear inventory",
+      "itemId": "Item ID",
+      "itemIdPlaceholder": "e.g. adamantite_sword",
+      "amount": "Amount",
+      "give": "Give",
+      "hint": "Items are given to the live player (via the plugin or server console). The saved view refreshes after the server flushes.",
+      "gaveItem": "Gave {amount}× {item}",
+      "giveFailed": "Failed to give item",
+      "clearConfirm": "Clear {player}'s entire inventory? This cannot be undone.",
+      "cleared": "Inventory cleared",
+      "clearFailed": "Failed to clear inventory"
+    },
     "searchPlayer": "Search player...",
     "selectPrompt": "Select a Player",
     "selectHint": "Use the search above to select a player",
