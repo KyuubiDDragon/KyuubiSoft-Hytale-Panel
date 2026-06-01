@@ -63,6 +63,7 @@ import { startPlaytimeTracking } from './services/playtime.js';
 import { startCrashCapture } from './services/crashReports.js';
 import { startPerfHistory } from './services/perfHistory.js';
 import { startAutoMod } from './services/autoMod.js';
+import { startRetention } from './services/retention.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -820,6 +821,9 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Sample TPS/MSPT/CPU/memory into a ring buffer for the performance charts.
   startPerfHistory();
+
+  // Daily delete-by-age sweep so operational log tables don't grow unbounded.
+  startRetention();
 
   // Start the event-action engine (reactive automations bound to the EventBus).
   const { startEventActions } = await import('./services/eventActions.js');
