@@ -7,7 +7,7 @@ import Card from '@/components/ui/Card.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse } from '@/api/server'
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
-import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate, type AutoModConfig } from '@/api/settings'
+import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate, type AutoModConfig, type DiscordStatus } from '@/api/settings'
 import { useToast } from '@/composables/useToast'
 
 const { t } = useI18n()
@@ -81,6 +81,12 @@ const automod = ref<AutoModConfig | null>(null)
 const automodLoading = ref(false)
 const automodSaving = ref(false)
 const automodBannedWordsText = ref('')
+
+// Discord bot (chat bridge)
+const discord = ref<DiscordStatus | null>(null)
+const discordLoading = ref(false)
+const discordSaving = ref(false)
+const discordForm = ref({ enabled: false, token: '', channelId: '', guildId: '' })
 
 function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
@@ -187,6 +193,45 @@ async function saveAutoMod() {
     toast.error(t('settings.automod.saveFailed'))
   } finally {
     automodSaving.value = false
+  }
+}
+
+async function loadDiscord() {
+  try {
+    discordLoading.value = true
+    discord.value = await settingsApi.getDiscord()
+    discordForm.value.enabled = discord.value.enabled
+    discordForm.value.channelId = discord.value.channelId
+    discordForm.value.guildId = discord.value.guildId
+    discordForm.value.token = ''
+  } catch {
+    // discord settings unavailable (permission / older backend)
+  } finally {
+    discordLoading.value = false
+  }
+}
+
+async function saveDiscord() {
+  try {
+    discordSaving.value = true
+    const payload: { enabled: boolean; channelId: string; guildId: string; token?: string } = {
+      enabled: discordForm.value.enabled,
+      channelId: discordForm.value.channelId.trim(),
+      guildId: discordForm.value.guildId.trim(),
+    }
+    // Only send the token when the user typed a new one (empty = keep current).
+    if (discordForm.value.token.trim()) payload.token = discordForm.value.token.trim()
+    const result = await settingsApi.saveDiscord(payload)
+    discord.value = result.data
+    discordForm.value.token = ''
+    discordForm.value.channelId = result.data.channelId
+    discordForm.value.guildId = result.data.guildId
+    toast.success(t('settings.discord.saved'))
+  } catch (e) {
+    const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+    toast.error(msg || t('settings.discord.saveFailed'))
+  } finally {
+    discordSaving.value = false
   }
 }
 
@@ -583,6 +628,7 @@ onMounted(() => {
   if (authStore.hasPermission('settings.view') || authStore.canManageConfig) {
     loadIntegrations()
     loadAutoMod()
+    loadDiscord()
   }
 
   // Load Hytale auth status if user can manage server
@@ -1381,6 +1427,60 @@ onUnmounted(() => {
           <button v-if="canEditIntegrations" @click="saveAutoMod" :disabled="automodSaving"
                   class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
             {{ automodSaving ? t('common.saving') : t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Discord Bot (chat bridge) -->
+    <Card v-if="authStore.hasPermission('settings.view') || authStore.canManageConfig" :title="t('settings.discord.title')">
+      <div v-if="discordLoading" class="py-6 text-center text-sm text-ink-muted">{{ t('common.loading') }}</div>
+      <div v-else-if="discord" class="space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <p class="text-sm text-ink-muted">{{ t('settings.discord.description') }}</p>
+          <span v-if="discord.running" class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-status-success/15 text-status-success text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-status-success"></span>{{ t('settings.discord.statusRunning') }}
+          </span>
+          <span v-else class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-overlay text-ink-muted text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>{{ t('settings.discord.statusStopped') }}
+          </span>
+        </div>
+
+        <label class="flex items-center justify-between gap-4 cursor-pointer">
+          <span class="text-sm font-medium text-ink">{{ t('settings.discord.enabled') }}</span>
+          <input type="checkbox" v-model="discordForm.enabled" :disabled="!canEditIntegrations"
+                 class="h-5 w-5 rounded accent-hytale-orange" />
+        </label>
+
+        <div class="space-y-1.5">
+          <label class="text-sm font-medium text-ink">{{ t('settings.discord.token') }}</label>
+          <input type="password" v-model="discordForm.token" :disabled="!canEditIntegrations" autocomplete="off"
+                 :placeholder="discord.tokenConfigured ? t('settings.discord.tokenSetPlaceholder', { hint: discord.tokenMasked }) : t('settings.discord.tokenPlaceholder')"
+                 class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+          <p class="text-xs text-ink-subtle">{{ t('settings.discord.tokenHint') }}</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.discord.channelId') }}</label>
+            <input type="text" v-model="discordForm.channelId" :disabled="!canEditIntegrations" inputmode="numeric"
+                   placeholder="123456789012345678"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+            <p class="text-xs text-ink-subtle">{{ t('settings.discord.channelIdHint') }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.discord.guildId') }}</label>
+            <input type="text" v-model="discordForm.guildId" :disabled="!canEditIntegrations" inputmode="numeric"
+                   placeholder="123456789012345678"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+            <p class="text-xs text-ink-subtle">{{ t('settings.discord.guildIdHint') }}</p>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button v-if="canEditIntegrations" @click="saveDiscord" :disabled="discordSaving"
+                  class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+            {{ discordSaving ? t('common.saving') : t('common.save') }}
           </button>
         </div>
       </div>

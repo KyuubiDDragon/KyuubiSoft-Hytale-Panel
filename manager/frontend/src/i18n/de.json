@@ -981,6 +981,23 @@
       "saved": "Auto-Moderations-Einstellungen gespeichert",
       "saveFailed": "Auto-Moderations-Einstellungen konnten nicht gespeichert werden"
     },
+    "discord": {
+      "title": "Discord-Bot",
+      "description": "Zwei-Wege-Chat-Bridge zwischen deinem Server und einem Discord-Kanal, plus /status- und /players-Slash-Befehle. Standardmäßig aus.",
+      "statusRunning": "Verbunden",
+      "statusStopped": "Gestoppt",
+      "enabled": "Discord-Bot aktivieren",
+      "token": "Bot-Token",
+      "tokenPlaceholder": "Bot-Token einfügen",
+      "tokenSetPlaceholder": "Token gesetzt ({hint}) — leer lassen zum Behalten",
+      "tokenHint": "Erstelle einen Bot auf discord.com/developers, aktiviere den Message-Content-Intent und füge sein Token hier ein.",
+      "channelId": "Kanal-ID",
+      "channelIdHint": "Der Textkanal, der den Chat spiegelt (Entwicklermodus aktivieren, Rechtsklick auf den Kanal → ID kopieren).",
+      "guildId": "Server-(Gilden-)ID — optional",
+      "guildIdHint": "Setze dies, um Slash-Befehle sofort auf einem Server zu registrieren. Leer lassen für globale Befehle.",
+      "saved": "Discord-Einstellungen gespeichert",
+      "saveFailed": "Discord-Einstellungen konnten nicht gespeichert werden"
+    },
     "title": "Einstellungen",
     "language": "Sprache",
     "german": "Deutsch",

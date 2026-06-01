@@ -944,6 +944,23 @@
       "saved": "Configurações de automoderação salvas",
       "saveFailed": "Falha ao salvar as configurações de automoderação"
     },
+    "discord": {
+      "title": "Bot do Discord",
+      "description": "Ponte de chat bidirecional entre o seu servidor e um canal do Discord, além dos comandos /status e /players. Desligado por padrão.",
+      "statusRunning": "Conectado",
+      "statusStopped": "Parado",
+      "enabled": "Ativar bot do Discord",
+      "token": "Token do bot",
+      "tokenPlaceholder": "Cole o token do seu bot",
+      "tokenSetPlaceholder": "Token definido ({hint}) — deixe em branco para manter",
+      "tokenHint": "Crie um bot em discord.com/developers, ative o intent de Conteúdo de Mensagem e cole o token aqui.",
+      "channelId": "ID do canal",
+      "channelIdHint": "O canal de texto para espelhar o chat (ative o Modo de Desenvolvedor, clique com o botão direito no canal → Copiar ID).",
+      "guildId": "ID do servidor (guild) — opcional",
+      "guildIdHint": "Defina para registrar comandos de barra em um servidor instantaneamente. Deixe em branco para comandos globais.",
+      "saved": "Configurações do Discord salvas",
+      "saveFailed": "Falha ao salvar as configurações do Discord"
+    },
     "title": "Configurações",
     "language": "Idioma",
     "german": "Deutsch",

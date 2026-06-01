@@ -62,4 +62,31 @@ export const settingsApi = {
     const { data } = await api.put('/settings/automod', payload)
     return data
   },
+
+  async getDiscord(): Promise<DiscordStatus> {
+    const { data } = await api.get<DiscordStatus>('/settings/discord')
+    return data
+  },
+
+  async saveDiscord(payload: DiscordUpdate): Promise<{ success: boolean; message?: string; data: DiscordStatus }> {
+    const { data } = await api.put('/settings/discord', payload)
+    return data
+  },
+}
+
+export interface DiscordStatus {
+  enabled: boolean
+  channelId: string
+  guildId: string
+  tokenConfigured: boolean
+  tokenMasked: string | null
+  running: boolean
+}
+
+/** PUT payload — token optional; provide '' to clear, omit to keep. */
+export interface DiscordUpdate {
+  enabled?: boolean
+  token?: string
+  channelId?: string
+  guildId?: string
 }

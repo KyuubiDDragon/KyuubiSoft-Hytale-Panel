@@ -160,3 +160,14 @@ export async function stopDiscordBot(): Promise<void> {
   }
   running = false;
 }
+
+/** Whether the bot is currently connected. */
+export function isDiscordRunning(): boolean {
+  return running;
+}
+
+/** Apply config changes live: tear down the current bot and re-read config. */
+export async function restartDiscordBot(): Promise<void> {
+  await stopDiscordBot();
+  await startDiscordBot();
+}

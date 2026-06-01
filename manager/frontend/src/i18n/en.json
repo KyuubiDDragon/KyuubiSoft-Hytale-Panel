@@ -981,6 +981,23 @@
       "saved": "Auto-moderation settings saved",
       "saveFailed": "Failed to save auto-moderation settings"
     },
+    "discord": {
+      "title": "Discord Bot",
+      "description": "Two-way chat bridge between your server and a Discord channel, plus /status and /players slash commands. Off by default.",
+      "statusRunning": "Connected",
+      "statusStopped": "Stopped",
+      "enabled": "Enable Discord bot",
+      "token": "Bot token",
+      "tokenPlaceholder": "Paste your bot token",
+      "tokenSetPlaceholder": "Token set ({hint}) — leave blank to keep",
+      "tokenHint": "Create a bot at discord.com/developers, enable the Message Content intent, and paste its token here.",
+      "channelId": "Channel ID",
+      "channelIdHint": "The text channel to mirror chat to/from (enable Developer Mode, right-click the channel → Copy ID).",
+      "guildId": "Server (guild) ID — optional",
+      "guildIdHint": "Set this to register slash commands to one server instantly. Leave blank for global commands.",
+      "saved": "Discord settings saved",
+      "saveFailed": "Failed to save Discord settings"
+    },
     "title": "Settings",
     "language": "Language",
     "german": "Deutsch",
