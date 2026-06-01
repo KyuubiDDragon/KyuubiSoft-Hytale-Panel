@@ -384,20 +384,33 @@ async function runExtraction(sourceFile: string): Promise<void> {
         }
       });
 
+      // Keep the tail of stderr so we can surface the REAL reason in the
+      // rejection — a bare "code 50" is uninformative (it can be disk-full,
+      // quota, OR — commonly — the target not being writable by the non-root
+      // manager user, which is what actually produces the cryptic 50 here).
+      let stderrTail = '';
       unzip.stderr.on('data', (data: Buffer) => {
-        logger.error('[Assets] unzip stderr:', data.toString());
+        const text = data.toString();
+        logger.error('[Assets] unzip stderr:', text);
+        stderrTail = (stderrTail + text).slice(-800);
       });
 
       unzip.on('close', (code) => {
         if (code === 0) {
           resolve();
-        } else if (code === 50) {
+          return;
+        }
+        const detail = stderrTail
+          .split('\n').map((l) => l.trim()).filter(Boolean).slice(-3).join(' | ');
+        if (code === 50) {
           reject(new Error(
-            `Ran out of disk space while extracting assets (unzip code 50). Free up space on ` +
-            `the assets volume (${config.assetsPath}) and retry.`
+            `unzip could not write the extracted files (code 50). Usual causes: the assets ` +
+            `volume (${config.assetsPath}) is out of space/quota, or it is not writable by the ` +
+            `manager user (uid 9999) — check that ${config.assetsPath} is owned by 9999.` +
+            (detail ? ` unzip said: ${detail}` : '')
           ));
         } else {
-          reject(new Error(`unzip exited with code ${code}`));
+          reject(new Error(`unzip failed (code ${code})` + (detail ? `: ${detail}` : '')));
         }
       });
 
