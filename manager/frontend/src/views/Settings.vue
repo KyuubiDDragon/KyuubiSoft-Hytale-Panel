@@ -7,7 +7,7 @@ import Card from '@/components/ui/Card.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { serverApi, type ConfigFile, type PatchlineResponse, type AcceptEarlyPluginsResponse, type DisableSentryResponse, type AllowOpResponse } from '@/api/server'
 import { authApi, type HytaleAuthStatus, type HytaleDeviceCodeResponse } from '@/api/auth'
-import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate } from '@/api/settings'
+import { settingsApi, type IntegrationsStatus, type IntegrationsUpdate, type AutoModConfig } from '@/api/settings'
 import { useToast } from '@/composables/useToast'
 
 const { t } = useI18n()
@@ -75,6 +75,12 @@ const integrationsForm = ref({
   modtaleApiKey: '',
   stackmartApiKey: '',
 })
+
+// Auto-moderation (chat filter)
+const automod = ref<AutoModConfig | null>(null)
+const automodLoading = ref(false)
+const automodSaving = ref(false)
+const automodBannedWordsText = ref('')
 
 function changeLocale(locale: 'de' | 'en' | 'pt_br') {
   setLocale(locale)
@@ -147,6 +153,40 @@ async function clearIntegration(field: 'curseforgeApiKey' | 'modtaleApiKey' | 's
     integrationsError.value = t('settings.integrations.saveFailed')
   } finally {
     integrationsSaving.value = false
+  }
+}
+
+async function loadAutoMod() {
+  try {
+    automodLoading.value = true
+    automod.value = await settingsApi.getAutoMod()
+    automodBannedWordsText.value = (automod.value.bannedWords || []).join(', ')
+  } catch {
+    // automod settings unavailable (permission / older backend)
+  } finally {
+    automodLoading.value = false
+  }
+}
+
+async function saveAutoMod() {
+  if (!automod.value) return
+  try {
+    automodSaving.value = true
+    const payload: AutoModConfig = {
+      ...automod.value,
+      bannedWords: automodBannedWordsText.value
+        .split(',')
+        .map(w => w.trim().toLowerCase())
+        .filter(w => w.length > 0),
+    }
+    const result = await settingsApi.saveAutoMod(payload)
+    automod.value = result.data
+    automodBannedWordsText.value = result.data.bannedWords.join(', ')
+    toast.success(t('settings.automod.saved'))
+  } catch {
+    toast.error(t('settings.automod.saveFailed'))
+  } finally {
+    automodSaving.value = false
   }
 }
 
@@ -542,6 +582,7 @@ onMounted(() => {
   // Integration API keys are admin/config-manager territory.
   if (authStore.hasPermission('settings.view') || authStore.canManageConfig) {
     loadIntegrations()
+    loadAutoMod()
   }
 
   // Load Hytale auth status if user can manage server
@@ -1249,6 +1290,97 @@ onUnmounted(() => {
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             {{ t('common.save') }}
+          </button>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Auto-Moderation (chat filter) -->
+    <Card v-if="authStore.hasPermission('settings.view') || authStore.canManageConfig" :title="t('settings.automod.title')">
+      <div v-if="automodLoading" class="py-6 text-center text-sm text-ink-muted">{{ t('common.loading') }}</div>
+      <div v-else-if="automod" class="space-y-5">
+        <p class="text-sm text-ink-muted">{{ t('settings.automod.description') }}</p>
+
+        <!-- Master toggle -->
+        <label class="flex items-center justify-between gap-4 cursor-pointer">
+          <span class="text-sm font-medium text-ink">{{ t('settings.automod.enabled') }}</span>
+          <input type="checkbox" v-model="automod.enabled" :disabled="!canEditIntegrations"
+                 class="h-5 w-5 rounded accent-hytale-orange" />
+        </label>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5" :class="{ 'opacity-50 pointer-events-none': !automod.enabled }">
+          <!-- Action on violation -->
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.automod.action') }}</label>
+            <select v-model="automod.action" :disabled="!canEditIntegrations"
+                    class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink">
+              <option value="warn">{{ t('settings.automod.actionWarn') }}</option>
+              <option value="mute">{{ t('settings.automod.actionMute') }}</option>
+              <option value="kick">{{ t('settings.automod.actionKick') }}</option>
+            </select>
+          </div>
+
+          <!-- Mute duration (only relevant for mute) -->
+          <div class="space-y-1.5" v-if="automod.action === 'mute'">
+            <label class="text-sm font-medium text-ink">{{ t('settings.automod.muteDuration') }}</label>
+            <input type="number" min="0" max="86400" v-model.number="automod.muteDurationSec" :disabled="!canEditIntegrations"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+            <p class="text-xs text-ink-subtle">{{ t('settings.automod.muteDurationHint') }}</p>
+          </div>
+        </div>
+
+        <!-- Banned words -->
+        <div class="space-y-1.5" :class="{ 'opacity-50 pointer-events-none': !automod.enabled }">
+          <label class="text-sm font-medium text-ink">{{ t('settings.automod.bannedWords') }}</label>
+          <textarea v-model="automodBannedWordsText" :disabled="!canEditIntegrations" rows="2"
+                    :placeholder="t('settings.automod.bannedWordsPlaceholder')"
+                    class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink"></textarea>
+          <p class="text-xs text-ink-subtle">{{ t('settings.automod.bannedWordsHint') }}</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5" :class="{ 'opacity-50 pointer-events-none': !automod.enabled }">
+          <!-- Block links -->
+          <label class="flex items-center justify-between gap-4 cursor-pointer">
+            <span class="text-sm font-medium text-ink">{{ t('settings.automod.blockLinks') }}</span>
+            <input type="checkbox" v-model="automod.blockLinks" :disabled="!canEditIntegrations"
+                   class="h-5 w-5 rounded accent-hytale-orange" />
+          </label>
+
+          <!-- Max caps % -->
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.automod.maxCaps') }}</label>
+            <input type="number" min="0" max="100" v-model.number="automod.maxCapsPercent" :disabled="!canEditIntegrations"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+            <p class="text-xs text-ink-subtle">{{ t('settings.automod.maxCapsHint') }}</p>
+          </div>
+
+          <!-- Max message length -->
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.automod.maxLength') }}</label>
+            <input type="number" min="0" max="1000" v-model.number="automod.maxMessageLength" :disabled="!canEditIntegrations"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+            <p class="text-xs text-ink-subtle">{{ t('settings.automod.maxLengthHint') }}</p>
+          </div>
+
+          <!-- Flood -->
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.automod.flood') }}</label>
+            <div class="flex items-center gap-2">
+              <input type="number" min="0" max="50" v-model.number="automod.floodCount" :disabled="!canEditIntegrations"
+                     class="w-20 px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+              <span class="text-xs text-ink-subtle">{{ t('settings.automod.floodIn') }}</span>
+              <input type="number" min="1" max="300" v-model.number="automod.floodWindowSec" :disabled="!canEditIntegrations"
+                     class="w-20 px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
+              <span class="text-xs text-ink-subtle">{{ t('settings.automod.floodSeconds') }}</span>
+            </div>
+            <p class="text-xs text-ink-subtle">{{ t('settings.automod.floodHint') }}</p>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button v-if="canEditIntegrations" @click="saveAutoMod" :disabled="automodSaving"
+                  class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+            {{ automodSaving ? t('common.saving') : t('common.save') }}
           </button>
         </div>
       </div>

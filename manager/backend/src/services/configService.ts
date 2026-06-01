@@ -86,6 +86,19 @@ export interface PanelConfig {
     channelId: string;
     guildId?: string; // register slash commands to one guild (instant vs global)
   };
+  // Optional auto-moderation of in-game chat. Off by default. Reacts to
+  // player_chat events from the plugin and applies the configured action.
+  automod?: {
+    enabled: boolean;
+    bannedWords: string[];     // case-insensitive whole-word matches
+    blockLinks: boolean;       // flag messages containing URLs
+    maxCapsPercent: number;    // 0 = off; e.g. 80 = >80% uppercase letters (min 8 chars)
+    maxMessageLength: number;  // 0 = off; flag very long messages
+    floodCount: number;        // 0 = off; N messages…
+    floodWindowSec: number;    // …within this many seconds counts as spam
+    action: 'warn' | 'mute' | 'kick';
+    muteDurationSec: number;   // for action=mute (0 = permanent)
+  };
 }
 
 // ============================================================
@@ -131,6 +144,17 @@ export function getDefaultConfig(): PanelConfig {
     },
     publicStatus: { enabled: false },
     discord: { enabled: false, token: '', channelId: '' },
+    automod: {
+      enabled: false,
+      bannedWords: [],
+      blockLinks: false,
+      maxCapsPercent: 0,
+      maxMessageLength: 0,
+      floodCount: 0,
+      floodWindowSec: 10,
+      action: 'warn',
+      muteDurationSec: 300,
+    },
     performance: {
       minRam: '3G',
       maxRam: '4G',

@@ -61,6 +61,7 @@ import { startPunishmentExpiry } from './services/punishments.js';
 import { startPlaytimeTracking } from './services/playtime.js';
 import { startCrashCapture } from './services/crashReports.js';
 import { startPerfHistory } from './services/perfHistory.js';
+import { startAutoMod } from './services/autoMod.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -825,6 +826,9 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Start the Discord bot if enabled in config (off by default).
   const { startDiscordBot } = await import('./services/discordBot.js');
   startDiscordBot().catch((err) => console.error('[Discord] start failed:', err));
+
+  // Start chat auto-moderation (acts only when config.automod.enabled).
+  startAutoMod();
 
   // Start the event-bus consumers (webhook dispatcher + notification fanout).
   const { startWebhookDispatcher } = await import('./services/webhooks.js');

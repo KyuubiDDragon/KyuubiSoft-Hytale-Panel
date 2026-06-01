@@ -28,6 +28,20 @@ export interface IntegrationsUpdate {
   stackmartApiKey?: string
 }
 
+export type AutoModAction = 'warn' | 'mute' | 'kick'
+
+export interface AutoModConfig {
+  enabled: boolean
+  bannedWords: string[]
+  blockLinks: boolean
+  maxCapsPercent: number
+  maxMessageLength: number
+  floodCount: number
+  floodWindowSec: number
+  action: AutoModAction
+  muteDurationSec: number
+}
+
 export const settingsApi = {
   async getIntegrations(): Promise<IntegrationsStatus> {
     const { data } = await api.get<IntegrationsStatus>('/settings/integrations')
@@ -36,6 +50,16 @@ export const settingsApi = {
 
   async saveIntegrations(payload: IntegrationsUpdate): Promise<{ success: boolean; message?: string; data: IntegrationsStatus }> {
     const { data } = await api.put('/settings/integrations', payload)
+    return data
+  },
+
+  async getAutoMod(): Promise<AutoModConfig> {
+    const { data } = await api.get<AutoModConfig>('/settings/automod')
+    return data
+  },
+
+  async saveAutoMod(payload: AutoModConfig): Promise<{ success: boolean; message?: string; data: AutoModConfig }> {
+    const { data } = await api.put('/settings/automod', payload)
     return data
   },
 }
