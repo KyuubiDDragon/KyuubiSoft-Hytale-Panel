@@ -143,8 +143,12 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   // grabbed the date (e.g. "2026.05.13") instead of the version. Prefer a real,
   // non-date version; only fall back to a date-style stamp when that's all the
   // output contains (the older date-based naming scheme).
+  // A build-date stamp is YYYY.MM.DD, optionally followed by a build/commit
+  // suffix like "-99ade04" (Hytale ships "2026.05.13-99ade04"). The suffix must
+  // be matched too, otherwise the stamp is mistaken for a real semver and wins
+  // over the actual version (e.g. "0.5.3"), causing a phantom "update available".
   const isDateStamp = (v: string): boolean =>
-    /^(19|20)\d{2}\.(0[1-9]|1[0-2])\.(0[1-9]|[12]\d|3[01])$/.test(v);
+    /^(19|20)\d{2}\.(0[1-9]|1[0-2])\.(0[1-9]|[12]\d|3[01])(?:[-.][0-9A-Za-z]+)?$/.test(v);
   const versionTokens = output.match(/[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z]+)?/g) || [];
   // A "version: X" label is the strongest signal — prefer it when present and
   // not itself a date stamp.
