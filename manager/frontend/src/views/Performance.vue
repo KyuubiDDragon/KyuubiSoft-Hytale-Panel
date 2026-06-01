@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { statsApi, type StatsEntry } from '@/api/management'
-import { serverApi, type PluginMemoryInfo, type PluginTpsMetrics, type PrometheusMetrics } from '@/api/server'
+import { serverApi, type PluginMemoryInfo, type PluginTpsMetrics, type PrometheusMetrics, type PerfSample } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 
 const { t } = useI18n()
@@ -30,6 +30,20 @@ const maxLocalHistory = 60 // 60 data points
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 const paused = ref(false)
 let isMounted = false
+
+// Persistent server-side performance history (survives page reloads, ~1h window)
+const perfHistory = ref<PerfSample[]>([])
+const perfIntervalMs = ref(10000)
+
+async function fetchPerfHistory() {
+  try {
+    const data = await serverApi.getPerfHistory()
+    perfHistory.value = data.samples
+    perfIntervalMs.value = data.intervalMs
+  } catch {
+    // History endpoint not available (e.g. demo mode / insufficient permission)
+  }
+}
 
 async function loadHistory() {
   try {
@@ -125,6 +139,49 @@ const maxCpu = computed(() => Math.max(...cpuData.value, 0))
 const maxMemory = computed(() => Math.max(...memoryData.value, 0))
 const maxPlayers = computed(() => Math.max(...playersData.value, 1))
 
+// --- Persistent history SVG charts (dependency-free) ---
+const CHART_W = 600
+const CHART_H = 120
+
+function buildChart(values: (number | null)[], domainMax: number, domainMin = 0) {
+  const n = values.length
+  const span = domainMax - domainMin || 1
+  const pts: string[] = []
+  values.forEach((v, i) => {
+    if (v === null || v === undefined) return
+    const x = n > 1 ? (i / (n - 1)) * CHART_W : 0
+    const yRaw = CHART_H - ((v - domainMin) / span) * CHART_H
+    const y = Math.max(0, Math.min(CHART_H, yRaw))
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`)
+  })
+  const line = pts.length >= 2 ? pts.join(' ') : ''
+  const area = line ? `0,${CHART_H} ${line} ${CHART_W},${CHART_H}` : ''
+  let last: number | null = null
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (values[i] !== null && values[i] !== undefined) { last = values[i] as number; break }
+  }
+  return { line, area, last }
+}
+
+const tpsChart = computed(() => buildChart(perfHistory.value.map(s => s.tps), 20, 0))
+const msptChart = computed(() => {
+  const peak = perfHistory.value.reduce((m, s) => Math.max(m, s.mspt ?? 0), 0)
+  return buildChart(perfHistory.value.map(s => s.mspt), Math.max(50, Math.ceil(peak / 10) * 10), 0)
+})
+const cpuChart = computed(() => buildChart(perfHistory.value.map(s => s.cpu), 100, 0))
+const memChart = computed(() => buildChart(perfHistory.value.map(s => s.mem), 100, 0))
+
+const historyWindowMinutes = computed(() =>
+  Math.max(1, Math.round((perfHistory.value.length * perfIntervalMs.value) / 60000))
+)
+
+const historyCharts = computed(() => [
+  { key: 'tps', label: t('performance.history.tps'), color: '#f59e0b', data: tpsChart.value, fmt: (v: number) => v.toFixed(1), unit: '' },
+  { key: 'mspt', label: t('performance.history.mspt'), color: '#3b82f6', data: msptChart.value, fmt: (v: number) => v.toFixed(1), unit: ' ms' },
+  { key: 'cpu', label: t('performance.history.cpu'), color: '#10b981', data: cpuChart.value, fmt: (v: number) => v.toFixed(0), unit: '%' },
+  { key: 'mem', label: t('performance.history.mem'), color: '#a855f7', data: memChart.value, fmt: (v: number) => v.toFixed(0), unit: '%' },
+])
+
 // Local fallback TPS stats (from client-side tracking)
 const localMinTps = computed(() => {
   const validTps = localHistory.value.filter(h => h.tps !== null).map(h => h.tps as number)
@@ -208,6 +265,7 @@ onMounted(async () => {
   await fetchPluginMemory()
   await fetchTpsMetrics()
   await fetchPrometheusMetrics()
+  await fetchPerfHistory()
   addLocalEntry()
 
   // Update every 5 seconds
@@ -217,6 +275,7 @@ onMounted(async () => {
     await fetchPluginMemory()
     await fetchTpsMetrics()
     await fetchPrometheusMetrics()
+    await fetchPerfHistory()
     addLocalEntry()
   }, 5000)
 })
@@ -254,6 +313,36 @@ onUnmounted(() => {
         </button>
       </div>
     </div>
+
+    <!-- Persistent Performance History (server-side ring buffer, survives reloads) -->
+    <Card>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-ink">{{ t('performance.history.title') }}</h3>
+        <span v-if="perfHistory.length >= 2" class="text-xs text-ink-muted">
+          {{ t('performance.history.window', { min: historyWindowMinutes }) }}
+        </span>
+      </div>
+      <div v-if="perfHistory.length < 2" class="py-10 text-center text-sm text-ink-muted">
+        {{ t('performance.history.collecting') }}
+      </div>
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div v-for="c in historyCharts" :key="c.key">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-sm text-ink-muted">{{ c.label }}</span>
+            <span class="text-sm font-bold" :style="{ color: c.color }">
+              {{ c.data.last !== null ? c.fmt(c.data.last) + c.unit : '—' }}
+            </span>
+          </div>
+          <svg :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none"
+               class="w-full h-24 bg-surface-overlay rounded-lg" role="img" :aria-label="c.label">
+            <polyline v-if="c.data.area" :points="c.data.area" :fill="c.color" fill-opacity="0.12" stroke="none" />
+            <polyline v-if="c.data.line" :points="c.data.line" fill="none" :stroke="c.color"
+                      stroke-width="2" vector-effect="non-scaling-stroke"
+                      stroke-linejoin="round" stroke-linecap="round" />
+          </svg>
+        </div>
+      </div>
+    </Card>
 
     <!-- Current Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

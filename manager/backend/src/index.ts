@@ -60,6 +60,7 @@ import { startWatchdog } from './services/watchdog.js';
 import { startPunishmentExpiry } from './services/punishments.js';
 import { startPlaytimeTracking } from './services/playtime.js';
 import { startCrashCapture } from './services/crashReports.js';
+import { startPerfHistory } from './services/perfHistory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -813,6 +814,9 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Capture a log snapshot whenever the watchdog reports a crash.
   startCrashCapture();
+
+  // Sample TPS/MSPT/CPU/memory into a ring buffer for the performance charts.
+  startPerfHistory();
 
   // Start the event-action engine (reactive automations bound to the EventBus).
   const { startEventActions } = await import('./services/eventActions.js');

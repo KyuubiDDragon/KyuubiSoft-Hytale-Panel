@@ -839,6 +839,15 @@
   },
   "performance": {
     "title": "Monitor de Desempenho",
+    "history": {
+      "title": "Histórico de Desempenho",
+      "window": "Últimos {min} min",
+      "collecting": "Coletando dados… os gráficos aparecem quando houver amostras suficientes.",
+      "tps": "TPS",
+      "mspt": "MSPT",
+      "cpu": "CPU",
+      "mem": "Memória"
+    },
     "liveUpdates": "Atualizações em Tempo Real",
     "cpu": "CPU",
     "memory": "Memória",

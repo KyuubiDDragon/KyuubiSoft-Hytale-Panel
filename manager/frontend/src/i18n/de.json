@@ -876,6 +876,15 @@
   },
   "performance": {
     "title": "Performance Monitor",
+    "history": {
+      "title": "Performance-Verlauf",
+      "window": "Letzte {min} Min",
+      "collecting": "Sammle Daten … Diagramme erscheinen, sobald genügend Messwerte vorliegen.",
+      "tps": "TPS",
+      "mspt": "MSPT",
+      "cpu": "CPU",
+      "mem": "Arbeitsspeicher"
+    },
     "liveUpdates": "Live Updates",
     "cpu": "CPU",
     "memory": "Speicher",

@@ -876,6 +876,15 @@
   },
   "performance": {
     "title": "Performance Monitor",
+    "history": {
+      "title": "Performance History",
+      "window": "Last {min} min",
+      "collecting": "Collecting data… charts appear once enough samples are gathered.",
+      "tps": "TPS",
+      "mspt": "MSPT",
+      "cpu": "CPU",
+      "mem": "Memory"
+    },
     "liveUpdates": "Live Updates",
     "cpu": "CPU",
     "memory": "Memory",

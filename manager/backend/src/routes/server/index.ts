@@ -5,6 +5,9 @@
 // routes/server.ts — submodules are mounted on '/' so paths stay identical.
 import { Router, Request, Response } from 'express';
 import { isDemoMode } from '../../services/demoData.js';
+import { authMiddleware } from '../../middleware/auth.js';
+import { requirePermission } from '../../middleware/permissions.js';
+import { getPerfHistory } from '../../services/perfHistory.js';
 
 import lifecycleRoutes from './lifecycle.js';
 import configRoutes from './config.js';
@@ -21,6 +24,11 @@ router.get('/demo', (_req: Request, res: Response) => {
     demoMode: isDemoMode(),
     message: isDemoMode() ? 'Panel is running in demo mode. All data is simulated.' : undefined,
   });
+});
+
+// GET /api/server/perf-history - TPS/MSPT/CPU/memory time-series for charts
+router.get('/perf-history', authMiddleware, requirePermission('performance.view'), (_req: Request, res: Response) => {
+  res.json(getPerfHistory());
 });
 
 // Mount submodules at root so all original /api/server/* paths still resolve
