@@ -825,6 +825,9 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Daily delete-by-age sweep so operational log tables don't grow unbounded.
   startRetention();
 
+  // Clear any restore staging dirs stranded by a crash mid-restore.
+  void (await import('./services/backup.js')).sweepOrphanedRestoreDirs().catch(() => {});
+
   // Start the event-action engine (reactive automations bound to the EventBus).
   const { startEventActions } = await import('./services/eventActions.js');
   startEventActions();

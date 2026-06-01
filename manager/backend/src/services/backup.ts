@@ -5,9 +5,25 @@ import { config } from '../config.js';
 import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js';
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe } from '../utils/pathSecurity.js';
-import { getDefaultId, getServer } from './servers.js';
+import { getDefaultId, getServer, listServers } from './servers.js';
 import { publish } from './eventBus.js';
 import { uploadBackupAsync } from './offsiteBackup.js';
+import { getDb } from '../db/index.js';
+
+// The manager's own data (panel.sqlite + config/users/servers JSON) lives here.
+const MANAGER_DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
+// How many panel self-backups to keep in the _panel subdir.
+const PANEL_BACKUP_KEEP = 14;
+
+/** Free bytes on the filesystem holding `dir`, or null if statfs is unsupported. */
+function freeBytes(dir: string): number | null {
+  try {
+    const st = fs.statfsSync(dir);
+    return st.bavail * st.bsize;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Resolve the backup/data paths for a specific server id. Falls back to the
@@ -42,6 +58,75 @@ function runBackupHookAsync(absolutePath: string): void {
     child.unref();
   } catch (err) {
     console.warn('[Backup] Failed to spawn backup-hook:', err instanceof Error ? err.message : err);
+  }
+}
+
+function prunePanelBackups(panelDir: string): void {
+  try {
+    const files = fs.readdirSync(panelDir)
+      .filter((f) => f.startsWith('panel-config_') && f.endsWith('.tar.gz'))
+      .map((f) => ({ f, t: fs.statSync(path.join(panelDir, f)).mtimeMs }))
+      .sort((a, b) => b.t - a.t);
+    for (const { f } of files.slice(PANEL_BACKUP_KEEP)) {
+      fs.rmSync(path.join(panelDir, f), { force: true });
+    }
+  } catch { /* non-fatal */ }
+}
+
+/**
+ * Snapshot the panel's OWN state — a consistent online copy of panel.sqlite
+ * (audit log, API keys, webhooks, punishments, …) plus the config/users/servers
+ * JSON — into `<backupsDir>/_panel/panel-config_<ts>.tar.gz`. Kept in a subdir
+ * so it never appears in (or is restored as) a game-data backup. Without this a
+ * manager-volume loss is unrecoverable.
+ */
+export async function backupPanelData(backupsDir: string): Promise<{ success: boolean; file?: string; error?: string }> {
+  try {
+    const panelDir = path.join(backupsDir, '_panel');
+    fs.mkdirSync(panelDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
+    const stage = path.join(panelDir, `.stage_${ts}`);
+    fs.mkdirSync(stage, { recursive: true });
+    try {
+      // Online snapshot — safe to take while the DB is in use (WAL).
+      await getDb().backup(path.join(stage, 'panel.sqlite'));
+      for (const name of ['config.json', 'users.json', 'servers.json']) {
+        const src = path.join(MANAGER_DATA_DIR, name);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(stage, name));
+      }
+      const outFile = path.join(panelDir, `panel-config_${ts}.tar.gz`);
+      execSync(`tar -czf '${outFile}' -C '${stage}' .`, { timeout: 300000, maxBuffer: 1024 * 1024 * 10 });
+      prunePanelBackups(panelDir);
+      return { success: true, file: outFile };
+    } finally {
+      fs.rmSync(stage, { recursive: true, force: true });
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'panel backup failed' };
+  }
+}
+
+/**
+ * Remove leftover restore staging dirs (`_restore_temp_*`, `_restore_old_*`)
+ * next to each server's data dir — these only linger after a restore that
+ * crashed mid-swap. Best-effort; runs on boot.
+ */
+export async function sweepOrphanedRestoreDirs(): Promise<void> {
+  const parents = new Set<string>();
+  try {
+    parents.add(path.dirname(config.dataPath));
+    for (const s of await listServers()) parents.add(path.dirname(s.paths.data));
+  } catch { /* registry not ready — fall back to the default path already added */ }
+  for (const parent of parents) {
+    try {
+      if (!fs.existsSync(parent)) continue;
+      for (const entry of fs.readdirSync(parent)) {
+        if (/^_restore_(temp|old)_/.test(entry)) {
+          fs.rmSync(path.join(parent, entry), { recursive: true, force: true });
+          console.log(`[Backup] swept orphaned restore dir: ${path.join(parent, entry)}`);
+        }
+      }
+    } catch { /* ignore per-parent failures */ }
   }
 }
 
@@ -212,6 +297,13 @@ export function createBackup(name?: string, serverId?: string): Promise<ActionRe
       // config.offsiteBackup is enabled with uploadOnBackup on).
       uploadBackupAsync(backupFile);
 
+      // Snapshot the panel's own DB/config too so a manager-volume loss is
+      // recoverable, and push that off-site as well. Best-effort.
+      void backupPanelData(paths.backups).then((r) => {
+        if (r.success && r.file) uploadBackupAsync(r.file);
+        else if (!r.success) console.warn('[Backup] panel self-backup failed:', r.error);
+      });
+
       publish('backup.completed', {
         name: backupName, file: backupFile, sizeMb: Math.round(stat.size / (1024 * 1024) * 100) / 100,
       }, serverId);
@@ -227,7 +319,14 @@ export function createBackup(name?: string, serverId?: string): Promise<ActionRe
         },
       };
     } catch (error) {
-      publish('backup.failed', { name: backupName, error: error instanceof Error ? error.message : 'unknown' }, serverId);
+      const msg = error instanceof Error ? error.message : 'unknown';
+      publish('backup.failed', { name: backupName, error: msg }, serverId);
+      // Surface a disk-full failure plainly instead of a raw tar error.
+      if (/ENOSPC|No space left/i.test(msg)) {
+        const free = freeBytes(paths.backups);
+        const freeMb = free !== null ? ` (${Math.round(free / (1024 * 1024))} MB free on the backups volume)` : '';
+        return { success: false, error: `Backup failed: not enough disk space${freeMb}.` };
+      }
       return { success: false, error: error instanceof Error ? error.message : 'Backup failed' };
     }
   });
@@ -289,6 +388,30 @@ export function restoreBackup(backupId: string, serverId?: string): Promise<Acti
     const tempDir = path.join(dataParent, `_restore_temp_${ts}`);
     const oldDir = path.join(dataParent, `_restore_old_${ts}`);
 
+    // Integrity gate: confirm the archive is a readable gzip tar BEFORE we take
+    // the pre-restore backup or touch live data. A corrupt/truncated archive
+    // fails here with nothing changed, instead of silently swapping in garbage.
+    try {
+      execSync(`tar -tzf '${filePath}' > /dev/null`, { timeout: 300000, maxBuffer: 1024 * 1024 * 10 });
+    } catch {
+      return { success: false, error: 'Backup archive is unreadable or corrupted; restore aborted (no data changed).' };
+    }
+
+    // Disk preflight: the pre-restore backup (~data size) plus the extraction
+    // (~uncompressed backup) both need space. Require a margin of 4× the
+    // compressed archive on the data volume. Skipped if statfs is unavailable.
+    try {
+      const archiveSize = fs.statSync(filePath).size;
+      const free = freeBytes(dataParent);
+      if (free !== null && free < archiveSize * 4) {
+        const mb = (n: number) => Math.round(n / (1024 * 1024));
+        return {
+          success: false,
+          error: `Not enough disk space to restore safely: need ~${mb(archiveSize * 4)} MB free, only ${mb(free)} MB available. Restore aborted (no data changed).`,
+        };
+      }
+    } catch { /* stat/statfs issue — proceed; the operation will surface real errors */ }
+
     // Move src→dst atomically when possible, else copy across devices.
     const safeMove = (src: string, dst: string): void => {
       try {
@@ -324,6 +447,13 @@ export function restoreBackup(backupId: string, serverId?: string): Promise<Acti
       if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       fs.mkdirSync(tempDir, { recursive: true });
       execSync(`tar -xzf '${filePath}' -C '${tempDir}'`, { timeout: 1800000, maxBuffer: 1024 * 1024 * 10 });
+
+      // Sanity: a valid backup extracts to a non-empty tree. An empty result
+      // means a bad/empty archive — abort before swapping out live data.
+      if (fs.readdirSync(tempDir).length === 0) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        return { success: false, error: 'Backup extracted to an empty directory; restore aborted (no data changed).' };
+      }
 
       // Swap WITHOUT a destructive delete first: move current data aside, move
       // the restored data in, and only then drop the sidelined copy. If the
