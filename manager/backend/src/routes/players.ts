@@ -10,6 +10,7 @@ import * as kyuubiApi from '../services/kyuubiApi.js';
 import * as chatLog from '../services/chatLog.js';
 import * as punishments from '../services/punishments.js';
 import { getLeaderboard, getPlayerSessions } from '../services/playtime.js';
+import * as playerNotes from '../services/playerNotes.js';
 import { config } from '../config.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoWhitelist } from '../services/demoData.js';
@@ -1257,6 +1258,35 @@ router.get('/:name/punishments', authMiddleware, requirePermission('players.view
   const playerName = req.params.name;
   if (!validatePlayerName(res, playerName)) return;
   res.json({ punishments: punishments.listPunishments({ player: playerName, limit: 200 }) });
+});
+
+// GET /api/players/:name/notes - staff notes for one player
+router.get('/:name/notes', authMiddleware, requirePermission('players.view'), (req: Request, res: Response) => {
+  const playerName = req.params.name;
+  if (!validatePlayerName(res, playerName)) return;
+  res.json({ notes: playerNotes.listNotes(playerName) });
+});
+
+// POST /api/players/:name/notes  { note }
+router.post('/:name/notes', authMiddleware, requirePermission('players.kick'), async (req: AuthenticatedRequest, res: Response) => {
+  const playerName = req.params.name;
+  const username = req.user || 'system';
+  if (!validatePlayerName(res, playerName)) return;
+  const note = sanitizeMessage(String((req.body as { note?: string }).note ?? ''), 500);
+  if (!note) { res.status(400).json({ error: 'Note text required' }); return; }
+  const created = playerNotes.addNote({ playerName, note, byUser: username, serverId: req.serverId });
+  await logActivity(username, 'note_add', 'player', true, playerName, note.slice(0, 80));
+  res.json({ success: true, note: created });
+});
+
+// DELETE /api/players/:name/notes/:id
+router.delete('/:name/notes/:id', authMiddleware, requirePermission('players.kick'), async (req: AuthenticatedRequest, res: Response) => {
+  const username = req.user || 'system';
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: 'Invalid id' }); return; }
+  const ok = playerNotes.deleteNote(id);
+  if (ok) await logActivity(username, 'note_delete', 'player', true, req.params.name, `note #${id}`);
+  res.json({ success: ok });
 });
 
 // POST /api/players/:name/tempban  { duration: "2h"|7200, reason? }

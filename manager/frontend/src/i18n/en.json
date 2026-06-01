@@ -169,6 +169,20 @@
     "noLog": "No log was captured for this crash.",
     "loadError": "Failed to load crash reports"
   },
+  "profile": {
+    "viewProfile": "View Profile",
+    "subtitle": "Player profile — staff notes & punishment history",
+    "notes": "Staff Notes",
+    "addNotePlaceholder": "Add a note…",
+    "add": "Add",
+    "noNotes": "No notes yet.",
+    "punishmentHistory": "Punishment History",
+    "active": "active",
+    "until": "until",
+    "noPunishments": "No punishments on record.",
+    "loadError": "Failed to load player profile",
+    "saveError": "Failed to save note"
+  },
   "liveMap": {
     "title": "Live Map",
     "subtitle": "Player positions with ping heatmap (realtime)",

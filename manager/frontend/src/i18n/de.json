@@ -169,6 +169,20 @@
     "noLog": "Für diesen Absturz wurde kein Log erfasst.",
     "loadError": "Absturzberichte konnten nicht geladen werden"
   },
+  "profile": {
+    "viewProfile": "Profil ansehen",
+    "subtitle": "Spieler-Profil — Staff-Notizen & Strafhistorie",
+    "notes": "Staff-Notizen",
+    "addNotePlaceholder": "Notiz hinzufügen…",
+    "add": "Hinzufügen",
+    "noNotes": "Noch keine Notizen.",
+    "punishmentHistory": "Strafhistorie",
+    "active": "aktiv",
+    "until": "bis",
+    "noPunishments": "Keine Strafen erfasst.",
+    "loadError": "Spieler-Profil konnte nicht geladen werden",
+    "saveError": "Notiz konnte nicht gespeichert werden"
+  },
   "liveMap": {
     "title": "Live-Karte",
     "subtitle": "Spielerpositionen mit Ping-Heatmap (Echtzeit)",

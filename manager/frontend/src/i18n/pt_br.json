@@ -169,6 +169,20 @@
     "noLog": "Nenhum log foi capturado para esta falha.",
     "loadError": "Falha ao carregar os relatórios de falhas"
   },
+  "profile": {
+    "viewProfile": "Ver Perfil",
+    "subtitle": "Perfil do jogador — notas da equipe e histórico de punições",
+    "notes": "Notas da Equipe",
+    "addNotePlaceholder": "Adicionar uma nota…",
+    "add": "Adicionar",
+    "noNotes": "Nenhuma nota ainda.",
+    "punishmentHistory": "Histórico de Punições",
+    "active": "ativo",
+    "until": "até",
+    "noPunishments": "Nenhuma punição registrada.",
+    "loadError": "Falha ao carregar o perfil do jogador",
+    "saveError": "Falha ao salvar a nota"
+  },
   "liveMap": {
     "title": "Mapa ao Vivo",
     "subtitle": "Posições dos jogadores com heatmap de ping (tempo real)",

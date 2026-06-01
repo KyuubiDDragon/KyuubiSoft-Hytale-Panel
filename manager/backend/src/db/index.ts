@@ -152,6 +152,17 @@ function ensureSchema(conn: Database.Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_crash_reports_time ON crash_reports(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS player_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id TEXT,
+      player_name TEXT NOT NULL,
+      uuid TEXT,
+      note TEXT NOT NULL,
+      by_user TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_player_notes_player ON player_notes(player_name, created_at DESC);
   `);
 }
 
