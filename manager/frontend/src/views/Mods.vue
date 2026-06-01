@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -60,6 +60,20 @@ const error = ref('')
 const uploading = ref(false)
 const uploadProgress = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// Drag-and-drop upload state
+const isDragging = ref(false)
+let dragDepth = 0
+// Mirror the hidden file input's `accept` attribute so dropped files are
+// filtered to the same set the picker allows.
+const ACCEPTED_UPLOAD_EXTENSIONS = ['.jar', '.zip', '.js', '.lua', '.dll', '.so']
+
+// True only when the user may upload AND is on a tab that accepts uploads.
+const canDropUpload = computed(
+  () =>
+    authStore.hasAnyPermission('mods.install', 'plugins.install') &&
+    (activeTab.value === 'mods' || activeTab.value === 'plugins'),
+)
 
 // Config editor state
 const showConfigModal = ref(false)
@@ -381,17 +395,19 @@ function triggerUpload() {
   fileInput.value?.click()
 }
 
-async function handleFileUpload(event: Event) {
-  const target = event.target as HTMLInputElement
-  const files = Array.from(target.files ?? [])
+// Shared upload loop reused by both the file <input> (@change) and drag-drop.
+// Uploads each file through the existing single-file endpoint so one failure
+// doesn't abort the rest; per-file errors are aggregated.
+async function performUpload(files: File[]) {
   if (files.length === 0) return
+  if (uploading.value) return // don't overlap an in-flight upload
+  // NB: no permission/tab guard here — the click path is gated by the upload
+  // button's v-if, and the drop path is gated by canDropUpload in handleDrop.
+  // This keeps the existing click-upload behaviour byte-for-byte unchanged.
 
   uploading.value = true
   error.value = ''
 
-  // Upload each selected file through the existing single-file endpoint so a
-  // single failure doesn't abort the rest. Collect per-file errors and surface
-  // them together at the end.
   const failures: string[] = []
   let done = 0
   for (const file of files) {
@@ -411,10 +427,92 @@ async function handleFileUpload(event: Event) {
   await loadData()
   uploading.value = false
   uploadProgress.value = ''
-  target.value = ''
 
   if (failures.length > 0) {
     error.value = failures.join(' · ')
+  }
+}
+
+async function handleFileUpload(event: Event) {
+  const target = event.target as HTMLInputElement
+  const files = Array.from(target.files ?? [])
+  await performUpload(files)
+  // Clear the input so selecting the same file again re-triggers @change.
+  target.value = ''
+}
+
+// --- Drag-and-drop ---------------------------------------------------------
+
+// Only react to OS file drags; ignore element/text drags so we never hijack
+// unrelated drag gestures elsewhere on the page.
+function isFileDrag(e: DragEvent): boolean {
+  const types = e.dataTransfer?.types
+  return !!types && Array.from(types).includes('Files')
+}
+
+function hasAcceptedExtension(name: string): boolean {
+  const lower = name.toLowerCase()
+  return ACCEPTED_UPLOAD_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+function resetDragState() {
+  dragDepth = 0
+  isDragging.value = false
+}
+
+// The enter/over/leave handlers are gated ONLY by isFileDrag (not permission)
+// so the depth counter stays symmetric — enter and leave always pair up. Whether
+// a drop is actually allowed is decided by canDropUpload in handleDrop, and the
+// overlay's own `v-if="isDragging && canDropUpload"` controls visibility. This
+// avoids a stuck overlay if permission/tab changes mid-drag.
+function handleDragEnter(e: DragEvent) {
+  if (!isFileDrag(e)) return
+  e.preventDefault()
+  dragDepth++
+  isDragging.value = true
+}
+
+function handleDragOver(e: DragEvent) {
+  if (!isFileDrag(e)) return
+  // preventDefault is required on every tab so the subsequent 'drop' fires and
+  // the browser never navigates to/opens a dropped file. dropEffect signals
+  // whether dropping here will actually upload.
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = canDropUpload.value ? 'copy' : 'none'
+}
+
+function handleDragLeave(e: DragEvent) {
+  if (!isFileDrag(e)) return
+  // Counter avoids flicker as the cursor crosses child elements.
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) isDragging.value = false
+}
+
+// Fires when a drag is cancelled (Esc) or ends outside the window without a
+// drop — neither of which emit a final dragleave — so the overlay can't stick.
+function handleDragEnd() {
+  resetDragState()
+}
+
+async function handleDrop(e: DragEvent) {
+  // Always swallow file drops so the browser never opens the file, even when
+  // uploading isn't currently allowed.
+  if (isFileDrag(e)) e.preventDefault()
+  resetDragState()
+  if (!canDropUpload.value) return
+  const dropped = Array.from(e.dataTransfer?.files ?? [])
+  if (dropped.length === 0) return
+  const accepted = dropped.filter((f) => hasAcceptedExtension(f.name))
+  const rejected = dropped.filter((f) => !hasAcceptedExtension(f.name))
+  if (accepted.length === 0) {
+    error.value = t('mods.dropRejected', { types: ACCEPTED_UPLOAD_EXTENSIONS.join(', ') })
+    return
+  }
+  await performUpload(accepted)
+  // Surface skipped unsupported files from a mixed drop, unless performUpload
+  // already reported per-file failures (those take priority in the banner).
+  if (rejected.length > 0 && !error.value) {
+    error.value = t('mods.dropSkipped', { files: rejected.map((f) => f.name).join(', ') })
   }
 }
 
@@ -1105,6 +1203,20 @@ onMounted(() => {
   if (initialTab === 'updates') {
     loadUpdateStatus()
   }
+  // Whole-page drag-and-drop upload (mods/plugins tabs only).
+  window.addEventListener('dragenter', handleDragEnter)
+  window.addEventListener('dragover', handleDragOver)
+  window.addEventListener('dragleave', handleDragLeave)
+  window.addEventListener('dragend', handleDragEnd)
+  window.addEventListener('drop', handleDrop)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('dragenter', handleDragEnter)
+  window.removeEventListener('dragover', handleDragOver)
+  window.removeEventListener('dragleave', handleDragLeave)
+  window.removeEventListener('dragend', handleDragEnd)
+  window.removeEventListener('drop', handleDrop)
 })
 </script>
 
@@ -1119,6 +1231,31 @@ onMounted(() => {
       class="hidden"
       @change="handleFileUpload"
     />
+
+    <!-- Screen-reader announcement for the (aria-hidden) drag overlay -->
+    <span class="sr-only" aria-live="polite">{{ isDragging && canDropUpload ? t('mods.dropTitle') : '' }}</span>
+
+    <!-- Whole-page drag-and-drop upload overlay (mods/plugins only) -->
+    <Transition
+      enter-active-class="transition-opacity duration-150"
+      leave-active-class="transition-opacity duration-150"
+      enter-from-class="opacity-0"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="isDragging && canDropUpload"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-dark/70 backdrop-blur-sm pointer-events-none"
+        aria-hidden="true"
+      >
+        <div class="flex flex-col items-center gap-4 px-12 py-10 rounded-2xl bg-surface-overlay/90 ring-2 ring-hytale-orange shadow-glow-orange">
+          <svg class="w-12 h-12 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <p class="text-lg font-semibold text-white">{{ t('mods.dropTitle') }}</p>
+          <p class="text-sm text-ink-muted">{{ t('mods.dropHint') }}</p>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Page Header -->
     <div class="flex items-center justify-between">
