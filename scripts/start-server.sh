@@ -2,6 +2,11 @@
 # ============================================================
 # Hytale Server - Start Script
 # ============================================================
+# pipefail catches mid-pipeline failures; we intentionally don't set -e
+# because the restart loop checks java's exit code (8 == native update restart)
+# and we don't set -u because several env vars are optional (AUTH_MODE,
+# EXTRA_SERVER_ARGS, EXTRA_JAVA_ARGS) and -n "${VAR:-}" idioms add noise.
+set -o pipefail
 
 cd /opt/hytale/server
 
@@ -20,6 +25,39 @@ if [ "$SERVER_JAR" = "HytaleServer.jar" ] && [ -f "HytaleServer.aot" ]; then
     echo "[INFO] AOT cache found - enabling fast startup"
     AOT_FLAG="-XX:AOTCache=HytaleServer.aot"
 fi
+
+# ------------------------------------------------------------
+# Panel config (written by the manager to the mounted data volume).
+# Lets operators tune settings from the web UI; applied on next start.
+# ------------------------------------------------------------
+PANEL_CONFIG="/opt/hytale/data/panel-config.json"
+
+# Read a boolean value from panel config.
+get_panel_config_bool() {
+    local key="$1"
+    local default="$2"
+    if [ -f "$PANEL_CONFIG" ]; then
+        value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[a-z]*" "$PANEL_CONFIG" 2>/dev/null | sed 's/.*:[[:space:]]*//')
+        if [ "$value" = "true" ]; then echo "true"; return; fi
+        if [ "$value" = "false" ]; then echo "false"; return; fi
+    fi
+    echo "$default"
+}
+
+# Read a string value from panel config (empty if absent).
+get_panel_config_string() {
+    local key="$1"
+    if [ -f "$PANEL_CONFIG" ]; then
+        grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$PANEL_CONFIG" 2>/dev/null \
+            | sed 's/.*:[[:space:]]*"\([^"]*\)".*/\1/'
+    fi
+}
+
+# JVM RAM overrides from the panel (fall back to the env defaults when unset).
+PANEL_JAVA_MIN_RAM=$(get_panel_config_string "javaMinRam")
+PANEL_JAVA_MAX_RAM=$(get_panel_config_string "javaMaxRam")
+[ -n "$PANEL_JAVA_MIN_RAM" ] && JAVA_MIN_RAM="$PANEL_JAVA_MIN_RAM"
+[ -n "$PANEL_JAVA_MAX_RAM" ] && JAVA_MAX_RAM="$PANEL_JAVA_MAX_RAM"
 
 # Java arguments (optimized for game servers)
 JAVA_ARGS=(
@@ -66,26 +104,6 @@ if [ -n "${AUTH_MODE}" ]; then
     SERVER_ARGS+=("--auth-mode" "${AUTH_MODE}")
 fi
 
-# Read panel config for additional settings
-PANEL_CONFIG="/opt/hytale/data/panel-config.json"
-
-# Function to read boolean value from panel config
-get_panel_config_bool() {
-    local key="$1"
-    local default="$2"
-    if [ -f "$PANEL_CONFIG" ]; then
-        value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*[a-z]*" "$PANEL_CONFIG" 2>/dev/null | sed 's/.*:[[:space:]]*//')
-        if [ "$value" = "true" ]; then
-            echo "true"
-            return
-        elif [ "$value" = "false" ]; then
-            echo "false"
-            return
-        fi
-    fi
-    echo "$default"
-}
-
 # Add --accept-early-plugins if enabled in panel config
 ACCEPT_EARLY_PLUGINS=$(get_panel_config_bool "acceptEarlyPlugins" "false")
 if [ "$ACCEPT_EARLY_PLUGINS" = "true" ]; then
@@ -120,6 +138,20 @@ if [ -n "${EXTRA_JAVA_ARGS}" ]; then
     echo "[INFO] Custom Java arguments: ${EXTRA_JAVA_ARGS}"
     read -ra CUSTOM_JAVA <<< "${EXTRA_JAVA_ARGS}"
     JAVA_ARGS+=("${CUSTOM_JAVA[@]}")
+fi
+
+# Extra args from the panel config (appended after any env-provided ones).
+PANEL_EXTRA_SERVER_ARGS=$(get_panel_config_string "extraServerArgs")
+if [ -n "${PANEL_EXTRA_SERVER_ARGS}" ]; then
+    echo "[INFO] Panel server arguments: ${PANEL_EXTRA_SERVER_ARGS}"
+    read -ra PANEL_SRV <<< "${PANEL_EXTRA_SERVER_ARGS}"
+    SERVER_ARGS+=("${PANEL_SRV[@]}")
+fi
+PANEL_EXTRA_JAVA_ARGS=$(get_panel_config_string "extraJavaArgs")
+if [ -n "${PANEL_EXTRA_JAVA_ARGS}" ]; then
+    echo "[INFO] Panel Java arguments: ${PANEL_EXTRA_JAVA_ARGS}"
+    read -ra PANEL_JVM <<< "${PANEL_EXTRA_JAVA_ARGS}"
+    JAVA_ARGS+=("${PANEL_JVM[@]}")
 fi
 
 echo "============================================================"

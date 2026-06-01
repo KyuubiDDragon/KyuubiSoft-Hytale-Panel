@@ -19,6 +19,33 @@ export const PERMISSIONS = {
   // Console
   'console.view': 'View console',
   'console.execute': 'Execute console commands',
+  'console.execute.admin': 'Execute privileged console commands (/op, /ban, /stop, ...)',
+
+  // Audit
+  'audit.view': 'View audit log',
+  'audit.export': 'Export audit log',
+
+  // API keys (per-user; admins can list across users)
+  'apikeys.manage': 'Create / revoke own API keys',
+  'apikeys.manage.all': 'Manage all users\' API keys',
+
+  // Webhooks
+  'webhooks.view': 'View webhooks',
+  'webhooks.manage': 'Create / edit / delete webhooks',
+
+  // File manager
+  'files.read': 'Read files (configs / mods / plugins)',
+  'files.write': 'Write files (configs / mods / plugins)',
+
+  // Server fleet (v3.x — multi-server)
+  'servers.list': 'List server instances',
+  'servers.create': 'Create new server instance',
+  'servers.delete': 'Delete server instance',
+
+  // Replay & wiki (v3.1)
+  'replay.view': 'View replays',
+  'replay.manage': 'Configure replay recorder',
+  'wiki.manage': 'Manage in-panel wiki',
 
   // Performance
   'performance.view': 'View performance metrics',
@@ -110,6 +137,9 @@ export const PERMISSIONS = {
   'updates.download': 'Download updates',
   'updates.apply': 'Apply updates (restart server)',
   'updates.config': 'Configure auto-update settings',
+
+  // Auto-wiki (replay.view/manage + wiki.manage already declared above; only wiki.view is new)
+  'wiki.view': 'View mod/plugin wiki',
 } as const;
 
 // Permission type derived from the keys
@@ -171,6 +201,9 @@ export const PERMISSION_CATEGORIES = [
   'hytale_auth',
   'settings',
   'updates',
+  'files',
+  'replay',
+  'wiki',
 ] as const;
 
 export type PermissionCategory = (typeof PERMISSION_CATEGORIES)[number];
@@ -241,6 +274,8 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
       'plugins.toggle',
       'config.view',
       'config.edit',
+      'files.read',
+      'files.write',
       'activity.view',
     ],
     isSystem: true,
@@ -264,6 +299,7 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
       'plugins.view',
       'config.view',
       'assets.view',
+      'files.read',
       'activity.view',
     ],
     isSystem: true,

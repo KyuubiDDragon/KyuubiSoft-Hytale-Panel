@@ -2,10 +2,14 @@ import axios from 'axios'
 import type { AxiosInstance, AxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
-// Create axios instance
+// Create axios instance.
+// `withCredentials: true` makes the browser send the HttpOnly kp_refresh
+// cookie back on /api/auth/refresh — the access token still rides as a
+// Bearer header so XHR endpoints behind authMiddleware see it as before.
 const api: AxiosInstance = axios.create({
   baseURL: '/api',
   timeout: 30000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -15,6 +19,7 @@ const api: AxiosInstance = axios.create({
 export const setupApiClient: AxiosInstance = axios.create({
   baseURL: '/api',
   timeout: 120000, // 2 minutes for setup operations like server start
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -60,33 +65,32 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const invalidationCodes = ['USER_DELETED', 'TOKEN_INVALIDATED']
       if (responseData?.code && invalidationCodes.includes(responseData.code)) {
-        authStore.logout()
+        const message = responseData.code === 'USER_DELETED'
+          ? 'Your account has been deleted.'
+          : 'Your session has expired due to account changes. Please log in again.'
+        authStore.logout(message)
         if (typeof window !== 'undefined') {
-          // Show message based on code
-          const message = responseData.code === 'USER_DELETED'
-            ? 'Your account has been deleted.'
-            : 'Your session has expired due to account changes. Please log in again.'
-
-          // Store message for login page to display
-          sessionStorage.setItem('logoutMessage', message)
           window.location.href = '/login'
         }
         return Promise.reject(error)
       }
     }
 
-    // If 401 and we have a refresh token, try to refresh
+    // 401 → try a refresh. We rely on the HttpOnly kp_refresh cookie (sent
+    // automatically because withCredentials: true) and fall back to the
+    // stored refresh token from localStorage for installations that haven't
+    // logged in yet under v2.2.
     if (
       error.response?.status === 401 &&
-      authStore.refreshToken &&
       originalRequest &&
       !(originalRequest as any)._retry
     ) {
       (originalRequest as any)._retry = true
 
       try {
-        const response = await axios.post('/api/auth/refresh', {
-          refresh_token: authStore.refreshToken,
+        const payload = authStore.refreshToken ? { refresh_token: authStore.refreshToken } : {}
+        const response = await axios.post('/api/auth/refresh', payload, {
+          withCredentials: true,
         })
 
         const { access_token, refresh_token } = response.data

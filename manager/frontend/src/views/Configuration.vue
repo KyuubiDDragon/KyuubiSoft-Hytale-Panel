@@ -218,13 +218,13 @@ onMounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('config.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('config.subtitle') }}</p>
+        <h1 class="text-2xl font-bold text-ink">{{ t('config.title') }}</h1>
+        <p class="text-ink-muted mt-1">{{ t('config.subtitle') }}</p>
       </div>
       <button
         v-if="!selectedFile"
         @click="loadConfigFiles"
-        class="text-gray-400 hover:text-white transition-colors"
+        class="text-ink-muted hover:text-ink transition-colors"
         :class="{ 'animate-spin': loading }"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -243,76 +243,76 @@ onMounted(() => {
 
     <!-- Quick Settings -->
     <Card v-if="!selectedFile" :title="t('config.quickSettings')">
-      <div v-if="quickSettingsLoading" class="text-center py-8 text-gray-400">
+      <div v-if="quickSettingsLoading" class="text-center py-8 text-ink-muted">
         {{ t('common.loading') }}
       </div>
       <div v-else class="space-y-4">
         <!-- Server Name -->
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.serverName') }}</label>
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.serverName') }}</label>
           <input
             v-model="quickSettings.serverName"
             type="text"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.serverNamePlaceholder')"
           />
         </div>
 
         <!-- MOTD -->
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.motd') }}</label>
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.motd') }}</label>
           <input
             v-model="quickSettings.motd"
             type="text"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.motdPlaceholder')"
           />
         </div>
 
         <!-- Password -->
         <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.password') }}</label>
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.password') }}</label>
           <input
             v-model="quickSettings.password"
             type="password"
-            class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.passwordPlaceholder')"
           />
-          <p class="text-xs text-gray-500 mt-1">{{ t('config.passwordHint') }}</p>
+          <p class="text-xs text-ink-subtle mt-1">{{ t('config.passwordHint') }}</p>
         </div>
 
         <!-- Grid for numeric settings -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <!-- Max Players -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.maxPlayers') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.maxPlayers') }}</label>
             <input
               v-model.number="quickSettings.maxPlayers"
               type="number"
               min="1"
               max="1000"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
           </div>
 
           <!-- Max View Radius -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.maxViewRadius') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.maxViewRadius') }}</label>
             <input
               v-model.number="quickSettings.maxViewRadius"
               type="number"
               min="1"
               max="64"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
           </div>
 
           <!-- Default GameMode -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.defaultGameMode') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.defaultGameMode') }}</label>
             <select
               v-model="quickSettings.defaultGameMode"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option v-for="mode in gameModes" :key="mode" :value="mode">
                 {{ t(`players.gamemodes.${mode.toLowerCase()}`) }}
@@ -322,7 +322,7 @@ onMounted(() => {
         </div>
 
         <!-- Save Button -->
-        <div v-if="authStore.hasPermission('config.edit')" class="flex items-center justify-between pt-4 border-t border-dark-50">
+        <div v-if="authStore.hasPermission('config.edit')" class="flex items-center justify-between pt-4 border-t border-border">
           <span v-if="quickSettingsChanged" class="text-xs text-status-warning">{{ t('config.unsaved') }}</span>
           <span v-else></span>
           <button
@@ -332,7 +332,7 @@ onMounted(() => {
               'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all',
               quickSettingsChanged
                 ? 'bg-hytale-orange text-dark hover:bg-hytale-yellow'
-                : 'bg-dark-50 text-gray-500 cursor-not-allowed'
+                : 'bg-surface-overlay text-ink-subtle cursor-not-allowed'
             ]"
           >
             <svg v-if="quickSettingsSaving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -350,7 +350,7 @@ onMounted(() => {
 
     <!-- Native Update System Configuration -->
     <Card v-if="!selectedFile && updateConfigSupported" :title="t('config.updateConfig.title')">
-      <div v-if="updateConfigLoading" class="text-center py-8 text-gray-400">
+      <div v-if="updateConfigLoading" class="text-center py-8 text-ink-muted">
         {{ t('common.loading') }}
       </div>
       <div v-else class="space-y-4">
@@ -360,21 +360,21 @@ onMounted(() => {
             <svg class="w-5 h-5 text-hytale-orange flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p class="text-sm text-gray-300">
+            <p class="text-sm text-ink-muted">
               {{ t('config.updateConfig.description') }}
             </p>
           </div>
         </div>
 
         <!-- Enable Auto Updates -->
-        <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+        <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
           <div class="flex-1">
-            <label class="text-sm font-medium text-white">{{ t('config.updateConfig.enabled') }}</label>
-            <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.enabledHint') }}</p>
+            <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.enabled') }}</label>
+            <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.enabledHint') }}</p>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
             <input type="checkbox" v-model="updateConfig.enabled" class="sr-only peer">
-            <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+            <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
           </label>
         </div>
 
@@ -382,10 +382,10 @@ onMounted(() => {
         <div v-if="updateConfig.enabled" class="space-y-4 pt-2">
           <!-- Check Interval -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.checkInterval') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.checkInterval') }}</label>
             <select
               v-model.number="updateConfig.checkIntervalSeconds"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option :value="1800">{{ t('config.updateConfig.interval30min') }}</option>
               <option :value="3600">{{ t('config.updateConfig.interval1hour') }}</option>
@@ -398,7 +398,7 @@ onMounted(() => {
 
           <!-- Patchline -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.patchline') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.patchline') }}</label>
             <div class="grid grid-cols-2 gap-3">
               <button
                 @click="updateConfig.patchline = 'release'"
@@ -406,14 +406,14 @@ onMounted(() => {
                   'p-3 rounded-lg border-2 text-left transition-all',
                   updateConfig.patchline === 'release'
                     ? 'border-status-success bg-status-success/10'
-                    : 'border-dark-50 bg-dark-100 hover:border-gray-500'
+                    : 'border-border bg-surface-overlay hover:border-gray-500'
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-sm font-medium text-white">{{ t('config.release') }}</span>
+                  <span class="text-sm font-medium text-ink">{{ t('config.release') }}</span>
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-success/20 text-status-success">{{ t('config.updateConfig.stable') }}</span>
                 </div>
-                <p class="text-xs text-gray-500">{{ t('config.updateConfig.releaseHint') }}</p>
+                <p class="text-xs text-ink-subtle">{{ t('config.updateConfig.releaseHint') }}</p>
               </button>
               <button
                 @click="updateConfig.patchline = 'pre-release'"
@@ -421,30 +421,30 @@ onMounted(() => {
                   'p-3 rounded-lg border-2 text-left transition-all',
                   updateConfig.patchline === 'pre-release'
                     ? 'border-status-warning bg-status-warning/10'
-                    : 'border-dark-50 bg-dark-100 hover:border-gray-500'
+                    : 'border-border bg-surface-overlay hover:border-gray-500'
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-sm font-medium text-white">{{ t('config.preRelease') }}</span>
+                  <span class="text-sm font-medium text-ink">{{ t('config.preRelease') }}</span>
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-warning/20 text-status-warning">{{ t('config.updateConfig.beta') }}</span>
                 </div>
-                <p class="text-xs text-gray-500">{{ t('config.updateConfig.preReleaseHint') }}</p>
+                <p class="text-xs text-ink-subtle">{{ t('config.updateConfig.preReleaseHint') }}</p>
               </button>
             </div>
           </div>
 
           <!-- Auto Apply Mode -->
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.autoApplyMode') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.autoApplyMode') }}</label>
             <select
               v-model="updateConfig.autoApplyMode"
-              class="w-full bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+              class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             >
               <option value="DISABLED">{{ t('config.updateConfig.modeDisabled') }}</option>
               <option value="WHEN_EMPTY">{{ t('config.updateConfig.modeWhenEmpty') }}</option>
               <option value="SCHEDULED">{{ t('config.updateConfig.modeScheduled') }}</option>
             </select>
-            <p class="text-xs text-gray-500 mt-1">
+            <p class="text-xs text-ink-subtle mt-1">
               <template v-if="updateConfig.autoApplyMode === 'DISABLED'">{{ t('config.updateConfig.modeDisabledHint') }}</template>
               <template v-else-if="updateConfig.autoApplyMode === 'WHEN_EMPTY'">{{ t('config.updateConfig.modeWhenEmptyHint') }}</template>
               <template v-else>{{ t('config.updateConfig.modeScheduledHint') }}</template>
@@ -453,58 +453,58 @@ onMounted(() => {
 
           <!-- Auto Apply Delay (only for SCHEDULED mode) -->
           <div v-if="updateConfig.autoApplyMode === 'SCHEDULED'">
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{ t('config.updateConfig.autoApplyDelay') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.autoApplyDelay') }}</label>
             <div class="flex items-center gap-2">
               <input
                 v-model.number="updateConfig.autoApplyDelayMinutes"
                 type="number"
                 min="1"
                 max="60"
-                class="w-24 bg-dark-400 text-white px-4 py-2.5 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none"
+                class="w-24 bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
-              <span class="text-gray-400 text-sm">{{ t('config.updateConfig.minutes') }}</span>
+              <span class="text-ink-muted text-sm">{{ t('config.updateConfig.minutes') }}</span>
             </div>
           </div>
 
           <!-- Notify Players -->
-          <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+          <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
             <div class="flex-1">
-              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.notifyPlayers') }}</label>
-              <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.notifyPlayersHint') }}</p>
+              <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.notifyPlayers') }}</label>
+              <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.notifyPlayersHint') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" v-model="updateConfig.notifyPlayersOnAvailable" class="sr-only peer">
-              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+              <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
             </label>
           </div>
 
           <!-- Backup Before Update -->
-          <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+          <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
             <div class="flex-1">
-              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.backupBefore') }}</label>
-              <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.backupBeforeHint') }}</p>
+              <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.backupBefore') }}</label>
+              <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.backupBeforeHint') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" v-model="updateConfig.runBackupBeforeUpdate" class="sr-only peer">
-              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+              <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
             </label>
           </div>
 
           <!-- Backup Config Before Update -->
-          <div class="flex items-center justify-between p-3 bg-dark-100 rounded-lg">
+          <div class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg">
             <div class="flex-1">
-              <label class="text-sm font-medium text-white">{{ t('config.updateConfig.backupConfigBefore') }}</label>
-              <p class="text-xs text-gray-500 mt-0.5">{{ t('config.updateConfig.backupConfigBeforeHint') }}</p>
+              <label class="text-sm font-medium text-ink">{{ t('config.updateConfig.backupConfigBefore') }}</label>
+              <p class="text-xs text-ink-subtle mt-0.5">{{ t('config.updateConfig.backupConfigBeforeHint') }}</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer">
               <input type="checkbox" v-model="updateConfig.backupConfigBeforeUpdate" class="sr-only peer">
-              <div class="w-11 h-6 bg-dark-50 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
+              <div class="w-11 h-6 bg-surface-overlay peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hytale-orange"></div>
             </label>
           </div>
         </div>
 
         <!-- Save Button -->
-        <div v-if="authStore.hasPermission('config.edit')" class="flex items-center justify-between pt-4 border-t border-dark-50">
+        <div v-if="authStore.hasPermission('config.edit')" class="flex items-center justify-between pt-4 border-t border-border">
           <span v-if="updateConfigChanged" class="text-xs text-status-warning">{{ t('config.unsaved') }}</span>
           <span v-else></span>
           <button
@@ -514,7 +514,7 @@ onMounted(() => {
               'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all',
               updateConfigChanged
                 ? 'bg-hytale-orange text-dark hover:bg-hytale-yellow'
-                : 'bg-dark-50 text-gray-500 cursor-not-allowed'
+                : 'bg-surface-overlay text-ink-subtle cursor-not-allowed'
             ]"
           >
             <svg v-if="updateConfigSaving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -532,11 +532,11 @@ onMounted(() => {
 
     <!-- File List -->
     <Card v-if="!selectedFile" :title="t('config.files')">
-      <div v-if="loading" class="text-center py-8 text-gray-400">
+      <div v-if="loading" class="text-center py-8 text-ink-muted">
         {{ t('common.loading') }}
       </div>
 
-      <div v-else-if="configFiles.length === 0" class="text-center py-8 text-gray-500">
+      <div v-else-if="configFiles.length === 0" class="text-center py-8 text-ink-subtle">
         {{ t('config.noFiles') }}
       </div>
 
@@ -545,20 +545,20 @@ onMounted(() => {
           v-for="file in configFiles"
           :key="file.name"
           @click="selectFile(file.name)"
-          class="flex items-center gap-4 p-4 bg-dark-100 hover:bg-dark-50 rounded-lg transition-colors text-left"
+          class="flex items-center gap-4 p-4 bg-surface-overlay hover:bg-surface-overlay rounded-lg transition-colors text-left"
         >
           <div class="w-12 h-12 rounded-lg flex items-center justify-center"
             :class="file.name.endsWith('.json') ? 'bg-hytale-orange/20' : 'bg-gray-600/20'"
           >
-            <svg class="w-6 h-6" :class="file.name.endsWith('.json') ? 'text-hytale-orange' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-6 h-6" :class="file.name.endsWith('.json') ? 'text-hytale-orange' : 'text-ink-muted'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="font-medium text-white truncate">{{ file.name }}</p>
-            <p class="text-sm text-gray-500">{{ Math.round(file.size / 1024) }} KB</p>
+            <p class="font-medium text-ink truncate">{{ file.name }}</p>
+            <p class="text-sm text-ink-subtle">{{ Math.round(file.size / 1024) }} KB</p>
           </div>
-          <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-5 h-5 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
         </button>
@@ -573,7 +573,7 @@ onMounted(() => {
           <div class="flex items-center gap-3">
             <button
               @click="closeEditor"
-              class="p-2 text-gray-400 hover:text-white hover:bg-dark-50 rounded-lg transition-colors"
+              class="p-2 text-ink-muted hover:text-ink hover:bg-surface-overlay rounded-lg transition-colors"
             >
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -581,8 +581,8 @@ onMounted(() => {
             </button>
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-mono text-white">{{ selectedFile }}</span>
-                <span class="px-2 py-0.5 bg-dark-50 rounded text-xs text-gray-400">{{ fileExtension }}</span>
+                <span class="font-mono text-ink">{{ selectedFile }}</span>
+                <span class="px-2 py-0.5 bg-surface-overlay rounded text-xs text-ink-muted">{{ fileExtension }}</span>
               </div>
               <span v-if="hasChanges" class="text-xs text-status-warning">{{ t('config.unsaved') }}</span>
             </div>
@@ -590,14 +590,14 @@ onMounted(() => {
 
           <div class="flex items-center gap-3">
             <!-- Mode Toggle (only for JSON files) -->
-            <div v-if="isJsonFile" class="flex bg-dark-100 rounded-lg p-1">
+            <div v-if="isJsonFile" class="flex bg-surface-overlay rounded-lg p-1">
               <button
                 @click="switchMode('form')"
                 :class="[
                   'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                   editorMode === 'form'
                     ? 'bg-hytale-orange text-dark'
-                    : 'text-gray-400 hover:text-white'
+                    : 'text-ink-muted hover:text-ink'
                 ]"
               >
                 <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -611,7 +611,7 @@ onMounted(() => {
                   'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                   editorMode === 'json'
                     ? 'bg-hytale-orange text-dark'
-                    : 'text-gray-400 hover:text-white'
+                    : 'text-ink-muted hover:text-ink'
                 ]"
               >
                 <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -630,7 +630,7 @@ onMounted(() => {
                 'flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all',
                 hasChanges
                   ? 'bg-hytale-orange text-dark hover:bg-hytale-yellow'
-                  : 'bg-dark-50 text-gray-500 cursor-not-allowed'
+                  : 'bg-surface-overlay text-ink-subtle cursor-not-allowed'
               ]"
             >
               <svg v-if="saving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -655,7 +655,7 @@ onMounted(() => {
       <Card v-else :title="editorMode === 'json' ? t('config.jsonEditor') : t('config.textEditor')">
         <textarea
           v-model="fileContent"
-          class="w-full h-[500px] bg-dark-400 text-gray-300 font-mono text-sm p-4 rounded-lg border border-dark-50 focus:border-hytale-orange focus:outline-none resize-y"
+          class="w-full h-[500px] bg-surface text-ink-muted font-mono text-sm p-4 rounded-lg border border-border focus:border-hytale-orange focus:outline-none resize-y"
           spellcheck="false"
         ></textarea>
       </Card>

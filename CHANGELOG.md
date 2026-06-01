@@ -2,6 +2,159 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [3.0.0] - 2026-06-01 - New operator features, reliability hardening & DR
+
+Builds on `3.0.0-alpha` with a wave of operator-facing features and a focused
+reliability/security/disaster-recovery hardening pass. Every change is type-checked
+(`tsc`/`vue-tsc`), the backend suite is green (87 tests), and the frontend builds
+clean with full en/de/pt_br i18n parity.
+
+### New operator features
+
+- **Performance history charts**: an in-memory ring buffer samples TPS/MSPT (from
+  the plugin's `server_tick` events) plus container CPU/RAM and renders
+  dependency-free inline SVG line charts on the Performance page (survives reloads,
+  ~1h window). New `GET /api/server/perf-history`.
+- **Playtime tracking + leaderboard**: per-player session tracking (`play_sessions`)
+  with a leaderboard view and per-player totals.
+- **Crash report capture**: the watchdog snapshots a container log tail on every
+  detected crash into `crash_reports`, surfaced in a new Crashes view with an
+  expandable log.
+- **Player profiles**: a per-player page with staff notes (CRUD) and a punishment
+  timeline, reachable from the Players list.
+- **Chat auto-moderation** (off by default): reacts to in-game chat and enforces
+  banned words, link blocking, excessive caps, max length and anti-spam flood —
+  applying warn / mute / kick via the existing plugin-or-console path.
+- **Discord 2-way chat bridge**: the existing bot is now fully configurable from
+  the UI (token/channel/guild, redacted token) and restarts live on save — no panel
+  restart. In-game ↔ Discord mirroring plus `/status` and `/players` slash commands.
+- **Off-site backups** to any S3-compatible store (AWS S3, Backblaze B2, Cloudflare
+  R2, Wasabi, MinIO): native AWS SigV4 signing with **no SDK dependency**, streamed
+  from disk; auto-upload on backup + a "Test connection" button.
+- **PWA web-push notifications**: panel alerts (crashes, backups, updates, …) are
+  delivered to subscribed devices even with the tab closed; VAPID keys auto-generated,
+  per-device subscribe/test, off by default.
+- **JVM / startup tuning from the UI**: edit heap (`-Xms`/`-Xmx`) and extra JVM/server
+  arguments in Settings, persisted via the existing `panel-config.json` channel and
+  applied on the next server restart (no container recreation).
+- **Live inventory editing**: give items to / clear a player's inventory directly
+  from the Avatar & Inventory view (permission-gated; uses the plugin-or-console path).
+- **Drag-and-drop mod/plugin upload**: drop files anywhere on the Mods page; reuses
+  the existing upload handler, scoped + permission-aware, with a full-window overlay.
+- **Mobile bottom navigation**: a phone-friendly bottom bar (hidden at `lg+`) for the
+  most-used destinations, plus assorted responsive fixes.
+
+### Reliability & disaster recovery
+
+- **Docker API timeouts**: every one-shot Docker call (inspect/stats/start/stop/
+  restart/logs/exec) is raced against a timeout so a hung daemon can no longer freeze
+  operator requests.
+- **Panel self-backup**: backups now also capture a consistent online snapshot of the
+  manager's own state (`panel.sqlite` + config/users/servers JSON) into a `_panel/`
+  subdir and off-site — a manager-volume loss is now recoverable.
+- **Restore hardening**: pre-swap archive integrity check (`tar -tzf`), disk-space
+  preflight, empty-extraction guard, and a boot-time sweep of orphaned restore staging
+  dirs; clearer disk-full messages.
+- **Schema migration framework**: a `schema_migrations` table + versioned runner
+  replaces ad-hoc `CREATE TABLE IF NOT EXISTS`, so future schema changes apply
+  deterministically across installs (existing schema becomes the idempotent v1 baseline).
+- **Data-retention sweeps**: a daily job prunes `audit_events`, `notifications`,
+  `crash_reports` and `webhook_deliveries` by age (the previously orphaned audit-prune
+  is now wired); `play_sessions` are kept for the leaderboard.
+- **TPS & disk-space watchdog alerts**: in addition to memory, the watchdog now emits
+  `server.alert` on low TPS (server lag) and low free disk, into the existing
+  notification/webhook pipeline. Env-tunable thresholds.
+
+### Security & quality
+
+- **File-manager upload magic-byte validation**: uploads with a known binary/archive
+  extension must match the format's signature (mods/plugins already did this).
+- **Tests for the security perimeter**: `requirePermission`/effective-permission
+  resolution (incl. the API-key scope ∩ owner-rights rule), the migration runner, and
+  upload magic-byte checks — suite now at 87 passing.
+- **Console reliability fix**: command failures (permission denied, validation, server
+  down) and "not connected" are now surfaced in the terminal instead of vanishing
+  silently; a closed socket triggers a reconnect and the typed command is preserved.
+- **Accessibility**: a skip-to-content link and a `prefers-reduced-motion` baseline.
+- **Performance**: native off-screen virtualization (`content-visibility`) for the
+  console log, player rows and asset/file lists.
+
+### Notable bug fixes
+
+- Asset Explorer surfaces the real unzip/permission/disk error instead of a bare
+  "code 50".
+- Live map heatmap reactivity + correct ping unit (µs→ms); WebMap iframe CSP relaxed
+  to load Leaflet from external CDNs.
+- "Update available" no longer flaps when the installed version is the newest
+  (date-stamped releases with a hash suffix are recognized).
+- Multi-mod upload, command-help links and live-map wiring fixed.
+
+### Plugin
+
+- **KyuubiSoft API plugin** bumped through v1.4.x for the 2026-05 Hytale ECS API
+  (older builds no longer compile against the current `HytaleServer.jar`).
+
+## [3.0.0-alpha] - 2026-05-31 - Platform standards, Hytale-API plugin & system review
+
+### Platform features (shipped; previously tracked as "V3 roadmap")
+
+- **2FA / TOTP** with single-use backup codes, **REST API keys** with scopes, **Audit log** (SQLite), **Webhook engine** (Discord/Slack/generic, retried delivery), **Notifications center**, **OIDC/SSO** (Discord), **File manager** (Monaco), **Multi-server registry** with per-server scoping, **Live player map**, **Replay recorder**, **Auto-Wiki**, **Prometheus metrics**.
+
+### New in this release
+
+- **Watchdog**: detects unexpected server stops (crashes), optional auto-restart with a crash-loop guard (`WATCHDOG_AUTO_RESTART`), and memory-threshold alerts — all via the EventBus (webhooks/notifications).
+- **Punishment history**: durable SQLite record of bans/kicks/mutes; **temp-bans / temp-mutes** with automatic expiry; per-player history API.
+- **Event-Action engine**: bind console commands / announcements / backups to panel events (e.g. broadcast on `player.joined`, backup on `server.crashed`).
+- **Public status page** (`/status`, `/api/public/status`): opt-in, unauthenticated read-only server status.
+- **Live player list** now sourced from the KyuubiSoft plugin API when available (log-scraping is the fallback).
+- **KyuubiSoft API plugin v1.4.3**: rebuilt against the 2026-05 Hytale server API (older builds no longer compiled); native player actions, real TPS/health/gamemode, real ping, bearer-auth + CORS.
+
+### Security & correctness (system review 2026-05; see `docs/SYSTEM_REVIEW_2026-05.md`)
+
+- Setup router sealed after completion; HTTP console enforces per-command permission + whitelist; SSO no longer leaks tokens in the URL; webhook delivery re-checks resolved IPs (SSRF/DNS-rebind); WS command auth is server-scoped; TOTP replay protection; constant-time login; user-create role-subset guard; API keys bound to current owner rights; restore is non-destructive with rollback; multi-server `serverId` threaded through player/console actions.
+- Build/tooling: `vue-tsc` upgraded to 2.x (the 1.x line crashed on TS 5.x, so the frontend had never been type-checked); Docker images build from lockfiles via `npm ci`; healthcheck is `SERVER_JAR`-aware; manager `depends_on: service_started` (fixes a fresh-install chicken-and-egg).
+
+## [2.2.0] - 2026-05-19 - Security, Robustness & Hytale Early Access Alignment
+
+### Existing-installation support
+
+- **Adopt a running Hytale server**: a new `existing` download method skips the OAuth + multi-GB download when a server JAR, Assets.zip and (optionally) worlds are already present at `/opt/hytale/server`. The setup wizard auto-detects this via `GET /api/setup/detect-existing` and shows a banner offering to keep the on-disk install.
+- **Non-destructive finalize**: when `downloadMethod === 'existing'`, `finalizeSetup()` treats the existing `config.json` as the source of truth — `ServerName`, `MOTD`, `MaxPlayers`, `Whitelist`, `AllowOp`, `Defaults.GameMode` and `ViewRadius` are only filled from wizard input when the existing config doesn't already have them. The `Password` field still honors an explicit value entered in the wizard (e.g. rotate during onboarding) but defers to the existing one when left blank. Worlds under `universe/` are never touched.
+
+
+### Security
+
+- **bcrypt** replaces `bcryptjs` (native binding, no longer blocks the event loop under password hashing load)
+- **WebSocket tickets** are atomically check-and-deleted on first verify, closing a small race where two parallel `/api/console/ws` upgrades could share the same single-use ticket
+- **Refresh tokens** now carry `tokenVersion`; `/api/auth/refresh` rejects refresh tokens whose version diverges from the user record, so password and role changes invalidate refresh tokens too
+- **CSRF middleware** stops waving through requests with missing `Origin` AND `Referer`. Wildcard CORS now requires explicit `CORS_ALLOW_WILDCARD=true` opt-in instead of silently disabling CSRF protection
+- **Granular console permissions**: dangerous commands (`/op`, `/ban`, `/stop`, `/give`, ...) now require `console.execute.admin`. Plain `console.execute` is enough for `/say`, `/help`, `/list`, etc.
+- **DOMPurify-sanitized** changelog modal — CurseForge/Modtale HTML is sanitized before `v-html`
+- **Drop unused `NET_BIND_SERVICE`** capability from the hytale container (UDP/5520 and WebMap ports are unprivileged)
+
+### Robustness
+
+- **Backup operations are serialized** in-process (and `scripts/backup.sh` uses `flock(1)` for cross-process safety) so concurrent create/restore/delete requests can't corrupt each other's tarball or race the retention cleanup
+- **Pre-restore backup** is inlined in `restoreBackup` so it doesn't deadlock the new lock
+- **`docker-compose`** now waits for the game container's healthcheck before booting the manager (`depends_on.condition: service_healthy`)
+- **Manager Dockerfile** installs the native build toolchain for bcrypt's postinstall, then strips it from the final layer
+- **Shell scripts** set `pipefail` (errexit and nounset stay off on purpose; restart-loop relies on capturing java exit codes, several env vars are optional)
+- **Plugin events** from the KyuubiSoft API plugin are now validated at runtime against Zod schemas. Contract drift surfaces as a loud warning instead of silently feeding bad data into chat logs and death tracking
+
+### Added
+
+- **`HytaleServerAPI` adapter** (`services/hytaleAdapter.ts`) — stable façade over the plugin transport with version-aware capability flags (`supportsNativeUpdates`, `supportsServerBrowser`, `configFormat`, `minJavaVersion`). Ready to grow a second adapter once Hytale ships native HTTP/RPC endpoints
+- **Logout messages** flow through a Pinia action (`logoutMessage` / `consumeLogoutMessage`) instead of a `sessionStorage` tunnel between API client and Login view
+- **Frontend safe-html helper** (`utils/safeHtml.ts`) using DOMPurify with a strict tag/attribute allowlist and an `afterSanitizeAttributes` hook that forces `target="_blank" rel="noopener noreferrer nofollow"` on anchors
+
+### Fixed
+
+- `User` interface in the frontend used a hardcoded role union; replaced with `roleId: string` to match the custom-role-aware backend, eliminating several `as any` casts in `Users.vue`
+
+### Repo hygiene
+
+- Untracked `EasyWebMap-v1.0.9.jar`, `hytale-server-files.zip`, `server-files2401.zip` (~209 MB of binaries that don't belong in git; `.gitignore` already excluded them but the originals were checked in before the rule landed). Distribute these via releases / object storage; the entrypoint downloads them on first run
+
 ## [2.1.4] - 2026-02-19 - Design Overhaul & UX Improvements
 
 ### Added

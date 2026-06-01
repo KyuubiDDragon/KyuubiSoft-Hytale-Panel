@@ -2,6 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens — CSS custom properties (RGB triplets so Tailwind <alpha-value> works) */
+@layer base {
+  :root {
+    /* Light theme defaults */
+    --surface: 250 250 252;
+    --surface-raised: 255 255 255;
+    --surface-sunken: 244 245 248;
+    --surface-overlay: 255 255 255;
+    --surface-muted: 235 237 242;
+
+    --ink: 15 18 25;
+    --ink-muted: 71 80 96;
+    --ink-subtle: 120 128 144;
+    --ink-inverse: 255 255 255;
+
+    --border: 225 228 235;
+    --border-strong: 195 200 210;
+    --border-subtle: 235 237 242;
+
+    --accent: 255 107 53;
+    --accent-strong: 229 90 43;
+    --accent-soft: 255 133 85;
+  }
+
+  .dark {
+    /* Dark theme v3 — deeper, slightly cool-violet undertones for more depth
+       between layers. Surfaces step from #0F1117 (sunken) → #16191F (base)
+       → #1C2029 (raised) → #232735 (overlay) — visibly stratified vs. the
+       old flat #1A1D23 palette. */
+    --surface: 22 25 31;        /* #16191F */
+    --surface-raised: 28 32 41; /* #1C2029 */
+    --surface-sunken: 15 17 23; /* #0F1117 */
+    --surface-overlay: 35 39 53;/* #232735 */
+    --surface-muted: 24 28 36;  /* #181C24 */
+
+    --ink: 244 246 250;
+    --ink-muted: 168 175 191;
+    --ink-subtle: 122 130 148;
+    --ink-inverse: 15 18 25;
+
+    --border: 48 54 70;
+    --border-strong: 70 78 98;
+    --border-subtle: 32 36 48;
+
+    --accent: 255 107 53;
+    --accent-strong: 229 90 43;
+    --accent-soft: 255 133 85;
+  }
+}
+
 /* Base Styles */
 @layer base {
   html {
@@ -9,7 +59,21 @@
   }
 
   body {
-    @apply bg-dark text-white;
+    @apply bg-surface text-ink;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    /* Subtle ambient gradient — orange glow top-right, accent shadow
+       bottom-left — gives the app a visible "lift" instead of a flat fill. */
+    background-image:
+      radial-gradient(1200px 600px at 100% -10%, rgba(255, 107, 53, 0.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(99, 102, 241, 0.05), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  .light body,
+  :root:not(.dark) body {
+    background-image:
+      radial-gradient(1200px 600px at 100% -10%, rgba(255, 107, 53, 0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(99, 102, 241, 0.06), transparent 55%);
   }
 
   /* Scrollbar Styling */
@@ -19,15 +83,22 @@
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-dark-200;
+    @apply bg-surface-sunken;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-dark-50 rounded-full;
+    @apply bg-border rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-500;
+    @apply bg-border-strong;
+  }
+
+  /* Universal focus ring for keyboard users */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 6px;
   }
 }
 
@@ -36,31 +107,38 @@
   /* Buttons */
   .btn {
     @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium transition-all duration-200;
-    @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    --tw-ring-offset-color: rgb(var(--surface));
   }
 
   .btn-primary {
     @apply bg-gradient-to-r from-hytale-orange to-hytale-orange-dark text-white;
     @apply hover:from-hytale-orange-light hover:to-hytale-orange hover:shadow-glow-orange;
-    @apply focus:ring-hytale-orange;
+    @apply focus-visible:ring-hytale-orange;
   }
 
   .btn-secondary {
-    @apply bg-dark-50 text-white border border-dark-50;
-    @apply hover:bg-dark-100 hover:border-gray-600;
-    @apply focus:ring-gray-500;
+    @apply bg-surface-overlay text-ink border border-border;
+    @apply hover:bg-surface-muted hover:border-border-strong;
+    @apply focus-visible:ring-border-strong;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-ink-muted border border-transparent;
+    @apply hover:bg-surface-muted hover:text-ink;
+    @apply focus-visible:ring-border-strong;
   }
 
   .btn-danger {
     @apply bg-status-error text-white;
     @apply hover:bg-red-600 hover:shadow-glow-error;
-    @apply focus:ring-status-error;
+    @apply focus-visible:ring-status-error;
   }
 
   .btn-success {
     @apply bg-status-success text-dark;
     @apply hover:bg-green-400 hover:shadow-glow-success;
-    @apply focus:ring-status-success;
+    @apply focus-visible:ring-status-success;
   }
 
   .btn-sm {
@@ -73,16 +151,20 @@
 
   /* Cards */
   .card {
-    @apply bg-dark-200 rounded-xl border border-dark-50/50 transition-all duration-200;
+    @apply bg-surface-raised rounded-xl border border-border/60 transition-all duration-200;
+  }
+
+  .card-hover {
+    @apply cursor-pointer;
   }
 
   .card-hover:hover {
-    @apply border-dark-50 shadow-lg shadow-black/20;
+    @apply border-border-strong shadow-card-hover;
     transform: translateY(-1px);
   }
 
   .card-header {
-    @apply flex items-center justify-between px-5 py-4 border-b border-dark-50/50;
+    @apply flex items-center justify-between px-5 py-4 border-b border-border/60;
   }
 
   .card-body {
@@ -91,13 +173,13 @@
 
   /* List items with padding for cards without padding prop */
   .card-list-item {
-    @apply px-5 py-4 border-b border-dark-50/30 last:border-b-0;
+    @apply px-5 py-4 border-b border-border/40 last:border-b-0;
   }
 
   /* Inputs */
   .input {
-    @apply w-full px-4 py-2.5 bg-dark-300 border border-dark-50 rounded-lg;
-    @apply text-white placeholder-gray-500;
+    @apply w-full px-4 py-2.5 bg-surface-sunken border border-border rounded-lg;
+    @apply text-ink placeholder-ink-subtle;
     @apply focus:outline-none focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange;
     @apply transition-colors duration-200;
   }
@@ -108,7 +190,7 @@
 
   /* Labels */
   .label {
-    @apply block text-sm font-medium text-gray-300 mb-1.5;
+    @apply block text-sm font-medium text-ink-muted mb-1.5;
   }
 
   /* Status Badges */
@@ -134,17 +216,28 @@
 
   /* Sidebar */
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 transition-colors duration-200;
-    @apply hover:bg-dark-50 hover:text-white;
+    @apply relative flex items-center gap-3 px-4 py-2.5 rounded-lg text-ink-muted transition-colors duration-200;
+    @apply hover:bg-surface-muted hover:text-ink;
   }
 
   .sidebar-link.active {
-    @apply bg-hytale-orange/10 text-hytale-orange border-l-2 border-hytale-orange;
+    @apply bg-hytale-orange/10 text-hytale-orange;
+  }
+
+  .sidebar-link.active::before {
+    content: '';
+    position: absolute;
+    left: -0.75rem;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background-color: rgb(var(--accent));
   }
 
   /* Console Terminal */
   .terminal {
-    @apply bg-dark-400 font-mono text-xs p-4 rounded-lg overflow-auto;
+    @apply bg-surface-sunken font-mono text-xs p-4 rounded-lg overflow-auto;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     line-height: 1.5;
   }
@@ -156,7 +249,7 @@
   }
 
   .terminal-line.info {
-    @apply text-gray-300;
+    @apply text-ink-muted;
   }
 
   .terminal-line.warn {
@@ -168,7 +261,7 @@
   }
 
   .terminal-line.debug {
-    @apply text-gray-500;
+    @apply text-ink-subtle;
   }
 
   /* Tables */
@@ -177,7 +270,7 @@
   }
 
   .table th {
-    @apply px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider bg-dark-300;
+    @apply px-4 py-3 text-left text-xs font-medium text-ink-muted uppercase tracking-wider bg-surface-sunken;
   }
 
   .table td {
@@ -185,11 +278,32 @@
   }
 
   .table tr {
-    @apply border-b border-dark-50/30;
+    @apply border-b border-border/40;
   }
 
   .table tr:hover {
-    @apply bg-dark-50/30;
+    @apply bg-surface-muted/30;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply relative overflow-hidden bg-surface-muted rounded-md;
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    /* Theme-aware shimmer: derived from the ink token so it reads on both the
+       dark and light surfaces (a fixed white highlight was invisible on light). */
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(var(--ink) / 0.08) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
   }
 
   /* Inventory Slots (Hytale-style) */
@@ -227,17 +341,28 @@
   .text-gradient {
     @apply bg-gradient-to-r from-hytale-orange to-hytale-yellow bg-clip-text text-transparent;
   }
+
+  /* Min touch target for mobile */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 /* Route transitions */
 .page-enter-active,
 .page-leave-active {
-  transition: opacity 0.15s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.page-enter-from,
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
 .page-leave-to {
   opacity: 0;
+  transform: translateY(-4px);
 }
 
 /* List item transitions */
@@ -254,4 +379,28 @@
 .list-leave-to {
   opacity: 0;
   transform: translateX(16px);
+}
+
+/* Accessibility: respect the user's reduced-motion preference. Disables the
+   pervasive spin/pulse/Transition animations and instant-scrolls for users
+   who are motion-sensitive, without changing any layout. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Performance: let the browser skip layout/paint of OFF-screen rows in long
+   lists (console logs, player rows, asset/file rows). Native virtualization —
+   DOM structure, scrolling and search stay identical, but a list with hundreds
+   or thousands of rows only renders what's near the viewport. The intrinsic
+   size is an estimate used for off-screen rows so the scrollbar stays sane. */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 40px;
 }

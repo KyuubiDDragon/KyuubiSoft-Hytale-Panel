@@ -21,6 +21,25 @@ export interface JwtPayload {
 
 export interface AuthenticatedRequest extends Request {
   user?: string;
+  /** Set when the caller authenticated via REST API key instead of JWT. */
+  apiKey?: { id: string; scopes: string[] };
+  /** Per-server scope when the route lives under /api/servers/:serverId/... */
+  serverId?: string;
+}
+
+// Augment Express.Request globally so handlers that use the plain `Request`
+// type from express still see the per-server scope set by serverScope
+// middleware. This avoids forcing a sweep of every existing route to switch
+// to AuthenticatedRequest just to read `req.serverId`.
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user?: string;
+      apiKey?: { id: string; scopes: string[] };
+      serverId?: string;
+    }
+  }
 }
 
 // Server Types

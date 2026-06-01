@@ -62,7 +62,9 @@ public class PrometheusMetrics {
         Map<String, Integer> playersPerWorld = new HashMap<>();
         try {
             Universe universe = Universe.get();
-            List<PlayerRef> players = universe.getPlayers();
+            // Hytale 2026-05 API: Universe.getPlayers() now returns Collection<PlayerRef>
+            // (was List<PlayerRef> in older versions).
+            Collection<PlayerRef> players = universe.getPlayers();
             onlinePlayers = players.size();
 
             for (PlayerRef player : players) {

@@ -201,6 +201,35 @@ const ALLOWED_COMMAND_PREFIXES = [
 ];
 
 /**
+ * Commands that grant elevated privileges, irreversibly remove state, or
+ * touch other players' accounts. Even users with console.execute should
+ * not be able to run these without a second permission grant.
+ */
+const ADMIN_COMMAND_PREFIXES = new Set([
+  '/op', '/deop',
+  '/ban', '/unban', '/pardon',
+  '/kick', '/mute', '/unmute',
+  '/stop',
+  '/gamemode', '/gamerule', '/difficulty',
+  '/give', '/clear', '/kill',
+  '/whitelist',
+  '/update',
+]);
+
+/**
+ * Returns the permission name required to run a given command. Returns null
+ * if the command isn't on the whitelist (caller should reject regardless).
+ */
+export function getCommandRequiredPermission(command: string): 'console.execute' | 'console.execute.admin' | null {
+  if (typeof command !== 'string') return null;
+  const trimmed = command.trim();
+  if (!trimmed.startsWith('/')) return null;
+  const cmdName = trimmed.split(/\s+/)[0].toLowerCase();
+  if (!isCommandAllowed(trimmed)) return null;
+  return ADMIN_COMMAND_PREFIXES.has(cmdName) ? 'console.execute.admin' : 'console.execute';
+}
+
+/**
  * SECURITY: Validate command against whitelist
  * Returns true only if the command starts with an allowed prefix
  */
@@ -296,4 +325,5 @@ export default {
   isCommandAllowed,
   validateCommand,
   buildSafeCommand,
+  getCommandRequiredPermission,
 };

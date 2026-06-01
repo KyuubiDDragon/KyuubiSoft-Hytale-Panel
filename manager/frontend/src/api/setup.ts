@@ -84,6 +84,8 @@ export interface ServerConfigData {
   password?: string
   viewRadius?: number
   defaultGamemode?: string
+  acceptEarlyPlugins?: boolean
+  disableSentry?: boolean
 }
 
 // Types for security settings
@@ -192,6 +194,7 @@ export interface DownloadRequest {
   method: 'official' | 'custom'
   serverUrl?: string
   assetsUrl?: string
+  patchline?: string // for the 'official' method
 }
 
 // Types for download verification
@@ -300,7 +303,10 @@ export const setupApi = {
   /**
    * Save a setup step
    */
-  async saveStep(stepId: string, data: StepData): Promise<SaveStepResponse> {
+  // `object` (not the StepData index-signature type) so the concrete typed
+  // wrappers below — saveLanguage(LanguageData) etc. — are assignable under
+  // strict TS. A concrete interface isn't assignable to { [k: string]: unknown }.
+  async saveStep(stepId: string, data: object): Promise<SaveStepResponse> {
     const response = await api.post<SaveStepResponse>(`/setup/step/${stepId}`, data)
     return response.data
   },
@@ -653,38 +659,6 @@ export function subscribeToServerConsole(
   }
 }
 
-// Re-export all types for easy imports
-export type {
-  SystemCheckItem,
-  SystemCheckResponse,
-  SetupStatus,
-  StepData,
-  SaveStepResponse,
-  CompleteSetupResponse,
-  AdminAccountData,
-  CreateAdminResponse,
-  LanguageData,
-  DownloadMethodData,
-  ServerAuthData,
-  ServerConfigData,
-  SecuritySettingsData,
-  AutomationSettingsData,
-  PerformanceSettingsData,
-  PluginInstallData,
-  IntegrationsData,
-  NetworkConfigData,
-  ProgressEvent,
-  ServerStatus,
-  AuthInitResponse,
-  AuthVerifyResponse,
-  DownloaderAuthResponse,
-  DownloaderAuthStatusResponse,
-  DownloadRequest,
-  DownloadVerificationResponse,
-  ServerFirstStartResponse,
-  ServerAuthResponse,
-  ServerAuthStatusResponse,
-  PersistenceSetupResponse,
-  AuthStatusResponse,
-  AssetExtractionResponse,
-}
+// NOTE: every type above is already declared with `export interface`/`export
+// type`, so a re-export block here is redundant — and under vue-tsc 2.x it
+// errors (TS2484: export conflicts with the inline export). Removed.

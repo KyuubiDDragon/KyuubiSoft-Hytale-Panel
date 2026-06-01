@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
-import { subscribeToDownloadProgress, setupApi, type ProgressEvent } from '@/api/setup'
+import { subscribeToDownloadProgress, setupApi, type ProgressEvent, type DownloadRequest } from '@/api/setup'
 
 const { t } = useI18n()
 const setupStore = useSetupStore()
@@ -19,8 +19,18 @@ type Patchline = 'release' | 'pre-release'
 const patchline = ref<Patchline>('release')
 
 // Download method selection
-type DownloadMethod = 'official' | 'custom' | 'manual'
+type DownloadMethod = 'official' | 'custom' | 'manual' | 'existing'
 const downloadMethod = ref<DownloadMethod>('official')
+
+// Existing-install detection — populated on mount via /api/setup/detect-existing.
+// When the panel is added to a host that already has a Hytale server (with
+// or without worlds), we show a "use what's already here" banner instead
+// of forcing the user through OAuth + a multi-GB download.
+const existingInstall = ref<{
+  canUseExisting: boolean
+  worldCount: number
+  version: string | null
+} | null>(null)
 
 // Custom URLs (for custom method)
 const customServerUrl = ref('')
@@ -84,6 +94,7 @@ const canProceedFromSelect = computed(() => {
     return customServerUrl.value.trim() !== '' && customAssetsUrl.value.trim() !== ''
   }
   if (downloadMethod.value === 'manual') return true
+  if (downloadMethod.value === 'existing') return existingInstall.value?.canUseExisting === true
   return false
 })
 
@@ -98,22 +109,6 @@ const authTimeRemaining = computed(() => {
   return `${minutes} ${t('setup.minutes')}`
 })
 
-// Format bytes to human readable
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-}
-
-// Format seconds to time string
-function formatTime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
-}
 
 // Handle method selection
 function selectMethod(method: DownloadMethod) {
@@ -122,8 +117,12 @@ function selectMethod(method: DownloadMethod) {
 
 // Proceed from method selection
 async function proceedFromSelect() {
-  if (downloadMethod.value === 'manual') {
-    // Skip download, go directly to verification
+  // 'existing' and 'manual' both skip the download and go straight to
+  // verification — the difference is intent: 'existing' says "I'm adopting
+  // a working install (possibly with worlds)", 'manual' says "I'll drop
+  // files in via docker cp". The backend treats 'existing' specially in
+  // finalizeSetup so it doesn't overwrite the existing config.json.
+  if (downloadMethod.value === 'manual' || downloadMethod.value === 'existing') {
     currentDownloadStep.value = 'verifying'
     await verifyDownload()
     return
@@ -137,6 +136,30 @@ async function proceedFromSelect() {
     // Start download with custom URLs
     currentDownloadStep.value = 'downloading'
     await startDownload()
+  }
+}
+
+async function detectExistingInstall() {
+  try {
+    const res = await fetch('/api/setup/detect-existing', { credentials: 'include' })
+    if (!res.ok) return
+    const data = await res.json() as {
+      canUseExisting: boolean
+      worlds: string[]
+      serverFiles: { version: string | null }
+    }
+    existingInstall.value = {
+      canUseExisting: data.canUseExisting,
+      worldCount: data.worlds?.length ?? 0,
+      version: data.serverFiles?.version ?? null,
+    }
+    if (data.canUseExisting && downloadMethod.value === 'official') {
+      // Default to existing when we find a viable install — operator can
+      // still pick another method by clicking one of the other cards.
+      downloadMethod.value = 'existing'
+    }
+  } catch {
+    // Detection is best-effort; fall back to normal wizard flow.
   }
 }
 
@@ -297,7 +320,7 @@ async function startDownload() {
 
   try {
     // Trigger the download on the backend
-    const downloadRequest = downloadMethod.value === 'custom'
+    const downloadRequest: DownloadRequest = downloadMethod.value === 'custom'
       ? { method: 'custom', serverUrl: customServerUrl.value, assetsUrl: customAssetsUrl.value }
       : { method: 'official', patchline: patchline.value }
 
@@ -420,12 +443,13 @@ function retryAuth() {
 
 // Load saved data on mount
 onMounted(() => {
-  const savedData = setupStore.setupData.serverDownload
+  const savedData = setupStore.setupData.downloadMethod as { patchline?: string; method?: string; autoUpdate?: boolean } | null | undefined
   if (savedData) {
     if (savedData.patchline) patchline.value = savedData.patchline as Patchline
     if (savedData.method) downloadMethod.value = savedData.method as DownloadMethod
     if (savedData.autoUpdate !== undefined) autoUpdateEnabled.value = savedData.autoUpdate
   }
+  detectExistingInstall()
 })
 
 // Cleanup on unmount
@@ -462,13 +486,13 @@ watch(deviceCodeState, () => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">
+      <h2 class="text-2xl font-bold text-ink mb-2">
         {{ currentDownloadStep === 'auth' ? t('setup.hytaleAuthTitle') :
            currentDownloadStep === 'downloading' ? t('setup.downloadingTitle') :
            currentDownloadStep === 'verifying' || currentDownloadStep === 'complete' ? t('setup.downloadCompleteTitle') :
            t('setup.serverDownloadTitle') }}
       </h2>
-      <p class="text-gray-400">
+      <p class="text-ink-muted">
         {{ currentDownloadStep === 'auth' ? t('setup.hytaleAuthDescription') :
            currentDownloadStep === 'downloading' ? t('setup.downloadingDescription') :
            currentDownloadStep === 'verifying' || currentDownloadStep === 'complete' ? t('setup.downloadVerifyDescription') :
@@ -479,8 +503,28 @@ watch(deviceCodeState, () => {
     <!-- Step 3.1: Download Method Selection -->
     <template v-if="currentDownloadStep === 'select'">
       <div class="space-y-4">
+        <!-- Existing install detected — operator adopting a running Hytale -->
+        <div
+          v-if="existingInstall?.canUseExisting"
+          class="p-4 rounded-xl border border-status-success/40 bg-status-success/10 flex items-start gap-3"
+        >
+          <svg class="w-5 h-5 text-status-success mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <div class="flex-1">
+            <p class="text-white font-semibold">Existing Hytale installation detected</p>
+            <p class="text-sm text-gray-300 mt-1">
+              Server files found{{ existingInstall.version ? ` (v${existingInstall.version})` : '' }}<span v-if="existingInstall.worldCount > 0">, {{ existingInstall.worldCount }} world{{ existingInstall.worldCount === 1 ? '' : 's' }} on disk</span>. Skip the download &amp; keep your existing <code class="text-xs">config.json</code> and worlds.
+            </p>
+            <button
+              type="button"
+              @click="selectMethod('existing')"
+              class="mt-3 text-sm font-medium px-3 py-1.5 rounded-md bg-status-success/20 hover:bg-status-success/30 text-status-success transition-colors"
+              :class="downloadMethod === 'existing' ? 'ring-2 ring-status-success' : ''"
+            >{{ downloadMethod === 'existing' ? '✓ Using existing install' : 'Use existing install' }}</button>
+          </div>
+        </div>
+
         <!-- Patchline Selection -->
-        <div class="mb-6">
+        <div v-if="downloadMethod !== 'existing'" class="mb-6">
           <label class="label mb-3">{{ t('setup.patchlineLabel') }}</label>
           <div class="grid grid-cols-2 gap-3">
             <!-- Release -->
@@ -491,7 +535,7 @@ watch(deviceCodeState, () => {
               :class="[
                 patchline === 'release'
                   ? 'border-status-success bg-status-success/10'
-                  : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+                  : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
               ]"
             >
               <div class="flex items-center gap-3">
@@ -505,8 +549,8 @@ watch(deviceCodeState, () => {
                   />
                 </div>
                 <div>
-                  <p class="text-white font-semibold">{{ t('setup.patchlineRelease') }}</p>
-                  <p class="text-xs text-gray-400">{{ t('setup.patchlineReleaseDesc') }}</p>
+                  <p class="text-ink font-semibold">{{ t('setup.patchlineRelease') }}</p>
+                  <p class="text-xs text-ink-muted">{{ t('setup.patchlineReleaseDesc') }}</p>
                 </div>
               </div>
             </button>
@@ -519,7 +563,7 @@ watch(deviceCodeState, () => {
               :class="[
                 patchline === 'pre-release'
                   ? 'border-status-warning bg-status-warning/10'
-                  : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+                  : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
               ]"
             >
               <div class="flex items-center gap-3">
@@ -533,15 +577,15 @@ watch(deviceCodeState, () => {
                   />
                 </div>
                 <div>
-                  <p class="text-white font-semibold">{{ t('setup.patchlinePreRelease') }}</p>
-                  <p class="text-xs text-gray-400">{{ t('setup.patchlinePreReleaseDesc') }}</p>
+                  <p class="text-ink font-semibold">{{ t('setup.patchlinePreRelease') }}</p>
+                  <p class="text-xs text-ink-muted">{{ t('setup.patchlinePreReleaseDesc') }}</p>
                 </div>
               </div>
             </button>
           </div>
         </div>
 
-        <div class="border-t border-dark-50/30 pt-4">
+        <div class="border-t border-border/40 pt-4">
           <label class="label mb-3">{{ t('setup.downloadMethodLabel') }}</label>
         </div>
 
@@ -552,7 +596,7 @@ watch(deviceCodeState, () => {
           :class="[
             downloadMethod === 'official'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+              : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
           ]"
         >
           <div class="flex items-start gap-4">
@@ -568,8 +612,8 @@ watch(deviceCodeState, () => {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.downloadMethodOfficial') }}</p>
-              <p class="text-sm text-gray-400 mb-2">{{ t('setup.downloadMethodOfficialDesc') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.downloadMethodOfficial') }}</p>
+              <p class="text-sm text-ink-muted mb-2">{{ t('setup.downloadMethodOfficialDesc') }}</p>
               <div class="flex flex-wrap gap-2">
                 <span class="text-xs px-2 py-1 rounded bg-status-success/20 text-status-success">
                   {{ t('setup.autoUpdates') }}
@@ -589,7 +633,7 @@ watch(deviceCodeState, () => {
           :class="[
             downloadMethod === 'custom'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+              : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
           ]"
         >
           <div class="flex items-start gap-4">
@@ -605,8 +649,8 @@ watch(deviceCodeState, () => {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.downloadMethodCustom') }}</p>
-              <p class="text-sm text-gray-400">{{ t('setup.downloadMethodCustomDesc') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.downloadMethodCustom') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('setup.downloadMethodCustomDesc') }}</p>
             </div>
           </div>
         </button>
@@ -638,7 +682,7 @@ watch(deviceCodeState, () => {
           :class="[
             downloadMethod === 'manual'
               ? 'border-hytale-orange bg-hytale-orange/10'
-              : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+              : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
           ]"
         >
           <div class="flex items-start gap-4">
@@ -654,8 +698,8 @@ watch(deviceCodeState, () => {
               </div>
             </div>
             <div class="flex-1">
-              <p class="text-white font-semibold mb-1">{{ t('setup.downloadMethodManual') }}</p>
-              <p class="text-sm text-gray-400">{{ t('setup.downloadMethodManualDesc') }}</p>
+              <p class="text-ink font-semibold mb-1">{{ t('setup.downloadMethodManual') }}</p>
+              <p class="text-sm text-ink-muted">{{ t('setup.downloadMethodManualDesc') }}</p>
             </div>
           </div>
         </button>
@@ -673,8 +717,8 @@ watch(deviceCodeState, () => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.authSuccess') }}</p>
-            <p class="text-gray-400 mt-2">{{ t('setup.startingDownload') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.authSuccess') }}</p>
+            <p class="text-ink-muted mt-2">{{ t('setup.startingDownload') }}</p>
           </div>
 
           <!-- Env Config Required State -->
@@ -684,14 +728,14 @@ watch(deviceCodeState, () => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg text-center">{{ t('setup.envConfigRequired') }}</p>
+            <p class="text-ink font-semibold text-lg text-center">{{ t('setup.envConfigRequired') }}</p>
             <p class="text-status-warning mt-2 text-center">{{ authError }}</p>
 
-            <div class="mt-4 bg-dark-300 rounded-lg p-4 text-left">
-              <p class="text-sm text-gray-300 mb-2 font-medium">{{ t('setup.followTheseSteps') }}:</p>
-              <ol class="list-decimal list-inside space-y-2 text-sm text-gray-400">
+            <div class="mt-4 bg-surface-muted rounded-lg p-4 text-left">
+              <p class="text-sm text-ink-muted mb-2 font-medium">{{ t('setup.followTheseSteps') }}:</p>
+              <ol class="list-decimal list-inside space-y-2 text-sm text-ink-muted">
                 <li v-for="(instruction, index) in envConfigInstructions" :key="index">
-                  <code v-if="instruction.includes('=') || instruction.includes('docker')" class="bg-dark-400 px-1 rounded text-hytale-orange">{{ instruction }}</code>
+                  <code v-if="instruction.includes('=') || instruction.includes('docker')" class="bg-surface px-1 rounded text-hytale-orange">{{ instruction }}</code>
                   <span v-else>{{ instruction }}</span>
                 </li>
               </ol>
@@ -709,7 +753,7 @@ watch(deviceCodeState, () => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.authFailed') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.authFailed') }}</p>
             <p class="text-status-error mt-2">{{ authError }}</p>
             <Button class="mt-4" @click="retryAuth">
               {{ t('setup.retryAuth') }}
@@ -720,8 +764,8 @@ watch(deviceCodeState, () => {
           <div v-else-if="deviceCodeState" class="space-y-6">
             <div class="text-center">
               <!-- Option 1: Direct Link (One-Click Auth) -->
-              <div v-if="deviceCodeState.verificationUrlDirect" class="bg-dark-300 rounded-lg p-4 mb-4">
-                <p class="text-sm text-gray-400 mb-3">{{ t('setup.quickAuthOption') }}</p>
+              <div v-if="deviceCodeState.verificationUrlDirect" class="bg-surface-muted rounded-lg p-4 mb-4">
+                <p class="text-sm text-ink-muted mb-3">{{ t('setup.quickAuthOption') }}</p>
                 <a
                   :href="deviceCodeState.verificationUrlDirect"
                   target="_blank"
@@ -733,23 +777,23 @@ watch(deviceCodeState, () => {
                   </svg>
                   {{ t('setup.openAuthPage') }}
                 </a>
-                <p class="text-xs text-gray-500 mt-2">{{ t('setup.directLinkHint') }}</p>
+                <p class="text-xs text-ink-subtle mt-2">{{ t('setup.directLinkHint') }}</p>
               </div>
 
               <!-- Divider -->
               <div v-if="deviceCodeState.verificationUrlDirect && deviceCodeState.verificationUrl" class="flex items-center gap-4 my-4">
-                <div class="flex-1 h-px bg-dark-50"></div>
-                <span class="text-gray-500 text-sm">{{ t('setup.orAlternatively') }}</span>
-                <div class="flex-1 h-px bg-dark-50"></div>
+                <div class="flex-1 h-px bg-surface-overlay"></div>
+                <span class="text-ink-subtle text-sm">{{ t('setup.orAlternatively') }}</span>
+                <div class="flex-1 h-px bg-surface-overlay"></div>
               </div>
 
               <!-- Option 2: Manual Code Entry -->
-              <div class="bg-dark-300 rounded-lg p-4 mb-4">
-                <p class="text-sm text-gray-400 mb-2">{{ t('setup.manualAuthOption') }}</p>
+              <div class="bg-surface-muted rounded-lg p-4 mb-4">
+                <p class="text-sm text-ink-muted mb-2">{{ t('setup.manualAuthOption') }}</p>
 
                 <!-- Verification URL (Base URL) -->
                 <div class="mb-4">
-                  <p class="text-xs text-gray-500 mb-1">{{ t('setup.verificationUrl') }}</p>
+                  <p class="text-xs text-ink-subtle mb-1">{{ t('setup.verificationUrl') }}</p>
                   <a
                     :href="deviceCodeState.verificationUrl || deviceCodeState.verificationUrlDirect"
                     target="_blank"
@@ -771,11 +815,11 @@ watch(deviceCodeState, () => {
                   </Button>
                 </div>
 
-                <p class="text-gray-300 mb-3">{{ t('setup.enterCode') }}</p>
+                <p class="text-ink-muted mb-3">{{ t('setup.enterCode') }}</p>
 
                 <!-- User Code Display -->
-                <div class="bg-dark-400 border-2 border-dark-50 rounded-xl p-6 inline-block">
-                  <p class="text-3xl font-mono font-bold text-white tracking-widest">
+                <div class="bg-surface border-2 border-border rounded-xl p-6 inline-block">
+                  <p class="text-3xl font-mono font-bold text-ink tracking-widest">
                     {{ formattedUserCode }}
                   </p>
                 </div>
@@ -783,7 +827,7 @@ watch(deviceCodeState, () => {
             </div>
 
             <!-- Waiting Status -->
-            <div class="flex items-center justify-center gap-3 text-gray-400">
+            <div class="flex items-center justify-center gap-3 text-ink-muted">
               <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
@@ -791,12 +835,12 @@ watch(deviceCodeState, () => {
             </div>
 
             <!-- Expiry Timer -->
-            <div class="text-center text-sm text-gray-500">
+            <div class="text-center text-sm text-ink-subtle">
               {{ t('setup.codeValidFor', { time: authTimeRemaining }) }}
             </div>
 
             <!-- Progress Bar (animated) -->
-            <div class="h-1 bg-dark-50 rounded-full overflow-hidden">
+            <div class="h-1 bg-surface-overlay rounded-full overflow-hidden">
               <div class="h-full bg-hytale-orange animate-pulse" style="width: 100%" />
             </div>
           </div>
@@ -806,7 +850,7 @@ watch(deviceCodeState, () => {
             <svg class="w-12 h-12 text-hytale-orange animate-spin mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <p class="text-gray-400">{{ t('setup.initializingAuth') }}</p>
+            <p class="text-ink-muted">{{ t('setup.initializingAuth') }}</p>
           </div>
         </div>
       </div>
@@ -832,23 +876,23 @@ watch(deviceCodeState, () => {
             </svg>
           </div>
 
-          <h3 class="text-xl font-semibold text-white mb-2">{{ t('setup.downloadingTitle') }}</h3>
-          <p class="text-gray-400 mb-6">{{ t('setup.downloadingDescription') }}</p>
+          <h3 class="text-xl font-semibold text-ink mb-2">{{ t('setup.downloadingTitle') }}</h3>
+          <p class="text-ink-muted mb-6">{{ t('setup.downloadingDescription') }}</p>
 
           <!-- Indeterminate Progress Bar -->
-          <div class="h-2 bg-dark-50 rounded-full overflow-hidden mb-6">
+          <div class="h-2 bg-surface-overlay rounded-full overflow-hidden mb-6">
             <div class="h-full bg-gradient-to-r from-hytale-orange via-hytale-orange-light to-hytale-orange bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full" />
           </div>
 
           <!-- Download Status -->
           <div class="space-y-3">
-            <div class="flex items-center justify-center gap-2 text-gray-300">
+            <div class="flex items-center justify-center gap-2 text-ink-muted">
               <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               <span>{{ t('setup.downloadInProgress') }}</span>
             </div>
-            <p class="text-sm text-gray-500">{{ t('setup.downloadInfoNotice') }}</p>
+            <p class="text-sm text-ink-subtle">{{ t('setup.downloadInfoNotice') }}</p>
           </div>
         </div>
       </div>
@@ -863,8 +907,8 @@ watch(deviceCodeState, () => {
               </svg>
             </div>
             <div>
-              <p class="text-white font-medium text-sm">HytaleServer.jar</p>
-              <p class="text-xs text-gray-500">~80 MB</p>
+              <p class="text-ink font-medium text-sm">HytaleServer.jar</p>
+              <p class="text-xs text-ink-subtle">~80 MB</p>
             </div>
           </div>
         </div>
@@ -876,8 +920,8 @@ watch(deviceCodeState, () => {
               </svg>
             </div>
             <div>
-              <p class="text-white font-medium text-sm">Assets.zip</p>
-              <p class="text-xs text-gray-500">~3.3 GB</p>
+              <p class="text-ink font-medium text-sm">Assets.zip</p>
+              <p class="text-xs text-ink-subtle">~3.3 GB</p>
             </div>
           </div>
         </div>
@@ -891,7 +935,7 @@ watch(deviceCodeState, () => {
         <svg class="w-12 h-12 text-hytale-orange animate-spin mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
-        <p class="text-gray-400">{{ t('setup.verifyingFiles') }}</p>
+        <p class="text-ink-muted">{{ t('setup.verifyingFiles') }}</p>
       </div>
 
       <!-- Verification Results -->
@@ -928,11 +972,11 @@ watch(deviceCodeState, () => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">HytaleServer.jar</span>
+                <span class="text-ink">HytaleServer.jar</span>
               </div>
               <div class="text-right">
-                <p class="text-sm text-gray-300">{{ verificationResults.serverJar.size }}</p>
-                <p class="text-xs text-gray-500">{{ t('setup.integrityOk') }}</p>
+                <p class="text-sm text-ink-muted">{{ verificationResults.serverJar.size }}</p>
+                <p class="text-xs text-ink-subtle">{{ t('setup.integrityOk') }}</p>
               </div>
             </div>
 
@@ -966,27 +1010,27 @@ watch(deviceCodeState, () => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">Assets.zip</span>
+                <span class="text-ink">Assets.zip</span>
               </div>
               <div class="text-right">
-                <p class="text-sm text-gray-300">{{ verificationResults.assetsZip.size }}</p>
-                <p class="text-xs text-gray-500">{{ t('setup.integrityOk') }}</p>
+                <p class="text-sm text-ink-muted">{{ verificationResults.assetsZip.size }}</p>
+                <p class="text-xs text-ink-subtle">{{ t('setup.integrityOk') }}</p>
               </div>
             </div>
 
             <!-- Version Info -->
-            <div class="flex items-center justify-between py-2 border-t border-dark-50/30">
+            <div class="flex items-center justify-between py-2 border-t border-border/40">
               <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-hytale-orange/20">
                   <svg class="w-4 h-4 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.version') }}</span>
+                <span class="text-ink">{{ t('setup.version') }}</span>
               </div>
               <div class="text-right">
-                <p class="text-sm text-gray-300">{{ verificationResults.version }}</p>
-                <p class="text-xs text-gray-500">({{ verificationResults.patchline }})</p>
+                <p class="text-sm text-ink-muted">{{ verificationResults.version }}</p>
+                <p class="text-xs text-ink-subtle">({{ verificationResults.patchline }})</p>
               </div>
             </div>
           </div>
@@ -999,11 +1043,11 @@ watch(deviceCodeState, () => {
               <input
                 v-model="autoUpdateEnabled"
                 type="checkbox"
-                class="mt-1 w-4 h-4 rounded border-gray-600 bg-dark-300 text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
+                class="mt-1 w-4 h-4 rounded border-gray-600 bg-surface-muted text-hytale-orange focus:ring-hytale-orange focus:ring-offset-0"
               />
               <div>
-                <p class="text-white font-medium">{{ t('setup.enableAutoUpdate') }}</p>
-                <p class="text-sm text-gray-400">{{ t('setup.autoUpdateDescription') }}</p>
+                <p class="text-ink font-medium">{{ t('setup.enableAutoUpdate') }}</p>
+                <p class="text-sm text-ink-muted">{{ t('setup.autoUpdateDescription') }}</p>
               </div>
             </label>
           </div>

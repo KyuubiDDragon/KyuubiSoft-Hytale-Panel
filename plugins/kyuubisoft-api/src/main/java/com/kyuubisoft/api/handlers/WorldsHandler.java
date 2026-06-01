@@ -1,6 +1,5 @@
 package com.kyuubisoft.api.handlers;
 
-import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 
@@ -61,32 +60,15 @@ public class WorldsHandler {
         WorldData data = new WorldData();
         data.name = world.getName();
 
-        // Count players in this world
+        // Hytale 2026-05 API exposes per-world counts/state directly instead of
+        // scanning the whole universe.
         try {
-            Universe universe = Universe.get();
-            List<PlayerRef> allPlayers = universe.getPlayers();
-            int playerCount = 0;
-            for (PlayerRef player : allPlayers) {
-                try {
-                    UUID worldUuid = player.getWorldUuid();
-                    if (worldUuid != null) {
-                        World playerWorld = universe.getWorld(worldUuid);
-                        if (playerWorld != null && playerWorld.getName().equals(world.getName())) {
-                            playerCount++;
-                        }
-                    }
-                } catch (Exception e) {
-                    // Ignore
-                }
-            }
-            data.playerCount = playerCount;
+            data.playerCount = world.getPlayerCount();
         } catch (Exception e) {
             data.playerCount = 0;
         }
-
-        // Try to get world properties
         try {
-            data.isTicking = true; // Assume true if world exists
+            data.isTicking = world.isTicking();
         } catch (Exception e) {
             data.isTicking = true;
         }
@@ -98,37 +80,28 @@ public class WorldsHandler {
         WorldStats stats = new WorldStats();
         stats.name = world.getName();
 
-        // Count players
         try {
-            Universe universe = Universe.get();
-            List<PlayerRef> allPlayers = universe.getPlayers();
-            int playerCount = 0;
-            for (PlayerRef player : allPlayers) {
-                try {
-                    UUID worldUuid = player.getWorldUuid();
-                    if (worldUuid != null) {
-                        World playerWorld = universe.getWorld(worldUuid);
-                        if (playerWorld != null && playerWorld.getName().equals(world.getName())) {
-                            playerCount++;
-                        }
-                    }
-                } catch (Exception e) {
-                    // Ignore
-                }
-            }
-            stats.playerCount = playerCount;
+            stats.playerCount = world.getPlayerCount();
         } catch (Exception e) {
             stats.playerCount = 0;
         }
-
-        // Try to get additional stats (may vary by server version)
         try {
-            stats.loadedChunks = -1; // TODO: Get actual count when API available
-            stats.entityCount = -1;
-            stats.tileEntityCount = -1;
+            stats.isTicking = world.isTicking();
         } catch (Exception e) {
-            // Stats not available
+            stats.isTicking = true;
         }
+        // Current tick of this world's simulation loop — useful as a liveness/age signal.
+        try {
+            stats.currentTick = world.getTick();
+        } catch (Exception e) {
+            stats.currentTick = -1;
+        }
+
+        // Loaded chunk / entity counts are not exposed as cheap aggregate getters
+        // by the current Hytale API; left as -1 ("unknown") rather than guessed.
+        stats.loadedChunks = -1;
+        stats.entityCount = -1;
+        stats.tileEntityCount = -1;
 
         return stats;
     }
@@ -152,6 +125,7 @@ public class WorldsHandler {
     }
 
     public static class WorldStats extends WorldData {
+        public long currentTick;
         public int loadedChunks;
         public int entityCount;
         public int tileEntityCount;

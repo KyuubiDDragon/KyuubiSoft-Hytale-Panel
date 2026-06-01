@@ -11,7 +11,10 @@ const savedLocale = typeof localStorage !== 'undefined'
 export const i18n = createI18n({
   legacy: false,
   locale: savedLocale,
-  fallbackLocale: 'de',
+  // English fallback: pt_br is missing ~135 keys, and falling back to German
+  // (the old setting) showed Brazilian users German text. English is the
+  // universally-understood stopgap until pt_br reaches key parity.
+  fallbackLocale: 'en',
   messages: {
     de,
     en,

@@ -14,7 +14,6 @@ const emit = defineEmits<{
 
 // System info
 const detectedRam = ref(16) // Will be fetched from system check
-const isLoadingSystemInfo = ref(false)
 
 // Performance settings
 const minRam = ref('3G')
@@ -39,7 +38,6 @@ function getRamValue(ram: string): number {
 
 // Computed for RAM recommendations based on player count
 const ramRecommendation = computed(() => {
-  const systemCheckData = setupStore.setupData.systemCheck
   const maxPlayers = 20 // Default, would be fetched from server config step
 
   if (maxPlayers <= 10) {
@@ -148,12 +146,12 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.performanceSettingsTitle') }}</h2>
-      <p class="text-gray-400">{{ t('setup.performanceSettingsDescription') }}</p>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.performanceSettingsTitle') }}</h2>
+      <p class="text-ink-muted">{{ t('setup.performanceSettingsDescription') }}</p>
     </div>
 
     <!-- System Info Card -->
-    <div class="p-4 bg-dark-200 rounded-lg border border-dark-50/50">
+    <div class="p-4 bg-surface-raised rounded-lg border border-border/60">
       <div class="flex items-center gap-4">
         <div class="w-12 h-12 rounded-xl bg-hytale-orange/20 flex items-center justify-center">
           <svg class="w-6 h-6 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -161,11 +159,11 @@ onMounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <p class="text-sm text-gray-400">{{ t('setup.detectedSystemRam') }}</p>
-          <p class="text-xl font-bold text-white">{{ detectedRam }} GB</p>
+          <p class="text-sm text-ink-muted">{{ t('setup.detectedSystemRam') }}</p>
+          <p class="text-xl font-bold text-ink">{{ detectedRam }} GB</p>
         </div>
         <div class="text-right">
-          <p class="text-sm text-gray-400">{{ t('setup.performanceRating') }}</p>
+          <p class="text-sm text-ink-muted">{{ t('setup.performanceRating') }}</p>
           <p class="font-medium" :class="performanceImpact.class">
             {{ t(performanceImpact.labelKey) }}
           </p>
@@ -185,8 +183,8 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h3 class="font-semibold text-white">{{ t('setup.serverRam') }}</h3>
-              <p class="text-sm text-gray-400">{{ t('setup.serverRamDescription') }}</p>
+              <h3 class="font-semibold text-ink">{{ t('setup.serverRam') }}</h3>
+              <p class="text-sm text-ink-muted">{{ t('setup.serverRamDescription') }}</p>
             </div>
           </div>
         </div>
@@ -210,7 +208,7 @@ onMounted(() => {
                   </option>
                 </select>
                 <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
@@ -234,7 +232,7 @@ onMounted(() => {
                   </option>
                 </select>
                 <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
@@ -275,8 +273,8 @@ onMounted(() => {
               </svg>
             </div>
             <div>
-              <h3 class="font-semibold text-white">{{ t('setup.viewRadius') }}</h3>
-              <p class="text-sm text-gray-400">{{ t('setup.viewRadiusDescription') }}</p>
+              <h3 class="font-semibold text-ink">{{ t('setup.viewRadius') }}</h3>
+              <p class="text-sm text-ink-muted">{{ t('setup.viewRadiusDescription') }}</p>
             </div>
           </div>
         </div>
@@ -285,8 +283,8 @@ onMounted(() => {
           <!-- Slider -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <span class="text-sm text-gray-400">{{ t('setup.chunks') }}</span>
-              <span class="text-lg font-bold text-white">{{ viewRadius }}</span>
+              <span class="text-sm text-ink-muted">{{ t('setup.chunks') }}</span>
+              <span class="text-lg font-bold text-ink">{{ viewRadius }}</span>
             </div>
             <input
               v-model="viewRadius"
@@ -294,9 +292,9 @@ onMounted(() => {
               min="8"
               max="32"
               step="1"
-              class="w-full h-2 bg-dark-50 rounded-lg appearance-none cursor-pointer slider-thumb"
+              class="w-full h-2 bg-surface-overlay rounded-lg appearance-none cursor-pointer slider-thumb"
             />
-            <div class="flex justify-between text-xs text-gray-500 mt-1">
+            <div class="flex justify-between text-xs text-ink-subtle mt-1">
               <span>8</span>
               <span>16</span>
               <span>24</span>
@@ -315,7 +313,7 @@ onMounted(() => {
           </div>
 
           <!-- Info -->
-          <div class="flex items-start gap-2 text-xs text-gray-500">
+          <div class="flex items-start gap-2 text-xs text-ink-subtle">
             <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -325,17 +323,17 @@ onMounted(() => {
       </div>
 
       <!-- Performance Guide -->
-      <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+      <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
         <div class="flex items-start gap-3">
-          <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-5 h-5 text-ink-muted mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <div class="text-sm text-gray-400">
-            <p class="font-medium text-gray-300 mb-2">{{ t('setup.performanceGuideTitle') }}</p>
+          <div class="text-sm text-ink-muted">
+            <p class="font-medium text-ink-muted mb-2">{{ t('setup.performanceGuideTitle') }}</p>
             <ul class="space-y-1">
-              <li><span class="text-white">10-20 {{ t('setup.players') }}:</span> 4-6 GB RAM, 16 {{ t('setup.chunks') }}</li>
-              <li><span class="text-white">20-50 {{ t('setup.players') }}:</span> 6-8 GB RAM, 12-16 {{ t('setup.chunks') }}</li>
-              <li><span class="text-white">50+ {{ t('setup.players') }}:</span> 8+ GB RAM, 10-12 {{ t('setup.chunks') }}</li>
+              <li><span class="text-ink">10-20 {{ t('setup.players') }}:</span> 4-6 GB RAM, 16 {{ t('setup.chunks') }}</li>
+              <li><span class="text-ink">20-50 {{ t('setup.players') }}:</span> 6-8 GB RAM, 12-16 {{ t('setup.chunks') }}</li>
+              <li><span class="text-ink">50+ {{ t('setup.players') }}:</span> 8+ GB RAM, 10-12 {{ t('setup.chunks') }}</li>
             </ul>
           </div>
         </div>

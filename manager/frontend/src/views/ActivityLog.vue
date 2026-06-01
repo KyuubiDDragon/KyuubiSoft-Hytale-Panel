@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Card from '@/components/ui/Card.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
+import Skeleton from '@/components/ui/Skeleton.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
+import EmptyTableState from '@/components/ui/EmptyTableState.vue'
+import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
 import { activityApi, type ActivityLogEntry } from '@/api/management'
 import { formatLogMessage } from '@/utils/formatItemPath'
 import { useAuthStore } from '@/stores/auth'
@@ -22,6 +25,15 @@ const offset = ref(0)
 const showClearConfirm = ref(false)
 
 const categories = ['all', 'player', 'server', 'backup', 'config', 'mod', 'user', 'system'] as const
+
+const columns = computed<TableColumn[]>(() => [
+  { key: 'action', label: t('activity.action') },
+  { key: 'category', label: t('activity.category'), width: '8rem' },
+  { key: 'target', label: t('activity.target') },
+  { key: 'user', label: t('activity.user'), nowrap: true, hideOnMobile: false },
+  { key: 'timestamp', label: t('activity.timestamp'), nowrap: true },
+  { key: 'success', label: t('activity.status'), align: 'center', width: '7rem' },
+])
 
 async function loadData() {
   loading.value = true
@@ -49,8 +61,7 @@ async function confirmClearLog() {
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleString()
+  return new Date(dateStr).toLocaleString()
 }
 
 function getCategoryColor(category: string): string {
@@ -61,22 +72,9 @@ function getCategoryColor(category: string): string {
     config: 'bg-yellow-500/20 text-yellow-400',
     mod: 'bg-orange-500/20 text-orange-400',
     user: 'bg-pink-500/20 text-pink-400',
-    system: 'bg-gray-500/20 text-gray-400',
+    system: 'bg-gray-500/20 text-ink-muted',
   }
-  return colors[category] || 'bg-gray-500/20 text-gray-400'
-}
-
-function getCategoryIcon(category: string): string {
-  const icons: Record<string, string> = {
-    player: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
-    server: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01',
-    backup: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
-    config: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0',
-    mod: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
-    user: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-    system: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
-  }
-  return icons[category] || icons.system
+  return colors[category] || 'bg-gray-500/20 text-ink-muted'
 }
 
 const hasMore = computed(() => offset.value + entries.value.length < total.value)
@@ -108,139 +106,119 @@ onMounted(loadData)
 <template>
   <div class="space-y-6">
     <!-- Page Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('activity.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('activity.subtitle') }}</p>
+        <h1 class="text-2xl font-bold text-ink">{{ t('activity.title') }}</h1>
+        <p class="text-ink-muted mt-1">{{ t('activity.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-3">
         <Button v-if="authStore.hasPermission('activity.clear')" variant="danger" @click="showClearConfirm = true" class="flex items-center gap-2">
           <Icon name="trash" class="w-4 h-4" />
           {{ t('activity.clearLog') }}
         </Button>
-        <button @click="loadData" class="p-2 text-gray-400 hover:text-white transition-colors" :aria-label="t('common.refresh')">
+        <button
+          @click="loadData"
+          class="p-2 text-ink-muted hover:text-ink transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
+          :aria-label="t('common.refresh')"
+        >
           <Icon name="refresh" class="w-5 h-5" :class="{ 'animate-spin': loading }" />
         </button>
       </div>
     </div>
 
-    <!-- Error Message -->
-    <div v-if="error" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
-      <p class="text-status-error">{{ error }}</p>
-    </div>
-
     <!-- Category Filter -->
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap gap-2" role="tablist">
       <button
         v-for="cat in categories"
         :key="cat"
+        role="tab"
+        :aria-selected="selectedCategory === cat"
         @click="changeCategory(cat)"
         :class="[
-          'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+          'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[40px]',
           selectedCategory === cat
-            ? 'bg-hytale-orange text-dark'
-            : 'bg-dark-100 text-gray-400 hover:text-white hover:bg-dark-50'
+            ? 'bg-hytale-orange text-ink-inverse'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink',
         ]"
       >
         {{ t(`activity.categories.${cat}`) }}
       </button>
     </div>
 
-    <!-- Stats Card -->
-    <Card>
-      <div class="flex items-center gap-4">
-        <div class="p-3 bg-hytale-orange/20 rounded-lg">
-          <svg class="w-6 h-6 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="font-semibold text-white">{{ t('activity.entries', { count: total }) }}</h3>
-          <p class="text-sm text-gray-400">
-            {{ selectedCategory === 'all' ? t('activity.categories.all') : t(`activity.categories.${selectedCategory}`) }}
+    <!-- Body -->
+    <ErrorState
+      v-if="error && entries.length === 0"
+      :message="error"
+      @retry="loadData"
+    />
+
+    <div v-else-if="loading && entries.length === 0" class="space-y-2">
+      <Skeleton v-for="i in 5" :key="i" height="3rem" />
+    </div>
+
+    <EmptyTableState
+      v-else-if="entries.length === 0"
+      icon="activity"
+      :title="t('activity.noEntries')"
+      :subtitle="t('activity.noEntriesSubtitle')"
+    />
+
+    <template v-else>
+      <ResponsiveTable
+        :columns="columns"
+        :rows="entries"
+        row-key="id"
+        :aria-label="t('activity.title')"
+        :mobile-card-label="(e) => formatLogMessage(e.action)"
+      >
+        <template #cell:action="{ row }">
+          <span class="font-medium text-ink">{{ formatLogMessage(row.action) }}</span>
+          <p v-if="row.details" class="text-xs text-ink-subtle mt-0.5 break-words">
+            {{ formatLogMessage(row.details) }}
           </p>
-        </div>
-      </div>
-    </Card>
-
-    <!-- Activity List -->
-    <Card :padding="false">
-      <div v-if="loading" class="flex items-center justify-center p-8">
-        <svg class="w-6 h-6 animate-spin text-hytale-orange" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
-      </div>
-
-      <div v-else-if="entries.length === 0" class="text-center text-gray-500 p-8">
-        <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
-        {{ t('activity.noEntries') }}
-      </div>
-
-      <div v-else class="divide-y divide-dark-50/30">
-        <div
-          v-for="entry in entries"
-          :key="entry.id"
-          class="flex items-start gap-4 p-4 hover:bg-dark-50/20 transition-colors"
-        >
-          <!-- Category Icon -->
-          <div :class="['p-2.5 rounded-lg', getCategoryColor(entry.category)]">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getCategoryIcon(entry.category)" />
-            </svg>
-          </div>
-
-          <!-- Entry Details -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="font-medium text-white">{{ formatLogMessage(entry.action) }}</span>
-              <span
-                :class="[
-                  'px-2 py-0.5 rounded text-xs font-medium',
-                  entry.success ? 'bg-status-success/20 text-status-success' : 'bg-status-error/20 text-status-error'
-                ]"
-              >
-                {{ entry.success ? t('activity.success') : t('activity.failed') }}
-              </span>
-            </div>
-            <div class="text-sm text-gray-400 space-y-0.5">
-              <div v-if="entry.target" class="flex items-center gap-1">
-                <span class="text-gray-500">{{ t('activity.target') }}:</span>
-                <span class="text-gray-300">{{ formatLogMessage(entry.target) }}</span>
-              </div>
-              <div v-if="entry.details" class="text-gray-500 truncate">{{ formatLogMessage(entry.details) }}</div>
-            </div>
-          </div>
-
-          <!-- Meta -->
-          <div class="text-right text-sm">
-            <p class="text-white">{{ entry.user }}</p>
-            <p class="text-gray-500">{{ formatDate(entry.timestamp) }}</p>
-          </div>
-        </div>
-      </div>
+        </template>
+        <template #cell:category="{ row }">
+          <span :class="['inline-flex px-2 py-0.5 rounded text-xs font-medium', getCategoryColor(row.category)]">
+            {{ t(`activity.categories.${row.category}`) }}
+          </span>
+        </template>
+        <template #cell:target="{ row }">
+          <span v-if="row.target" class="text-ink-muted break-all">{{ formatLogMessage(row.target) }}</span>
+          <span v-else class="text-ink-subtle">—</span>
+        </template>
+        <template #cell:user="{ row }">
+          <span class="text-ink">{{ row.user }}</span>
+        </template>
+        <template #cell:timestamp="{ row }">
+          <span class="text-sm text-ink-muted whitespace-nowrap">{{ formatDate(row.timestamp) }}</span>
+        </template>
+        <template #cell:success="{ row }">
+          <span
+            :class="[
+              'inline-flex px-2 py-0.5 rounded text-xs font-medium',
+              row.success ? 'bg-status-success/20 text-status-success' : 'bg-status-error/20 text-status-error',
+            ]"
+          >
+            {{ row.success ? t('activity.success') : t('activity.failed') }}
+          </span>
+        </template>
+      </ResponsiveTable>
 
       <!-- Pagination -->
-      <div v-if="entries.length > 0" class="flex items-center justify-between p-4 border-t border-dark-50/30">
+      <div class="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-surface-raised border border-border/60">
         <Button variant="secondary" size="sm" @click="prevPage" :disabled="!hasPrev" :aria-label="t('common.previous')">
-          <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
+          <Icon name="chevronDown" class="w-4 h-4 mr-1 rotate-90" />
           {{ t('common.previous') }}
         </Button>
-        <span class="text-gray-400">
-          {{ offset + 1 }} - {{ Math.min(offset + entries.length, total) }} / {{ total }}
+        <span class="text-ink-muted text-sm">
+          {{ offset + 1 }} – {{ Math.min(offset + entries.length, total) }} / {{ total }}
         </span>
         <Button variant="secondary" size="sm" @click="nextPage" :disabled="!hasMore" :aria-label="t('common.next')">
           {{ t('common.next') }}
-          <svg class="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
+          <Icon name="chevronDown" class="w-4 h-4 ml-1 -rotate-90" />
         </Button>
       </div>
-    </Card>
+    </template>
 
     <ConfirmDialog
       :show="showClearConfirm"

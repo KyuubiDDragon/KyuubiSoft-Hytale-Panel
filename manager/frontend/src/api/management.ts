@@ -208,6 +208,11 @@ export interface ModInfo {
   installedVersion?: string
   latestVersion?: string
   hasUpdate?: boolean
+  // Unified-update enrichment (set client-side from the update checker).
+  updateSource?: string
+  updateSourceId?: string
+  updateModId?: number
+  updateChangelog?: string
 }
 
 export interface ConfigFile {

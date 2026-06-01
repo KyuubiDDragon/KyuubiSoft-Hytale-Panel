@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Asset Service
  * Handles extraction, browsing, and reading of Hytale game assets
@@ -230,7 +231,7 @@ export function getAssetStatus(): AssetStatus {
         };
         writeAssetMeta(newMeta);
         meta = newMeta;
-        console.log(`[Assets] Detected manually copied assets: ${fileCount} files`);
+        logger.info(`[Assets] Detected manually copied assets: ${fileCount} files`);
       }
     }
   }
@@ -291,7 +292,7 @@ export function extractAssets(): { success: boolean; error?: string; message?: s
 
   // Run extraction asynchronously
   runExtraction(sourceFile).catch((err) => {
-    console.error('[Assets] Extraction error:', err);
+    logger.error('[Assets] Extraction error:', err);
     if (extractionProgress) {
       extractionProgress.status = 'failed';
       extractionProgress.error = err.message || 'Unknown error';
@@ -327,6 +328,30 @@ async function runExtraction(sourceFile: string): Promise<void> {
       fs.rmSync(itemPath, { recursive: true, force: true });
     }
 
+    // Pre-flight: make sure there's enough free space. Game assets are large
+    // and already compressed, so the extracted size is roughly the archive
+    // size; require ~1.5x as a margin. Failing here gives a clear message
+    // instead of unzip aborting mid-way with the cryptic "exited with code 50"
+    // (disk full).
+    let freeBytes: number | null = null;
+    try {
+      const st = fs.statfsSync(config.assetsPath);
+      freeBytes = st.bavail * st.bsize;
+    } catch {
+      freeBytes = null; // statfs unsupported on this filesystem — skip the check
+    }
+    if (freeBytes !== null) {
+      const requiredBytes = Math.ceil(fs.statSync(sourceFile).size * 1.5);
+      if (freeBytes < requiredBytes) {
+        const gb = (n: number) => (n / 1024 ** 3).toFixed(1);
+        throw new Error(
+          `Not enough disk space to extract assets: need ~${gb(requiredBytes)} GB free, ` +
+          `only ${gb(freeBytes)} GB available on the assets volume (${config.assetsPath}). ` +
+          `Free up space (or set ASSETS_PATH to a larger disk) and retry.`
+        );
+      }
+    }
+
     // Extract using unzip command with verbose output to track progress
     if (extractionProgress) {
       extractionProgress.currentFile = 'Extracting...';
@@ -359,15 +384,33 @@ async function runExtraction(sourceFile: string): Promise<void> {
         }
       });
 
+      // Keep the tail of stderr so we can surface the REAL reason in the
+      // rejection — a bare "code 50" is uninformative (it can be disk-full,
+      // quota, OR — commonly — the target not being writable by the non-root
+      // manager user, which is what actually produces the cryptic 50 here).
+      let stderrTail = '';
       unzip.stderr.on('data', (data: Buffer) => {
-        console.error('[Assets] unzip stderr:', data.toString());
+        const text = data.toString();
+        logger.error('[Assets] unzip stderr:', text);
+        stderrTail = (stderrTail + text).slice(-800);
       });
 
       unzip.on('close', (code) => {
         if (code === 0) {
           resolve();
+          return;
+        }
+        const detail = stderrTail
+          .split('\n').map((l) => l.trim()).filter(Boolean).slice(-3).join(' | ');
+        if (code === 50) {
+          reject(new Error(
+            `unzip could not write the extracted files (code 50). Usual causes: the assets ` +
+            `volume (${config.assetsPath}) is out of space/quota, or it is not writable by the ` +
+            `manager user (uid 9999) — check that ${config.assetsPath} is owned by 9999.` +
+            (detail ? ` unzip said: ${detail}` : '')
+          ));
         } else {
-          reject(new Error(`unzip exited with code ${code}`));
+          reject(new Error(`unzip failed (code ${code})` + (detail ? `: ${detail}` : '')));
         }
       });
 
@@ -404,9 +447,20 @@ async function runExtraction(sourceFile: string): Promise<void> {
       extractionProgress.status = 'completed';
     }
 
-    console.log(`[Assets] Extraction complete: ${fileCount} files`);
+    logger.info(`[Assets] Extraction complete: ${fileCount} files`);
   } catch (error) {
-    console.error('[Assets] Extraction failed:', error);
+    logger.error('[Assets] Extraction failed:', error);
+    // Remove the half-extracted tree so a failed run (e.g. disk full) doesn't
+    // leave junk occupying the volume. The old assets were already cleared
+    // before extraction started, so there's nothing useful to keep. Best-effort.
+    try {
+      if (fs.existsSync(config.assetsPath)) {
+        for (const item of fs.readdirSync(config.assetsPath)) {
+          if (item === ASSET_META_FILE) continue;
+          fs.rmSync(path.join(config.assetsPath, item), { recursive: true, force: true });
+        }
+      }
+    } catch { /* best-effort cleanup */ }
     if (extractionProgress) {
       extractionProgress.status = 'failed';
       extractionProgress.error = error instanceof Error ? error.message : 'Unknown error';
@@ -742,7 +796,7 @@ function parseRegexPattern(pattern: string): RegExp | null {
 
     // SECURITY: Check for ReDoS patterns
     if (!isSafeRegex(regexBody)) {
-      console.warn('[SECURITY] Rejected unsafe regex pattern:', regexBody.substring(0, 50));
+      logger.warn('[SECURITY] Rejected unsafe regex pattern:', regexBody.substring(0, 50));
       return null;
     }
 
@@ -781,7 +835,7 @@ export function searchAssets(query: string, options?: {
       // User wants regex but didn't use /.../ format, treat as regex directly
       // SECURITY: Check for ReDoS patterns before creating regex
       if (!isSafeRegex(query)) {
-        console.warn('[SECURITY] Rejected unsafe regex query:', query.substring(0, 50));
+        logger.warn('[SECURITY] Rejected unsafe regex query:', query.substring(0, 50));
         searchMode = 'text';
       } else {
         try {
@@ -944,7 +998,7 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
 
   // Check if assets are extracted
   if (!fs.existsSync(config.assetsPath)) {
-    console.log('[Items] Assets path does not exist:', config.assetsPath);
+    logger.info('[Items] Assets path does not exist:', config.assetsPath);
     return items;
   }
 
@@ -964,13 +1018,13 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
     files = listAssetDirectory(iconPath);
     if (files && files.length > 0) {
       foundPath = iconPath;
-      console.log('[Items] Found items in:', iconPath, '- Count:', files.length);
+      logger.info('[Items] Found items in:', iconPath, '- Count:', files.length);
       break;
     }
   }
 
   if (!files || files.length === 0) {
-    console.log('[Items] No items found in any known path');
+    logger.info('[Items] No items found in any known path');
     return items;
   }
 
@@ -1006,7 +1060,7 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
     });
   }
 
-  console.log('[Items] Total items found:', items.length);
+  logger.info('[Items] Total items found:', items.length);
 
   // Sort by name
   items.sort((a, b) => a.name.localeCompare(b.name));

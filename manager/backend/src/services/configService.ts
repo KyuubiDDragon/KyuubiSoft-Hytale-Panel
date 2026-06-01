@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * Config Service for the Hytale Panel Setup Wizard
  *
@@ -11,7 +12,7 @@
 import { readFile, writeFile, mkdir, rename, access, constants } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 // ============================================================
 // Configuration Interface
@@ -62,6 +63,8 @@ export interface PanelConfig {
   integrations: {
     modtaleApiKey: string;
     stackmartApiKey: string;
+    curseforgeApiKey: string;
+    curseforgeGameId: number;
     webmap: boolean;
   };
   network: {
@@ -70,6 +73,52 @@ export interface PanelConfig {
   plugin: {
     kyuubiApiInstalled: boolean;
     version?: string;
+  };
+  // Optional: expose an unauthenticated read-only status page at /api/public/status.
+  publicStatus?: {
+    enabled: boolean;
+  };
+  // Optional Discord bot: chat bridge + slash commands. Off by default; needs a
+  // bot token and a text-channel id to do anything.
+  discord?: {
+    enabled: boolean;
+    token: string;
+    channelId: string;
+    guildId?: string; // register slash commands to one guild (instant vs global)
+  };
+  // Optional Web Push (PWA) notifications. Off by default. VAPID keys are
+  // auto-generated the first time it is enabled.
+  webPush?: {
+    enabled: boolean;
+    vapidPublicKey: string;
+    vapidPrivateKey: string;
+    subject: string; // mailto: or https: contact, per RFC 8292
+  };
+  // Optional off-site backup target (S3-compatible: AWS S3, Backblaze B2,
+  // Cloudflare R2, Wasabi, MinIO…). Off by default. Uploads use native
+  // AWS SigV4 signing — no extra dependencies.
+  offsiteBackup?: {
+    enabled: boolean;
+    endpoint: string;        // e.g. https://s3.us-west-002.backblazeb2.com (blank = AWS)
+    region: string;          // e.g. us-east-1
+    bucket: string;
+    prefix: string;          // key prefix, e.g. "hytale-backups/"
+    accessKeyId: string;
+    secretAccessKey: string;
+    uploadOnBackup: boolean;  // auto-upload each new backup
+  };
+  // Optional auto-moderation of in-game chat. Off by default. Reacts to
+  // player_chat events from the plugin and applies the configured action.
+  automod?: {
+    enabled: boolean;
+    bannedWords: string[];     // case-insensitive whole-word matches
+    blockLinks: boolean;       // flag messages containing URLs
+    maxCapsPercent: number;    // 0 = off; e.g. 80 = >80% uppercase letters (min 8 chars)
+    maxMessageLength: number;  // 0 = off; flag very long messages
+    floodCount: number;        // 0 = off; N messages…
+    floodWindowSec: number;    // …within this many seconds counts as spam
+    action: 'warn' | 'mute' | 'kick';
+    muteDurationSec: number;   // for action=mute (0 = permanent)
   };
 }
 
@@ -114,6 +163,30 @@ export function getDefaultConfig(): PanelConfig {
       whitelist: false,
       allowOp: true,
     },
+    publicStatus: { enabled: false },
+    discord: { enabled: false, token: '', channelId: '' },
+    webPush: { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: 'mailto:admin@example.com' },
+    offsiteBackup: {
+      enabled: false,
+      endpoint: '',
+      region: 'us-east-1',
+      bucket: '',
+      prefix: 'hytale-backups/',
+      accessKeyId: '',
+      secretAccessKey: '',
+      uploadOnBackup: true,
+    },
+    automod: {
+      enabled: false,
+      bannedWords: [],
+      blockLinks: false,
+      maxCapsPercent: 0,
+      maxMessageLength: 0,
+      floodCount: 0,
+      floodWindowSec: 10,
+      action: 'warn',
+      muteDurationSec: 300,
+    },
     performance: {
       minRam: '3G',
       maxRam: '4G',
@@ -138,6 +211,8 @@ export function getDefaultConfig(): PanelConfig {
     integrations: {
       modtaleApiKey: '',
       stackmartApiKey: '',
+      curseforgeApiKey: '',
+      curseforgeGameId: 70216, // Hytale on CurseForge
       webmap: false,
     },
     network: {
@@ -214,9 +289,9 @@ export async function loadConfig(): Promise<PanelConfig> {
   } catch (error) {
     // File doesn't exist or is invalid - return defaults
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      console.log('[ConfigService] config.json not found, using defaults');
+      logger.info('[ConfigService] config.json not found, using defaults');
     } else {
-      console.error('[ConfigService] Error loading config.json:', error);
+      logger.error('[ConfigService] Error loading config.json:', error);
     }
     return getDefaultConfig();
   }
@@ -242,7 +317,7 @@ export async function saveConfig(config: PanelConfig): Promise<void> {
   // Atomically rename temp file to actual config file
   await rename(tempPath, configPath);
 
-  console.log('[ConfigService] Configuration saved successfully');
+  logger.info('[ConfigService] Configuration saved successfully');
 }
 
 /**
@@ -373,7 +448,7 @@ export async function migrateFromEnv(): Promise<PanelConfig> {
     config.assets.extracted = false;
   }
 
-  console.log('[ConfigService] Migrated configuration from environment variables');
+  logger.info('[ConfigService] Migrated configuration from environment variables');
 
   return config;
 }
@@ -534,7 +609,7 @@ export async function getConfig(): Promise<PanelConfig> {
  */
 export async function reloadConfig(): Promise<PanelConfig> {
   cachedConfig = await loadConfig();
-  console.log('[ConfigService] Configuration reloaded');
+  logger.info('[ConfigService] Configuration reloaded');
   return cachedConfig;
 }
 

@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * CurseForge Service
  * Integration with the CurseForge API for browsing and installing mods
@@ -207,7 +208,7 @@ function setCache<T>(key: string, data: T): void {
 
 export function clearCurseForgeCache(): void {
   cache.clear();
-  console.log('CurseForge cache cleared');
+  logger.info('CurseForge cache cleared');
 }
 
 // ============== Installed Mods Tracking ==============
@@ -250,7 +251,7 @@ async function saveInstalledMods(data: InstalledModsData): Promise<void> {
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, JSON.stringify(data, null, 2));
   } catch (e) {
-    console.error('Failed to save installed mods tracking:', e);
+    logger.error('Failed to save installed mods tracking:', e);
   }
 }
 
@@ -344,10 +345,13 @@ function sanitizeForFilename(input: string): string | null {
  * Get the CurseForge API key from config/environment
  */
 function getApiKey(): string | undefined {
-  const key = process.env.CURSEFORGE_API_KEY || config.curseforgeApiKey;
+  // config-first so a key set in the Settings UI (persisted to config.json and
+  // hot-reloaded into `config`) wins; fall back to the raw env var. `config`
+  // is reload-aware, so UI changes take effect without a restart.
+  const key = config.curseforgeApiKey || process.env.CURSEFORGE_API_KEY;
   // Only log on first call
   if (key && !apiKeyLogged) {
-    console.log(`[CurseForge] API key configured (${key.substring(0, 6)}...)`);
+    logger.info(`[CurseForge] API key configured (${key.substring(0, 6)}...)`);
     apiKeyLogged = true;
   }
   return key || undefined;
@@ -376,7 +380,7 @@ async function curseforgeRequest<T>(
   const apiKey = getApiKey();
 
   if (!apiKey) {
-    console.error('CurseForge API key not configured');
+    logger.error('CurseForge API key not configured');
     return null;
   }
 
@@ -412,24 +416,24 @@ async function curseforgeRequest<T>(
           if (res.statusCode === 200) {
             resolve(JSON.parse(data));
           } else if (res.statusCode === 403) {
-            console.error('CurseForge API key invalid or access denied');
+            logger.error('CurseForge API key invalid or access denied');
             resolve(null);
           } else if (res.statusCode === 429) {
-            console.error('CurseForge API rate limit exceeded');
+            logger.error('CurseForge API rate limit exceeded');
             resolve(null);
           } else {
-            console.error(`CurseForge API error: ${res.statusCode} - ${data}`);
+            logger.error(`CurseForge API error: ${res.statusCode} - ${data}`);
             resolve(null);
           }
         } catch (e) {
-          console.error('Failed to parse CurseForge response:', e);
+          logger.error('Failed to parse CurseForge response:', e);
           resolve(null);
         }
       });
     });
 
     req.on('error', (e) => {
-      console.error('CurseForge request error:', e);
+      logger.error('CurseForge request error:', e);
       resolve(null);
     });
 
@@ -469,7 +473,7 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
         }
 
         if (res.statusCode !== 200) {
-          console.error(`Download failed: ${res.statusCode}`);
+          logger.error(`Download failed: ${res.statusCode}`);
           resolve(false);
           return;
         }
@@ -483,16 +487,16 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
             await writeFile(destPath, buffer);
             resolve(true);
           } catch (e) {
-            console.error('Failed to write file:', e);
+            logger.error('Failed to write file:', e);
             resolve(false);
           }
         });
         res.on('error', (e) => {
-          console.error('Download error:', e);
+          logger.error('Download error:', e);
           resolve(false);
         });
       }).on('error', (e) => {
-        console.error('Request error:', e);
+        logger.error('Request error:', e);
         resolve(false);
       });
     };
@@ -566,7 +570,7 @@ export async function searchMods(options: {
 export async function getModDetails(modId: number): Promise<CurseForgeMod | null> {
   // Security: Validate modId before using in URL
   if (!isValidModId(modId)) {
-    console.error(`Invalid mod ID format: ${modId}`);
+    logger.error(`Invalid mod ID format: ${modId}`);
     return null;
   }
 
@@ -600,7 +604,7 @@ export async function getModFiles(
 ): Promise<CurseForgeFile[] | null> {
   // Security: Validate modId before using in URL
   if (!isValidModId(modId)) {
-    console.error(`Invalid mod ID format: ${modId}`);
+    logger.error(`Invalid mod ID format: ${modId}`);
     return null;
   }
 
@@ -635,7 +639,7 @@ export async function getModFiles(
  */
 export async function getFile(modId: number, fileId: number): Promise<CurseForgeFile | null> {
   if (!isValidModId(modId) || !isValidFileId(fileId)) {
-    console.error(`Invalid mod/file ID format: ${modId}/${fileId}`);
+    logger.error(`Invalid mod/file ID format: ${modId}/${fileId}`);
     return null;
   }
 
@@ -763,10 +767,10 @@ export async function installModFromCurseForge(
     const oldFilePath = path.join(config.modsPath, existingInstall.filename);
     try {
       await unlink(oldFilePath);
-      console.log(`[CurseForge] Removed old mod file: ${existingInstall.filename}`);
+      logger.info(`[CurseForge] Removed old mod file: ${existingInstall.filename}`);
     } catch (e) {
       // File might not exist, that's ok
-      console.log(`[CurseForge] Could not remove old file ${existingInstall.filename}:`, e);
+      logger.info(`[CurseForge] Could not remove old file ${existingInstall.filename}:`, e);
     }
   }
 
@@ -815,7 +819,7 @@ export async function installModFromCurseForge(
   const resolvedTarget = path.resolve(targetPath);
 
   if (!resolvedDest.startsWith(resolvedTarget + path.sep)) {
-    console.error(`Path traversal attempt detected: ${destPath}`);
+    logger.error(`Path traversal attempt detected: ${destPath}`);
     return { success: false, error: 'Invalid destination path' };
   }
 
@@ -1027,7 +1031,7 @@ export async function uninstallCurseForge(modId: number): Promise<{ success: boo
   try {
     await unlink(filePath);
   } catch (e) {
-    console.error('Failed to delete mod file:', e);
+    logger.error('Failed to delete mod file:', e);
     // Continue to untrack even if file doesn't exist
   }
 
@@ -1036,9 +1040,9 @@ export async function uninstallCurseForge(modId: number): Promise<{ success: boo
   // Also untrack from CFWidget
   try {
     await cfwidgetUntrackMod(installed.filename);
-    console.log(`[CurseForge] Mod ${installed.modName} also untracked from CFWidget`);
+    logger.info(`[CurseForge] Mod ${installed.modName} also untracked from CFWidget`);
   } catch (e) {
-    console.error('[CurseForge] Failed to untrack mod from CFWidget:', e);
+    logger.error('[CurseForge] Failed to untrack mod from CFWidget:', e);
   }
 
   return { success: true };
@@ -1070,7 +1074,7 @@ export async function getFileChangelog(modId: number, fileId: number): Promise<s
     const result = await response.json() as { data: string };
     return result.data || null;
   } catch (e) {
-    console.error(`[CurseForge] Failed to get changelog for mod ${modId} file ${fileId}:`, e);
+    logger.error(`[CurseForge] Failed to get changelog for mod ${modId} file ${fileId}:`, e);
     return null;
   }
 }

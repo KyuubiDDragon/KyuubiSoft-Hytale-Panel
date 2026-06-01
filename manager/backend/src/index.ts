@@ -1,4 +1,5 @@
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -14,27 +15,55 @@ import httpProxy from 'http-proxy';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
+import { requestLogger } from './middleware/requestLogger.js';
+import { logger } from './utils/logger.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
-import serverRoutes from './routes/server.js';
+import serverRoutes from './routes/server/index.js';
 import consoleRoutes from './routes/console.js';
 import backupRoutes from './routes/backup.js';
 import playersRoutes from './routes/players.js';
-import managementRoutes from './routes/management.js';
+import managementRoutes from './routes/management/index.js';
 import schedulerRoutes from './routes/scheduler.js';
 import assetsRoutes from './routes/assets.js';
 import rolesRouter from './routes/roles.js';
 import setupRoutes from './routes/setup.js';
+import webhooksRoutes from './routes/webhooks.js';
+import notificationsRoutes from './routes/notifications.js';
+import auditRoutes from './routes/audit.js';
+import serversRoutes from './routes/servers.js';
+import ssoRoutes from './routes/sso.js';
+import filesRoutes from './routes/files.js';
+import playerLocationsRoutes from './routes/playerLocations.js';
+import replayRoutes from './routes/replay.js';
+import wikiRoutes from './routes/wiki.js';
+import metricsRoutes from './routes/metrics.js';
+import settingsRoutes from './routes/settings.js';
+import pushRoutes from './routes/push.js';
+import publicRoutes from './routes/public.js';
+import eventActionsRoutes from './routes/eventActions.js';
+import { metricsMiddleware } from './services/metrics.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
 import { initializePlayerTracking } from './services/players.js';
 import { initializePluginEvents, disconnectFromPluginWebSocket } from './services/pluginEvents.js';
+import { initializePlayerLocations } from './services/playerLocations.js';
+import { initializeReplay, shutdownReplay } from './services/replay.js';
 import { initializeRoles } from './services/roles.js';
+import * as playerLocations from './services/playerLocations.js';
 import { isSetupComplete } from './services/setupService.js';
 import { checkAndRunMigration, migrateUpdateConfig, checkPanelVersionAndFeatures } from './services/migration.js';
 import { startAutoUpdateCheck } from './services/cfwidget.js';
+import { getCurrentVersion } from './services/panelVersionService.js';
+import { startWatchdog } from './services/watchdog.js';
+import { startPunishmentExpiry } from './services/punishments.js';
+import { startPlaytimeTracking } from './services/playtime.js';
+import { startCrashCapture } from './services/crashReports.js';
+import { startPerfHistory } from './services/perfHistory.js';
+import { startAutoMod } from './services/autoMod.js';
+import { startRetention } from './services/retention.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +81,22 @@ if (config.trustProxy) {
 // WebSocket server - use noServer mode so we can handle multiple WebSocket paths
 const wss = new WebSocketServer({ noServer: true });
 setupWebSocket(wss);
+
+// Secondary WSS for live player-location broadcasts. Kept separate so the
+// console WS handler stays untouched.
+const locationsWss = new WebSocketServer({ noServer: true });
+locationsWss.on('connection', (socket) => {
+  // Send initial snapshot, then stream subsequent updates.
+  try {
+    socket.send(JSON.stringify({ type: 'snapshot', samples: playerLocations.getLatestSnapshot() }));
+  } catch { /* socket may already be closed */ }
+  const unsubscribe = playerLocations.addListener((s) => {
+    try { socket.send(JSON.stringify({ type: 'sample', sample: s })); }
+    catch { /* ignore - will be cleaned up by close */ }
+  });
+  socket.on('close', () => unsubscribe());
+  socket.on('error', () => unsubscribe());
+});
 
 // WebMap Proxy - MUST be mounted BEFORE helmet so our CSP doesn't affect WebMap content
 // The WebMap loads Leaflet from unpkg.com CDN which would be blocked by our CSP
@@ -167,6 +212,12 @@ const webMapProxy = createProxyMiddleware({
           }
 
           console.log(`[WebMap Proxy] Body length: ${body.length}, starts with: ${body.substring(0, 100).replace(/\n/g, '\\n')}`);
+          // Strip any <meta http-equiv="Content-Security-Policy"> the map ships
+          // with: EasyWebMap's own policy omits 'unsafe-inline', which blocks
+          // both its inline scripts and the WS-rewrite <script> we inject below
+          // (this is the "Executing inline script violates CSP" error).
+          body = body.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
+
           // Inject our WebSocket rewrite script after <head>
           body = body.replace(/<head>/i, '<head>' + webMapWsRewriteScript);
 
@@ -175,6 +226,18 @@ const webMapProxy = createProxyMiddleware({
           delete newHeaders['content-length'];
           delete newHeaders['content-encoding'];
           delete newHeaders['transfer-encoding'];
+          // This proxied map is a trusted local mod page rendered in an isolated
+          // iframe; give that document a permissive CSP so its (and our injected)
+          // inline scripts run AND it can pull its own deps (e.g. Leaflet) from
+          // external CDNs like unpkg.com. Scoped to /api/webmap only — the panel
+          // shell keeps its strict helmet CSP.
+          newHeaders['content-security-policy'] =
+            "default-src 'self' https: http: data: blob: 'unsafe-inline' 'unsafe-eval'; " +
+            "script-src 'self' https: http: data: blob: 'unsafe-inline' 'unsafe-eval'; " +
+            "style-src 'self' https: http: 'unsafe-inline'; " +
+            "img-src 'self' https: http: data: blob:; " +
+            "font-src 'self' https: http: data:; " +
+            "connect-src 'self' https: http: ws: wss:;";
 
           res.writeHead(proxyRes.statusCode || 200, newHeaders);
           res.end(body);
@@ -232,11 +295,24 @@ server.on('upgrade', (request, socket, head) => {
   const pathname = request.url || '';
   console.log(`[WebSocket Upgrade] Path: ${pathname}`);
 
-  // Handle /api/console/ws - our panel's console WebSocket
-  if (pathname.startsWith('/api/console/ws')) {
-    console.log(`[Console WS] Handling console WebSocket upgrade`);
+  // Handle /api/console/ws - our panel's console WebSocket (legacy, default server)
+  // and /api/servers/:serverId/console/ws (per-server console stream).
+  if (
+    pathname.startsWith('/api/console/ws') ||
+    /^\/api\/servers\/[^/?]+\/console\/ws/.test(pathname)
+  ) {
+    console.log(`[Console WS] Handling console WebSocket upgrade for ${pathname}`);
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
+    });
+    return;
+  }
+
+  // Handle /api/players/locations/ws - live position broadcasts
+  if (pathname.startsWith('/api/players/locations/ws')) {
+    console.log(`[Locations WS] Handling player-locations WebSocket upgrade`);
+    locationsWss.handleUpgrade(request, socket, head, (ws) => {
+      locationsWss.emit('connection', ws, request);
     });
     return;
   }
@@ -261,7 +337,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'"], // Vue.js needs unsafe-eval for template compilation
+      scriptSrc: ["'self'", "'unsafe-eval'", "blob:"], // Vue.js needs unsafe-eval; Monaco loads workers from blob:
+      workerSrc: ["'self'", "blob:"], // Monaco editor uses Web Workers via blob URLs
+      childSrc: ["'self'", "blob:"], // Fallback for older browsers that don't honour workerSrc
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Vue/CSS-in-JS + Google Fonts
       imgSrc: ["'self'", "data:", "blob:", "https://cdn.modtale.net", "https://stackmart.org", "https://hyvatar.io", "https://media.forgecdn.net"], // Allow data URIs, Modtale CDN, StackMart, Hyvatar and CurseForge CDN
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"], // Google Fonts
@@ -287,6 +365,15 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow loading cross-origin resources
 }));
 app.use(compression());
+// Structured request logging with correlation IDs. Mount BEFORE any router
+// so every log line in a handler carries req.id automatically. Health
+// checks are filtered out to keep the stream readable.
+app.use(requestLogger);
+// Prometheus per-request metrics. Pure timing + counter, no route filter.
+app.use(metricsMiddleware);
+// Parse refresh-token cookie (HttpOnly, set by /api/auth/login & /refresh).
+// Body-based refresh tokens still work for backward compat — see auth route.
+app.use(cookieParser());
 
 // CORS configuration - must be explicitly set
 const corsOrigins = config.corsOrigins
@@ -300,7 +387,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
 
-// CSRF Protection via Origin/Referer validation for state-changing requests
+// CSRF Protection via Origin/Referer validation for state-changing requests.
+// Modern browsers always send Origin on POST/PUT/PATCH/DELETE, so missing
+// Origin AND missing Referer on a state-changing request is suspicious and
+// rejected (was previously waved through, which made CSRF protection toothless).
 app.use((req, res, next) => {
   // Skip for safe methods
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
@@ -317,31 +407,44 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // Get origin from headers
+  // Wildcard CORS disables CSRF protection — only honor it when the operator
+  // has explicitly opted in. Otherwise treat '*' as misconfiguration.
+  if (config.corsOrigins === '*') {
+    if (!config.corsAllowWildcard) {
+      console.warn(`[CSRF] Blocking ${req.method} ${req.path}: CORS_ORIGINS=* without CORS_ALLOW_WILDCARD=true`);
+      res.status(403).json({ error: 'CSRF validation failed', detail: 'Wildcard CORS requires CORS_ALLOW_WILDCARD=true' });
+      return;
+    }
+    return next();
+  }
+
   const origin = req.headers.origin;
   const referer = req.headers.referer;
+  let requestOrigin: string | null = null;
+  if (origin) {
+    requestOrigin = origin;
+  } else if (referer) {
+    try {
+      requestOrigin = new URL(referer).origin;
+    } catch {
+      requestOrigin = null;
+    }
+  }
 
-  // If no origin header, check referer (some browsers don't send origin)
-  const requestOrigin = origin || (referer ? new URL(referer).origin : null);
-
-  // Allow same-origin requests (no origin header means same-origin in most cases)
   if (!requestOrigin) {
-    // For security, require origin header for cross-origin requests
-    // Same-origin requests from browsers typically don't include Origin for non-CORS
-    return next();
+    console.warn(`[CSRF] Blocked ${req.method} ${req.path}: missing Origin and Referer headers`);
+    res.status(403).json({ error: 'CSRF validation failed', detail: 'Origin or Referer header required' });
+    return;
   }
 
-  // Validate origin against allowed CORS origins
-  if (config.corsOrigins === '*') {
-    // Wildcard CORS - allow but log warning
-    return next();
-  }
+  const allowedOrigins = (config.corsOrigins || '').split(',').map(o => o.trim()).filter(Boolean);
 
-  const allowedOrigins = config.corsOrigins.split(',').map(o => o.trim());
-
-  // Also allow requests from the server's own origin (same-origin)
+  // Also allow requests from the server's own origin (same-origin).
+  // Derive the protocol from req.secure only — Express already resolves it from
+  // a *trusted* X-Forwarded-Proto when TRUST_PROXY is on, so we must never read
+  // the raw header here (it is attacker-controllable without a trusted proxy).
   const host = req.headers.host;
-  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const protocol = req.secure ? 'https' : 'http';
   const serverOrigin = `${protocol}://${host}`;
 
   if (allowedOrigins.includes(requestOrigin) || requestOrigin === serverOrigin) {
@@ -349,17 +452,51 @@ app.use((req, res, next) => {
   }
 
   // Origin mismatch - potential CSRF
-  console.warn(`CSRF: Blocked request from origin ${requestOrigin} to ${req.path}`);
+  console.warn(`[CSRF] Blocked ${req.method} ${req.path} from origin ${requestOrigin}`);
   res.status(403).json({ error: 'CSRF validation failed', detail: 'Origin not allowed' });
 });
 
 // SECURITY: Limit JSON body size to prevent memory exhaustion attacks
-app.use(express.json({ limit: '100kb' }));
+// The file-manager /api/files/write route has its own parser with a larger
+// limit (~15 MB) because file content payloads can legitimately exceed 100kb.
+app.use((req, res, next) => {
+  if (req.path === '/api/files/write') {
+    return next();
+  }
+  express.json({ limit: '100kb' })(req, res, next);
+});
 
 // ============================================================
 // Setup Routes - MUST be BEFORE auth middleware and other routes
 // These routes work without authentication during first-run setup
 // ============================================================
+//
+// SECURITY: The setup router is unauthenticated by design (first-run has no
+// users yet). Once setup is complete it MUST be sealed: its action endpoints
+// (server start/stop, /auth console injection, raw log/SSE streams that leak
+// OAuth device codes) would otherwise stay reachable without any auth. After
+// completion we allow only the two read-only status probes the SPA needs and
+// return 410 for everything else. Fails open during first run so the wizard
+// can never lock itself out.
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith('/api/setup')) return next();
+  const sub = req.path.slice('/api/setup'.length); // '', '/status', '/server/start', …
+  const readOnlyAllowed = req.method === 'GET' && (sub === '/status' || sub === '/check');
+  if (readOnlyAllowed) return next();
+  try {
+    if (await isSetupComplete()) {
+      res.status(410).json({
+        error: 'Setup already completed',
+        detail: 'Setup endpoints are disabled after the panel has been set up.',
+      });
+      return;
+    }
+  } catch (err) {
+    // If we can't determine setup state, fail open so first-run isn't blocked.
+    console.error('[Setup Gate] Could not determine setup state, allowing:', err);
+  }
+  next();
+});
 app.use('/api/setup', setupRoutes);
 
 // ============================================================
@@ -419,14 +556,53 @@ app.use(async (req, res, next) => {
 // API Routes (require setup to be complete)
 // ============================================================
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/sso', ssoRoutes);
 app.use('/api/server', serverRoutes);
 app.use('/api/console', consoleRoutes);
 app.use('/api/backups', backupRoutes);
+// IMPORTANT: more specific player routes must come before /api/players.
+app.use('/api/players/locations', playerLocationsRoutes);
 app.use('/api/players', playersRoutes);
 app.use('/api/management', managementRoutes);
 app.use('/api/scheduler', schedulerRoutes);
 app.use('/api/assets', assetsRoutes);
 app.use('/api/roles', rolesRouter);
+app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/me/notifications', notificationsRoutes);
+app.use('/api/audit-log', auditRoutes);
+app.use('/api/files', filesRoutes);
+app.use('/api/metrics', metricsRoutes);
+app.use('/api/replay', replayRoutes);
+app.use('/api/wiki', wikiRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/push', pushRoutes);
+app.use('/api/event-actions', eventActionsRoutes);
+// Public, unauthenticated status (off unless config.publicStatus.enabled).
+app.use('/api/public', publicRoutes);
+
+// v3 multi-server registry.
+//
+//   /api/servers/*                        — registry CRUD (this router)
+//   /api/servers/:serverId/<resource>/... — scoped invocation of any
+//                                           resource router. The serverScope
+//                                           middleware sets req.serverId,
+//                                           the service layer (docker.ts,
+//                                           scheduler.ts, backup.ts, …) uses
+//                                           it. Legacy /api/<resource>/...
+//                                           still works against the default
+//                                           server identified by
+//                                           servers.json.defaultId.
+app.use('/api/servers', serversRoutes);
+
+import { serverScopeMiddleware } from './middleware/serverScope.js';
+app.use('/api/servers/:serverId/server',     serverScopeMiddleware, serverRoutes);
+app.use('/api/servers/:serverId/console',    serverScopeMiddleware, consoleRoutes);
+app.use('/api/servers/:serverId/backups',    serverScopeMiddleware, backupRoutes);
+app.use('/api/servers/:serverId/players',    serverScopeMiddleware, playersRoutes);
+app.use('/api/servers/:serverId/management', serverScopeMiddleware, managementRoutes);
+app.use('/api/servers/:serverId/scheduler',  serverScopeMiddleware, schedulerRoutes);
+app.use('/api/servers/:serverId/assets',     serverScopeMiddleware, assetsRoutes);
+app.use('/api/servers/:serverId/files',      serverScopeMiddleware, filesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -575,9 +751,10 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start server
 server.listen(config.port, '0.0.0.0', async () => {
+  const panelVersion = await getCurrentVersion(); // single source of truth: package.json
   console.log(`
 ╔═══════════════════════════════════════════════════╗
-║         KyuubiSoft Panel v2.1.1                   ║
+║         KyuubiSoft Panel ${('v' + panelVersion).padEnd(25)}║
 ║         Hytale Server Management                  ║
 ╠═══════════════════════════════════════════════════╣
 ║  Panel: http://localhost:${config.externalPort.toString().padEnd(23)}║
@@ -616,17 +793,64 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Initialize plugin events connection (chat, deaths)
   initializePluginEvents();
 
+  // Initialize live player locations (simulated in demo mode / when plugin
+  // does not yet emit positions)
+  initializePlayerLocations();
+
+  // Start replay recorder if enabled in config.json
+  initializeReplay().catch((err) => console.error('[replay] init failed:', err));
+
   // Start schedulers
-  startSchedulers();
+  startSchedulers().catch(err => console.error('[Startup] Scheduler init failed:', err));
 
   // Start CFWidget mod update checker (checks hourly for CurseForge mod updates)
   startAutoUpdateCheck();
+
+  // Start the crash watchdog (monitoring/alerts always; auto-restart opt-in via
+  // WATCHDOG_AUTO_RESTART=true).
+  startWatchdog();
+
+  // Start the punishment-expiry loop (lifts lapsed temp bans/mutes).
+  startPunishmentExpiry();
+
+  // Start playtime/session tracking (records play_sessions from join/leave).
+  startPlaytimeTracking();
+
+  // Capture a log snapshot whenever the watchdog reports a crash.
+  startCrashCapture();
+
+  // Sample TPS/MSPT/CPU/memory into a ring buffer for the performance charts.
+  startPerfHistory();
+
+  // Daily delete-by-age sweep so operational log tables don't grow unbounded.
+  startRetention();
+
+  // Clear any restore staging dirs stranded by a crash mid-restore.
+  void (await import('./services/backup.js')).sweepOrphanedRestoreDirs().catch(() => {});
+
+  // Start the event-action engine (reactive automations bound to the EventBus).
+  const { startEventActions } = await import('./services/eventActions.js');
+  startEventActions();
+
+  // Start the Discord bot if enabled in config (off by default).
+  const { startDiscordBot } = await import('./services/discordBot.js');
+  startDiscordBot().catch((err) => console.error('[Discord] start failed:', err));
+
+  // Start chat auto-moderation (acts only when config.automod.enabled).
+  startAutoMod();
+
+  // Start the event-bus consumers (webhook dispatcher + notification fanout).
+  const { startWebhookDispatcher } = await import('./services/webhooks.js');
+  const { startNotificationFanout } = await import('./services/notifications.js');
+  startWebhookDispatcher();
+  startNotificationFanout();
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down...');
   disconnectFromPluginWebSocket();
+  shutdownReplay().catch((err) => console.error('[replay] shutdown failed:', err));
   server.close(() => {
     process.exit(0);
   });
@@ -635,6 +859,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down...');
   disconnectFromPluginWebSocket();
+  shutdownReplay().catch((err) => console.error('[replay] shutdown failed:', err));
   server.close(() => {
     process.exit(0);
   });

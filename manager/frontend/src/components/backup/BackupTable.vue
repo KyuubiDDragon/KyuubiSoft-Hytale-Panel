@@ -39,7 +39,7 @@ function formatDate(isoString: string): string {
       </thead>
       <tbody>
         <tr v-if="backups.length === 0">
-          <td colspan="5" class="text-center text-gray-500 py-8">
+          <td colspan="5" class="text-center text-ink-subtle py-8">
             {{ t('backups.noBackups') }}
           </td>
         </tr>

@@ -5,3 +5,9 @@ declare module '*.vue' {
   const component: DefineComponent<{}, {}, any>
   export default component
 }
+
+// The deep monaco entry is imported for tree-shaking but ships no own types;
+// map it to the package's main type surface.
+declare module 'monaco-editor/esm/vs/editor/editor.api' {
+  export * from 'monaco-editor'
+}

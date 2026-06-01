@@ -1,8 +1,29 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { config } from '../config.js';
 import { isDemoMode } from './demoData.js';
+
+// Shared password policy. Applied at every entry point that mints or
+// changes a password: createUser / updateUser (API) and the setup wizard's
+// admin-account step. Returns null on success or a human-readable reason.
+const COMMON_SEQUENCES = ['password', 'changeme', '123456789012', 'qwertyuiop', 'administrator'];
+export function validatePasswordPolicy(password: string, username?: string): string | null {
+  if (typeof password !== 'string' || password.length < 12) {
+    return 'Password must be at least 12 characters';
+  }
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(password)).length;
+  if (classes < 3) {
+    return 'Password must include at least three of: lowercase, uppercase, digit, symbol';
+  }
+  if (username && password.toLowerCase().includes(username.toLowerCase())) {
+    return 'Password must not contain the username';
+  }
+  if (COMMON_SEQUENCES.some(c => password.toLowerCase().includes(c))) {
+    return 'Password contains a well-known sequence; pick something less guessable';
+  }
+  return null;
+}
 
 // User interface
 export interface User {
@@ -13,6 +34,12 @@ export interface User {
   lastLogin?: string;
   tokenVersion: number;
 }
+
+// A valid bcrypt hash compared against when the supplied username doesn't
+// exist, so "no such user" costs the same time as "wrong password". Without
+// this, a missing account returns instantly (no bcrypt) and leaks via timing
+// which usernames are valid. Computed once at startup.
+const TIMING_DUMMY_HASH = bcrypt.hashSync('timing-equalizer-not-a-real-password', 12);
 
 // Track deleted users for session-based invalidation
 const invalidatedUsers = new Set<string>();
@@ -169,6 +196,9 @@ export async function verifyUserCredentials(username: string, password: string):
 
   const user = await getUser(username);
   if (!user) {
+    // Constant-time: still run a bcrypt comparison so a missing account is
+    // indistinguishable from a wrong password by response timing.
+    await bcrypt.compare(password, TIMING_DUMMY_HASH);
     return null;
   }
   const isValid = await bcrypt.compare(password, user.passwordHash);
@@ -196,9 +226,12 @@ export async function createUser(
     throw new Error('Username must be 3-32 characters, alphanumeric with _ or -');
   }
 
-  // Validate password length
-  if (password.length < 8) {
-    throw new Error('Password must be at least 8 characters');
+  // Validate password against the shared policy (length + character classes
+  // + username/common-sequence checks). The setup wizard runs the same
+  // policy so accounts created via either route are held to the same bar.
+  const policyError = validatePasswordPolicy(password, username);
+  if (policyError) {
+    throw new Error(policyError);
   }
 
   // SECURITY: Use async bcrypt to prevent blocking the event loop
@@ -234,8 +267,9 @@ export async function updateUser(
   let shouldInvalidateTokens = false;
 
   if (updates.password) {
-    if (updates.password.length < 8) {
-      throw new Error('Password must be at least 8 characters');
+    const policyError = validatePasswordPolicy(updates.password, username);
+    if (policyError) {
+      throw new Error(policyError);
     }
     // SECURITY: Use async bcrypt to prevent blocking the event loop
     data.users[userIndex].passwordHash = await bcrypt.hash(updates.password, 12);

@@ -1,13 +1,58 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, CookieOptions } from 'express';
 import rateLimit from 'express-rate-limit';
+import { config } from '../config.js';
 import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken, createWsTicket } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
-import { getAllUsers, createUser, updateUser, deleteUser, getUser, invalidateUserTokens } from '../services/users.js';
-import { getUserPermissions, hasPermission } from '../services/roles.js';
+import { getAllUsers, createUser, updateUser, deleteUser, getUser, invalidateUserTokens, getTokenVersion } from '../services/users.js';
+import { getUserPermissions, getRolePermissions, hasPermission } from '../services/roles.js';
 import { initiateDeviceLogin, checkAuthCompletion, getAuthStatus, resetAuth, setPersistence, listAuthFiles, inspectDownloaderCredentials } from '../services/hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 import { isDemoMode, getDemoUsers, getDemoRoles } from '../services/demoData.js';
+import {
+  startTotpEnrollment, verifyAndEnableTotp, disableTotp,
+  regenerateBackupCodes, isTotpEnabled, verifyTotpOrBackup,
+} from '../services/totp.js';
+import { createApiKey, listApiKeys, revokeApiKey } from '../services/apiKeys.js';
+import { audit } from '../services/audit.js';
+import { publish } from '../services/eventBus.js';
+import { authLogins } from '../services/metrics.js';
+
+// HttpOnly refresh-token cookie. SameSite=Strict because the panel and the
+// API live on the same origin in every supported deployment, so the cookie
+// only needs to ride first-party navigations. `Secure` is set whenever the
+// actual (proxy-resolved) connection is HTTPS — `req.secure` already reflects
+// a trusted X-Forwarded-Proto when TRUST_PROXY is on, and we keep the
+// trustProxy fallback so the flag is never weaker than the operator's intent.
+// Over plain HTTP a Secure cookie would just be dropped silently.
+const REFRESH_COOKIE_NAME = 'kp_refresh';
+const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches refreshExpiresIn
+
+function refreshCookieOptions(req?: Request): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: (req?.secure ?? false) || config.trustProxy,
+    sameSite: 'strict',
+    path: '/api/auth',
+    maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+  };
+}
+
+function setRefreshCookie(res: Response, token: string, req?: Request): void {
+  res.cookie(REFRESH_COOKIE_NAME, token, refreshCookieOptions(req));
+}
+
+function clearRefreshCookie(res: Response, req?: Request): void {
+  res.clearCookie(REFRESH_COOKIE_NAME, { ...refreshCookieOptions(req), maxAge: 0 });
+}
+
+function readRefreshToken(req: Request): string | undefined {
+  // Cookie wins; body fallback keeps non-browser callers working during the
+  // transition period and lets the deprecation be staged.
+  const cookieVal = (req as Request & { cookies?: Record<string, string> }).cookies?.[REFRESH_COOKIE_NAME];
+  if (cookieVal) return cookieVal;
+  return (req.body && typeof req.body === 'object') ? req.body.refresh_token : undefined;
+}
 
 // Demo credentials
 const DEMO_USERNAME = 'demo';
@@ -16,6 +61,19 @@ const DEMO_ADMIN_USERNAME = 'admin';
 const DEMO_ADMIN_PASSWORD = 'admin';
 
 const router = Router();
+
+/**
+ * Privilege-escalation guard for role assignment: an actor may only grant a
+ * role whose permissions are a subset of their own. Admins ('*') may grant
+ * anything; a target role carrying '*' may only be granted by an admin.
+ */
+async function canAssignRole(actorUsername: string, roleId: string): Promise<boolean> {
+  const ownerPerms = await getUserPermissions(actorUsername);
+  if ((ownerPerms as string[]).includes('*')) return true;
+  const targetPerms = await getRolePermissions(roleId);
+  if ((targetPerms as string[]).includes('*')) return false;
+  return (targetPerms as string[]).every(p => (ownerPerms as string[]).includes(p));
+}
 
 // SECURITY: Rate limiting for authentication endpoints
 const loginLimiter = rateLimit({
@@ -34,6 +92,29 @@ const refreshLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Per-username TOTP failure counter. The loginLimiter is already IP-based,
+// but distributed attackers could rotate IPs; this adds an account-level
+// brake that locks 2FA for 15 min after 10 wrong codes. Mounted as a tiny
+// in-process counter — sufficient for a single-process panel.
+const totpFailures = new Map<string, { count: number; lockedUntil: number }>();
+const TOTP_MAX_ATTEMPTS = 10;
+const TOTP_LOCK_MS = 15 * 60_000;
+function totpLockState(username: string): { locked: boolean; retryInSec: number } {
+  const now = Date.now();
+  const e = totpFailures.get(username);
+  if (!e) return { locked: false, retryInSec: 0 };
+  if (e.lockedUntil > now) return { locked: true, retryInSec: Math.ceil((e.lockedUntil - now) / 1000) };
+  if (e.lockedUntil > 0) { totpFailures.delete(username); return { locked: false, retryInSec: 0 }; }
+  return { locked: false, retryInSec: 0 };
+}
+function recordTotpFailure(username: string): void {
+  const e = totpFailures.get(username) ?? { count: 0, lockedUntil: 0 };
+  e.count += 1;
+  if (e.count >= TOTP_MAX_ATTEMPTS) e.lockedUntil = Date.now() + TOTP_LOCK_MS;
+  totpFailures.set(username, e);
+}
+function clearTotpFailures(username: string): void { totpFailures.delete(username); }
 
 // POST /api/auth/login
 router.post('/login', loginLimiter, async (req: Request, res: Response) => {
@@ -59,11 +140,12 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
 
     // Create tokens even in demo mode for consistent behavior
     const accessToken = await createAccessToken(username);
-    const refreshToken = createRefreshToken(username);
+    const refreshToken = await createRefreshToken(username);
 
+    setRefreshCookie(res, refreshToken, req);
     res.json({
       access_token: accessToken,
-      refresh_token: refreshToken,
+      refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
       token_type: 'bearer',
       role,
       permissions,
@@ -75,26 +157,156 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   const result = await verifyCredentials(username, password);
 
   if (!result.valid) {
+    audit(req, 'auth.login_failed', { actor: username, success: false });
+    publish('auth.login_failed', { username, reason: 'invalid_credentials' });
+    authLogins.inc({ result: 'failed' });
     res.status(401).json({ detail: 'Invalid credentials' });
     return;
   }
 
+  // 2FA gate. If the user has TOTP enabled we require a valid code (TOTP
+  // or a single-use backup code) BEFORE issuing any tokens. Browsers will
+  // typically submit a second login request with the code field populated.
+  if (await isTotpEnabled(username)) {
+    // Per-account lockout on top of the IP-based loginLimiter.
+    const lock = totpLockState(username);
+    if (lock.locked) {
+      audit(req, 'auth.2fa_locked', { actor: username, success: false });
+      res.status(429).json({ detail: 'Too many 2FA failures, account temporarily locked', code: '2FA_LOCKED', retryAfter: lock.retryInSec });
+      return;
+    }
+    const totpCode = (req.body as { totpCode?: string }).totpCode;
+    if (!totpCode) {
+      res.status(401).json({ detail: '2FA code required', code: '2FA_REQUIRED' });
+      return;
+    }
+    const ok = await verifyTotpOrBackup(username, totpCode);
+    if (!ok) {
+      recordTotpFailure(username);
+      audit(req, 'auth.2fa_failed', { actor: username, success: false });
+      publish('auth.2fa_failed', { username });
+      authLogins.inc({ result: '2fa_failed' });
+      res.status(401).json({ detail: 'Invalid 2FA code', code: '2FA_INVALID' });
+      return;
+    }
+    clearTotpFailures(username);
+  }
+
   const accessToken = await createAccessToken(username);
-  const refreshToken = createRefreshToken(username);
+  const refreshToken = await createRefreshToken(username);
   const permissions = await getUserPermissions(username);
 
+  setRefreshCookie(res, refreshToken, req);
+  audit(req, 'auth.login_success', { actor: username });
+  publish('auth.login_success', { username });
+  authLogins.inc({ result: 'success' });
   res.json({
     access_token: accessToken,
-    refresh_token: refreshToken,
+    refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
     token_type: 'bearer',
     role: result.role,
     permissions,
   });
 });
 
+// ============== 2FA / TOTP ==============
+
+router.post('/2fa/setup', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await startTotpEnrollment(req.user!);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed to start 2FA setup' });
+  }
+});
+
+router.post('/2fa/verify-enable', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const { code } = req.body as { code?: string };
+  if (!code) { res.status(400).json({ detail: 'Code required' }); return; }
+  try {
+    const result = await verifyAndEnableTotp(req.user!, code);
+    audit(req, 'auth.2fa_enabled');
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed to enable 2FA' });
+  }
+});
+
+router.post('/2fa/disable', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const { password, code } = req.body as { password?: string; code?: string };
+  if (!password || !code) { res.status(400).json({ detail: 'Password and 2FA code required' }); return; }
+  const creds = await verifyCredentials(req.user!, password);
+  if (!creds.valid) { res.status(401).json({ detail: 'Invalid password' }); return; }
+  if (!(await verifyTotpOrBackup(req.user!, code))) {
+    res.status(401).json({ detail: 'Invalid 2FA code' });
+    return;
+  }
+  await disableTotp(req.user!);
+  audit(req, 'auth.2fa_disabled');
+  res.json({ success: true });
+});
+
+router.post('/2fa/regenerate-backup-codes', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const { password } = req.body as { password?: string };
+  if (!password) { res.status(400).json({ detail: 'Password required' }); return; }
+  const creds = await verifyCredentials(req.user!, password);
+  if (!creds.valid) { res.status(401).json({ detail: 'Invalid password' }); return; }
+  try {
+    const backupCodes = await regenerateBackupCodes(req.user!);
+    audit(req, 'auth.2fa_backup_codes_regenerated');
+    res.json({ backupCodes });
+  } catch (err) {
+    res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed' });
+  }
+});
+
+router.get('/2fa/status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  res.json({ enabled: await isTotpEnabled(req.user!) });
+});
+
+// ============== REST API KEYS ==============
+
+router.get('/api-keys', authMiddleware, requirePermission('apikeys.manage'), (req: AuthenticatedRequest, res: Response) => {
+  res.json({ keys: listApiKeys(req.user!) });
+});
+
+router.post('/api-keys', authMiddleware, requirePermission('apikeys.manage'), async (req: AuthenticatedRequest, res: Response) => {
+  const { name, scopes, expiresAt } = req.body as { name?: string; scopes?: string[]; expiresAt?: string };
+  if (!name || !Array.isArray(scopes) || scopes.length === 0) {
+    res.status(400).json({ detail: 'name and scopes[] required' });
+    return;
+  }
+  // Disallow giving an API key more rights than its owner has, except for
+  // admins (`*`). This prevents privilege escalation through key creation.
+  const ownerPerms = await getUserPermissions(req.user!);
+  if (!ownerPerms.includes('*')) {
+    const bad = scopes.filter(s => !(ownerPerms as string[]).includes(s));
+    if (bad.length) {
+      res.status(403).json({ detail: 'Cannot grant scopes you do not hold', scopes: bad });
+      return;
+    }
+  }
+  const { key, token } = await createApiKey({
+    ownerUsername: req.user!,
+    name,
+    scopes,
+    expiresAt: expiresAt ?? null,
+  });
+  audit(req, 'apikey.created', { target: `apikey:${key.id}`, metadata: { name, scopes } });
+  publish('user.created', { kind: 'api_key', name, scopes, owner: req.user });
+  res.json({ key, token });
+});
+
+router.delete('/api-keys/:id', authMiddleware, requirePermission('apikeys.manage'), (req: AuthenticatedRequest, res: Response) => {
+  const ok = revokeApiKey(req.user!, req.params.id);
+  if (!ok) { res.status(404).json({ detail: 'Key not found' }); return; }
+  audit(req, 'apikey.revoked', { target: `apikey:${req.params.id}` });
+  res.json({ success: true });
+});
+
 // POST /api/auth/refresh
 router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
-  const { refresh_token } = req.body;
+  const refresh_token = readRefreshToken(req);
 
   if (!refresh_token) {
     res.status(400).json({ detail: 'Refresh token required' });
@@ -108,13 +320,23 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
     return;
   }
 
+  // Verify the refresh token wasn't invalidated by a password or role change.
+  if (!isDemoMode()) {
+    const currentVersion = await getTokenVersion(result.username);
+    if (result.tokenVersion !== undefined && result.tokenVersion !== currentVersion) {
+      res.status(401).json({ detail: 'Refresh token invalidated', code: 'TOKEN_INVALIDATED' });
+      return;
+    }
+  }
+
   // Demo mode: Create new tokens for demo users
   if (isDemoMode()) {
     const isAdmin = result.username === DEMO_ADMIN_USERNAME;
     const accessToken = await createAccessToken(result.username);
-    const newRefreshToken = createRefreshToken(result.username);
+    const newRefreshToken = await createRefreshToken(result.username);
     const permissions = isAdmin ? ['*'] : ['server.view_status', 'players.view', 'console.view', 'performance.view', 'backups.view', 'scheduler.view', 'mods.view', 'plugins.view', 'worlds.view', 'chat.view', 'activity.view'];
 
+    setRefreshCookie(res, newRefreshToken, req);
     res.json({
       access_token: accessToken,
       refresh_token: newRefreshToken,
@@ -127,8 +349,9 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
   }
 
   const accessToken = await createAccessToken(result.username);
-  const newRefreshToken = createRefreshToken(result.username);
+  const newRefreshToken = await createRefreshToken(result.username);
 
+  setRefreshCookie(res, newRefreshToken, req);
   res.json({
     access_token: accessToken,
     refresh_token: newRefreshToken,
@@ -143,6 +366,7 @@ router.post('/logout', authMiddleware, async (req: Request, res: Response) => {
   if (authReq.user) {
     await invalidateUserTokens(authReq.user);
   }
+  clearRefreshCookie(res, req);
   res.json({ message: 'Logged out successfully' });
 });
 
@@ -159,16 +383,23 @@ const wsTicketLimiter = rateLimit({
 
 router.post('/ws-ticket', authMiddleware, wsTicketLimiter, async (req: AuthenticatedRequest, res: Response) => {
   const username = req.user!;
+  // Optional server scope. Callers can request a scoped ticket for a
+  // specific Hytale instance; the ticket then only opens the matching
+  // /api/servers/:id/console/ws upgrade — cross-server reuse is rejected
+  // by verifyWsTicket().
+  const requestedServerId = (req.body && typeof req.body === 'object' && typeof (req.body as { serverId?: string }).serverId === 'string')
+    ? (req.body as { serverId?: string }).serverId
+    : undefined;
 
   // Verify user has console.view permission before issuing ticket
-  const canViewConsole = await hasPermission(username, 'console.view');
+  const canViewConsole = await hasPermission(username, 'console.view', requestedServerId);
   if (!canViewConsole) {
     res.status(403).json({ error: 'Permission denied: console.view required' });
     return;
   }
 
-  const ticket = createWsTicket(username);
-  res.json({ ticket, expiresIn: 30 }); // 30 seconds TTL
+  const ticket = createWsTicket(username, requestedServerId);
+  res.json({ ticket, expiresIn: 30, serverId: requestedServerId ?? null });
 });
 
 // GET /api/auth/me
@@ -232,7 +463,15 @@ router.post('/users', authMiddleware, requirePermission('users.create'), async (
       return;
     }
 
-    const user = await createUser(username, password, roleId || 'viewer');
+    // SECURITY: prevent privilege escalation — a creator can't mint a user with
+    // a role more powerful than their own (e.g. a users.create holder making an admin).
+    const targetRole = roleId || 'viewer';
+    if (!(await canAssignRole(req.user!, targetRole))) {
+      res.status(403).json({ error: 'Cannot assign a role with more permissions than your own' });
+      return;
+    }
+
+    const user = await createUser(username, password, targetRole);
     res.json({ success: true, user });
   } catch (error) {
     res.status(400).json({ error: (error as Error).message });
@@ -259,6 +498,13 @@ router.put('/users/:username', authMiddleware, requirePermission('users.edit'), 
     // Prevent users from changing their own role (security)
     if (roleId && username === req.user) {
       res.status(400).json({ error: 'Cannot change your own role' });
+      return;
+    }
+
+    // SECURITY: same subset guard as user creation — no escalating another
+    // account into a role beyond the actor's own permissions.
+    if (roleId && !(await canAssignRole(req.user!, roleId))) {
+      res.status(403).json({ error: 'Cannot assign a role with more permissions than your own' });
       return;
     }
 
@@ -330,7 +576,11 @@ router.post('/hytale/initiate', authMiddleware, requirePermission('hytale_auth.m
       success: true,
       message: '[DEMO] Device login initiated (simulated)',
       deviceCode: 'DEMO-1234-5678',
-      verificationUri: 'https://hypixel.net/activate',
+      // Field name aligned with the real hytaleAuth service (verificationUrl)
+      // and the frontend api/auth.ts expectation. Demo response uses the
+      // same field so /ServerAuth.vue and Dashboard.vue see consistent
+      // shape between demo + real auth.
+      verificationUrl: 'https://hypixel.net/activate',
       expiresIn: 300,
       demo: true,
     });

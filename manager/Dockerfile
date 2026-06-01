@@ -8,11 +8,9 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy package files
-COPY frontend/package.json ./
-
-# Install dependencies
-RUN npm install
+# Copy manifest + lockfile and install from the lockfile for reproducible builds.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
 # Copy frontend source
 COPY frontend/ ./
@@ -24,13 +22,14 @@ RUN npm run build
 # Stage 2: Build Backend
 FROM node:20-alpine AS backend-builder
 
+# bcrypt is a native module — needs build toolchain
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app/backend
 
-# Copy package files
-COPY backend/package.json ./
-
-# Install dependencies (including dev for build)
-RUN npm install
+# Copy manifest + lockfile and install from the lockfile (dev deps included for build).
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci
 
 # Copy backend source
 COPY backend/ ./
@@ -56,9 +55,13 @@ RUN addgroup -g 9999 -S hytale && \
 
 WORKDIR /app
 
-# Copy package files and install production dependencies only
-COPY backend/package.json ./
-RUN npm install --omit=dev && npm cache clean --force
+# bcrypt native binding needs the build toolchain at install time
+RUN apk add --no-cache --virtual .build-deps python3 make g++
+
+# Copy manifest + lockfile and install production dependencies only, from the lockfile.
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force \
+    && apk del .build-deps
 
 # Copy built backend from builder
 COPY --from=backend-builder /app/backend/dist ./dist
@@ -75,6 +78,18 @@ RUN mkdir -p /app/data && \
 
 # Copy entrypoint script
 COPY --chmod=755 entrypoint.sh /app/entrypoint.sh
+
+# Off-host backup hook. The manager container runs `tar` itself in
+# createBackup() (execSync on the shared /opt/hytale/backups bind mount),
+# so the hook has to be reachable from the manager container too — not
+# just from the hytale container's scripts/backup.sh path.
+#
+# The file lives next to this Dockerfile (manager/backup-hook.sh) because
+# the build context is `./manager` and Docker won't read outside it.
+# It is a byte-for-byte duplicate of scripts/backup-hook.sh; if you edit
+# one, edit both. Operators normally replace the file in a derived image
+# to plug in restic / rclone / borg / s3 rather than editing in place.
+COPY --chmod=755 backup-hook.sh /app/backup-hook.sh
 
 # Environment variables
 ENV NODE_ENV=production

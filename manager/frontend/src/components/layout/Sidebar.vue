@@ -26,7 +26,6 @@ interface NavItem {
   permission?: Permission
 }
 
-// Check if user has permission for a nav item
 function hasPermission(permission?: Permission): boolean {
   if (!permission || permission === 'all') return true
   return authStore.hasPermission(permission)
@@ -37,8 +36,11 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'console', path: '/console', icon: 'console', label: t('nav.console'), group: 'main', permission: 'console.view' },
   { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), group: 'main', permission: 'performance.view' },
   { name: 'statistics', path: '/statistics', icon: 'statistics', label: t('nav.statistics'), group: 'main', permission: 'dashboard.stats' },
+  { name: 'crashes', path: '/crashes', icon: 'console', label: t('nav.crashes'), group: 'main', permission: 'server.view_status' },
   { name: 'help', path: '/help', icon: 'help', label: t('nav.help'), group: 'main', permission: 'all' },
   { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management', permission: 'players.view' },
+  { name: 'playtime', path: '/playtime', icon: 'statistics', label: t('nav.playtime'), group: 'management', permission: 'players.view' },
+  { name: 'liveMap', path: '/live-map', icon: 'worlds', label: t('nav.liveMap'), group: 'management', permission: 'players.view' },
   { name: 'avatarInventory', path: '/avatar-inventory', icon: 'avatarInventory', label: t('nav.avatarInventory'), group: 'management', permission: 'players.view' },
   { name: 'chat', path: '/chat', icon: 'chat', label: t('nav.chat'), group: 'management', permission: 'chat.view' },
   { name: 'whitelist', path: '/whitelist', icon: 'whitelist', label: t('nav.whitelist'), group: 'management', permission: 'players.whitelist' },
@@ -48,14 +50,21 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'assets', path: '/assets', icon: 'assets', label: t('nav.assets'), group: 'management', permission: 'assets.view' },
   { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data', permission: 'backups.view' },
   { name: 'scheduler', path: '/scheduler', icon: 'scheduler', label: t('nav.scheduler'), group: 'data', permission: 'scheduler.view' },
+  { name: 'replay', path: '/replay', icon: 'backup', label: t('nav.replay'), group: 'data', permission: 'replay.view' },
+  { name: 'wiki', path: '/wiki', icon: 'help', label: t('nav.wiki'), group: 'main', permission: 'wiki.view' },
   { name: 'configuration', path: '/configuration', icon: 'configuration', label: t('nav.configuration'), group: 'data', permission: 'config.view' },
+  { name: 'files', path: '/files', icon: 'files', label: t('nav.files'), group: 'data', permission: 'files.read' },
   { name: 'settings', path: '/settings', icon: 'settings', label: t('nav.settings'), group: 'data', permission: 'settings.view' },
+  { name: 'servers', path: '/servers', icon: 'configuration', label: 'Servers', group: 'admin', permission: 'servers.list' },
   { name: 'users', path: '/users', icon: 'users', label: t('nav.users'), group: 'admin', permission: 'users.view' },
   { name: 'roles', path: '/roles', icon: 'roles', label: t('nav.roles'), group: 'admin', permission: 'roles.view' },
   { name: 'activity', path: '/activity', icon: 'activity', label: t('nav.activityLog'), group: 'admin', permission: 'activity.view' },
+  // v3 alpha additions — gated by the new permissions added in services/types.
+  { name: 'audit', path: '/audit', icon: 'activity', label: 'Audit Log', group: 'admin', permission: 'audit.view' },
+  { name: 'webhooks', path: '/webhooks', icon: 'scheduler', label: 'Webhooks', group: 'admin', permission: 'webhooks.view' },
+  { name: 'security', path: '/security', icon: 'settings', label: 'Security', group: 'admin', permission: 'all' },
 ])
 
-// Navigation sections
 const navSections = computed(() => [
   { key: 'main', label: t('nav.server'), items: navItems.value.filter(i => i.group === 'main' && hasPermission(i.permission)) },
   { key: 'management', label: t('nav.management'), items: navItems.value.filter(i => i.group === 'management' && hasPermission(i.permission)) },
@@ -69,52 +78,64 @@ function isActive(path: string): boolean {
 </script>
 
 <template>
-  <aside class="w-64 bg-dark-200 border-r border-dark-50/50 flex flex-col">
+  <aside class="w-64 bg-gradient-to-b from-surface-raised via-surface to-surface-sunken border-r border-border/60 flex flex-col">
     <!-- Logo -->
-    <div class="h-16 flex items-center px-6 border-b border-dark-50/50">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-lg overflow-hidden bg-dark-100 flex items-center justify-center shadow-md">
-          <img src="/logo.png" alt="KyuubiSoft Panel" class="w-full h-full object-cover" />
+    <div class="h-16 flex items-center px-6 border-b border-border/60">
+      <router-link to="/" class="flex items-center gap-3 group">
+        <div class="w-10 h-10 rounded-xl overflow-hidden bg-surface-overlay flex items-center justify-center shadow-lg ring-1 ring-border/50 group-hover:ring-hytale-orange/70 group-hover:shadow-glow-orange transition">
+          <img src="/logo.png" alt="" class="w-full h-full object-cover" />
         </div>
         <div class="flex flex-col">
-          <span class="text-lg font-bold text-white leading-tight">KyuubiSoft Panel</span>
-          <span class="text-[10px] text-gray-500 leading-tight">Hytale Server Management</span>
+          <span class="text-base font-bold leading-tight">
+            <span class="text-gradient">KyuubiSoft</span>
+            <span class="text-ink"> Panel</span>
+          </span>
+          <span class="text-[10px] text-ink-subtle leading-tight tracking-wide uppercase">Hytale Server Management</span>
         </div>
-      </div>
+      </router-link>
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 py-4 px-3 space-y-6 overflow-y-auto">
-      <div v-for="section in navSections" :key="section.key">
-        <template v-if="section.items.length > 0">
-          <p class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ section.label }}</p>
-          <div class="space-y-1">
+    <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto" :aria-label="t('nav.dashboard')">
+      <template v-for="(section, idx) in navSections" :key="section.key">
+        <div v-if="section.items.length > 0">
+          <div
+            v-if="idx > 0"
+            class="my-3 border-t border-border/40"
+            aria-hidden="true"
+          />
+          <p class="px-3 mb-1.5 text-[10px] font-semibold text-ink-subtle uppercase tracking-[0.08em]">
+            {{ section.label }}
+          </p>
+          <div class="space-y-0.5 pl-3">
             <router-link
               v-for="item in section.items"
               :key="item.name"
               :to="item.path"
-              :class="['sidebar-link', isActive(item.path) ? 'active' : '']"
+              :class="['sidebar-link touch-target', isActive(item.path) ? 'active' : '']"
+              :aria-current="isActive(item.path) ? 'page' : undefined"
             >
-              <Icon :name="item.icon" class="w-5 h-5" />
-              <span>{{ item.label }}</span>
+              <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+              <span class="text-sm">{{ item.label }}</span>
             </router-link>
           </div>
-        </template>
-      </div>
+        </div>
+      </template>
     </nav>
 
     <!-- Footer -->
-    <div class="p-4 border-t border-dark-50/50 space-y-3">
+    <div class="p-4 border-t border-border/60 space-y-3">
       <!-- Social Links -->
-      <div class="flex justify-center gap-3">
+      <div class="flex justify-center gap-2">
         <a
           href="https://ko-fi.com/kyuubiddragon"
           target="_blank"
           rel="noopener noreferrer"
           class="p-2 rounded-lg bg-[#FF5E5B]/10 text-[#FF5E5B] hover:bg-[#FF5E5B]/20 transition-colors"
           title="Support on Ko-fi"
+          aria-label="Support on Ko-fi"
         >
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.7-.091-3.71.951-1.01 3.005-1.086 4.363.407 0 0 1.565-1.782 3.468-.963 1.904.82 1.832 3.011.723 4.311zm6.173.478c-.928.116-1.682.028-1.682.028V7.284h1.77s1.971.551 1.971 2.638c0 1.913-.985 2.667-2.059 3.015z"/>
           </svg>
         </a>
@@ -124,8 +145,9 @@ function isActive(path: string): boolean {
           rel="noopener noreferrer"
           class="p-2 rounded-lg bg-[#5865F2]/10 text-[#5865F2] hover:bg-[#5865F2]/20 transition-colors"
           title="Discord Support Server"
+          aria-label="Discord Support Server"
         >
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
           </svg>
         </a>
@@ -133,18 +155,19 @@ function isActive(path: string): boolean {
           href="https://github.com/KyuubiDDragon/KyuubiSoft-Hytale-Panel"
           target="_blank"
           rel="noopener noreferrer"
-          class="p-2 rounded-lg bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 transition-colors"
+          class="p-2 rounded-lg bg-ink-subtle/10 text-ink-subtle hover:bg-ink-subtle/20 transition-colors"
           title="GitHub Repository"
+          aria-label="GitHub Repository"
         >
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
           </svg>
         </a>
       </div>
       <!-- Credits -->
       <div class="text-center">
-        <p class="text-xs text-gray-500">by <a href="https://github.com/KyuubiDDragon" target="_blank" rel="noopener noreferrer" class="text-hytale-orange hover:underline font-medium">KyuubiSoft</a></p>
-        <p class="text-xs text-gray-600 mt-1">v2.1.1</p>
+        <p class="text-xs text-ink-subtle">by <a href="https://github.com/KyuubiDDragon" target="_blank" rel="noopener noreferrer" class="text-hytale-orange hover:underline font-medium">KyuubiSoft</a></p>
+        <p class="text-xs text-ink-subtle/70 mt-1">v3.0</p>
       </div>
     </div>
   </aside>

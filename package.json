@@ -1,0 +1,19 @@
+{
+  "name": "kyuubisoft-hytale-panel",
+  "private": true,
+  "version": "3.0.0-alpha",
+  "description": "Repo-root tooling. Backend and frontend packages live under manager/.",
+  "scripts": {
+    "prepare": "husky || true",
+    "test:backend": "npm --prefix manager/backend test",
+    "build:backend": "npm --prefix manager/backend run build",
+    "build:frontend": "npm --prefix manager/frontend run build",
+    "build": "npm run build:backend && npm run build:frontend"
+  },
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "devDependencies": {
+    "husky": "^9.1.6"
+  }
+}

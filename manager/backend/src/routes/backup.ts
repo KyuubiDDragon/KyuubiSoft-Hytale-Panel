@@ -15,7 +15,8 @@ const DEMO_STORAGE = {
 };
 
 // GET /api/backups
-router.get('/', authMiddleware, requirePermission('backups.view'), (_req: Request, res: Response) => {
+router.get('/', authMiddleware, requirePermission('backups.view'), async (req: Request, res: Response) => {
+  const serverId = (req as { serverId?: string }).serverId;
   // Demo mode: return mock backups
   if (isDemoMode()) {
     const demoBackups = getDemoBackups();
@@ -32,14 +33,14 @@ router.get('/', authMiddleware, requirePermission('backups.view'), (_req: Reques
     return;
   }
 
-  const backups = backupService.listBackups();
-  const storage = backupService.getStorageInfo();
+  const backups = await backupService.listBackups(serverId);
+  const storage = await backupService.getStorageInfo(serverId);
 
   res.json({ backups, storage });
 });
 
 // GET /api/backups/:id
-router.get('/:id', authMiddleware, requirePermission('backups.view'), (req: Request, res: Response) => {
+router.get('/:id', authMiddleware, requirePermission('backups.view'), async (req: Request, res: Response) => {
   // Demo mode: return mock backup
   if (isDemoMode()) {
     const demoBackups = getDemoBackups();
@@ -58,7 +59,7 @@ router.get('/:id', authMiddleware, requirePermission('backups.view'), (req: Requ
     return;
   }
 
-  const backup = backupService.getBackup(req.params.id);
+  const backup = await backupService.getBackup(req.params.id, (req as { serverId?: string }).serverId);
 
   if (!backup) {
     res.status(404).json({ detail: 'Backup not found' });
@@ -69,7 +70,7 @@ router.get('/:id', authMiddleware, requirePermission('backups.view'), (req: Requ
 });
 
 // POST /api/backups
-router.post('/', authMiddleware, requirePermission('backups.create'), (req: Request, res: Response) => {
+router.post('/', authMiddleware, requirePermission('backups.create'), async (req: Request, res: Response) => {
   // Demo mode: simulate backup creation
   if (isDemoMode()) {
     const { name } = req.body || {};
@@ -89,7 +90,7 @@ router.post('/', authMiddleware, requirePermission('backups.create'), (req: Requ
   }
 
   const { name } = req.body || {};
-  const result = backupService.createBackup(name);
+  const result = await backupService.createBackup(name);
 
   if (!result.success) {
     res.status(500).json(result);
@@ -104,14 +105,14 @@ router.post('/', authMiddleware, requirePermission('backups.create'), (req: Requ
 });
 
 // DELETE /api/backups/:id
-router.delete('/:id', authMiddleware, requirePermission('backups.delete'), (req: Request, res: Response) => {
+router.delete('/:id', authMiddleware, requirePermission('backups.delete'), async (req: Request, res: Response) => {
   // Demo mode: simulate deletion
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Backup deleted (simulated)' });
     return;
   }
 
-  const result = backupService.deleteBackup(req.params.id);
+  const result = await backupService.deleteBackup(req.params.id);
 
   if (!result.success) {
     res.status(500).json(result);
@@ -122,14 +123,14 @@ router.delete('/:id', authMiddleware, requirePermission('backups.delete'), (req:
 });
 
 // POST /api/backups/:id/restore
-router.post('/:id/restore', authMiddleware, requirePermission('backups.restore'), (req: Request, res: Response) => {
+router.post('/:id/restore', authMiddleware, requirePermission('backups.restore'), async (req: Request, res: Response) => {
   // Demo mode: simulate restore
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Backup restored (simulated)' });
     return;
   }
 
-  const result = backupService.restoreBackup(req.params.id);
+  const result = await backupService.restoreBackup(req.params.id);
 
   if (!result.success) {
     res.status(500).json(result);
@@ -140,14 +141,14 @@ router.post('/:id/restore', authMiddleware, requirePermission('backups.restore')
 });
 
 // GET /api/backups/:id/download
-router.get('/:id/download', authMiddleware, requirePermission('backups.download'), (req: Request, res: Response) => {
+router.get('/:id/download', authMiddleware, requirePermission('backups.download'), async (req: Request, res: Response) => {
   // Demo mode: return error (can't download simulated files)
   if (isDemoMode()) {
     res.status(400).json({ detail: '[DEMO] Download not available in demo mode' });
     return;
   }
 
-  const filePath = backupService.getBackupPath(req.params.id);
+  const filePath = await backupService.getBackupPath(req.params.id, (req as { serverId?: string }).serverId);
 
   if (!filePath) {
     res.status(404).json({ detail: 'Backup not found' });
@@ -172,6 +173,28 @@ router.get('/:id/download', authMiddleware, requirePermission('backups.download'
   });
 
   readStream.pipe(res);
+});
+
+// POST /api/backups/:id/offsite — upload an existing backup to off-site storage.
+router.post('/:id/offsite', authMiddleware, requirePermission('backups.create'), async (req: Request, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Off-site upload (simulated)' });
+    return;
+  }
+
+  const filePath = await backupService.getBackupPath(req.params.id, (req as { serverId?: string }).serverId);
+  if (!filePath) {
+    res.status(404).json({ success: false, error: 'Backup not found' });
+    return;
+  }
+
+  const { uploadBackup } = await import('../services/offsiteBackup.js');
+  const result = await uploadBackup(filePath);
+  if (!result.success) {
+    res.status(502).json(result);
+    return;
+  }
+  res.json({ success: true, message: 'Backup uploaded off-site', key: result.key });
 });
 
 export default router;

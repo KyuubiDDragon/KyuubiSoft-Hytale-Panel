@@ -1,7 +1,8 @@
+import { logger } from '../utils/logger.js';
 import { readFile, writeFile, mkdir, access, constants } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile, getConfigFilePath } from '../config.js';
 import { isDemoMode } from './demoData.js';
 import * as dockerService from './docker.js';
@@ -68,7 +69,7 @@ export interface SetupConfig {
     kyuubiApiInstalled: boolean;
     version?: string;
   };
-  downloadMethod?: 'official' | 'custom' | 'manual';
+  downloadMethod?: 'official' | 'custom' | 'manual' | 'existing';
   autoUpdate?: boolean;
   patchline?: 'release' | 'pre-release';
   acceptEarlyPlugins?: boolean;
@@ -215,7 +216,7 @@ export async function isSetupComplete(): Promise<boolean> {
     try {
       await access(getConfigFilePath(), constants.F_OK);
     } catch {
-      console.log('[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.');
+      logger.info('[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.');
       await writeSetupConfig({ ...setupConfig, setupComplete: false });
       return false;
     }
@@ -310,9 +311,15 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         if (!/^[a-zA-Z0-9_-]{3,32}$/.test(data.username as string)) {
           return { success: false, nextStep: stepId, error: 'Username must be 3-32 characters, alphanumeric with _ or -' };
         }
-        // Validate password strength
-        if ((data.password as string).length < 12) {
-          return { success: false, nextStep: stepId, error: 'Password must be at least 12 characters' };
+        {
+          // Shared policy (length + character classes + username/common
+          // sequence checks). Same helper runs in users.createUser /
+          // users.updateUser so all entry points are aligned.
+          const { validatePasswordPolicy } = await import('./users.js');
+          const policyError = validatePasswordPolicy(data.password as string, data.username as string);
+          if (policyError) {
+            return { success: false, nextStep: stepId, error: policyError };
+          }
         }
 
         // Store admin info (we'll create the user during finalization)
@@ -324,10 +331,10 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         break;
 
       case 'download-method':
-        if (!data.method || !['official', 'custom', 'manual'].includes(data.method as string)) {
+        if (!data.method || !['official', 'custom', 'manual', 'existing'].includes(data.method as string)) {
           return { success: false, nextStep: stepId, error: 'Invalid download method' };
         }
-        setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual';
+        setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual' | 'existing';
         setupConfig.autoUpdate = data.autoUpdate === true;
         if (data.customUrls) {
           (setupConfig as any)._customUrls = data.customUrls;
@@ -424,9 +431,11 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         break;
 
       case 'server-download':
-        // Server download step - stores download method, patchline and auto-update preference
+        // Server download step - stores download method, patchline and auto-update preference.
+        // method='existing' means: don't download anything, the user already has
+        // a server install (and possibly worlds) at /opt/hytale/server.
         if (data.method) {
-          setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual';
+          setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual' | 'existing';
         }
         if (data.patchline) {
           setupConfig.patchline = data.patchline as 'release' | 'pre-release';
@@ -586,7 +595,7 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
       await writeFile(usersFile, JSON.stringify(usersData, null, 2), 'utf-8');
     } catch (error) {
       // User might already exist, which is fine
-      console.log('Note: Admin user creation skipped (may already exist)');
+      logger.info('Note: Admin user creation skipped (may already exist)');
     }
 
     // Write panel config
@@ -597,9 +606,15 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
       allowOp: setupConfig.server?.allowOp ?? false,
     };
     await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
-    console.log('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
+    logger.info('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
 
-    // Write server config.json if server path exists
+    // Write server config.json if server path exists.
+    // When downloadMethod === 'existing' we treat the on-disk config as the
+    // source of truth: any setting the wizard collected that the existing
+    // config already specifies is left alone, so people adopting an existing
+    // Hytale install with worlds don't lose their server name, MOTD,
+    // gamemode or whitelist on first panel boot.
+    const isExisting = setupConfig.downloadMethod === 'existing';
     if (setupConfig.server) {
       const serverConfigPath = path.join(config.serverPath, 'config.json');
       try {
@@ -608,26 +623,45 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
 
         // Read existing config or create new
         let serverConfig: any = {};
+        let hadExistingConfig = false;
         try {
           const existing = await readFile(serverConfigPath, 'utf-8');
           serverConfig = JSON.parse(existing);
+          hadExistingConfig = true;
         } catch {
           // File doesn't exist, start fresh
         }
 
-        // Update with setup values
-        serverConfig.ServerName = setupConfig.server.name;
-        serverConfig.MOTD = setupConfig.server.motd;
-        serverConfig.MaxPlayers = setupConfig.server.maxPlayers;
-        serverConfig.Password = setupConfig.server.password;
-        serverConfig.Whitelist = setupConfig.server.whitelist ?? false;
-        serverConfig.AllowOp = setupConfig.server.allowOp ?? true;
+        // Helper: write field only if we don't already have a value, or if
+        // we're doing a fresh install (no existing config).
+        const preserveExisting = isExisting && hadExistingConfig;
+        const setIfMissing = <T,>(key: string, value: T | undefined): void => {
+          if (value === undefined) return;
+          if (preserveExisting && serverConfig[key] !== undefined && serverConfig[key] !== '') return;
+          serverConfig[key] = value;
+        };
+
+        setIfMissing('ServerName', setupConfig.server.name);
+        setIfMissing('MOTD', setupConfig.server.motd);
+        setIfMissing('MaxPlayers', setupConfig.server.maxPlayers);
+        // Password is special: even on 'existing' we honor an explicit
+        // value the operator typed in the wizard (they may want to rotate
+        // it). Empty strings still defer to the existing config.
+        if (setupConfig.server.password) {
+          serverConfig.Password = setupConfig.server.password;
+        } else if (!preserveExisting) {
+          serverConfig.Password = '';
+        }
+        setIfMissing('Whitelist', setupConfig.server.whitelist ?? false);
+        setIfMissing('AllowOp', setupConfig.server.allowOp ?? true);
         if (!serverConfig.Defaults) serverConfig.Defaults = {};
-        serverConfig.Defaults.GameMode = setupConfig.server.gameMode;
+        if (!(preserveExisting && serverConfig.Defaults.GameMode)) {
+          serverConfig.Defaults.GameMode = setupConfig.server.gameMode;
+        }
 
         // Performance settings
         if (setupConfig.performance?.viewRadius) {
-          serverConfig.ViewRadius = setupConfig.performance.viewRadius;
+          setIfMissing('ViewRadius', setupConfig.performance.viewRadius);
         }
 
         // Add UpdateConfig for native update system (Hytale 24.01.2026+)
@@ -643,10 +677,10 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         };
 
         await writeFile(serverConfigPath, JSON.stringify(serverConfig, null, 2), 'utf-8');
-        console.log('[Setup] Wrote server config.json with all settings including UpdateConfig');
+        logger.info('[Setup] Wrote server config.json with all settings including UpdateConfig');
       } catch {
         // Server directory might not exist yet, skip
-        console.log('Note: Server config not written (server directory not ready)');
+        logger.info('Note: Server config not written (server directory not ready)');
       }
     }
 
@@ -680,63 +714,63 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
       plugin: setupConfig.plugin ?? null,
     };
     await writeFile(getConfigFilePath(), JSON.stringify(mainConfig, null, 2), 'utf-8');
-    console.log('[Setup] Wrote config.json with all settings');
+    logger.info('[Setup] Wrote config.json with all settings');
 
     // Install KyuubiAPI plugin if user selected it
     if (setupConfig.plugin?.kyuubiApiInstalled) {
-      console.log('[Setup] Installing KyuubiAPI plugin...');
+      logger.info('[Setup] Installing KyuubiAPI plugin...');
       try {
         const pluginResult = await installKyuubiApiPlugin();
         if (pluginResult.success) {
-          console.log('[Setup] KyuubiAPI plugin installed successfully');
+          logger.info('[Setup] KyuubiAPI plugin installed successfully');
         } else {
-          console.error('[Setup] Failed to install KyuubiAPI plugin:', pluginResult.error);
+          logger.error('[Setup] Failed to install KyuubiAPI plugin:', pluginResult.error);
         }
       } catch (pluginError) {
-        console.error('[Setup] Error installing KyuubiAPI plugin:', pluginError);
+        logger.error('[Setup] Error installing KyuubiAPI plugin:', pluginError);
       }
     }
 
     // Install EasyWebMap plugin if user enabled webmap
     if (setupConfig.integrations?.webmap) {
-      console.log('[Setup] Installing EasyWebMap plugin...');
+      logger.info('[Setup] Installing EasyWebMap plugin...');
       try {
         const webmapResult = await installMod('easywebmap');
         if (webmapResult.success) {
-          console.log('[Setup] EasyWebMap plugin installed successfully:', webmapResult.filename);
+          logger.info('[Setup] EasyWebMap plugin installed successfully:', webmapResult.filename);
           if (webmapResult.configCreated) {
-            console.log('[Setup] EasyWebMap config created at', path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json'));
+            logger.info('[Setup] EasyWebMap config created at', path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json'));
             // Give filesystem time to sync the config file before server restart
             await new Promise(resolve => setTimeout(resolve, 500));
-            console.log('[Setup] EasyWebMap config write confirmed');
+            logger.info('[Setup] EasyWebMap config write confirmed');
           }
         } else {
           // "already installed" is not an error, just info
           if (webmapResult.error?.includes('already installed')) {
-            console.log('[Setup] EasyWebMap already installed:', webmapResult.error);
+            logger.info('[Setup] EasyWebMap already installed:', webmapResult.error);
           } else {
-            console.error('[Setup] Failed to install EasyWebMap:', webmapResult.error);
+            logger.error('[Setup] Failed to install EasyWebMap:', webmapResult.error);
           }
         }
       } catch (webmapError) {
-        console.error('[Setup] Error installing EasyWebMap:', webmapError);
+        logger.error('[Setup] Error installing EasyWebMap:', webmapError);
       }
     }
 
     // Apply automation settings to scheduler
     if (setupConfig.automation) {
-      console.log('[Setup] Applying automation settings to scheduler...');
+      logger.info('[Setup] Applying automation settings to scheduler...');
       try {
         // Convert setup automation format to scheduler format
         const schedulerConfig = convertAutomationToSchedulerConfig(setupConfig.automation);
         const saved = saveSchedulerConfig(schedulerConfig);
         if (saved) {
-          console.log('[Setup] Scheduler configuration applied successfully');
+          logger.info('[Setup] Scheduler configuration applied successfully');
         } else {
-          console.error('[Setup] Failed to save scheduler configuration');
+          logger.error('[Setup] Failed to save scheduler configuration');
         }
       } catch (schedulerError) {
-        console.error('[Setup] Error applying scheduler config:', schedulerError);
+        logger.error('[Setup] Error applying scheduler config:', schedulerError);
       }
     }
 
@@ -746,36 +780,36 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
     // Restart server container so newly installed mods get loaded
     // Run in background to avoid HTTP timeout - setup is already complete at this point
     // Use longer delay to ensure all config files are fully written to disk before restart
-    console.log('[Setup] Scheduling server restart to load installed mods (3 second delay)...');
+    logger.info('[Setup] Scheduling server restart to load installed mods (3 second delay)...');
     setTimeout(async () => {
       try {
-        console.log('[Setup] Restarting server container now...');
+        logger.info('[Setup] Restarting server container now...');
         const restartResult = await dockerService.restartContainer();
         if (restartResult.success) {
-          console.log('[Setup] Server restart completed successfully');
+          logger.info('[Setup] Server restart completed successfully');
 
           // Wait for server to start, then ensure EasyWebMap config has correct port
           // This fixes cases where the mod creates a default config on first startup
           if (setupConfig.integrations?.webmap) {
-            console.log('[Setup] Waiting 10 seconds for mods to initialize...');
+            logger.info('[Setup] Waiting 10 seconds for mods to initialize...');
             await new Promise(resolve => setTimeout(resolve, 10000));
-            console.log('[Setup] Ensuring EasyWebMap config has correct port...');
+            logger.info('[Setup] Ensuring EasyWebMap config has correct port...');
             const configResult = await ensureEasyWebMapConfig();
             if (configResult.updated) {
-              console.log('[Setup] EasyWebMap config was updated with correct port');
+              logger.info('[Setup] EasyWebMap config was updated with correct port');
             } else if (configResult.created) {
-              console.log('[Setup] EasyWebMap config was created');
+              logger.info('[Setup] EasyWebMap config was created');
             } else if (configResult.success) {
-              console.log('[Setup] EasyWebMap config already correct');
+              logger.info('[Setup] EasyWebMap config already correct');
             } else {
-              console.error('[Setup] Failed to ensure EasyWebMap config:', configResult.error);
+              logger.error('[Setup] Failed to ensure EasyWebMap config:', configResult.error);
             }
           }
         } else {
-          console.error('[Setup] Failed to restart server:', restartResult.error);
+          logger.error('[Setup] Failed to restart server:', restartResult.error);
         }
       } catch (restartError) {
-        console.error('[Setup] Error restarting server:', restartError);
+        logger.error('[Setup] Error restarting server:', restartError);
       }
     }, 3000); // 3 second delay to ensure config files are written and HTTP response completes
 
@@ -963,7 +997,7 @@ export async function getAuthStatusForSetup(): Promise<{
       },
     };
   } catch (error) {
-    console.error('[Setup] Failed to get auth status:', error);
+    logger.error('[Setup] Failed to get auth status:', error);
     return {
       downloaderAuth: {
         authenticated: false,

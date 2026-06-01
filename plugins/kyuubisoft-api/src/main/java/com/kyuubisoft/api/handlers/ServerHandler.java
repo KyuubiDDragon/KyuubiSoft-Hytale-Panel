@@ -85,9 +85,15 @@ public class ServerHandler {
         info.uptimeSeconds = (System.currentTimeMillis() - SERVER_START_TIME) / 1000;
         info.startedAt = Instant.ofEpochMilli(SERVER_START_TIME).toString();
 
-        // TPS (we'll estimate based on timing if actual TPS not available)
-        info.tps = 20.0; // Default to ideal TPS
-        info.mspt = 50.0; // Default to ideal MSPT (1000ms / 20 ticks)
+        // Real TPS/MSPT from the tracker (falls back to ideal if not started).
+        com.kyuubisoft.api.metrics.TpsTracker tracker = com.kyuubisoft.api.metrics.TpsTracker.getInstance();
+        if (tracker != null) {
+            info.tps = tracker.getCurrentTps();
+            info.mspt = tracker.getCurrentMspt();
+        } else {
+            info.tps = 20.0;
+            info.mspt = 50.0;
+        }
 
         return info;
     }
@@ -99,9 +105,15 @@ public class ServerHandler {
     public PerformanceInfo getPerformance() {
         PerformanceInfo perf = new PerformanceInfo();
 
-        // TPS/MSPT
-        perf.tps = 20.0; // TODO: Get actual TPS when API available
-        perf.mspt = 50.0;
+        // Real TPS/MSPT from the tracker.
+        com.kyuubisoft.api.metrics.TpsTracker tracker = com.kyuubisoft.api.metrics.TpsTracker.getInstance();
+        if (tracker != null) {
+            perf.tps = tracker.getCurrentTps();
+            perf.mspt = tracker.getCurrentMspt();
+        } else {
+            perf.tps = 20.0;
+            perf.mspt = 50.0;
+        }
 
         // Entity count (total across all worlds)
         try {

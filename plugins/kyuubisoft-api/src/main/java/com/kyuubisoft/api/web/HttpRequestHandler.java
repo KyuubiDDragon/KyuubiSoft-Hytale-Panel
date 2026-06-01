@@ -3,6 +3,7 @@ package com.kyuubisoft.api.web;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.kyuubisoft.api.KyuubiSoftAPI;
+import com.kyuubisoft.api.config.ApiConfig;
 import com.kyuubisoft.api.handlers.MetricsHandler;
 import com.kyuubisoft.api.handlers.PlayersHandler;
 import com.kyuubisoft.api.handlers.ServerHandler;
@@ -15,6 +16,8 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
 import io.netty.util.CharsetUtil;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,14 +49,56 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     private static final Pattern PLAYER_TELEPORT_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/teleport$");
     private static final Pattern PLAYER_GAMEMODE_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/gamemode$");
     private static final Pattern PLAYER_INVENTORY_CLEAR_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/inventory/clear$");
+    private static final Pattern PLAYER_GIVE_PATTERN = Pattern.compile("^/api/players/([\\w-]+)/give$");
 
     private final PlayersHandler playersHandler = new PlayersHandler();
     private final WorldsHandler worldsHandler = new WorldsHandler();
     private final ServerHandler serverHandler = new ServerHandler();
     private MetricsHandler metricsHandler;
+    private ApiConfig apiConfig;
+    // Keep-alive decision for the request currently being processed. The handler
+    // is per-connection and Netty delivers requests sequentially, so a single
+    // field is safe across keep-alive requests on the same channel.
+    private boolean keepAlive = false;
 
     public void setMetricsHandler(MetricsHandler metricsHandler) {
         this.metricsHandler = metricsHandler;
+    }
+
+    public void setApiConfig(ApiConfig apiConfig) {
+        this.apiConfig = apiConfig;
+    }
+
+    /** Configured CORS origin, or "*" when CORS is enabled without an explicit origin. */
+    private String corsOrigin() {
+        if (apiConfig == null) return "*";
+        if (!apiConfig.isCorsEnabled()) return null; // CORS disabled → omit header
+        String origin = apiConfig.getCorsOrigin();
+        return (origin == null || origin.isBlank()) ? "*" : origin;
+    }
+
+    /**
+     * Enforce bearer-token auth when enabled in config. Returns true if the
+     * request is allowed to proceed. OPTIONS preflight is always allowed so the
+     * browser can negotiate CORS before sending credentials.
+     *
+     * <p>NOTE: auth is OFF by default. Enabling it requires API clients
+     * (incl. the panel) to send {@code Authorization: Bearer <authToken>}.</p>
+     */
+    private boolean isAuthorized(FullHttpRequest request) {
+        if (apiConfig == null || !apiConfig.isAuthEnabled()) return true;
+        if (request.method() == HttpMethod.OPTIONS) return true;
+
+        String expected = apiConfig.getAuthToken();
+        if (expected == null || expected.isBlank()) return true; // misconfigured → don't lock out
+
+        String header = request.headers().get(HttpHeaderNames.AUTHORIZATION);
+        if (header == null) return false;
+        String provided = header.startsWith("Bearer ") ? header.substring(7).trim() : header.trim();
+
+        return MessageDigest.isEqual(
+                provided.getBytes(StandardCharsets.UTF_8),
+                expected.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override
@@ -61,6 +106,16 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         // Skip WebSocket upgrade requests
         if (request.uri().equals("/ws")) {
             ctx.fireChannelRead(request.retain());
+            return;
+        }
+
+        // Honor HTTP keep-alive so the panel can reuse connections instead of
+        // a TCP handshake per poll. All responses set Content-Length already.
+        this.keepAlive = HttpUtil.isKeepAlive(request);
+
+        // Optional bearer-token auth (no-op unless enabled in config).
+        if (!isAuthorized(request)) {
+            sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "Unauthorized");
             return;
         }
 
@@ -117,6 +172,18 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
                 else if ((matcher = PLAYER_INVENTORY_CLEAR_PATTERN.matcher(uri)).matches()) {
                     String playerName = matcher.group(1);
                     response = playersHandler.clearInventory(playerName);
+                }
+                // POST /api/players/{name}/give  { item, amount? }
+                else if ((matcher = PLAYER_GIVE_PATTERN.matcher(uri)).matches()) {
+                    String playerName = matcher.group(1);
+                    String body = request.content().toString(CharsetUtil.UTF_8);
+                    GiveRequest giveReq = GSON.fromJson(body, GiveRequest.class);
+                    if (giveReq != null && giveReq.item != null) {
+                        response = playersHandler.givePlayer(playerName, giveReq.item, giveReq.amount);
+                    } else {
+                        sendError(ctx, HttpResponseStatus.BAD_REQUEST, "Item required");
+                        return;
+                    }
                 }
                 else {
                     sendError(ctx, HttpResponseStatus.NOT_FOUND, "POST endpoint not found: " + uri);
@@ -240,12 +307,34 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/json; charset=UTF-8");
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
 
-        // CORS headers
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS");
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
+        applyCors(response.headers());
 
-        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        writeResponse(ctx, response);
+    }
+
+    /** Apply CORS headers using the configured origin (omitted if CORS disabled). */
+    private void applyCors(HttpHeaders headers) {
+        String origin = corsOrigin();
+        if (origin == null) return;
+        headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+        headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS");
+        headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
+    }
+
+    /**
+     * Flush a response, honoring the keep-alive decision made for the current
+     * request. When the client asked to keep the connection open we set the
+     * Connection header accordingly and leave the channel open for reuse;
+     * otherwise we close it once the write completes (the legacy behavior).
+     */
+    private void writeResponse(ChannelHandlerContext ctx, FullHttpResponse response) {
+        if (keepAlive) {
+            HttpUtil.setKeepAlive(response, true);
+            ctx.writeAndFlush(response);
+        } else {
+            HttpUtil.setKeepAlive(response, false);
+            ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        }
     }
 
     private void sendError(ChannelHandlerContext ctx, HttpResponseStatus status) {
@@ -267,13 +356,11 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         FullHttpResponse response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.EMPTY_BUFFER);
 
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS");
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
+        applyCors(response.headers());
         response.headers().set(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE, 86400);
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, 0);
 
-        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        writeResponse(ctx, response);
     }
 
     private void sendPrometheusMetrics(ChannelHandlerContext ctx) {
@@ -286,10 +373,9 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, metricsHandler.getContentType());
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
 
-        // CORS headers for metrics
-        response.headers().set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+        applyCors(response.headers());
 
-        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        writeResponse(ctx, response);
     }
 
     /**
@@ -320,5 +406,13 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
      */
     private static class GamemodeRequest {
         public String gamemode;
+    }
+
+    /**
+     * Request body for give
+     */
+    private static class GiveRequest {
+        public String item;
+        public Integer amount;
     }
 }

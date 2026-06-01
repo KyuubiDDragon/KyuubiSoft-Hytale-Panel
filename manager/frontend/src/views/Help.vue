@@ -32,6 +32,12 @@ const categories: Category[] = [
       { command: '/kick', description: 'help.commands.kick', usage: '/kick <player> [reason]', permission: 'hytale.command.kick' },
       { command: '/ban', description: 'help.commands.ban', usage: '/ban <player> [reason]', permission: 'hytale.command.ban' },
       { command: '/unban', description: 'help.commands.unban', usage: '/unban <player>', permission: 'hytale.command.unban' },
+      { command: '/pardon', description: 'help.commands.pardon', usage: '/pardon <player>', permission: 'hytale.command.pardon' },
+      { command: '/mute', description: 'help.commands.mute', usage: '/mute <player> [duration]', permission: 'hytale.command.mute' },
+      { command: '/unmute', description: 'help.commands.unmute', usage: '/unmute <player>', permission: 'hytale.command.unmute' },
+      { command: '/heal', description: 'help.commands.heal', usage: '/heal [player]', permission: 'hytale.command.heal' },
+      { command: '/effect', description: 'help.commands.effect', usage: '/effect <player> <effect> [duration]', permission: 'hytale.command.effect' },
+      { command: '/clear', description: 'help.commands.clear', usage: '/clear [player]', permission: 'hytale.command.clear' },
       { command: '/op add', description: 'help.commands.opAdd', usage: '/op add <player>', permission: 'hytale.command.op' },
       { command: '/op remove', description: 'help.commands.opRemove', usage: '/op remove <player>', permission: 'hytale.command.op' },
       { command: '/whitelist add', description: 'help.commands.whitelistAdd', usage: '/whitelist add <player>', permission: 'hytale.command.whitelist' },
@@ -57,9 +63,15 @@ const categories: Category[] = [
       { command: '/stop', description: 'help.commands.stop', usage: '/stop', permission: 'hytale.command.stop' },
       { command: '/restart', description: 'help.commands.restart', usage: '/restart', permission: 'hytale.command.restart' },
       { command: '/save', description: 'help.commands.save', usage: '/save', permission: 'hytale.command.save' },
+      { command: '/save-all', description: 'help.commands.saveAll', usage: '/save-all', permission: 'hytale.command.save' },
+      { command: '/save-on', description: 'help.commands.saveOn', usage: '/save-on', permission: 'hytale.command.save' },
+      { command: '/save-off', description: 'help.commands.saveOff', usage: '/save-off', permission: 'hytale.command.save' },
+      { command: '/update', description: 'help.commands.update', usage: '/update [check|apply]', permission: 'hytale.command.update' },
       { command: '/reload', description: 'help.commands.reload', usage: '/reload', permission: 'hytale.command.reload' },
       { command: '/say', description: 'help.commands.say', usage: '/say <message>', permission: 'hytale.command.say' },
       { command: '/tell', description: 'help.commands.tell', usage: '/tell <player> <message>', permission: 'hytale.command.tell' },
+      { command: '/msg', description: 'help.commands.msg', usage: '/msg <player> <message>', permission: 'hytale.command.msg' },
+      { command: '/me', description: 'help.commands.me', usage: '/me <action>', permission: 'hytale.command.me' },
       { command: '/broadcast', description: 'help.commands.broadcast', usage: '/broadcast <message>', permission: 'hytale.command.broadcast' },
       { command: '/list', description: 'help.commands.list', usage: '/list', permission: 'hytale.command.list' },
       { command: '/info', description: 'help.commands.info', usage: '/info', permission: 'hytale.command.info' },
@@ -86,6 +98,8 @@ const categories: Category[] = [
       { command: '/weather storm', description: 'help.commands.weatherStorm', usage: '/weather storm [duration]', permission: 'hytale.command.weather' },
       { command: '/difficulty', description: 'help.commands.difficulty', usage: '/difficulty <peaceful|easy|normal|hard>', permission: 'hytale.command.difficulty' },
       { command: '/gamerule', description: 'help.commands.gamerule', usage: '/gamerule <rule> <value>', permission: 'hytale.command.gamerule' },
+      { command: '/seed', description: 'help.commands.seed', usage: '/seed', permission: 'hytale.command.seed' },
+      { command: '/worldborder', description: 'help.commands.worldborder', usage: '/worldborder <set|add|center> <value>', permission: 'hytale.command.worldborder' },
     ]
   },
   {
@@ -99,6 +113,7 @@ const categories: Category[] = [
       { command: '/tp', description: 'help.commands.tpWorld', usage: '/tp <player> <x> <y> <z> --world <name>', permission: 'hytale.command.teleport' },
       { command: '/top', description: 'help.commands.top', usage: '/top', permission: 'hytale.command.top' },
       { command: '/spawn', description: 'help.commands.spawn', usage: '/spawn [player]', permission: 'hytale.command.spawn' },
+      { command: '/setspawn', description: 'help.commands.setspawn', usage: '/setspawn [x] [y] [z]', permission: 'hytale.command.setspawn' },
       { command: '/home', description: 'help.commands.home', usage: '/home [player]', permission: 'hytale.command.home' },
       { command: '/sethome', description: 'help.commands.sethome', usage: '/sethome [player]', permission: 'hytale.command.sethome' },
       { command: '/warp', description: 'help.commands.warp', usage: '/warp <name> [player]', permission: 'hytale.command.warp' },
@@ -213,19 +228,19 @@ function getCategoryLabel(id: string): string {
 </script>
 
 <template>
-  <div class="h-[calc(100vh-8rem)] flex flex-col">
+  <div class="h-full flex flex-col">
     <!-- Page Title -->
     <div class="mb-6 flex-shrink-0">
-      <h1 class="text-2xl font-bold text-white">{{ t('help.title') }}</h1>
-      <p class="text-gray-400 mt-1">{{ t('help.subtitle', { count: commandCount }) }}</p>
+      <h1 class="text-2xl font-bold text-ink">{{ t('help.title') }}</h1>
+      <p class="text-ink-muted mt-1">{{ t('help.subtitle', { count: commandCount }) }}</p>
     </div>
 
     <!-- Main Content -->
     <div class="flex-1 flex gap-6 min-h-0 overflow-hidden">
       <!-- Sidebar Categories -->
       <Card class="w-64 flex-shrink-0 flex flex-col" :padding="false">
-        <div class="p-4 border-b border-dark-50/50 flex-shrink-0">
-          <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">{{ t('help.categoriesTitle') }}</h3>
+        <div class="p-4 border-b border-border/60 flex-shrink-0">
+          <h3 class="text-sm font-semibold text-ink-muted uppercase tracking-wider">{{ t('help.categoriesTitle') }}</h3>
         </div>
         <div class="flex-1 overflow-y-auto p-2">
           <button
@@ -236,7 +251,7 @@ function getCategoryLabel(id: string): string {
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all',
               activeCategory === cat.id
                 ? 'bg-hytale-orange/20 text-hytale-orange'
-                : 'text-gray-400 hover:bg-dark-50/50 hover:text-white'
+                : 'text-ink-muted hover:bg-surface-overlay/50 hover:text-ink'
             ]"
           >
             <!-- All Icon -->
@@ -285,23 +300,23 @@ function getCategoryLabel(id: string): string {
       <!-- Commands List -->
       <Card class="flex-1 flex flex-col min-h-0" :padding="false">
         <!-- Search Bar -->
-        <div class="p-4 border-b border-dark-50/50 flex-shrink-0">
+        <div class="p-4 border-b border-border/60 flex-shrink-0">
           <div class="relative">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               v-model="searchQuery"
               type="text"
               :placeholder="t('help.searchPlaceholder')"
-              class="w-full pl-10 pr-4 py-2.5 bg-dark-100 border border-dark-50/50 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50 transition-colors"
+              class="w-full pl-10 pr-4 py-2.5 bg-surface-overlay border border-border/60 rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50 transition-colors"
             />
           </div>
         </div>
 
         <!-- Commands -->
         <div class="flex-1 overflow-y-auto p-4">
-          <div v-if="filteredCommands.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500">
+          <div v-if="filteredCommands.length === 0" class="flex flex-col items-center justify-center h-full text-ink-subtle">
             <svg class="w-12 h-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -312,7 +327,7 @@ function getCategoryLabel(id: string): string {
             <div
               v-for="(cmd, index) in filteredCommands"
               :key="`${cmd.command}-${index}`"
-              class="bg-dark-100 rounded-lg p-4 hover:bg-dark-50/50 transition-colors group"
+              class="bg-surface-overlay rounded-lg p-4 hover:bg-surface-overlay/50 transition-colors group"
             >
               <div class="flex items-start justify-between gap-4">
                 <div class="flex-1 min-w-0">
@@ -320,19 +335,19 @@ function getCategoryLabel(id: string): string {
                     <code class="text-hytale-orange font-mono text-base font-semibold">{{ cmd.command }}</code>
                     <span
                       v-if="activeCategory === 'all'"
-                      class="px-2 py-0.5 text-xs rounded bg-dark-200 text-gray-400"
+                      class="px-2 py-0.5 text-xs rounded bg-surface-raised text-ink-muted"
                     >
                       {{ getCategoryLabel(cmd.categoryId) }}
                     </span>
                   </div>
-                  <p class="text-gray-300 text-sm mb-3">{{ t(cmd.description) }}</p>
+                  <p class="text-ink-muted text-sm mb-3">{{ t(cmd.description) }}</p>
                   <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-500 uppercase font-semibold">{{ t('help.usage') }}:</span>
-                    <code class="text-sm text-gray-300 font-mono bg-dark-200 px-2 py-1 rounded">{{ cmd.usage }}</code>
+                    <span class="text-xs text-ink-subtle uppercase font-semibold">{{ t('help.usage') }}:</span>
+                    <code class="text-sm text-ink-muted font-mono bg-surface-raised px-2 py-1 rounded">{{ cmd.usage }}</code>
                   </div>
                   <div v-if="cmd.permission" class="mt-2 flex items-center gap-2">
-                    <span class="text-xs text-gray-500 uppercase font-semibold">{{ t('help.permission') }}:</span>
-                    <code class="text-xs text-gray-400 font-mono">{{ cmd.permission }}</code>
+                    <span class="text-xs text-ink-subtle uppercase font-semibold">{{ t('help.permission') }}:</span>
+                    <code class="text-xs text-ink-muted font-mono">{{ cmd.permission }}</code>
                   </div>
                 </div>
                 <button
@@ -341,7 +356,7 @@ function getCategoryLabel(id: string): string {
                     'p-2 rounded-lg transition-all flex-shrink-0',
                     copiedCommand === cmd.usage
                       ? 'bg-green-500/20 text-green-400'
-                      : 'bg-dark-200 text-gray-400 hover:text-white hover:bg-dark-50/50 opacity-0 group-hover:opacity-100'
+                      : 'bg-surface-raised text-ink-muted hover:text-ink hover:bg-surface-overlay/50 opacity-0 group-hover:opacity-100'
                   ]"
                   :title="t('help.copyCommand')"
                 >
@@ -358,17 +373,17 @@ function getCategoryLabel(id: string): string {
         </div>
 
         <!-- Footer Info -->
-        <div class="p-4 border-t border-dark-50/50 bg-dark-100/50 flex-shrink-0">
-          <div class="flex items-center justify-between text-sm text-gray-500">
+        <div class="p-4 border-t border-border/60 bg-surface-overlay/50 flex-shrink-0">
+          <div class="flex items-center justify-between text-sm text-ink-subtle">
             <span>{{ t('help.commandsShown', { shown: filteredCommands.length, total: commandCount }) }}</span>
             <div class="flex items-center gap-4">
               <div class="flex items-center gap-2">
                 <span class="text-xs">{{ t('help.tipPrefix') }}:</span>
-                <code class="text-xs bg-dark-200 px-1.5 py-0.5 rounded text-gray-400">~</code>
+                <code class="text-xs bg-surface-raised px-1.5 py-0.5 rounded text-ink-muted">~</code>
                 <span class="text-xs">{{ t('help.tipRelative') }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <code class="text-xs bg-dark-200 px-1.5 py-0.5 rounded text-gray-400">@a @p @r @s</code>
+                <code class="text-xs bg-surface-raised px-1.5 py-0.5 rounded text-ink-muted">@a @p @r @s</code>
                 <span class="text-xs">{{ t('help.tipSelectors') }}</span>
               </div>
             </div>

@@ -403,6 +403,15 @@ export interface FilePlayerInventory {
   activeHotbarSlot: number
   totalSlots: number
   usedSlots: number
+  // Per-container capacities reported by the API (optional; UI falls back to defaults).
+  capacities?: {
+    hotbar?: number
+    armor?: number
+    utility?: number
+    storage?: number
+    backpack?: number
+    tools?: number
+  }
 }
 
 export interface FilePlayerStats {
@@ -428,6 +437,34 @@ export interface FilePlayerDetails {
   uniqueItemsUsed: string[]
 }
 
+export interface PerfSample {
+  ts: number
+  tps: number | null
+  mspt: number | null
+  cpu: number | null
+  mem: number | null
+}
+
+export interface PerfHistory {
+  intervalMs: number
+  samples: PerfSample[]
+}
+
+export interface JvmSettings {
+  javaMinRam: string
+  javaMaxRam: string
+  extraJavaArgs: string
+  extraServerArgs: string
+  envDefaults: { javaMinRam: string; javaMaxRam: string }
+}
+
+export interface JvmSettingsUpdate {
+  javaMinRam: string
+  javaMaxRam: string
+  extraJavaArgs: string
+  extraServerArgs: string
+}
+
 export const serverApi = {
   async getStatus(): Promise<ServerStatus> {
     const response = await api.get<ServerStatus>('/server/status')
@@ -441,6 +478,11 @@ export const serverApi = {
 
   async getMemoryStats(): Promise<ServerMemoryStats> {
     const response = await api.get<ServerMemoryStats>('/server/memory')
+    return response.data
+  },
+
+  async getPerfHistory(): Promise<PerfHistory> {
+    const response = await api.get<PerfHistory>('/server/perf-history')
     return response.data
   },
 
@@ -526,6 +568,16 @@ export const serverApi = {
 
   async setAllowOp(allowOp: boolean): Promise<AllowOpUpdateResponse> {
     const response = await api.put<AllowOpUpdateResponse>('/server/allow-op', { allowOp })
+    return response.data
+  },
+
+  async getJvmSettings(): Promise<JvmSettings> {
+    const response = await api.get<JvmSettings>('/server/jvm')
+    return response.data
+  },
+
+  async saveJvmSettings(payload: JvmSettingsUpdate): Promise<{ success: boolean; changed: boolean; message?: string }> {
+    const response = await api.put('/server/jvm', payload)
     return response.data
   },
 

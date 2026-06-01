@@ -6,7 +6,6 @@ import Card from '@/components/ui/Card.vue'
 import {
   modupdatesApi,
   modsApi,
-  type TrackedMod,
   type ModUpdateStatus,
   type ModInfo,
 } from '@/api/management'
@@ -130,8 +129,8 @@ onMounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('modupdates.title') }}</h1>
-        <p class="text-gray-400 text-sm mt-1">
+        <h1 class="text-2xl font-bold text-ink">{{ t('modupdates.title') }}</h1>
+        <p class="text-ink-muted text-sm mt-1">
           {{ t('modupdates.lastChecked') }}: {{ formatDate(updateStatus?.lastChecked || null) }}
         </p>
       </div>
@@ -186,8 +185,8 @@ onMounted(() => {
             </svg>
           </div>
           <div>
-            <p class="text-gray-400 text-sm">{{ t('modupdates.tracked') }}</p>
-            <p class="text-2xl font-bold text-white">{{ updateStatus.totalTracked }}</p>
+            <p class="text-ink-muted text-sm">{{ t('modupdates.tracked') }}</p>
+            <p class="text-2xl font-bold text-ink">{{ updateStatus.totalTracked }}</p>
           </div>
         </div>
       </Card>
@@ -200,7 +199,7 @@ onMounted(() => {
             </svg>
           </div>
           <div>
-            <p class="text-gray-400 text-sm">{{ t('modupdates.available') }}</p>
+            <p class="text-ink-muted text-sm">{{ t('modupdates.available') }}</p>
             <p class="text-2xl font-bold" :class="updateStatus.updatesAvailable > 0 ? 'text-status-warning' : 'text-status-success'">
               {{ updateStatus.updatesAvailable }}
             </p>
@@ -216,8 +215,8 @@ onMounted(() => {
             </svg>
           </div>
           <div>
-            <p class="text-gray-400 text-sm">{{ t('modupdates.autoCheck') }}</p>
-            <p class="text-lg font-medium text-white">1h</p>
+            <p class="text-ink-muted text-sm">{{ t('modupdates.autoCheck') }}</p>
+            <p class="text-lg font-medium text-ink">1h</p>
           </div>
         </div>
       </Card>
@@ -226,10 +225,10 @@ onMounted(() => {
     <!-- Tracked Mods List -->
     <Card v-if="!loading && updateStatus">
       <template #header>
-        <h2 class="text-lg font-semibold text-white">{{ t('modupdates.tracked') }}</h2>
+        <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.tracked') }}</h2>
       </template>
 
-      <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-gray-400">
+      <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-ink-muted">
         {{ t('modupdates.noTrackedMods') }}
       </div>
 
@@ -249,7 +248,7 @@ onMounted(() => {
                 class="w-12 h-12 rounded-lg object-cover"
               />
               <div v-else class="w-12 h-12 rounded-lg bg-gray-700 flex items-center justify-center">
-                <svg class="w-6 h-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-6 h-6 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
               </div>
@@ -258,7 +257,7 @@ onMounted(() => {
             <!-- Info -->
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                <h3 class="font-medium text-ink truncate">{{ mod.projectTitle || mod.filename }}</h3>
                 <span
                   v-if="mod.hasUpdate"
                   class="px-2 py-0.5 text-xs rounded-full bg-status-warning/20 text-status-warning"
@@ -272,8 +271,8 @@ onMounted(() => {
                   {{ t('modupdates.noUpdate') }}
                 </span>
               </div>
-              <p class="text-sm text-gray-400 truncate">{{ mod.filename }}</p>
-              <div class="flex items-center gap-4 mt-1 text-xs text-gray-500">
+              <p class="text-sm text-ink-muted truncate">{{ mod.filename }}</p>
+              <div class="flex items-center gap-4 mt-1 text-xs text-ink-subtle">
                 <span>{{ t('modupdates.installedVersion') }}: {{ mod.installedVersion || '-' }}</span>
                 <span>{{ t('modupdates.latestVersion') }}: {{ mod.latestVersion || '-' }}</span>
               </div>
@@ -317,7 +316,7 @@ onMounted(() => {
       <div v-if="showTrackDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
         <div class="bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
           <div class="p-6">
-            <h3 class="text-lg font-semibold text-white mb-4">{{ t('modupdates.trackMod') }}</h3>
+            <h3 class="text-lg font-semibold text-ink mb-4">{{ t('modupdates.trackMod') }}</h3>
 
             <!-- Error -->
             <div v-if="trackError" class="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
@@ -328,7 +327,7 @@ onMounted(() => {
             <div class="space-y-4">
               <!-- Filename Select or Input -->
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.filename') }}</label>
+                <label class="block text-sm font-medium text-ink-muted mb-1">{{ t('modupdates.filename') }}</label>
                 <select
                   v-if="untrackedMods.length > 0"
                   v-model="trackFilename"
@@ -350,7 +349,7 @@ onMounted(() => {
 
               <!-- CurseForge URL/Slug -->
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.curseforgeUrl') }}</label>
+                <label class="block text-sm font-medium text-ink-muted mb-1">{{ t('modupdates.curseforgeUrl') }}</label>
                 <input
                   v-model="trackCurseforgeInput"
                   type="text"
@@ -361,7 +360,7 @@ onMounted(() => {
 
               <!-- Current Version (optional) -->
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">{{ t('modupdates.installedVersion') }} (optional)</label>
+                <label class="block text-sm font-medium text-ink-muted mb-1">{{ t('modupdates.installedVersion') }} (optional)</label>
                 <input
                   v-model="trackCurrentVersion"
                   type="text"

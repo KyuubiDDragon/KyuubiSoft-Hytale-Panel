@@ -1,4 +1,8 @@
 # Server files (too large for git)
+# Do NOT commit Hytale server archives, asset packs or stand-alone JARs.
+# Distribute them via Releases / object storage and let the entrypoint
+# download them on first run. Anything previously checked in was untracked
+# with `git rm --cached` to keep the working tree but stop tracking.
 *.jar
 *.zip
 *.aot
@@ -10,7 +14,7 @@
 data/
 backups/
 logs/
-server/
+/server/
 
 # Environment (enthält evtl. URLs/Secrets)
 .env
@@ -28,5 +32,5 @@ Thumbs.db
 # Node.js / Manager
 node_modules/
 dist/
-package-lock.json
 manager/static/
+.claude/

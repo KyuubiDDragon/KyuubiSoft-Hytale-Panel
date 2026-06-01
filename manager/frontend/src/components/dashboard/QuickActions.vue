@@ -92,7 +92,7 @@ function onConfirm() {
 <template>
   <div class="card">
     <div class="card-header">
-      <h3 class="text-lg font-semibold text-white">{{ t('dashboard.quickActions') }}</h3>
+      <h3 class="text-lg font-semibold text-ink">{{ t('dashboard.quickActions') }}</h3>
     </div>
     <div class="card-body">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">

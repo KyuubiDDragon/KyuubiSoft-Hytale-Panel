@@ -358,13 +358,6 @@ async function pollServerAuthStatus() {
   }, pollInterval * 1000)
 }
 
-// Open server verification URL in new tab (prefer direct URL with code)
-function openServerVerificationUrl() {
-  if (!serverDeviceCodeState.value) return
-  const url = serverDeviceCodeState.value.verificationUrlDirect || serverDeviceCodeState.value.verificationUrl
-  window.open(url, '_blank', 'noopener,noreferrer')
-}
-
 // Copy server verification URL to clipboard
 async function copyServerVerificationUrl() {
   if (!serverDeviceCodeState.value) return
@@ -572,13 +565,13 @@ onUnmounted(() => {
           />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">
+      <h2 class="text-2xl font-bold text-ink mb-2">
         {{ currentAuthStep === 'starting' ? t('setup.firstServerStartTitle') :
            currentAuthStep === 'server-auth' ? t('setup.serverAuthTitle') :
            currentAuthStep === 'persistence' ? t('setup.persistenceTitle') :
            t('setup.authCompleteTitle') }}
       </h2>
-      <p class="text-gray-400">
+      <p class="text-ink-muted">
         {{ currentAuthStep === 'starting' ? t('setup.firstServerStartDescription') :
            currentAuthStep === 'server-auth' ? t('setup.serverAuthDescription') :
            currentAuthStep === 'persistence' ? t('setup.persistenceDescription') :
@@ -593,9 +586,9 @@ onUnmounted(() => {
         <div class="card-body p-0">
           <div
             ref="consoleContainer"
-            class="h-64 overflow-y-auto bg-dark-400 rounded-lg p-4 font-mono text-sm"
+            class="h-64 overflow-y-auto bg-surface rounded-lg p-4 font-mono text-sm"
           >
-            <div v-if="consoleLines.length === 0 && isServerStarting" class="flex items-center gap-2 text-gray-400">
+            <div v-if="consoleLines.length === 0 && isServerStarting" class="flex items-center gap-2 text-ink-muted">
               <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
@@ -606,10 +599,10 @@ onUnmounted(() => {
               :key="index"
               class="flex gap-2"
             >
-              <span class="text-gray-500 flex-shrink-0">[{{ line.timestamp }}]</span>
+              <span class="text-ink-subtle flex-shrink-0">[{{ line.timestamp }}]</span>
               <span
                 :class="{
-                  'text-gray-300': line.type === 'info',
+                  'text-ink-muted': line.type === 'info',
                   'text-status-warning': line.type === 'warning',
                   'text-status-error': line.type === 'error',
                 }"
@@ -657,7 +650,7 @@ onUnmounted(() => {
               </svg>
               <div class="text-sm">
                 <p class="text-hytale-orange font-medium mb-1">{{ t('setup.separateAuthNotice') }}</p>
-                <p class="text-gray-400">{{ t('setup.separateAuthNoticeDesc') }}</p>
+                <p class="text-ink-muted">{{ t('setup.separateAuthNoticeDesc') }}</p>
               </div>
             </div>
           </div>
@@ -669,8 +662,8 @@ onUnmounted(() => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.serverAuthSuccess') }}</p>
-            <p class="text-gray-400 mt-2">{{ t('setup.settingUpPersistence') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.serverAuthSuccess') }}</p>
+            <p class="text-ink-muted mt-2">{{ t('setup.settingUpPersistence') }}</p>
           </div>
 
           <!-- Error State -->
@@ -680,7 +673,7 @@ onUnmounted(() => {
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <p class="text-white font-semibold text-lg">{{ t('setup.authFailed') }}</p>
+            <p class="text-ink font-semibold text-lg">{{ t('setup.authFailed') }}</p>
             <p class="text-status-error mt-2">{{ serverAuthError }}</p>
             <Button class="mt-4" @click="retryServerAuth">
               {{ t('setup.retryAuth') }}
@@ -691,8 +684,8 @@ onUnmounted(() => {
           <div v-else-if="serverDeviceCodeState" class="space-y-6">
             <div class="text-center">
               <!-- Option 1: Direct Link (One-Click Auth) -->
-              <div v-if="serverDeviceCodeState.verificationUrlDirect" class="bg-dark-300 rounded-lg p-4 mb-4">
-                <p class="text-sm text-gray-400 mb-3">{{ t('setup.quickAuthOption') }}</p>
+              <div v-if="serverDeviceCodeState.verificationUrlDirect" class="bg-surface-muted rounded-lg p-4 mb-4">
+                <p class="text-sm text-ink-muted mb-3">{{ t('setup.quickAuthOption') }}</p>
                 <a
                   :href="serverDeviceCodeState.verificationUrlDirect"
                   target="_blank"
@@ -704,23 +697,23 @@ onUnmounted(() => {
                   </svg>
                   {{ t('setup.openAuthPage') }}
                 </a>
-                <p class="text-xs text-gray-500 mt-2">{{ t('setup.directLinkHint') }}</p>
+                <p class="text-xs text-ink-subtle mt-2">{{ t('setup.directLinkHint') }}</p>
               </div>
 
               <!-- Divider -->
               <div v-if="serverDeviceCodeState.verificationUrlDirect && serverDeviceCodeState.verificationUrl" class="flex items-center gap-4 my-4">
-                <div class="flex-1 h-px bg-dark-50"></div>
-                <span class="text-gray-500 text-sm">{{ t('setup.orAlternatively') }}</span>
-                <div class="flex-1 h-px bg-dark-50"></div>
+                <div class="flex-1 h-px bg-surface-overlay"></div>
+                <span class="text-ink-subtle text-sm">{{ t('setup.orAlternatively') }}</span>
+                <div class="flex-1 h-px bg-surface-overlay"></div>
               </div>
 
               <!-- Option 2: Manual Code Entry -->
-              <div class="bg-dark-300 rounded-lg p-4 mb-4">
-                <p class="text-sm text-gray-400 mb-2">{{ t('setup.manualAuthOption') }}</p>
+              <div class="bg-surface-muted rounded-lg p-4 mb-4">
+                <p class="text-sm text-ink-muted mb-2">{{ t('setup.manualAuthOption') }}</p>
 
                 <!-- Verification URL (Base URL) -->
                 <div class="mb-4">
-                  <p class="text-xs text-gray-500 mb-1">{{ t('setup.verificationUrl') }}</p>
+                  <p class="text-xs text-ink-subtle mb-1">{{ t('setup.verificationUrl') }}</p>
                   <a
                     :href="serverDeviceCodeState.verificationUrl || serverDeviceCodeState.verificationUrlDirect"
                     target="_blank"
@@ -742,11 +735,11 @@ onUnmounted(() => {
                   </Button>
                 </div>
 
-                <p class="text-gray-300 mb-4">{{ t('setup.enterCode') }}</p>
+                <p class="text-ink-muted mb-4">{{ t('setup.enterCode') }}</p>
 
                 <!-- User Code Display -->
-                <div class="bg-dark-400 border-2 border-dark-50 rounded-xl p-6 inline-block">
-                  <p class="text-3xl font-mono font-bold text-white tracking-widest">
+                <div class="bg-surface border-2 border-border rounded-xl p-6 inline-block">
+                  <p class="text-3xl font-mono font-bold text-ink tracking-widest">
                     {{ formattedServerUserCode }}
                   </p>
                 </div>
@@ -754,7 +747,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Waiting Status -->
-            <div class="flex items-center justify-center gap-3 text-gray-400">
+            <div class="flex items-center justify-center gap-3 text-ink-muted">
               <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
@@ -762,12 +755,12 @@ onUnmounted(() => {
             </div>
 
             <!-- Expiry Timer -->
-            <div class="text-center text-sm text-gray-500">
+            <div class="text-center text-sm text-ink-subtle">
               {{ t('setup.codeValidFor', { time: serverAuthTimeRemaining }) }}
             </div>
 
             <!-- Progress Bar (animated) -->
-            <div class="h-1 bg-dark-50 rounded-full overflow-hidden">
+            <div class="h-1 bg-surface-overlay rounded-full overflow-hidden">
               <div class="h-full bg-hytale-orange animate-pulse" style="width: 100%" />
             </div>
           </div>
@@ -777,7 +770,7 @@ onUnmounted(() => {
             <svg class="w-12 h-12 text-hytale-orange animate-spin mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <p class="text-gray-400">{{ t('setup.initializingAuth') }}</p>
+            <p class="text-ink-muted">{{ t('setup.initializingAuth') }}</p>
           </div>
         </div>
       </div>
@@ -795,15 +788,15 @@ onUnmounted(() => {
 
       <div class="card">
         <div class="card-body">
-          <p class="text-gray-300 mb-4">{{ t('setup.persistenceSetupInfo') }}</p>
+          <p class="text-ink-muted mb-4">{{ t('setup.persistenceSetupInfo') }}</p>
 
           <!-- Progress Bar -->
           <div class="mb-4">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-white font-medium">{{ t('setup.savingToken') }}</span>
-              <span class="text-gray-400 text-sm">{{ persistenceProgress }}%</span>
+              <span class="text-ink font-medium">{{ t('setup.savingToken') }}</span>
+              <span class="text-ink-muted text-sm">{{ persistenceProgress }}%</span>
             </div>
-            <div class="h-2 bg-dark-50 rounded-full overflow-hidden">
+            <div class="h-2 bg-surface-overlay rounded-full overflow-hidden">
               <div
                 class="h-full transition-all duration-300"
                 :class="persistenceComplete ? 'bg-status-success' : 'bg-hytale-orange'"
@@ -815,17 +808,17 @@ onUnmounted(() => {
           <!-- Console Output -->
           <div
             ref="consoleContainer"
-            class="h-40 overflow-y-auto bg-dark-400 rounded-lg p-4 font-mono text-sm"
+            class="h-40 overflow-y-auto bg-surface rounded-lg p-4 font-mono text-sm"
           >
             <div
               v-for="(line, index) in consoleLines"
               :key="index"
               class="flex gap-2"
             >
-              <span class="text-gray-500 flex-shrink-0">[{{ line.timestamp }}]</span>
+              <span class="text-ink-subtle flex-shrink-0">[{{ line.timestamp }}]</span>
               <span
                 :class="{
-                  'text-gray-300': line.type === 'info',
+                  'text-ink-muted': line.type === 'info',
                   'text-status-warning': line.type === 'warning',
                   'text-status-error': line.type === 'error',
                 }"
@@ -842,12 +835,12 @@ onUnmounted(() => {
     <template v-else-if="currentAuthStep === 'complete'">
       <div class="card">
         <div class="card-body">
-          <p class="text-gray-300 mb-4">{{ t('setup.allAuthCompleted') }}</p>
+          <p class="text-ink-muted mb-4">{{ t('setup.allAuthCompleted') }}</p>
 
           <!-- Auth Status List -->
           <div class="space-y-3">
             <!-- Downloader Credentials -->
-            <div class="flex items-center justify-between py-3 border-b border-dark-50/30">
+            <div class="flex items-center justify-between py-3 border-b border-border/40">
               <div class="flex items-center gap-3">
                 <div
                   class="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -855,7 +848,7 @@ onUnmounted(() => {
                 >
                   <svg
                     class="w-4 h-4"
-                    :class="allAuthStatus.downloaderCredentials ? 'text-status-success' : 'text-gray-500'"
+                    :class="allAuthStatus.downloaderCredentials ? 'text-status-success' : 'text-ink-subtle'"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -876,18 +869,18 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.downloaderCredentials') }}</span>
+                <span class="text-ink">{{ t('setup.downloaderCredentials') }}</span>
               </div>
               <span
                 class="text-sm"
-                :class="allAuthStatus.downloaderCredentials ? 'text-status-success' : 'text-gray-500'"
+                :class="allAuthStatus.downloaderCredentials ? 'text-status-success' : 'text-ink-subtle'"
               >
                 {{ allAuthStatus.downloaderCredentials ? t('setup.saved') : t('setup.notSaved') }}
               </span>
             </div>
 
             <!-- Server Token -->
-            <div class="flex items-center justify-between py-3 border-b border-dark-50/30">
+            <div class="flex items-center justify-between py-3 border-b border-border/40">
               <div class="flex items-center gap-3">
                 <div
                   class="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -895,7 +888,7 @@ onUnmounted(() => {
                 >
                   <svg
                     class="w-4 h-4"
-                    :class="allAuthStatus.serverToken ? 'text-status-success' : 'text-gray-500'"
+                    :class="allAuthStatus.serverToken ? 'text-status-success' : 'text-ink-subtle'"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -916,18 +909,18 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.serverToken') }}</span>
+                <span class="text-ink">{{ t('setup.serverToken') }}</span>
               </div>
               <span
                 class="text-sm"
-                :class="allAuthStatus.serverToken ? 'text-status-success' : 'text-gray-500'"
+                :class="allAuthStatus.serverToken ? 'text-status-success' : 'text-ink-subtle'"
               >
                 {{ allAuthStatus.serverToken ? t('setup.authenticated') : t('setup.notAuthenticated') }}
               </span>
             </div>
 
             <!-- Token Persistence -->
-            <div class="flex items-center justify-between py-3 border-b border-dark-50/30">
+            <div class="flex items-center justify-between py-3 border-b border-border/40">
               <div class="flex items-center gap-3">
                 <div
                   class="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -935,7 +928,7 @@ onUnmounted(() => {
                 >
                   <svg
                     class="w-4 h-4"
-                    :class="allAuthStatus.tokenPersistence ? 'text-status-success' : 'text-gray-500'"
+                    :class="allAuthStatus.tokenPersistence ? 'text-status-success' : 'text-ink-subtle'"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -956,11 +949,11 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.tokenPersistence') }}</span>
+                <span class="text-ink">{{ t('setup.tokenPersistence') }}</span>
               </div>
               <span
                 class="text-sm"
-                :class="allAuthStatus.tokenPersistence ? 'text-status-success' : 'text-gray-500'"
+                :class="allAuthStatus.tokenPersistence ? 'text-status-success' : 'text-ink-subtle'"
               >
                 {{ allAuthStatus.tokenPersistence ? t('setup.encryptedOnDisk') : t('setup.notPersisted') }}
               </span>
@@ -975,7 +968,7 @@ onUnmounted(() => {
                 >
                   <svg
                     class="w-4 h-4"
-                    :class="allAuthStatus.machineId ? 'text-status-success' : 'text-gray-500'"
+                    :class="allAuthStatus.machineId ? 'text-status-success' : 'text-ink-subtle'"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -996,11 +989,11 @@ onUnmounted(() => {
                     />
                   </svg>
                 </div>
-                <span class="text-white">{{ t('setup.machineId') }}</span>
+                <span class="text-ink">{{ t('setup.machineId') }}</span>
               </div>
               <span
                 class="text-sm"
-                :class="allAuthStatus.machineId ? 'text-status-success' : 'text-gray-500'"
+                :class="allAuthStatus.machineId ? 'text-status-success' : 'text-ink-subtle'"
               >
                 {{ allAuthStatus.machineId ? t('setup.generatedAndSaved') : t('setup.notGenerated') }}
               </span>
@@ -1010,13 +1003,13 @@ onUnmounted(() => {
       </div>
 
       <!-- Auto-Auth Info -->
-      <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+      <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
         <div class="flex items-start gap-3">
           <svg class="w-5 h-5 text-status-success mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
-          <div class="text-sm text-gray-400">
-            <p class="font-medium text-gray-300 mb-1">{{ t('setup.autoAuthEnabled') }}</p>
+          <div class="text-sm text-ink-muted">
+            <p class="font-medium text-ink-muted mb-1">{{ t('setup.autoAuthEnabled') }}</p>
             <p>{{ t('setup.autoAuthEnabledDesc') }}</p>
           </div>
         </div>

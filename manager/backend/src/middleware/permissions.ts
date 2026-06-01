@@ -4,19 +4,45 @@ import { getUserPermissions } from '../services/roles.js';
 import { Permission } from '../types/permissions.js';
 
 /**
+ * Effective permission set for a request. Resolves both JWT-authenticated
+ * users (role-derived permissions) and API-key callers (scopes are the
+ * permission set; the key's owner does not get extra rights through their
+ * role — keys are intentionally restrictive).
+ */
+async function effectivePermissions(req: AuthenticatedRequest): Promise<string[]> {
+  if (req.apiKey) {
+    // Bind the key to its owner's CURRENT rights (req.user is the key owner).
+    // A key minted while the owner was admin must not outlive a demotion or
+    // deletion: intersect the stored scopes with what the owner holds now.
+    // Owner deleted ⇒ getUserPermissions returns [] ⇒ key has no rights.
+    if (!req.user) return [];
+    const ownerPerms = await getUserPermissions(req.user);
+    if (ownerPerms.includes('*')) return req.apiKey.scopes;
+    return req.apiKey.scopes.filter(s => (ownerPerms as string[]).includes(s));
+  }
+  if (!req.user) return [];
+  // Hybrid scope: when a route is mounted under /api/servers/:serverId/...
+  // serverScopeMiddleware sets req.serverId and we apply per-server role
+  // overrides. Otherwise only the global role's permissions count.
+  if (req.serverId) {
+    const { getUserPermissionsForServer } = await import('../services/roles.js');
+    return getUserPermissionsForServer(req.user, req.serverId);
+  }
+  return getUserPermissions(req.user);
+}
+
+/**
  * Middleware factory that requires ALL specified permissions (AND logic).
  * If the user has the '*' permission (admin wildcard), all permissions are granted.
  */
 export function requirePermission(...permissions: Permission[]) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
-    const username = req.user;
-
-    if (!username) {
+    if (!req.user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    const userPermissions = await getUserPermissions(username);
+    const userPermissions = await effectivePermissions(req);
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {
@@ -47,14 +73,12 @@ export function requirePermission(...permissions: Permission[]) {
  */
 export function requireAnyPermission(...permissions: Permission[]) {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
-    const username = req.user;
-
-    if (!username) {
+    if (!req.user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    const userPermissions = await getUserPermissions(username);
+    const userPermissions = await effectivePermissions(req);
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {

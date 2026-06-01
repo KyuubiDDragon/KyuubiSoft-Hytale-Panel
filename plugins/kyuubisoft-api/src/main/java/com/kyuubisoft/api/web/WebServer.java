@@ -1,5 +1,6 @@
 package com.kyuubisoft.api.web;
 
+import com.kyuubisoft.api.config.ApiConfig;
 import com.kyuubisoft.api.handlers.MetricsHandler;
 import com.kyuubisoft.api.websocket.EventBroadcaster;
 import io.netty.bootstrap.ServerBootstrap;
@@ -23,6 +24,7 @@ public class WebServer {
     private final int port;
     private final EventBroadcaster eventBroadcaster;
     private MetricsHandler metricsHandler;
+    private ApiConfig apiConfig;
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -35,6 +37,11 @@ public class WebServer {
 
     public void setMetricsHandler(MetricsHandler metricsHandler) {
         this.metricsHandler = metricsHandler;
+    }
+
+    /** Optional API config used for auth + CORS on each request handler. */
+    public void setApiConfig(ApiConfig apiConfig) {
+        this.apiConfig = apiConfig;
     }
 
     public void start() throws InterruptedException {
@@ -61,6 +68,9 @@ public class WebServer {
                         HttpRequestHandler httpHandler = new HttpRequestHandler();
                         if (metricsHandler != null) {
                             httpHandler.setMetricsHandler(metricsHandler);
+                        }
+                        if (apiConfig != null) {
+                            httpHandler.setApiConfig(apiConfig);
                         }
                         pipeline.addLast(httpHandler);
                         pipeline.addLast(new WebSocketFrameHandler(eventBroadcaster));

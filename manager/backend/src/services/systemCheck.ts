@@ -1,4 +1,4 @@
-import Docker from 'dockerode';
+import { createDockerClient, isTcpDockerHost, dockerSocketPath } from './dockerClient.js';
 import * as os from 'os';
 import * as net from 'net';
 import * as dgram from 'dgram';
@@ -47,14 +47,19 @@ async function checkDockerSocket(): Promise<SystemCheck> {
     required: true,
   };
 
-  const socketPath = '/var/run/docker.sock';
+  const viaTcp = isTcpDockerHost();
+  const socketPath = dockerSocketPath();
 
   try {
-    // First check if socket file exists
-    await fs.promises.access(socketPath, fs.constants.R_OK | fs.constants.W_OK);
+    // For a local socket, verify the file is reachable first so we can give a
+    // precise ENOENT/EACCES hint. When pointed at a TCP endpoint (socket proxy)
+    // there is no local socket to stat — go straight to the dockerode connect.
+    if (!viaTcp) {
+      await fs.promises.access(socketPath, fs.constants.R_OK | fs.constants.W_OK);
+    }
 
-    // Try to connect using dockerode
-    const docker = new Docker({ socketPath });
+    // Try to connect using dockerode (honors DOCKER_HOST when set)
+    const docker = createDockerClient();
     const info = await docker.info();
 
     check.status = 'ok';
@@ -66,11 +71,11 @@ async function checkDockerSocket(): Promise<SystemCheck> {
     if (err.code === 'ENOENT') {
       check.status = 'error';
       check.message = 'Docker socket not found';
-      check.details = 'Docker must be installed and running. Socket path: /var/run/docker.sock';
+      check.details = `Docker must be installed and running. Socket path: ${socketPath}`;
     } else if (err.code === 'EACCES') {
       check.status = 'error';
       check.message = 'Permission denied';
-      check.details = 'Cannot access Docker socket. Ensure the container has access to /var/run/docker.sock';
+      check.details = `Cannot access Docker socket. Ensure the container has access to ${socketPath}`;
     } else {
       check.status = 'error';
       check.message = 'Connection failed';

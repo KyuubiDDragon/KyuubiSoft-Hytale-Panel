@@ -11,6 +11,7 @@ import com.kyuubisoft.api.metrics.PrometheusMetrics;
 import com.kyuubisoft.api.metrics.TpsTracker;
 import com.kyuubisoft.api.web.WebServer;
 import com.kyuubisoft.api.websocket.EventBroadcaster;
+import com.kyuubisoft.api.websocket.PositionTicker;
 import com.kyuubisoft.api.config.ApiConfig;
 
 import java.util.logging.Logger;
@@ -33,6 +34,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
     private ApiConfig config;
     private TpsTracker tpsTracker;
     private PrometheusMetrics prometheusMetrics;
+    private PositionTicker positionTicker;
 
     public KyuubiSoftAPI(JavaPluginInit init) {
         super(init);
@@ -46,7 +48,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
     @Override
     protected void setup() {
         LOGGER.info("╔════════════════════════════════════════╗");
-        LOGGER.info("║       KyuubiSoft API v1.2.2            ║");
+        LOGGER.info("║       KyuubiSoft API v1.4.3            ║");
         LOGGER.info("║       by KyuubiDDragon                 ║");
         LOGGER.info("║       + Prometheus Metrics Support     ║");
         LOGGER.info("╚════════════════════════════════════════╝");
@@ -70,6 +72,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
         // Start HTTP/WebSocket server
         int port = config.getHttpPort();
         webServer = new WebServer(port, eventBroadcaster);
+        webServer.setApiConfig(config);
 
         // Set up metrics handler
         MetricsHandler metricsHandler = new MetricsHandler(prometheusMetrics);
@@ -91,6 +94,15 @@ public class KyuubiSoftAPI extends JavaPlugin {
 
         // Register event listeners
         registerEvents();
+
+        // Start periodic player_position broadcast for the panel's live-map and
+        // replay recorder. Disabled if positionBroadcastIntervalMs <= 0.
+        try {
+            positionTicker = new PositionTicker(eventBroadcaster, config.getPositionBroadcastIntervalMs());
+            positionTicker.start();
+        } catch (Exception e) {
+            LOGGER.warning("Failed to start PositionTicker: " + e.getMessage());
+        }
     }
 
     private void registerEvents() {
@@ -125,22 +137,13 @@ public class KyuubiSoftAPI extends JavaPlugin {
         try {
             eventRegistry.registerGlobal(PlayerChatEvent.class, event -> {
                 try {
-                    String playerName = "Unknown";
-                    String uuid = "";
-                    String message = "";
-
-                    // Get sender info
                     var sender = event.getSender();
-                    if (sender != null) {
-                        playerName = sender.getUsername();
-                        uuid = sender.getUuid().toString();
-                    }
-
-                    // Get message content
-                    Object content = event.getContent();
-                    if (content != null) {
-                        message = extractStringFromParamValue(content);
-                    }
+                    String playerName = sender != null ? sender.getUsername() : "Unknown";
+                    String uuid = sender != null ? sender.getUuid().toString() : "";
+                    // PlayerChatEvent.getContent() is a plain String on this API —
+                    // use it directly instead of the old toString/reflection probe.
+                    String message = event.getContent();
+                    if (message == null) message = "";
 
                     eventBroadcaster.broadcastChat(playerName, uuid, message);
                 } catch (Exception e) {
@@ -152,63 +155,13 @@ public class KyuubiSoftAPI extends JavaPlugin {
         }
     }
 
-    /**
-     * Extract string value from StringParamValue or similar wrapper objects.
-     * Tries multiple methods via reflection to get the actual string.
-     */
-    private String extractStringFromParamValue(Object obj) {
-        if (obj == null) return "";
-
-        // If it's already a string, return it
-        if (obj instanceof String) return (String) obj;
-
-        String strVal = obj.toString();
-
-        // If toString() returns a clean value (no @ sign), use it
-        if (!strVal.contains("@") && !strVal.contains("StringParamValue")) {
-            return strVal;
-        }
-
-        // Try various getter methods via reflection
-        String[] methodNames = {"getValue", "getString", "get", "value", "getStringValue", "getContent", "getText"};
-
-        for (String methodName : methodNames) {
-            try {
-                var method = obj.getClass().getMethod(methodName);
-                Object result = method.invoke(obj);
-                if (result != null) {
-                    if (result instanceof String) {
-                        return (String) result;
-                    }
-                    String resultStr = result.toString();
-                    if (!resultStr.contains("@")) {
-                        return resultStr;
-                    }
-                }
-            } catch (Exception ignored) {
-                // Method doesn't exist or failed, try next
-            }
-        }
-
-        // Try to access 'value' field directly
-        try {
-            var field = obj.getClass().getDeclaredField("value");
-            field.setAccessible(true);
-            Object value = field.get(obj);
-            if (value != null) {
-                return value.toString();
-            }
-        } catch (Exception ignored) {
-            // Field doesn't exist or not accessible
-        }
-
-        // Return raw toString as fallback
-        return strVal.contains("@") ? "" : strVal;
-    }
-
     @Override
     protected void shutdown() {
         LOGGER.info("Shutting down KyuubiSoft API...");
+
+        if (positionTicker != null) {
+            positionTicker.shutdown();
+        }
 
         if (tpsTracker != null) {
             tpsTracker.shutdown();

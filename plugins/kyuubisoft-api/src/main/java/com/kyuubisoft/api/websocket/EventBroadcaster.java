@@ -101,6 +101,33 @@ public class EventBroadcaster {
     }
 
     /**
+     * Broadcast a player position update (live-map + replay).
+     *
+     * Fields may be null when the underlying Hytale API does not expose them
+     * yet (see PositionTicker for the reflection-based extraction). The frame
+     * is only sent when at least world+x+y+z are present, so consumers can
+     * treat a payload's absence as "no data" rather than "player at 0,0,0".
+     */
+    public void broadcastPlayerPosition(String playerName, String uuid, String world,
+                                        Double x, Double y, Double z,
+                                        Double yaw, Double pitch, Integer latencyMs) {
+        PlayerPositionEvent event = new PlayerPositionEvent();
+        event.type = "player_position";
+        event.player = playerName;
+        event.uuid = uuid;
+        event.world = world;
+        event.x = x;
+        event.y = y;
+        event.z = z;
+        event.yaw = yaw;
+        event.pitch = pitch;
+        event.latencyMs = latencyMs;
+        event.timestamp = Instant.now().toString();
+
+        broadcast(event);
+    }
+
+    /**
      * Broadcast TPS update (can be called periodically)
      */
     public void broadcastTpsUpdate(double tps, double mspt) {
@@ -165,6 +192,20 @@ public class EventBroadcaster {
         public String type;
         public double tps;
         public double mspt;
+        public String timestamp;
+    }
+
+    public static class PlayerPositionEvent {
+        public String type;
+        public String player;
+        public String uuid;
+        public String world;
+        public Double x;
+        public Double y;
+        public Double z;
+        public Double yaw;
+        public Double pitch;
+        public Integer latencyMs;
         public String timestamp;
     }
 }

@@ -68,6 +68,7 @@ WORKDIR /opt/hytale
 COPY --chmod=755 scripts/entrypoint.sh /opt/hytale/entrypoint.sh
 COPY --chmod=755 scripts/start-server.sh /opt/hytale/start-server.sh
 COPY --chmod=755 scripts/backup.sh /opt/hytale/backup.sh
+COPY --chmod=755 scripts/backup-hook.sh /opt/hytale/backup-hook.sh
 
 # ============================================================
 # Volumes for persistent data
@@ -82,7 +83,10 @@ EXPOSE 5520/udp
 # ============================================================
 # Health check
 # ============================================================
+# Match the configured launcher jar, not a hardcoded name — otherwise an
+# alternative launcher (SERVER_JAR=Hyinit-*.jar) leaves the container forever
+# "unhealthy" and a manager with depends_on:service_healthy never starts.
 HEALTHCHECK --interval=60s --timeout=10s --start-period=180s --retries=3 \
-    CMD pgrep -f "HytaleServer.jar" > /dev/null || exit 1
+    CMD pgrep -f "${SERVER_JAR:-HytaleServer.jar}" > /dev/null || exit 1
 
 ENTRYPOINT ["/opt/hytale/entrypoint.sh"]

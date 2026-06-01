@@ -2,9 +2,12 @@ import api from './client'
 
 export interface User {
   username: string
-  role: 'admin' | 'moderator' | 'operator' | 'viewer'
+  // Reference to a Role id. Custom roles are allowed alongside the four
+  // built-in ones so this is a free-form string rather than a fixed union.
+  roleId: string
   createdAt: string
   lastLogin?: string
+  tokenVersion?: number
 }
 
 export const usersApi = {

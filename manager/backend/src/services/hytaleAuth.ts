@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { config } from '../config.js';
@@ -48,7 +49,7 @@ export async function saveAuthStatus(status: HytaleAuthStatus): Promise<void> {
     await fs.mkdir(config.dataPath, { recursive: true });
     await fs.writeFile(AUTH_STATUS_FILE, JSON.stringify(status, null, 2));
   } catch (error) {
-    console.error('Failed to save Hytale auth status:', error);
+    logger.error('Failed to save Hytale auth status:', error);
   }
 }
 
@@ -58,13 +59,13 @@ export async function saveAuthStatus(status: HytaleAuthStatus): Promise<void> {
  */
 export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<ActionResponse> {
   try {
-    console.log(`[HytaleAuth] Setting persistence to: ${type}`);
+    logger.info(`[HytaleAuth] Setting persistence to: ${type}`);
 
     // Execute the /auth persistence command
     const result = await execCommand(`/auth persistence ${type}`);
 
     if (!result.success) {
-      console.error('[HytaleAuth] Failed to execute persistence command:', result.error);
+      logger.error('[HytaleAuth] Failed to execute persistence command:', result.error);
       return {
         success: false,
         error: result.error || 'Failed to set persistence type',
@@ -94,7 +95,7 @@ export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<Acti
     const hasMemoryWarning = /credentials stored in memory only/i.test(cleanLogs);
 
     if (hasSuccess && !hasMemoryWarning) {
-      console.log('[HytaleAuth] Persistence successfully set to Encrypted');
+      logger.info('[HytaleAuth] Persistence successfully set to Encrypted');
 
       // Check if token file now exists
       const tokenFileExists = await checkTokenFileExists();
@@ -116,20 +117,20 @@ export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<Acti
 
     // If we still see memory warnings, it didn't work
     if (hasMemoryWarning) {
-      console.warn('[HytaleAuth] Persistence command executed but still seeing memory-only warnings');
+      logger.warn('[HytaleAuth] Persistence command executed but still seeing memory-only warnings');
       return {
         success: false,
         error: 'Persistence command executed but credentials are still in memory only. The server may not support encrypted persistence yet.',
       };
     }
 
-    console.warn('[HytaleAuth] Could not verify persistence type change from logs');
+    logger.warn('[HytaleAuth] Could not verify persistence type change from logs');
     return {
       success: false,
       error: 'Could not verify persistence type change. Check server logs for details.',
     };
   } catch (error) {
-    console.error('Failed to set persistence:', error);
+    logger.error('Failed to set persistence:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -196,7 +197,7 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
     }
 
     if (!verificationUrl || !userCode) {
-      console.error('[HytaleAuth] Could not parse auth response from server logs');
+      logger.error('[HytaleAuth] Could not parse auth response from server logs');
       return {
         success: false,
         error: 'Could not parse authentication response from server logs. Make sure the server is running.',
@@ -310,7 +311,7 @@ export async function inspectDownloaderCredentials(): Promise<{ exists: boolean;
       };
     }
   } catch (error) {
-    console.error('[HytaleAuth] Error inspecting downloader credentials:', error);
+    logger.error('[HytaleAuth] Error inspecting downloader credentials:', error);
     return {
       exists: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -364,7 +365,7 @@ async function checkTokenFileExists(): Promise<boolean> {
       try {
         await fs.access(tokenPath);
         // File exists
-        console.log(`[HytaleAuth] Found Hytale auth token at: ${tokenPath}`);
+        logger.info(`[HytaleAuth] Found Hytale auth token at: ${tokenPath}`);
         return true;
       } catch {
         // File doesn't exist, try next
@@ -374,13 +375,13 @@ async function checkTokenFileExists(): Promise<boolean> {
 
     // If we have ANY files in the .auth directory, consider it as having tokens
     if (authFiles.length > 0) {
-      console.log(`[HytaleAuth] Found ${authFiles.length} file(s) in .auth directory, considering as authenticated`);
+      logger.info(`[HytaleAuth] Found ${authFiles.length} file(s) in .auth directory, considering as authenticated`);
       return true;
     }
 
     return false;
   } catch (error) {
-    console.error('[HytaleAuth] Error checking token file:', error);
+    logger.error('[HytaleAuth] Error checking token file:', error);
     return false;
   }
 }
@@ -406,7 +407,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
     for (const tokenPath of serverTokenPaths) {
       try {
         await fs.access(tokenPath);
-        console.log(`[HytaleAuth] Found server auth token at: ${tokenPath}`);
+        logger.info(`[HytaleAuth] Found server auth token at: ${tokenPath}`);
         await saveAuthStatus({
           authenticated: true,
           persistent: true,
@@ -446,7 +447,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
       const isAuthSuccessful = authSuccessPatterns.some(pattern => pattern.test(cleanLogs));
 
       if (isAuthSuccessful) {
-        console.log('[HytaleAuth] Authentication successful detected in logs! Setting persistence...');
+        logger.info('[HytaleAuth] Authentication successful detected in logs! Setting persistence...');
 
         // Authentication successful - now set persistence to save credentials
         const persistenceResult = await execCommand('/auth persistence Encrypted');
@@ -459,7 +460,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
           for (const tokenPath of serverTokenPaths) {
             try {
               await fs.access(tokenPath);
-              console.log(`[HytaleAuth] Persistence successful - auth.enc created at: ${tokenPath}`);
+              logger.info(`[HytaleAuth] Persistence successful - auth.enc created at: ${tokenPath}`);
               await saveAuthStatus({
                 authenticated: true,
                 persistent: true,
@@ -476,7 +477,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
           }
 
           // auth.enc not found but persistence command succeeded - auth is in memory
-          console.log('[HytaleAuth] Persistence command ran but auth.enc not found. Auth may be memory-only.');
+          logger.info('[HytaleAuth] Persistence command ran but auth.enc not found. Auth may be memory-only.');
           await saveAuthStatus({
             authenticated: true,
             persistent: false,
@@ -488,7 +489,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
             message: 'Server is authenticated (memory only - credentials may not persist after restart).',
           };
         } else {
-          console.warn('[HytaleAuth] Failed to set persistence:', persistenceResult.error);
+          logger.warn('[HytaleAuth] Failed to set persistence:', persistenceResult.error);
           // Auth successful but persistence failed
           await saveAuthStatus({
             authenticated: true,
@@ -527,7 +528,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
     const downloaderCredsExist = await checkDownloaderCredentialsExist();
 
     if (serverAuthNeeded) {
-      console.log('[HytaleAuth] Server requires authentication (detected "No server tokens configured")');
+      logger.info('[HytaleAuth] Server requires authentication (detected "No server tokens configured")');
 
       // Update status to indicate server auth is specifically required
       await saveAuthStatus({

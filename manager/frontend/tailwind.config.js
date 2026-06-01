@@ -1,5 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Class strategy so the existing `dark:` utilities keep working but we can
+  // also opt into Light Mode by toggling a single class on <html>.
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{vue,js,ts,jsx,tsx}",
@@ -7,6 +10,11 @@ export default {
   theme: {
     extend: {
       colors: {
+        // NOTE: `surface` and `ink` are defined ONCE below. A previous duplicate
+        // block here (surface.base/panel/elevated, ink.primary/secondary) read
+        // CSS vars that don't exist in main.css AND was silently overridden by
+        // the canonical block — so `text-ink-primary`/`bg-surface-panel` resolved
+        // to nothing. Removed to keep a single source of truth.
         // Hytale Brand Colors
         hytale: {
           orange: '#FF6B35',
@@ -15,7 +23,7 @@ export default {
           yellow: '#FFB845',
           gold: '#FFAA00',
         },
-        // Dark Theme Backgrounds
+        // Dark Theme Backgrounds (legacy — kept for backward compatibility)
         dark: {
           DEFAULT: '#1A1D23',
           50: '#2D323C',
@@ -28,6 +36,27 @@ export default {
           700: '#0B0C0E',
           800: '#060707',
           900: '#000000',
+        },
+        // Semantic Surface tokens (driven by CSS custom properties)
+        surface: {
+          DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
+          raised: 'rgb(var(--surface-raised) / <alpha-value>)',
+          sunken: 'rgb(var(--surface-sunken) / <alpha-value>)',
+          overlay: 'rgb(var(--surface-overlay) / <alpha-value>)',
+          muted: 'rgb(var(--surface-muted) / <alpha-value>)',
+        },
+        // Semantic Ink (foreground/text) tokens
+        ink: {
+          DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+          muted: 'rgb(var(--ink-muted) / <alpha-value>)',
+          subtle: 'rgb(var(--ink-subtle) / <alpha-value>)',
+          inverse: 'rgb(var(--ink-inverse) / <alpha-value>)',
+        },
+        // Semantic border token
+        border: {
+          DEFAULT: 'rgb(var(--border) / <alpha-value>)',
+          strong: 'rgb(var(--border-strong) / <alpha-value>)',
+          subtle: 'rgb(var(--border-subtle) / <alpha-value>)',
         },
         // Inventory UI Colors (neutral dark, matching panel theme)
         inv: {
@@ -57,6 +86,7 @@ export default {
         'glow-orange': '0 0 20px rgba(255, 107, 53, 0.3)',
         'glow-success': '0 0 20px rgba(74, 222, 128, 0.3)',
         'glow-error': '0 0 20px rgba(239, 68, 68, 0.3)',
+        'card-hover': '0 8px 24px rgba(0, 0, 0, 0.3)',
       },
       keyframes: {
         shimmer: {
@@ -68,10 +98,20 @@ export default {
           '50%': { width: '40%', marginLeft: '30%' },
           '100%': { width: '0%', marginLeft: '100%' },
         },
+        'pulse-soft': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.6' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         shimmer: 'shimmer 1.5s ease-in-out infinite',
         'extraction-progress': 'extraction-progress 2s ease-in-out infinite',
+        'pulse-soft': 'pulse-soft 2s ease-in-out infinite',
+        'fade-in': 'fade-in 0.2s ease-out',
       },
     },
   },

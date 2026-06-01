@@ -93,6 +93,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/files',
+      name: 'files',
+      component: () => import('./views/Files.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('./views/Settings.vue'),
@@ -111,6 +117,24 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/audit',
+      name: 'audit',
+      component: () => import('./views/Audit.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/webhooks',
+      name: 'webhooks',
+      component: () => import('./views/Webhooks.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/security',
+      name: 'security',
+      component: () => import('./views/SecuritySettings.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/scheduler',
       name: 'scheduler',
       component: () => import('./views/Scheduler.vue'),
@@ -120,6 +144,24 @@ const router = createRouter({
       path: '/statistics',
       name: 'statistics',
       component: () => import('./views/Statistics.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/playtime',
+      name: 'playtime',
+      component: () => import('./views/Playtime.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/crashes',
+      name: 'crashes',
+      component: () => import('./views/Crashes.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/player/:name',
+      name: 'playerProfile',
+      component: () => import('./views/PlayerProfile.vue'),
       meta: { requiresAuth: true },
     },
     {
@@ -147,10 +189,40 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/live-map',
+      name: 'liveMap',
+      component: () => import('./views/LiveMap.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/replay',
+      name: 'replay',
+      component: () => import('./views/Replay.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/wiki',
+      name: 'wiki',
+      component: () => import('./views/Wiki.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/roles',
       name: 'roles',
       component: () => import('./views/Roles.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/servers',
+      name: 'servers',
+      component: () => import('./views/Servers.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/status',
+      name: 'publicStatus',
+      component: () => import('./views/PublicStatus.vue'),
+      meta: { requiresAuth: false, public: true },
     },
     {
       path: '/:pathMatch(.*)*',
@@ -185,6 +257,12 @@ router.beforeEach(async (to, _from, next) => {
       setupCheckDone = true
       setupRequired = false
     }
+  }
+
+  // Public pages (e.g. the read-only status page) bypass setup/auth gates.
+  if (to.meta.public) {
+    next()
+    return
   }
 
   // If setup is required and not going to setup page, redirect to setup

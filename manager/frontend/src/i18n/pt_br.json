@@ -9,6 +9,9 @@
     "noRealData": "Todos os dados sao simulados. Nenhuma alteracao real possivel."
   },
   "common": {
+    "skipToContent": "Pular para o conteúdo principal",
+    "revoke": "Revogar",
+    "uninstall": "Desinstalar",
     "loading": "Carregando...",
     "save": "Salvar",
     "saving": "Salvando...",
@@ -39,7 +42,19 @@
     "copy": "Copiar",
     "noPermission": "Você não tem permissão para realizar esta ação",
     "online": "Online",
-    "dismiss": "Dispensar"
+    "dismiss": "Dispensar",
+    "retry": "Tentar novamente",
+    "errorOccurred": "Algo deu errado",
+    "errorLoading": "Falha ao carregar os dados",
+    "noResults": "Nenhum resultado encontrado",
+    "empty": "Nada por aqui ainda",
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu",
+    "toggleTheme": "Alternar tema",
+    "lightMode": "Tema claro",
+    "darkMode": "Tema escuro",
+    "userMenu": "Menu do usuário",
+    "loadMore": "Carregar mais"
   },
   "health": {
     "permissionIssue": "Problema de Permissão de Arquivo Detectado",
@@ -60,6 +75,7 @@
   "nav": {
     "admin": "Admin",
     "dashboard": "Painel",
+    "menu": "Menu",
     "console": "Console",
     "backups": "Backups",
     "players": "Jogadores",
@@ -81,7 +97,153 @@
     "chat": "Log de Chat",
     "roles": "Funções",
     "help": "Ajuda de Comandos",
-    "avatarInventory": "Avatar e Inventário"
+    "avatarInventory": "Avatar e Inventário",
+    "files": "Gerenciador de Arquivos",
+    "playtime": "Tempo de Jogo",
+    "crashes": "Falhas",
+    "liveMap": "Mapa ao Vivo",
+    "replay": "Replay",
+    "wiki": "Wiki",
+    "modUpdates": "Atualizações de Mods"
+  },
+  "files": {
+    "title": "Gerenciador de Arquivos",
+    "subtitle": "Navegue e edite arquivos do seu servidor Hytale",
+    "upload": "Enviar",
+    "move": "Mover / Renomear",
+    "modified": "Modificado",
+    "binary": "Binário",
+    "binaryHint": "Arquivo binário - use Download para obter uma cópia.",
+    "readonlyHint": "Este diretório é somente leitura. Edição e upload estão desativados.",
+    "empty": {
+      "title": "Nenhum arquivo selecionado",
+      "subtitle": "Selecione um arquivo na árvore para começar a editar.",
+      "dir": "Esta pasta está vazia."
+    },
+    "confirm": {
+      "delete": "Excluir \"{path}\"? Esta ação não pode ser desfeita.",
+      "deleteTitle": "Excluir arquivo?",
+      "discardChanges": "Há alterações não salvas. Descartar?",
+      "discardTitle": "Descartar alterações?"
+    },
+    "prompt": {
+      "move": "Digite o novo caminho (relativo ao root):",
+      "moveTitle": "Mover / renomear"
+    },
+    "success": {
+      "saved": "Arquivo salvo",
+      "uploaded": "Upload concluído",
+      "deleted": "Arquivo excluído",
+      "moved": "Arquivo movido"
+    },
+    "error": {
+      "loadRoots": "Falha ao carregar os roots do gerenciador",
+      "loadDir": "Falha ao carregar diretório",
+      "loadFile": "Falha ao carregar arquivo",
+      "save": "Falha ao salvar arquivo",
+      "upload": "Falha no upload",
+      "delete": "Falha ao excluir arquivo",
+      "move": "Falha ao mover arquivo"
+    },
+    "conflict": {
+      "title": "Arquivo modificado em disco",
+      "message": "Outro processo modificou este arquivo desde que você o abriu. Recarregue para obter a versão mais recente (alterações não salvas serão perdidas).",
+      "reload": "Recarregar do disco"
+    }
+  },
+  "playtime": {
+    "title": "Ranking de Tempo de Jogo",
+    "subtitle": "Tempo total jogado por jogador, mais ativos primeiro",
+    "player": "Jogador",
+    "total": "Tempo de Jogo",
+    "sessions": "Sessões",
+    "status": "Status",
+    "online": "Online",
+    "never": "Nunca",
+    "empty": "Nenhuma sessão de jogo registrada ainda.",
+    "loadError": "Falha ao carregar o ranking de tempo de jogo"
+  },
+  "crashes": {
+    "title": "Relatórios de Falhas",
+    "subtitle": "Falhas do servidor capturadas com o log ao redor",
+    "autoRestarted": "Reiniciado automaticamente",
+    "empty": "Nenhuma falha registrada. Bem estável!",
+    "noLog": "Nenhum log foi capturado para esta falha.",
+    "loadError": "Falha ao carregar os relatórios de falhas"
+  },
+  "profile": {
+    "viewProfile": "Ver Perfil",
+    "subtitle": "Perfil do jogador — notas da equipe e histórico de punições",
+    "notes": "Notas da Equipe",
+    "addNotePlaceholder": "Adicionar uma nota…",
+    "add": "Adicionar",
+    "noNotes": "Nenhuma nota ainda.",
+    "punishmentHistory": "Histórico de Punições",
+    "active": "ativo",
+    "until": "até",
+    "noPunishments": "Nenhuma punição registrada.",
+    "loadError": "Falha ao carregar o perfil do jogador",
+    "saveError": "Falha ao salvar a nota"
+  },
+  "liveMap": {
+    "title": "Mapa ao Vivo",
+    "subtitle": "Posições dos jogadores com heatmap de ping (tempo real)",
+    "noPlayers": "Nenhum jogador online no momento.",
+    "heatmap": "Heatmap",
+    "playback": "Reprodução",
+    "now": "Agora",
+    "minutesAgo": "há {n} min",
+    "secondsAgo": "há {n} s",
+    "latencyGood": "<50ms",
+    "latencyOk": "<120ms",
+    "latencyBad": ">=120ms",
+    "demoNotice": "Modo demo: posições simuladas."
+  },
+  "replay": {
+    "title": "Replay",
+    "subtitle": "Gravações de todos os eventos do plugin e posições dos jogadores",
+    "recording": "Gravação",
+    "recordingOn": "ativa",
+    "recordingOff": "desativada",
+    "enableRecording": "Ativar gravação",
+    "disableRecording": "Desativar gravação",
+    "retention": "Retenção (dias)",
+    "segments": "Segmentos",
+    "noSegments": "Nenhum segmento de replay foi gravado ainda.",
+    "tableId": "ID",
+    "tableStart": "Início",
+    "tableEnd": "Fim",
+    "tableDuration": "Duração",
+    "tablePlayers": "Jogadores",
+    "tableEvents": "Eventos",
+    "tableSize": "Tamanho",
+    "play": "Reproduzir",
+    "pause": "Pausar",
+    "export": "Exportar",
+    "deleteConfirm": "Excluir este segmento?",
+    "deleteTitle": "Excluir segmento de replay?",
+    "saveConfig": "Salvar",
+    "playerModal": "Player de replay",
+    "events": "Eventos",
+    "chat": "Chat",
+    "speed": "Velocidade"
+  },
+  "wiki": {
+    "title": "Wiki",
+    "subtitle": "Visão geral auto-gerada de todos os mods e plugins instalados",
+    "regenerate": "Regerar",
+    "regenerating": "Regerando...",
+    "regenerated": "Wiki atualizada ({n} entradas).",
+    "publicAccess": "Acesso público",
+    "publicHint": "Quando ativo, a wiki fica acessível sem autenticação via ?public=true.",
+    "noEntries": "Nenhum dado de mod ou plugin encontrado.",
+    "selectEntry": "Selecione uma entrada à esquerda.",
+    "commands": "Comandos",
+    "configuration": "Configuração",
+    "version": "Versão",
+    "author": "Autor",
+    "category": "Categoria",
+    "file": "Arquivo"
   },
   "dashboard": {
     "title": "Painel",
@@ -228,6 +390,7 @@
     "connected": "Conectado",
     "disconnected": "Desconectado",
     "reconnecting": "Reconectando...",
+    "notConnected": "Não conectado — comando não enviado. Reconectando, tente novamente.",
     "reconnect": "Reconectar",
     "noLogs": "Nenhum log disponível",
     "filter": "Filtrar",
@@ -311,7 +474,43 @@
       "noDeaths": "Nenhuma posição de morte registrada",
       "deathCount": "{count} posições de morte",
       "deathDay": "Dia {day}",
-      "latestDeath": "Mais recente"
+      "latestDeath": "Mais recente",
+      "appearance": "Aparência",
+      "world": "Mundo",
+      "gamemode": "Modo de Jogo",
+      "health": "Vida",
+      "stamina": "Vigor",
+      "oxygen": "Oxigênio",
+      "mana": "Mana",
+      "immunity": "Imunidade",
+      "position": "Posição",
+      "rotation": "Rotação",
+      "discoveredZones": "Zonas Descobertas",
+      "memories": "Memórias",
+      "uniqueItems": "Itens Únicos",
+      "noData": "Nenhum dado do jogador disponível",
+      "noSavedData": "Nenhum dado salvo do jogador encontrado",
+      "noStats": "Nenhuma estatística disponível",
+      "slots": "Espaços",
+      "armor": "Armadura",
+      "utility": "Utilitário",
+      "tools": "Ferramentas",
+      "emptyInventory": "O inventário está vazio",
+      "inventoryUnavailable": "Inventário indisponível",
+      "inventoryHint": "Os dados do inventário estarão disponíveis assim que a API do Hytale oferecer suporte.",
+      "modelPreview": "Pré-visualização do Modelo",
+      "modelType": "Tipo de Modelo",
+      "skinId": "ID da Skin",
+      "customization": "Personalização",
+      "hairStyle": "Estilo de Cabelo",
+      "hairColor": "Cor do Cabelo",
+      "eyeColor": "Cor dos Olhos",
+      "bodyType": "Tipo de Corpo",
+      "noCustomization": "Nenhum dado de personalização disponível",
+      "appearanceUnavailable": "Aparência indisponível",
+      "appearanceHint": "Os dados de aparência estarão disponíveis assim que a API do Hytale oferecer suporte.",
+      "assetsHint": "Extraia os assets para mostrar os ícones dos itens",
+      "goToAssets": "Ir para Assets"
     },
     "kill": "Matar",
     "respawn": "Renascer",
@@ -334,7 +533,37 @@
     "confirmKill": "Realmente deseja matar este jogador?",
     "confirmClearInventory": "Realmente deseja limpar o inventário deste jogador?",
     "moreActions": "Mais Ações",
-    "coordinates": "Coordenadas"
+    "coordinates": "Coordenadas",
+    "viewDetails": "Ver Detalhes",
+    "pluginRequired": "Plugin necessário para informações detalhadas do jogador",
+    "pluginHint": "Instale e inicie o Plugin KyuubiSoft API para ver os detalhes do jogador.",
+    "itemTypes": {
+      "sword": "Espada",
+      "axe": "Machado",
+      "battleaxe": "Machado de Batalha",
+      "mace": "Maça",
+      "pickaxe": "Picareta",
+      "bow": "Arco",
+      "arrow": "Flecha",
+      "shield": "Escudo",
+      "helmet": "Capacete",
+      "chestplate": "Peitoral",
+      "leggings": "Calças",
+      "gloves": "Luvas",
+      "potion": "Poção",
+      "food": "Comida",
+      "torch": "Tocha",
+      "teleporter": "Teleportador",
+      "material": "Material",
+      "tool": "Ferramenta",
+      "block": "Bloco",
+      "plant": "Planta",
+      "item": "Item"
+    },
+    "tooltip": {
+      "amount": "Quantidade",
+      "durability": "Durabilidade"
+    }
   },
   "whitelist": {
     "title": "Lista de Permissões e Banimentos",
@@ -354,7 +583,10 @@
     "bannedPlayers": "Jogadores Banidos",
     "confirmRemove": "Remover \"{player}\" da whitelist?",
     "confirmUnban": "Desbanir jogador \"{player}\"?",
-    "noBans": "Nenhum jogador banido"
+    "noBans": "Nenhum jogador banido",
+    "noPlayersSubtitle": "Adicione nomes de jogadores para permitir o acesso ao servidor.",
+    "noBansSubtitle": "Jogadores banidos aparecem aqui.",
+    "bannedAt": "Banido em"
   },
   "permissions": {
     "confirmDeleteUser": "Excluir usuário de permissões \"{name}\"?",
@@ -513,8 +745,14 @@
     "path": "Caminho",
     "restartNote": "Reinicialização do servidor necessária após ativar/desativar mods ou plugins.",
     "upload": "Enviar",
+    "dropTitle": "Solte para enviar",
+    "dropHint": "Solte os arquivos em qualquer lugar para enviá-los",
+    "dropRejected": "Tipo de arquivo não suportado. Permitido: {types}",
+    "dropSkipped": "Arquivos não suportados ignorados: {files}",
     "confirmDelete": "Realmente deseja excluir \"{name}\"?",
+    "confirmDeleteTitle": "Excluir arquivo?",
     "confirmUninstall": "Realmente deseja desinstalar \"{name}\"?",
+    "confirmUninstallTitle": "Desinstalar mod?",
     "configEditor": "Editor de Configuração",
     "configFiles": "Arquivos de Configuração",
     "noConfigs": "Nenhum arquivo de configuração encontrado",
@@ -583,10 +821,40 @@
     "stackmartApiKeyInstructions": "Para usar recursos de publicador, crie uma API key no stackmart.org:",
     "stackmartApiKeyStep1": "Vá para",
     "stackmartApiKeyStep2": "Crie uma conta de publicador",
-    "stackmartApiKeyStep3": "Gere uma Publisher API Key"
+    "stackmartApiKeyStep3": "Gere uma Publisher API Key",
+    "curseforgeDescription": "Navegue e instale mods do CurseForge - a maior plataforma de mods para jogos.",
+    "curseforgeUnavailable": "API do CurseForge indisponível. Configure a chave de API.",
+    "searchCurseForge": "Buscar mods no CurseForge...",
+    "curseforgeResults": "Resultados do CurseForge",
+    "noCurseForgeResults": "Nenhum mod encontrado",
+    "curseforgeApiKeyInstructions": "Para usar o CurseForge, você precisa de uma chave de API:",
+    "curseforgeApiKeyStep1": "Acesse",
+    "curseforgeApiKeyStep2": "Solicite uma chave de API de terceiros",
+    "curseforgeApiKeyStep3": "Adicione a chave à sua configuração",
+    "checkingUpdates": "Verificando atualizações...",
+    "updatesAvailable": "Atualizações disponíveis",
+    "noUpdatesAvailable": "Todos os mods estão atualizados",
+    "updateAll": "Atualizar todos",
+    "releaseType": "Tipo de Versão",
+    "release": "Estável",
+    "beta": "Beta",
+    "alpha": "Alpha",
+    "gameVersions": "Versões do Jogo",
+    "curseforgeApiSettings": "Configurações da API do CurseForge",
+    "thirdPartyDisabled": "Este mod não permite downloads de terceiros. Baixe diretamente do CurseForge.",
+    "viewOnCurseforge": "Ver no CurseForge"
   },
   "performance": {
     "title": "Monitor de Desempenho",
+    "history": {
+      "title": "Histórico de Desempenho",
+      "window": "Últimos {min} min",
+      "collecting": "Coletando dados… os gráficos aparecem quando houver amostras suficientes.",
+      "tps": "TPS",
+      "mspt": "MSPT",
+      "cpu": "CPU",
+      "mem": "Memória"
+    },
     "liveUpdates": "Atualizações em Tempo Real",
     "cpu": "CPU",
     "memory": "Memória",
@@ -637,6 +905,114 @@
     "resume": "Retomar"
   },
   "settings": {
+    "integrations": {
+      "title": "Chaves de API / Integrações",
+      "desc": "Armazene chaves de API de terceiros aqui em vez de variáveis de ambiente. As chaves salvas aqui ficam na configuração do painel e entram em vigor imediatamente — sem reiniciar.",
+      "loadFailed": "Falha ao carregar as configurações de integração",
+      "saveFailed": "Falha ao salvar as configurações de integração",
+      "saved": "Configurações de integração salvas",
+      "nothingToSave": "Insira um novo valor antes de salvar",
+      "statusUnset": "Não configurado",
+      "statusEnv": "Definido via ambiente ({hint})",
+      "statusConfig": "Configurado ({hint})",
+      "curseforgeKey": "Chave de API do CurseForge",
+      "curseforgeGetKey": "Obter uma chave de API do CurseForge",
+      "curseforgeGameId": "ID do jogo no CurseForge",
+      "curseforgeGameIdHint": "Hytale é 70216. Altere apenas se souber o que está fazendo.",
+      "modtaleKey": "Chave de API do Modtale",
+      "stackmartKey": "Chave de API do StackMart",
+      "placeholderSet": "Digite uma nova chave para substituir a atual",
+      "placeholderEmpty": "Cole sua chave de API…",
+      "clear": "Limpar",
+      "envNote": "Deixe em branco para manter o valor atual. Limpar uma chave recorre à variável de ambiente, se houver."
+    },
+    "automod": {
+      "title": "Automoderação do Chat",
+      "description": "Age automaticamente sobre o chat do jogo que infringe suas regras. Requer o plugin KyuubiSoft para retransmitir os eventos de chat.",
+      "enabled": "Ativar automoderação",
+      "action": "Ação ao infringir",
+      "actionWarn": "Avisar (lembrete público)",
+      "actionMute": "Silenciar o jogador",
+      "actionKick": "Expulsar o jogador",
+      "muteDuration": "Duração do silêncio (segundos)",
+      "muteDurationHint": "0 = permanente até ser removido manualmente.",
+      "bannedWords": "Palavras proibidas",
+      "bannedWordsPlaceholder": "palavra1, palavra2, palavra3",
+      "bannedWordsHint": "Separadas por vírgula, sem distinção de maiúsculas, palavras inteiras.",
+      "blockLinks": "Bloquear links / URLs",
+      "maxCaps": "Máx. de maiúsculas %",
+      "maxCapsHint": "0 = desligado. Sinaliza mensagens (≥8 caracteres) acima desta proporção de maiúsculas.",
+      "maxLength": "Comprimento máx. da mensagem",
+      "maxLengthHint": "0 = desligado. Sinaliza mensagens mais longas que isso.",
+      "flood": "Anti-spam (flood)",
+      "floodIn": "mensagens em",
+      "floodSeconds": "segundos",
+      "floodHint": "0 = desligado. Mais de N mensagens dentro da janela conta como spam.",
+      "saved": "Configurações de automoderação salvas",
+      "saveFailed": "Falha ao salvar as configurações de automoderação"
+    },
+    "discord": {
+      "title": "Bot do Discord",
+      "description": "Ponte de chat bidirecional entre o seu servidor e um canal do Discord, além dos comandos /status e /players. Desligado por padrão.",
+      "statusRunning": "Conectado",
+      "statusStopped": "Parado",
+      "enabled": "Ativar bot do Discord",
+      "token": "Token do bot",
+      "tokenPlaceholder": "Cole o token do seu bot",
+      "tokenSetPlaceholder": "Token definido ({hint}) — deixe em branco para manter",
+      "tokenHint": "Crie um bot em discord.com/developers, ative o intent de Conteúdo de Mensagem e cole o token aqui.",
+      "channelId": "ID do canal",
+      "channelIdHint": "O canal de texto para espelhar o chat (ative o Modo de Desenvolvedor, clique com o botão direito no canal → Copiar ID).",
+      "guildId": "ID do servidor (guild) — opcional",
+      "guildIdHint": "Defina para registrar comandos de barra em um servidor instantaneamente. Deixe em branco para comandos globais.",
+      "saved": "Configurações do Discord salvas",
+      "saveFailed": "Falha ao salvar as configurações do Discord"
+    },
+    "offsite": {
+      "title": "Backups Externos",
+      "description": "Envie backups para armazenamento compatível com S3 (AWS S3, Backblaze B2, Cloudflare R2, Wasabi, MinIO…). Desligado por padrão.",
+      "enabled": "Ativar backups externos",
+      "endpoint": "URL do endpoint",
+      "endpointHint": "Deixe em branco para AWS S3. Para B2/R2/Wasabi/MinIO, cole o endpoint compatível com S3.",
+      "bucket": "Bucket",
+      "region": "Região",
+      "prefix": "Prefixo da chave",
+      "prefixHint": "Pasta/caminho adicionado a cada chave de objeto.",
+      "accessKeyId": "ID da chave de acesso",
+      "secretAccessKey": "Chave de acesso secreta",
+      "secretPlaceholder": "Digite a chave de acesso secreta",
+      "secretSetPlaceholder": "Segredo definido ({hint}) — deixe em branco para manter",
+      "uploadOnBackup": "Enviar automaticamente cada novo backup",
+      "test": "Testar conexão",
+      "testing": "Testando…",
+      "testOk": "Conexão OK — as credenciais funcionam",
+      "testFailed": "Falha no teste de conexão",
+      "saved": "Configurações de backup externo salvas",
+      "saveFailed": "Falha ao salvar as configurações de backup externo"
+    },
+    "webpush": {
+      "title": "Notificações Push",
+      "description": "Envie alertas do painel (falhas, backups, atualizações…) como notificações nativas para seus dispositivos — mesmo com a aba do painel fechada. Desligado por padrão.",
+      "enabled": "Ativar notificações push",
+      "subject": "Contato (assunto VAPID)",
+      "subjectHint": "Um contato mailto: ou https: exigido pelos serviços de push. As chaves VAPID são geradas automaticamente.",
+      "saved": "Configurações de push salvas",
+      "saveFailed": "Falha ao salvar as configurações de push",
+      "thisDevice": "Este dispositivo",
+      "unsupported": "Este navegador não suporta notificações push.",
+      "enableFirst": "Ative as notificações push acima primeiro.",
+      "deviceOn": "Este dispositivo está inscrito.",
+      "deviceOff": "Não inscrito neste dispositivo.",
+      "subscribe": "Inscrever",
+      "subscribed": "Dispositivo inscrito nas notificações push",
+      "subscribeFailed": "Não foi possível inscrever este dispositivo",
+      "permissionDenied": "A permissão de notificação foi negada",
+      "unsubscribe": "Cancelar inscrição",
+      "unsubscribed": "Inscrição do dispositivo cancelada",
+      "test": "Enviar teste",
+      "testSent": "Notificação de teste enviada",
+      "testFailed": "Falha ao enviar a notificação de teste"
+    },
     "title": "Configurações",
     "language": "Idioma",
     "german": "Deutsch",
@@ -701,6 +1077,22 @@
     "allowOpHint": "Adiciona a flag --allow-op ao iniciar o servidor",
     "allowOpRestartNote": "Após alterar esta configuração, o servidor deve ser reiniciado para que a alteração tenha efeito.",
     "allowOpRestartRequired": "Reinicialização Necessária",
+    "jvm": {
+      "title": "Memória do Servidor & JVM",
+      "description": "Ajuste o heap do Java e adicione argumentos avançados de JVM/servidor. As alterações são gravadas na configuração do servidor e aplicadas na próxima reinicialização.",
+      "minRam": "RAM mínima (-Xms)",
+      "maxRam": "RAM máxima (-Xmx)",
+      "ramHint": "Número seguido de M ou G (ex.: 512M, 4G). Padrão do contêiner: {min} – {max}.",
+      "extraJavaArgs": "Argumentos extras da JVM",
+      "extraJavaArgsHint": "Separados por espaço, ex.: -XX:+UseZGC. Avançado — deixe em branco se não tiver certeza.",
+      "extraServerArgs": "Argumentos extras do servidor",
+      "extraServerArgsHint": "Flags separadas por espaço passadas ao próprio servidor Hytale.",
+      "restartNote": "Salvo — reinicie o servidor para aplicar as novas configurações.",
+      "restartNow": "Reiniciar agora",
+      "restarting": "Reiniciando o servidor…",
+      "saved": "Configurações da JVM salvas",
+      "saveFailed": "Falha ao salvar as configurações da JVM"
+    },
     "allowOpRestartRequiredDesc": "A configuração foi alterada. O servidor deve ser reiniciado agora para aplicar a alteração.",
     "allowOpRestarting": "O servidor está reiniciando para aplicar a nova configuração...",
     "recommendedPluginsTitle": "Plugins Recomendados",
@@ -755,7 +1147,8 @@
     "lastLogin": "Último Login",
     "you": "Você",
     "confirmDelete": "Realmente deseja excluir o usuário \"{username}\"?",
-    "requiredFields": "Usuário e senha são obrigatórios"
+    "requiredFields": "Usuário e senha são obrigatórios",
+    "noUsersSubtitle": "Adicione um usuário do painel para conceder acesso ao dashboard."
   },
   "activity": {
     "title": "Registro de Atividades",
@@ -782,14 +1175,81 @@
     "failed": "Falhou",
     "clearLog": "Limpar Registro",
     "confirmClear": "Realmente deseja limpar todo o registro de atividades?",
-    "entries": "{count} entradas"
+    "entries": "{count} entradas",
+    "noEntriesSubtitle": "Ações realizadas no painel aparecem aqui."
+  },
+  "audit": {
+    "title": "Registro de Auditoria",
+    "subtitle": "Trilha de auditoria detalhada para eventos sensíveis à segurança",
+    "time": "Hora",
+    "actor": "Ator",
+    "action": "Ação",
+    "target": "Alvo",
+    "ip": "IP",
+    "result": "Resultado",
+    "success": "Sucesso",
+    "failed": "Falhou",
+    "actorPlaceholder": "Ator (nome de usuário)",
+    "allActions": "Todas as ações",
+    "from": "De",
+    "to": "Até",
+    "apply": "Aplicar",
+    "exportCsv": "Exportar CSV",
+    "noEvents": "Sem eventos de auditoria",
+    "noEventsSubtitle": "Nenhum evento corresponde ao filtro atual."
+  },
+  "notifications": {
+    "title": "Notificações",
+    "bellWithCount": "Notificações, {count} não lidas",
+    "empty": "Sem notificações",
+    "dismissAll": "Descartar todas"
+  },
+  "servers": {
+    "title": "Servidores",
+    "subtitle": "Gerenciar instâncias do servidor Hytale",
+    "addServer": "Adicionar servidor",
+    "default": "padrão",
+    "setDefault": "Definir como padrão",
+    "deleteConfirm": "Excluir servidor \"{name}\"? O contêiner será parado.",
+    "ready": "pronto",
+    "creating": "criando",
+    "broken": "com erro"
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Receba eventos do servidor no Discord, Slack ou em qualquer endpoint HTTP",
+    "add": "Adicionar Webhook",
+    "name": "Nome",
+    "namePlaceholder": "Nome (ex.: Discord #ops)",
+    "type": "Tipo",
+    "typeGeneric": "HTTP Genérico (assinado)",
+    "url": "URL",
+    "urlPlaceholder": "https://discord.com/api/webhooks/...",
+    "secret": "Secret",
+    "secretPlaceholder": "Segredo HMAC (X-KyuubiSoft-Signature)",
+    "events": "Eventos",
+    "eventCount": "{count} eventos",
+    "status": "Status",
+    "create": "Criar",
+    "test": "Testar",
+    "testResult": "Teste",
+    "noHooks": "Nenhum webhook configurado",
+    "noHooksSubtitle": "Adicione um para receber eventos do servidor no Discord, Slack ou em um endpoint genérico.",
+    "confirmDelete": "Excluir webhook \"{name}\"?",
+    "confirmDeleteTitle": "Excluir webhook?"
   },
   "chat": {
     "title": "Log de Chat",
     "description": "Ver todas as mensagens de chat dos jogadores",
     "noMessages": "Nenhuma mensagem de chat ainda",
     "searchPlaceholder": "Buscar mensagens ou nomes de jogadores...",
-    "messageCount": "{count} mensagens no total"
+    "messageCount": "{count} mensagens no total",
+    "timeRange": "Período:",
+    "days7": "7 dias",
+    "days14": "14 dias",
+    "days30": "30 dias",
+    "all": "Tudo",
+    "daysAvailable": "{count} dia(s) disponível(is)"
   },
   "commands": {
     "title": "Referência de Comandos",
@@ -800,44 +1260,120 @@
       "server": "Servidor",
       "world": "Mundo"
     },
-    "kick": { "desc": "Expulsar um jogador do servidor" },
-    "ban": { "desc": "Banir um jogador do servidor" },
-    "unban": { "desc": "Desbanir um jogador" },
-    "op": { "desc": "Dar permissões de operador" },
-    "deop": { "desc": "Remover permissões de operador" },
-    "whitelistAdd": { "desc": "Adicionar jogador à lista de permissões" },
-    "whitelistRemove": { "desc": "Remover jogador da lista de permissões" },
-    "kill": { "desc": "Matar um jogador" },
-    "gamemode": { "desc": "Alterar modo de jogo do jogador" },
-    "give": { "desc": "Dar itens a um jogador" },
-    "heal": { "desc": "Curar um jogador completamente" },
-    "effectApply": { "desc": "Aplicar um efeito a um jogador" },
-    "effectClear": { "desc": "Limpar todos os efeitos de um jogador" },
-    "inventoryClear": { "desc": "Limpar o inventário de um jogador" },
-    "tpPlayer": { "desc": "Teleportar jogador para outro jogador" },
-    "tpCoords": { "desc": "Teleportar jogador para coordenadas" },
-    "tpSelf": { "desc": "Teleportar você para um jogador" },
-    "top": { "desc": "Teleportar para o topo do mundo" },
-    "spawn": { "desc": "Teleportar para o spawn" },
-    "home": { "desc": "Teleportar para casa" },
-    "sethome": { "desc": "Definir localização de casa" },
-    "warp": { "desc": "Teleportar para um ponto de teleporte" },
-    "stop": { "desc": "Parar o servidor" },
-    "restart": { "desc": "Reiniciar o servidor" },
-    "save": { "desc": "Salvar todos os mundos" },
-    "reload": { "desc": "Recarregar configuração do servidor" },
-    "say": { "desc": "Transmitir uma mensagem" },
-    "broadcast": { "desc": "Transmissão para todo o servidor" },
-    "list": { "desc": "Listar jogadores online" },
-    "memory": { "desc": "Mostrar estatísticas de uso de memória" },
-    "tps": { "desc": "Mostrar ticks por segundo" },
-    "gc": { "desc": "Executar coleta de lixo" },
-    "worldList": { "desc": "Listar todos os mundos" },
-    "worldCreate": { "desc": "Criar um novo mundo" },
-    "worldLoad": { "desc": "Carregar um mundo" },
-    "timeSet": { "desc": "Definir horário do mundo" },
-    "weather": { "desc": "Definir clima" },
-    "difficulty": { "desc": "Definir dificuldade do jogo" }
+    "kick": {
+      "desc": "Expulsar um jogador do servidor"
+    },
+    "ban": {
+      "desc": "Banir um jogador do servidor"
+    },
+    "unban": {
+      "desc": "Desbanir um jogador"
+    },
+    "op": {
+      "desc": "Dar permissões de operador"
+    },
+    "deop": {
+      "desc": "Remover permissões de operador"
+    },
+    "whitelistAdd": {
+      "desc": "Adicionar jogador à lista de permissões"
+    },
+    "whitelistRemove": {
+      "desc": "Remover jogador da lista de permissões"
+    },
+    "kill": {
+      "desc": "Matar um jogador"
+    },
+    "gamemode": {
+      "desc": "Alterar modo de jogo do jogador"
+    },
+    "give": {
+      "desc": "Dar itens a um jogador"
+    },
+    "heal": {
+      "desc": "Curar um jogador completamente"
+    },
+    "effectApply": {
+      "desc": "Aplicar um efeito a um jogador"
+    },
+    "effectClear": {
+      "desc": "Limpar todos os efeitos de um jogador"
+    },
+    "inventoryClear": {
+      "desc": "Limpar o inventário de um jogador"
+    },
+    "tpPlayer": {
+      "desc": "Teleportar jogador para outro jogador"
+    },
+    "tpCoords": {
+      "desc": "Teleportar jogador para coordenadas"
+    },
+    "tpSelf": {
+      "desc": "Teleportar você para um jogador"
+    },
+    "top": {
+      "desc": "Teleportar para o topo do mundo"
+    },
+    "spawn": {
+      "desc": "Teleportar para o spawn"
+    },
+    "home": {
+      "desc": "Teleportar para casa"
+    },
+    "sethome": {
+      "desc": "Definir localização de casa"
+    },
+    "warp": {
+      "desc": "Teleportar para um ponto de teleporte"
+    },
+    "stop": {
+      "desc": "Parar o servidor"
+    },
+    "restart": {
+      "desc": "Reiniciar o servidor"
+    },
+    "save": {
+      "desc": "Salvar todos os mundos"
+    },
+    "reload": {
+      "desc": "Recarregar configuração do servidor"
+    },
+    "say": {
+      "desc": "Transmitir uma mensagem"
+    },
+    "broadcast": {
+      "desc": "Transmissão para todo o servidor"
+    },
+    "list": {
+      "desc": "Listar jogadores online"
+    },
+    "memory": {
+      "desc": "Mostrar estatísticas de uso de memória"
+    },
+    "tps": {
+      "desc": "Mostrar ticks por segundo"
+    },
+    "gc": {
+      "desc": "Executar coleta de lixo"
+    },
+    "worldList": {
+      "desc": "Listar todos os mundos"
+    },
+    "worldCreate": {
+      "desc": "Criar um novo mundo"
+    },
+    "worldLoad": {
+      "desc": "Carregar um mundo"
+    },
+    "timeSet": {
+      "desc": "Definir horário do mundo"
+    },
+    "weather": {
+      "desc": "Definir clima"
+    },
+    "difficulty": {
+      "desc": "Definir dificuldade do jogo"
+    }
   },
   "scheduler": {
     "title": "Agendador e Automação",
@@ -960,8 +1496,11 @@
     "selectAll": "Selecionar Tudo",
     "deselectAll": "Desselecionar Tudo",
     "confirmDelete": "Tem certeza de que deseja excluir a função \"{name}\"?",
+    "confirmDeleteTitle": "Excluir função?",
     "cannotDeleteSystem": "Funções do sistema não podem ser excluídas",
-    "noRoles": "Nenhuma função encontrada"
+    "noRoles": "Nenhuma função encontrada",
+    "noRolesSubtitle": "Crie uma função personalizada para conceder permissões específicas.",
+    "type": "Tipo"
   },
   "permissionCategories": {
     "dashboard": "Painel",
@@ -1239,7 +1778,24 @@
       "memory": "Mostrar uso de memória",
       "chunkLoad": "Forçar carregamento de chunks",
       "chunkUnload": "Descarregar chunks",
-      "logLevel": "Definir nível de log"
+      "logLevel": "Definir nível de log",
+      "gamemodeSurvival": "Definir modo sobrevivência",
+      "gamemodeSpectator": "Definir modo espectador",
+      "pardon": "Remover um banimento (alias de /unban)",
+      "mute": "Silenciar um jogador no chat",
+      "unmute": "Remover o silêncio de um jogador",
+      "heal": "Restaurar a vida de um jogador ao máximo",
+      "effect": "Aplicar ou modificar um efeito de status",
+      "clear": "Limpar o inventário de um jogador",
+      "saveAll": "Salvar todos os mundos imediatamente",
+      "saveOn": "Ativar o salvamento automático",
+      "saveOff": "Desativar o salvamento automático",
+      "update": "Verificar ou aplicar uma atualização do servidor",
+      "msg": "Enviar mensagem privada a um jogador",
+      "me": "Transmitir uma mensagem de ação",
+      "seed": "Mostrar a seed do mundo",
+      "worldborder": "Configurar a borda do mundo",
+      "setspawn": "Definir o ponto de spawn do mundo"
     }
   },
   "setup": {
@@ -1456,7 +2012,6 @@
     "codeValidFor": "Codigo valido por {time}",
     "envConfigRequired": "Configuracao Necessaria",
     "followTheseSteps": "Siga estes passos",
-
     "extractAssetsTitle": "Extracao de Assets",
     "extractAssetsDescription": "Extraia assets do jogo para recursos avancados como icones de itens e pre-visualizacao de texturas",
     "extractingAssetsTitle": "Extraindo Assets",
@@ -1489,7 +2044,6 @@
     "extractionSkippedInfo": "Voce pode extrair assets mais tarde em Configuracoes > Assets",
     "extractionStartFailed": "Falha ao iniciar a extracao",
     "enabledFeatures": "Recursos Ativados",
-
     "firstServerStartTitle": "Primeiro Inicio do Servidor",
     "firstServerStartDescription": "Iniciando o servidor pela primeira vez para iniciar a autenticacao",
     "serverAuthTitle": "Autenticacao do Servidor",
@@ -1525,7 +2079,6 @@
     "autoAuthEnabledDesc": "Seu servidor ira re-autenticar automaticamente ao reiniciar usando as credenciais salvas. Nenhuma intervencao manual necessaria.",
     "serverStartFailed": "Falha ao iniciar servidor",
     "persistenceFailed": "Falha ao configurar persistencia de token",
-
     "download": {
       "title": "Download do Servidor",
       "description": "Escolha como voce quer configurar os arquivos do servidor Hytale",
@@ -1708,7 +2261,14 @@
         "description": "Habilite o recurso de mapa web ao vivo para visualizacao do mundo em tempo real",
         "portRequirements": "As seguintes portas serao usadas:"
       },
-      "learnMore": "Saiba mais"
+      "learnMore": "Saiba mais",
+      "curseforge": {
+        "title": "CurseForge",
+        "description": "Acesse o CurseForge para navegar e instalar mods com verificação de atualizações",
+        "apiKey": "Chave de API",
+        "apiKeyPlaceholder": "Digite sua chave de API do CurseForge...",
+        "hint": "Solicite uma chave de API em docs.curseforge.com"
+      }
     },
     "network": {
       "title": "Configuracao de Rede",
@@ -1792,6 +2352,21 @@
   "avatarInventory": {
     "title": "Avatar e Inventário",
     "subtitle": "Ver avatar e inventário do jogador no estilo Hytale",
+    "edit": {
+      "title": "Editar inventário",
+      "giveItem": "Dar item",
+      "clear": "Limpar inventário",
+      "itemId": "ID do item",
+      "itemIdPlaceholder": "ex.: adamantite_sword",
+      "amount": "Quantidade",
+      "give": "Dar",
+      "hint": "Os itens são dados ao jogador ao vivo (via plugin ou console do servidor). A visualização salva é atualizada após o servidor gravar.",
+      "gaveItem": "{amount}× {item} dado(s)",
+      "giveFailed": "Falha ao dar o item",
+      "clearConfirm": "Limpar todo o inventário de {player}? Isso não pode ser desfeito.",
+      "cleared": "Inventário limpo",
+      "clearFailed": "Falha ao limpar o inventário"
+    },
     "searchPlayer": "Buscar jogador...",
     "selectPrompt": "Selecione um Jogador",
     "selectHint": "Use a busca acima para selecionar um jogador",
@@ -1836,5 +2411,47 @@
       "amount": "Quantidade",
       "durability": "Durabilidade"
     }
+  },
+  "modupdates": {
+    "title": "Atualizações de Mods",
+    "status": "Status da Atualização",
+    "available": "Atualizações disponíveis",
+    "upToDate": "Todos os mods atualizados",
+    "noTrackedMods": "Nenhum mod sendo monitorado",
+    "tracked": "Mods Monitorados",
+    "checking": "Verificando atualizações...",
+    "checkAll": "Verificar Todos",
+    "checkNow": "Verificar Agora",
+    "lastChecked": "Última verificação",
+    "never": "Nunca",
+    "trackMod": "Monitorar Mod",
+    "untrack": "Parar de Monitorar",
+    "curseforgeUrl": "URL ou Slug do CurseForge",
+    "curseforgeUrlHint": "ex.: https://www.curseforge.com/hytale/mods/nome-do-mod ou nome-do-mod",
+    "installedVersion": "Versão Instalada",
+    "latestVersion": "Versão Mais Recente",
+    "updateAvailable": "Atualização disponível",
+    "noUpdate": "Atualizado",
+    "filename": "Nome do Arquivo",
+    "trackSuccess": "O mod agora está sendo monitorado",
+    "trackError": "Falha ao monitorar o mod",
+    "untrackSuccess": "O mod não está mais sendo monitorado",
+    "modNotFound": "Mod não encontrado no CurseForge",
+    "invalidUrl": "URL ou slug do CurseForge inválido",
+    "autoCheck": "Verificação automática (a cada hora)",
+    "viewOnCurseforge": "Ver no CurseForge",
+    "trackAsWishlist": "Monitorar sem instalar (Lista de Desejos)",
+    "wishlist": "Lista de Desejos",
+    "notInstalled": "Não instalado",
+    "selectFile": "Selecione um arquivo de mod",
+    "install": "Instalar",
+    "update": "Atualizar",
+    "installing": "Instalando...",
+    "updating": "Atualizando..."
+  },
+  "security": {
+    "confirmRevokeTitle": "Revogar chave de API?",
+    "confirmRevokeMessage": "Revogar a chave \"{name}\"? Qualquer ferramenta que a utilize perderá o acesso imediatamente.",
+    "revokeApiKeyAria": "Revogar chave de API {name}"
   }
 }

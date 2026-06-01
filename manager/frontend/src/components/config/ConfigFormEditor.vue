@@ -115,7 +115,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="topLevelKeys.length === 0" class="text-center py-8 text-gray-500">
+    <div v-else-if="topLevelKeys.length === 0" class="text-center py-8 text-ink-subtle">
       {{ t('config.noProperties') }}
     </div>
 
@@ -124,37 +124,37 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
       <div v-for="key in topLevelKeys" :key="key" class="space-y-2">
         <!-- String Input -->
         <div v-if="getValueType(parsedConfig[key]) === 'string'" class="space-y-1">
-          <label class="block text-sm font-medium text-gray-300">
+          <label class="block text-sm font-medium text-ink-muted">
             {{ formatKey(key) }}
-            <span v-if="isPathLike(parsedConfig[key] as string)" class="text-xs text-gray-500 ml-2">(path)</span>
+            <span v-if="isPathLike(parsedConfig[key] as string)" class="text-xs text-ink-subtle ml-2">(path)</span>
           </label>
           <input
             :value="parsedConfig[key] as string"
             @input="updateValue(key, ($event.target as HTMLInputElement).value)"
             type="text"
-            class="w-full px-4 py-2 bg-dark-300 border border-dark-50 rounded-lg text-white font-mono text-sm focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-ink font-mono text-sm focus:outline-none focus:border-hytale-orange"
           />
         </div>
 
         <!-- Number Input -->
         <div v-else-if="getValueType(parsedConfig[key]) === 'number'" class="space-y-1">
-          <label class="block text-sm font-medium text-gray-300">{{ formatKey(key) }}</label>
+          <label class="block text-sm font-medium text-ink-muted">{{ formatKey(key) }}</label>
           <input
             :value="parsedConfig[key] as number"
             @input="updateValue(key, parseFloat(($event.target as HTMLInputElement).value) || 0)"
             type="number"
-            class="w-full px-4 py-2 bg-dark-300 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
           />
         </div>
 
         <!-- Boolean Toggle -->
         <div v-else-if="getValueType(parsedConfig[key]) === 'boolean'" class="flex items-center justify-between py-2 px-1">
-          <label class="text-sm font-medium text-gray-300">{{ formatKey(key) }}</label>
+          <label class="text-sm font-medium text-ink-muted">{{ formatKey(key) }}</label>
           <button
             @click="updateValue(key, !parsedConfig[key])"
             :class="[
               'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-              parsedConfig[key] ? 'bg-hytale-orange' : 'bg-dark-50'
+              parsedConfig[key] ? 'bg-hytale-orange' : 'bg-surface-overlay'
             ]"
           >
             <span
@@ -168,7 +168,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
 
         <!-- Array (editable textarea) -->
         <div v-else-if="getValueType(parsedConfig[key]) === 'array'" class="space-y-1">
-          <label class="block text-sm font-medium text-gray-300">
+          <label class="block text-sm font-medium text-ink-muted">
             {{ formatKey(key) }}
             <span class="text-xs text-hytale-orange ml-2">(Array - {{ (parsedConfig[key] as ConfigValue[]).length }} items)</span>
           </label>
@@ -176,7 +176,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
             :value="arrayEditors[key] || JSON.stringify(parsedConfig[key], null, 2)"
             @input="updateArrayValue(key, ($event.target as HTMLTextAreaElement).value)"
             rows="4"
-            class="w-full px-3 py-2 bg-dark-300 border border-dark-50 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-hytale-orange resize-y"
+            class="w-full px-3 py-2 bg-surface-muted border border-border rounded-lg text-ink text-sm font-mono focus:outline-none focus:border-hytale-orange resize-y"
             spellcheck="false"
           ></textarea>
         </div>
@@ -184,41 +184,41 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
         <!-- Nested Object -->
         <div v-else-if="getValueType(parsedConfig[key]) === 'object'" class="space-y-2">
           <label class="block text-sm font-medium text-hytale-orange">{{ formatKey(key) }}</label>
-          <div class="ml-4 pl-4 border-l-2 border-dark-50 space-y-3">
+          <div class="ml-4 pl-4 border-l-2 border-border space-y-3">
             <template v-for="(childValue, childKey) in (parsedConfig[key] as { [key: string]: ConfigValue })" :key="childKey">
               <!-- Nested String -->
               <div v-if="getValueType(childValue) === 'string'" class="space-y-1">
-                <label class="block text-xs font-medium text-gray-400">
+                <label class="block text-xs font-medium text-ink-muted">
                   {{ formatKey(String(childKey)) }}
-                  <span v-if="isPathLike(childValue as string)" class="text-gray-500 ml-1">(path)</span>
+                  <span v-if="isPathLike(childValue as string)" class="text-ink-subtle ml-1">(path)</span>
                 </label>
                 <input
                   :value="childValue as string"
                   @input="updateNestedValue([key, String(childKey)], ($event.target as HTMLInputElement).value)"
                   type="text"
-                  class="w-full px-3 py-1.5 bg-dark-300 border border-dark-50 rounded-lg text-white text-sm font-mono focus:outline-none focus:border-hytale-orange"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-sm font-mono focus:outline-none focus:border-hytale-orange"
                 />
               </div>
 
               <!-- Nested Number -->
               <div v-else-if="getValueType(childValue) === 'number'" class="space-y-1">
-                <label class="block text-xs font-medium text-gray-400">{{ formatKey(String(childKey)) }}</label>
+                <label class="block text-xs font-medium text-ink-muted">{{ formatKey(String(childKey)) }}</label>
                 <input
                   :value="childValue as number"
                   @input="updateNestedValue([key, String(childKey)], parseFloat(($event.target as HTMLInputElement).value) || 0)"
                   type="number"
-                  class="w-full px-3 py-1.5 bg-dark-300 border border-dark-50 rounded-lg text-white text-sm focus:outline-none focus:border-hytale-orange"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-sm focus:outline-none focus:border-hytale-orange"
                 />
               </div>
 
               <!-- Nested Boolean -->
               <div v-else-if="getValueType(childValue) === 'boolean'" class="flex items-center justify-between py-1 px-1">
-                <label class="text-xs font-medium text-gray-400">{{ formatKey(String(childKey)) }}</label>
+                <label class="text-xs font-medium text-ink-muted">{{ formatKey(String(childKey)) }}</label>
                 <button
                   @click="updateNestedValue([key, String(childKey)], !childValue)"
                   :class="[
                     'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                    childValue ? 'bg-hytale-orange' : 'bg-dark-50'
+                    childValue ? 'bg-hytale-orange' : 'bg-surface-overlay'
                   ]"
                 >
                   <span
@@ -232,7 +232,7 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
 
               <!-- Nested Array -->
               <div v-else-if="getValueType(childValue) === 'array'" class="space-y-1">
-                <label class="block text-xs font-medium text-gray-400">
+                <label class="block text-xs font-medium text-ink-muted">
                   {{ formatKey(String(childKey)) }}
                   <span class="text-hytale-orange ml-1">(Array)</span>
                 </label>
@@ -240,35 +240,35 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
                   :value="arrayEditors[`${key}.${childKey}`] || JSON.stringify(childValue, null, 2)"
                   @input="updateArrayValue(`${key}.${childKey}`, ($event.target as HTMLTextAreaElement).value)"
                   rows="3"
-                  class="w-full px-3 py-1.5 bg-dark-300 border border-dark-50 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
                   spellcheck="false"
                 ></textarea>
               </div>
 
               <!-- Nested Object (show as JSON) -->
               <div v-else-if="getValueType(childValue) === 'object'" class="space-y-1">
-                <label class="block text-xs font-medium text-gray-400">
+                <label class="block text-xs font-medium text-ink-muted">
                   {{ formatKey(String(childKey)) }}
-                  <span class="text-gray-500 ml-1">(Object)</span>
+                  <span class="text-ink-subtle ml-1">(Object)</span>
                 </label>
                 <textarea
                   :value="JSON.stringify(childValue, null, 2)"
                   @input="(() => { try { updateNestedValue([key, String(childKey)], JSON.parse(($event.target as HTMLTextAreaElement).value)) } catch {} })()"
                   rows="4"
-                  class="w-full px-3 py-1.5 bg-dark-300 border border-dark-50 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-xs font-mono focus:outline-none focus:border-hytale-orange resize-y"
                   spellcheck="false"
                 ></textarea>
               </div>
 
               <!-- Null -->
               <div v-else class="space-y-1">
-                <label class="block text-xs font-medium text-gray-400">{{ formatKey(String(childKey)) }}</label>
+                <label class="block text-xs font-medium text-ink-muted">{{ formatKey(String(childKey)) }}</label>
                 <input
                   :value="String(childValue)"
                   @input="updateNestedValue([key, String(childKey)], ($event.target as HTMLInputElement).value || null)"
                   type="text"
                   placeholder="null"
-                  class="w-full px-3 py-1.5 bg-dark-300 border border-dark-50 rounded-lg text-white text-sm focus:outline-none focus:border-hytale-orange"
+                  class="w-full px-3 py-1.5 bg-surface-muted border border-border rounded-lg text-ink text-sm focus:outline-none focus:border-hytale-orange"
                 />
               </div>
             </template>
@@ -277,13 +277,13 @@ const topLevelKeys = computed(() => Object.keys(parsedConfig.value))
 
         <!-- Null or Unknown -->
         <div v-else class="space-y-1">
-          <label class="block text-sm font-medium text-gray-300">{{ formatKey(key) }}</label>
+          <label class="block text-sm font-medium text-ink-muted">{{ formatKey(key) }}</label>
           <input
             :value="parsedConfig[key] === null ? '' : String(parsedConfig[key])"
             @input="updateValue(key, ($event.target as HTMLInputElement).value || null)"
             type="text"
             placeholder="null"
-            class="w-full px-4 py-2 bg-dark-300 border border-dark-50 rounded-lg text-white focus:outline-none focus:border-hytale-orange"
+            class="w-full px-4 py-2 bg-surface-muted border border-border rounded-lg text-ink focus:outline-none focus:border-hytale-orange"
           />
         </div>
       </div>

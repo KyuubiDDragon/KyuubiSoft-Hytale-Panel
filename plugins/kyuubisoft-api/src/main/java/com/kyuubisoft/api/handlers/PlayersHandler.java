@@ -3,9 +3,14 @@ package com.kyuubisoft.api.handlers;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.NameMatching;
+import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
+import com.hypixel.hytale.server.core.modules.entitystats.EntityStatValue;
+import com.hypixel.hytale.server.core.modules.entitystats.asset.DefaultEntityStatTypes;
 import com.hypixel.hytale.math.vector.Transform;
-import com.hypixel.hytale.math.vector.Vector3d;
-import com.hypixel.hytale.math.vector.Vector3f;
+import com.hypixel.hytale.math.vector.Rotation3f;
+import org.joml.Vector3d;
 
 import java.util.*;
 import java.util.HashMap;
@@ -13,7 +18,18 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 /**
- * Handler for player-related API endpoints
+ * Handler for player-related API endpoints.
+ *
+ * <h3>Hytale 2026-05 API notes</h3>
+ * <ul>
+ *   <li>{@code Transform.getPosition()} now returns {@link org.joml.Vector3d}
+ *       and {@code Transform.getRotation()} a {@link Rotation3f} with explicit
+ *       {@code yaw()}/{@code pitch()} accessors (older versions used
+ *       {@code com.hypixel.hytale.math.vector.Vector3d/Vector3f}).</li>
+ *   <li>{@code Universe.getPlayers()} returns {@link Collection} (was List).</li>
+ *   <li>Player actions are dispatched through the server's own commands via
+ *       {@link CommandExecutor} rather than the old "not implemented" stubs.</li>
+ * </ul>
  */
 public class PlayersHandler {
 
@@ -23,169 +39,145 @@ public class PlayersHandler {
     // Player Actions (POST endpoints)
     // ============================================================
 
-    /**
-     * POST /api/players/{name}/heal
-     * Heals the player to full health
-     */
+    /** POST /api/players/{name}/heal — restore the player's stats to full. */
     public ActionResult healPlayer(String playerName) {
-        PlayerRef player = findPlayer(playerName);
-        if (player == null) {
-            return new ActionResult(false, "Player not found: " + playerName);
-        }
-
-        // TODO: When Hytale API exposes health modification, implement it here
-        // For now, return false so the panel uses console commands as fallback
-        // Example future API:
-        // PlayerStats stats = player.getStats();
-        // stats.setHealth(stats.getMaxHealth());
-        // return new ActionResult(true, "Player healed");
-
-        LOGGER.info("Heal requested for player: " + playerName + " - using console fallback");
-        return new ActionResult(false, "Not implemented - use console command");
+        String name = safeName(playerName);
+        if (name == null) return new ActionResult(false, "Invalid player name");
+        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
+        return CommandExecutor.run("player stats settomax --player " + name);
     }
 
-    /**
-     * POST /api/players/{name}/respawn
-     * Respawns the player at their spawn point
-     */
+    /** POST /api/players/{name}/respawn — respawn the player at their spawn point. */
     public ActionResult respawnPlayer(String playerName) {
-        PlayerRef player = findPlayer(playerName);
-        if (player == null) {
-            return new ActionResult(false, "Player not found: " + playerName);
-        }
-
-        // TODO: When Hytale API exposes respawn functionality, implement it here
-        LOGGER.info("Respawn requested for player: " + playerName + " - using console fallback");
-        return new ActionResult(false, "Not implemented - use console command");
+        String name = safeName(playerName);
+        if (name == null) return new ActionResult(false, "Invalid player name");
+        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
+        return CommandExecutor.run("player respawn --player " + name);
     }
 
-    /**
-     * POST /api/players/{name}/kill
-     * Kills the player
-     */
+    /** POST /api/players/{name}/kill — kill the player. */
     public ActionResult killPlayer(String playerName) {
-        PlayerRef player = findPlayer(playerName);
-        if (player == null) {
-            return new ActionResult(false, "Player not found: " + playerName);
-        }
-
-        // TODO: When Hytale API exposes kill functionality, implement it here
-        LOGGER.info("Kill requested for player: " + playerName + " - using console fallback");
-        return new ActionResult(false, "Not implemented - use console command");
+        String name = safeName(playerName);
+        if (name == null) return new ActionResult(false, "Invalid player name");
+        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
+        return CommandExecutor.run("kill " + name);
     }
 
-    /**
-     * POST /api/players/{name}/teleport
-     * Teleports player to coordinates or another player
-     */
+    /** POST /api/players/{name}/teleport — to coordinates or another player. */
     public ActionResult teleportPlayer(String playerName, Double x, Double y, Double z, String targetPlayer) {
-        PlayerRef player = findPlayer(playerName);
-        if (player == null) {
-            return new ActionResult(false, "Player not found: " + playerName);
-        }
+        String name = safeName(playerName);
+        if (name == null) return new ActionResult(false, "Invalid player name");
+        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
 
-        // Validate target
         if (targetPlayer != null && !targetPlayer.isEmpty()) {
-            PlayerRef target = findPlayer(targetPlayer);
-            if (target == null) {
-                return new ActionResult(false, "Target player not found: " + targetPlayer);
-            }
-        } else if (x == null || y == null || z == null) {
-            return new ActionResult(false, "No target specified");
+            String target = safeName(targetPlayer);
+            if (target == null) return new ActionResult(false, "Invalid target player name");
+            if (findPlayer(target) == null) return new ActionResult(false, "Target player not found: " + target);
+            return CommandExecutor.run("tp " + name + " " + target);
         }
-
-        // TODO: When Hytale API exposes teleport functionality, implement it here
-        LOGGER.info("Teleport requested for player: " + playerName + " - using console fallback");
-        return new ActionResult(false, "Not implemented - use console command");
+        if (x == null || y == null || z == null
+                || !Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {
+            return new ActionResult(false, "No valid target specified");
+        }
+        return CommandExecutor.run("tp " + name + " " + fmt(x) + " " + fmt(y) + " " + fmt(z));
     }
 
-    /**
-     * POST /api/players/{name}/gamemode
-     * Changes the player's gamemode
-     */
+    /** POST /api/players/{name}/gamemode — Hytale today only has Adventure/Creative. */
     public ActionResult setGamemode(String playerName, String gamemode) {
-        PlayerRef player = findPlayer(playerName);
-        if (player == null) {
-            return new ActionResult(false, "Player not found: " + playerName);
-        }
+        String name = safeName(playerName);
+        if (name == null) return new ActionResult(false, "Invalid player name");
+        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
 
-        // TODO: When Hytale API exposes gamemode modification, implement it here
-        LOGGER.info("Gamemode " + gamemode + " requested for player: " + playerName + " - using console fallback");
-        return new ActionResult(false, "Not implemented - use console command");
+        String mode = gamemode == null ? "" : gamemode.trim().toLowerCase(Locale.ROOT);
+        // Accept long and short forms; map to the two modes the server supports.
+        if (mode.equals("c") || mode.equals("creative")) mode = "creative";
+        else if (mode.equals("a") || mode.equals("adventure")) mode = "adventure";
+        else return new ActionResult(false, "Unsupported gamemode (use creative/adventure): " + gamemode);
+
+        return CommandExecutor.run("gamemode " + mode + " " + name);
     }
 
-    /**
-     * POST /api/players/{name}/inventory/clear
-     * Clears the player's inventory
-     */
+    /** POST /api/players/{name}/inventory/clear — clear the player's inventory. */
     public ActionResult clearInventory(String playerName) {
-        PlayerRef player = findPlayer(playerName);
-        if (player == null) {
-            return new ActionResult(false, "Player not found: " + playerName);
-        }
-
-        // TODO: When Hytale API exposes inventory modification, implement it here
-        // For now, return false so the panel uses console commands as fallback
-        // Example future API:
-        // player.getInventory().clear();
-        // return new ActionResult(true, "Inventory cleared");
-
-        LOGGER.info("Clear inventory requested for player: " + playerName + " - using console fallback");
-        return new ActionResult(false, "Not implemented - use console command");
+        String name = safeName(playerName);
+        if (name == null) return new ActionResult(false, "Invalid player name");
+        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
+        return CommandExecutor.run("inventory clear " + name);
     }
 
     /**
-     * Helper to find a player by name
+     * POST /api/players/{name}/give — give an item to an online player.
+     *
+     * Dispatched through the server's own /give command (via {@link CommandExecutor})
+     * rather than a hand-rolled ECS {@code Player.giveItem(...)} call: that reuses
+     * the server's validated item lookup + inventory/networking handling and the
+     * exact syntax the panel already used over the console. The native
+     * {@code Player.giveItem(ItemStack, Ref, ComponentAccessor)} path would need
+     * a world-thread ComponentAccessor and is deferred.
      */
-    private PlayerRef findPlayer(String playerName) {
-        Universe universe = Universe.get();
-        List<PlayerRef> players = universe.getPlayers();
-
-        for (PlayerRef player : players) {
-            if (player.getUsername().equalsIgnoreCase(playerName)) {
-                return player;
-            }
+    public ActionResult givePlayer(String playerName, String itemId, Integer amount) {
+        String name = safeName(playerName);
+        if (name == null) return new ActionResult(false, "Invalid player name");
+        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
+        if (itemId == null || !itemId.toLowerCase(Locale.ROOT).matches("[a-z][a-z0-9_]*(:[a-z][a-z0-9_/]*)?")) {
+            return new ActionResult(false, "Invalid item id");
         }
-        return null;
+        String item = itemId.toLowerCase(Locale.ROOT);
+        int qty = (amount != null && amount > 0) ? Math.min(amount, 9999) : 1;
+        String cmd = qty > 1 ? "give " + name + " " + item + " --quantity=" + qty
+                             : "give " + name + " " + item;
+        return CommandExecutor.run(cmd);
+    }
+
+    /** Find an online player by name (case-insensitive) using the native lookup. */
+    private PlayerRef findPlayer(String playerName) {
+        try {
+            return Universe.get().getPlayerByUsername(playerName, NameMatching.EXACT_IGNORE_CASE);
+        } catch (Throwable t) {
+            // Fall back to a manual scan if the lookup overload misbehaves.
+            for (PlayerRef player : Universe.get().getPlayers()) {
+                if (player.getUsername().equalsIgnoreCase(playerName)) return player;
+            }
+            return null;
+        }
+    }
+
+    /** Allow only the safe player-name charset; returns null if invalid. */
+    private static String safeName(String name) {
+        if (name == null) return null;
+        return name.matches("[\\w-]{1,32}") ? name : null;
+    }
+
+    /** Trim float noise so commands stay clean. */
+    private static String fmt(double v) {
+        if (v == Math.rint(v)) return String.valueOf((long) v);
+        return String.valueOf(Math.round(v * 1000.0) / 1000.0);
     }
 
     // ============================================================
     // Player Info (GET endpoints)
     // ============================================================
 
-    /**
-     * GET /api/players
-     * Returns all online players across all worlds
-     */
+    /** GET /api/players — all online players across all worlds. */
     public PlayersResponse getAllPlayers() {
-        Universe universe = Universe.get();
-        List<PlayerRef> players = universe.getPlayers();
-
+        Collection<PlayerRef> players = Universe.get().getPlayers();
         List<PlayerData> playerDataList = new ArrayList<>();
         for (PlayerRef player : players) {
             playerDataList.add(createPlayerData(player));
         }
-
         return new PlayersResponse(playerDataList.size(), playerDataList);
     }
 
-    /**
-     * GET /api/players/{world}
-     * Returns all players in a specific world
-     */
+    /** GET /api/players/{world} — all players in a specific world. */
     public PlayersResponse getPlayersInWorld(String worldName) {
         Universe universe = Universe.get();
         World world = universe.getWorld(worldName);
-
         if (world == null) {
             return new PlayersResponse(0, Collections.emptyList());
         }
 
         List<PlayerData> playerDataList = new ArrayList<>();
-        List<PlayerRef> players = universe.getPlayers();
-
-        for (PlayerRef player : players) {
-            // Check if player is in this world
+        for (PlayerRef player : universe.getPlayers()) {
             try {
                 UUID worldUuid = player.getWorldUuid();
                 if (worldUuid != null) {
@@ -198,25 +190,13 @@ public class PlayersHandler {
                 // Player may be transitioning between worlds
             }
         }
-
         return new PlayersResponse(playerDataList.size(), playerDataList);
     }
 
-    /**
-     * GET /api/players/{name}/details
-     * Returns detailed information about a specific player
-     */
+    /** GET /api/players/{name}/details — detailed info about a specific player. */
     public PlayerDetails getPlayerDetails(String playerName) {
-        Universe universe = Universe.get();
-        List<PlayerRef> players = universe.getPlayers();
-
-        for (PlayerRef player : players) {
-            if (player.getUsername().equalsIgnoreCase(playerName)) {
-                return createPlayerDetails(player);
-            }
-        }
-
-        return null; // Player not found
+        PlayerRef player = findPlayer(playerName);
+        return player == null ? null : createPlayerDetails(player);
     }
 
     private PlayerData createPlayerData(PlayerRef player) {
@@ -236,13 +216,12 @@ public class PlayersHandler {
             data.world = "unknown";
         }
 
-        // Get position from transform
         try {
             Transform transform = player.getTransform();
             if (transform != null) {
                 Vector3d pos = transform.getPosition();
                 if (pos != null) {
-                    data.position = new Position(pos.getX(), pos.getY(), pos.getZ());
+                    data.position = new Position(pos.x(), pos.y(), pos.z());
                 }
             }
         } catch (Exception e) {
@@ -269,52 +248,62 @@ public class PlayersHandler {
             details.world = "unknown";
         }
 
-        // Position and rotation from transform
+        // Position and rotation from the transform.
         try {
             Transform transform = player.getTransform();
             if (transform != null) {
                 Vector3d pos = transform.getPosition();
                 if (pos != null) {
-                    details.position = new Position(pos.getX(), pos.getY(), pos.getZ());
+                    details.position = new Position(pos.x(), pos.y(), pos.z());
                 }
-
-                Vector3f rot = transform.getRotation();
+                Rotation3f rot = transform.getRotation();
                 if (rot != null) {
-                    details.yaw = rot.getY();
-                    details.pitch = rot.getX();
+                    details.yaw = rot.yaw();
+                    details.pitch = rot.pitch();
                 }
             }
         } catch (Exception e) {
             details.position = null;
         }
 
-        // Try to get additional stats (may not be available depending on server version)
+        // Real gamemode via the Player entity component (Adventure/Creative).
+        details.gamemode = "unknown";
         try {
-            details.gamemode = "unknown"; // TODO: Get actual gamemode when API available
-            details.health = 20.0; // TODO: Get actual health
-            details.maxHealth = 20.0;
-        } catch (Exception e) {
-            // Stats not available
+            Player p = player.getComponent(Player.getComponentType());
+            if (p != null && p.getGameMode() != null) {
+                details.gamemode = p.getGameMode().name().toLowerCase(Locale.ROOT);
+            }
+        } catch (Throwable ignored) {
+            // Component not readable off the world thread in this build — keep "unknown".
+        }
+
+        // Real health via the entity-stats component.
+        details.health = -1;
+        details.maxHealth = -1;
+        try {
+            EntityStatMap stats = player.getComponent(EntityStatMap.getComponentType());
+            if (stats != null) {
+                EntityStatValue health = stats.get(DefaultEntityStatTypes.getHealth());
+                if (health != null) {
+                    details.health = round2(health.get());
+                    details.maxHealth = round2(health.getMax());
+                }
+            }
+        } catch (Throwable ignored) {
+            // Stats not readable here — leave as -1 ("unknown").
         }
 
         return details;
     }
 
-    /**
-     * GET /api/players/{name}/inventory
-     * Returns the player's inventory items
-     */
+    private static double round2(double v) {
+        return Math.round(v * 100.0) / 100.0;
+    }
+
+    /** GET /api/players/{name}/inventory — placeholder until item containers are mapped. */
     public PlayerInventory getPlayerInventory(String playerName) {
-        Universe universe = Universe.get();
-        List<PlayerRef> players = universe.getPlayers();
-
-        for (PlayerRef player : players) {
-            if (player.getUsername().equalsIgnoreCase(playerName)) {
-                return createPlayerInventory(player);
-            }
-        }
-
-        return null; // Player not found
+        PlayerRef player = findPlayer(playerName);
+        return player == null ? null : createPlayerInventory(player);
     }
 
     private PlayerInventory createPlayerInventory(PlayerRef player) {
@@ -325,55 +314,26 @@ public class PlayersHandler {
         inventory.totalSlots = 36;
         inventory.usedSlots = 0;
 
-        // TODO: When Hytale API exposes inventory access, implement real inventory reading
-        // For now, we return an empty inventory structure
-        // Future implementation would look like:
-        // PlayerInventoryAccess inv = player.getInventory();
-        // for (int i = 0; i < inv.getSize(); i++) {
-        //     ItemStack item = inv.getItem(i);
-        //     if (item != null) {
-        //         inventory.items.add(new InventoryItem(i, item.getId(), item.getAmount()));
-        //         inventory.usedSlots++;
-        //     }
-        // }
-
+        // NOTE: Reading the live inventory requires walking the player's
+        // ItemContainer windows (HotbarManager / WindowManager). That is a
+        // larger, version-sensitive mapping deferred to a follow-up; the
+        // structure is returned empty rather than fabricated.
         return inventory;
     }
 
-    /**
-     * GET /api/players/{name}/appearance
-     * Returns the player's appearance/skin information
-     */
+    /** GET /api/players/{name}/appearance — placeholder structure. */
     public PlayerAppearance getPlayerAppearance(String playerName) {
-        Universe universe = Universe.get();
-        List<PlayerRef> players = universe.getPlayers();
-
-        for (PlayerRef player : players) {
-            if (player.getUsername().equalsIgnoreCase(playerName)) {
-                return createPlayerAppearance(player);
-            }
-        }
-
-        return null; // Player not found
+        PlayerRef player = findPlayer(playerName);
+        return player == null ? null : createPlayerAppearance(player);
     }
 
     private PlayerAppearance createPlayerAppearance(PlayerRef player) {
         PlayerAppearance appearance = new PlayerAppearance();
         appearance.uuid = player.getUuid().toString();
         appearance.name = player.getUsername();
-
-        // TODO: When Hytale API exposes appearance/customization data, implement real reading
-        // For now, we return basic structure with placeholder data
-        // Future implementation would look like:
-        // PlayerCustomization custom = player.getCustomization();
-        // appearance.skinId = custom.getSkinId();
-        // appearance.bodyType = custom.getBodyType();
-        // etc.
-
         appearance.skinId = null;
         appearance.modelType = "default";
         appearance.customization = new AppearanceCustomization();
-
         return appearance;
     }
 

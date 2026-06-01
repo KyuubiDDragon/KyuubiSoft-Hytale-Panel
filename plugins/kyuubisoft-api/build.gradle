@@ -3,17 +3,24 @@ plugins {
 }
 
 group = 'com.kyuubisoft'
-version = '1.2.2'
+version = '1.4.3'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
 }
 
+// Source files use UTF-8 (box-drawing chars in the startup banner, em-dashes in
+// comments). Pin the encoding so builds are reproducible across platforms.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
 // No external repositories needed - Prometheus format is implemented manually
 
 dependencies {
-    // Hytale Server API (includes Netty, Gson, etc.)
+    // Hytale Server API (includes Netty, Gson, fastutil, JOML, etc.)
+    // Copy the running server's HytaleServer.jar here before building.
     compileOnly files('lib/HytaleServer.jar')
 }
 

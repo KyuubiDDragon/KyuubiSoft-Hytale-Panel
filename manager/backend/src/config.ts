@@ -83,7 +83,21 @@ const securityMode = process.env.SECURITY_MODE || 'strict';
 
 // Demo mode: enables the panel to run without a real Hytale server
 // All data is mocked for demonstration purposes
-const demoMode = process.env.DEMO_MODE === 'true' || process.env.DEMO_MODE === '1';
+let demoMode = process.env.DEMO_MODE === 'true' || process.env.DEMO_MODE === '1';
+
+// SECURITY: never run demo mode on top of a REAL install. Demo mode accepts
+// admin/admin and grants the '*' wildcard, so enabling it where a real
+// users.json exists is a full authentication bypass. Refuse and fall back to
+// normal auth; demo is only for clean throwaway environments.
+if (demoMode) {
+  try {
+    const usersFile = path.join(path.dirname(CONFIG_FILE_PATH), 'users.json');
+    if (fs.existsSync(usersFile)) {
+      console.warn('[Demo Mode] DISABLED: a real users.json exists — demo would bypass authentication. Unset DEMO_MODE or use a clean data volume.');
+      demoMode = false;
+    }
+  } catch { /* fs error — leave demoMode as configured */ }
+}
 
 // ============================================================
 // Configuration Object
@@ -120,6 +134,11 @@ const modtaleApiKeyFromConfig = configJson?.integrations?.modtaleApiKey;
 const modtaleApiKeyFromEnv = process.env.MODTALE_API_KEY || '';
 const effectiveModtaleApiKey = modtaleApiKeyFromConfig || modtaleApiKeyFromEnv;
 
+// Determine StackMart API key: prefer config.json, then env
+const stackmartApiKeyFromConfig = configJson?.integrations?.stackmartApiKey;
+const stackmartApiKeyFromEnv = process.env.STACKMART_API_KEY || '';
+const effectiveStackmartApiKey = stackmartApiKeyFromConfig || stackmartApiKeyFromEnv;
+
 // Determine CurseForge API key: prefer config.json, then env
 const curseforgeApiKeyFromConfig = configJson?.integrations?.curseforgeApiKey;
 const curseforgeApiKeyFromEnv = process.env.CURSEFORGE_API_KEY || '';
@@ -145,11 +164,19 @@ export const config = {
   // CORS Origins - from config.json if available, otherwise from env
   corsOrigins: effectiveCors,
 
+  // Explicit opt-in to wildcard CORS. Required to allow CORS_ORIGINS='*' to
+  // bypass CSRF origin validation — otherwise wildcard means "open server",
+  // which is dangerous on a panel that controls a game server.
+  corsAllowWildcard: process.env.CORS_ALLOW_WILDCARD === 'true' || process.env.CORS_ALLOW_WILDCARD === '1',
+
   // Reverse Proxy Support - from config.json if available, otherwise from env
   trustProxy: effectiveTrustProxy,
 
   // Modtale Integration - from config.json if available, otherwise from env
   modtaleApiKey: effectiveModtaleApiKey,
+
+  // StackMart Integration - from config.json if available, otherwise from env
+  stackmartApiKey: effectiveStackmartApiKey,
 
   // CurseForge Integration - from config.json if available, otherwise from env
   curseforgeApiKey: effectiveCurseforgeApiKey,
@@ -253,6 +280,9 @@ export function reloadConfigFromFile(): void {
       }
       if (newConfigJson.integrations?.modtaleApiKey !== undefined) {
         (config as { modtaleApiKey: string }).modtaleApiKey = newConfigJson.integrations.modtaleApiKey;
+      }
+      if (newConfigJson.integrations?.stackmartApiKey !== undefined) {
+        (config as { stackmartApiKey: string }).stackmartApiKey = newConfigJson.integrations.stackmartApiKey;
       }
       if (newConfigJson.integrations?.curseforgeApiKey !== undefined) {
         (config as { curseforgeApiKey: string }).curseforgeApiKey = newConfigJson.integrations.curseforgeApiKey;

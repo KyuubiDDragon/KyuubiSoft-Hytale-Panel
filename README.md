@@ -8,14 +8,14 @@
 [![Discord](https://img.shields.io/badge/Discord-Support%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://dsc.gg/kyuubisoft)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](LICENSE)
 
-<img src="https://img.shields.io/badge/KyuubiSoft_Panel-v2.1.1-orange?style=for-the-badge" alt="KyuubiSoft Panel v2.1.1"/>
+<img src="https://img.shields.io/badge/KyuubiSoft_Panel-v3.0.0--alpha-orange?style=for-the-badge" alt="KyuubiSoft Panel v3.0.0-alpha"/>
 <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
 <img src="https://img.shields.io/badge/Node.js-Backend-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js"/>
 <img src="https://img.shields.io/badge/Vue.js-Frontend-4FC08D?style=for-the-badge&logo=vue.js&logoColor=white" alt="Vue.js"/>
 
 ---
 
-**[Deutsch](#deutsch)** | **[English](#english)** | **[Upgrade v2.0](#upgrade-auf-v20)** | **[Commands](docs/COMMANDS.md)** | **[Changelog](CHANGELOG.md)**
+**[Deutsch](#deutsch)** | **[English](#english)** | **[Upgrade v2.0](#upgrade-auf-v20)** | **[V3 Roadmap](docs/V3_ROADMAP.md)** | **[API Cheatsheet](docs/V3_API_CHEATSHEET.md)** | **[Commands](docs/COMMANDS.md)** | **[Changelog](CHANGELOG.md)**
 
 </div>
 
@@ -313,7 +313,12 @@ docker-compose build && docker-compose up -d
 Mit Hytale Downloader:
 ```bash
 docker stop hytale
-docker volume rm hytale-server
+# NOTE: data lives in BIND-MOUNTS under ${HOST_DATA_PATH} (the only Docker
+# *named* volume is manager-data). The table above lists subdirectories of
+# that path, not named volumes — `docker volume rm hytale-server` does NOT
+# exist. To force a fresh server download, clear the server directory
+# (or just delete its .hytale-version marker):
+rm -rf "${HOST_DATA_PATH:-./hytale-data}/server"/*
 docker start hytale
 ```
 
@@ -599,7 +604,12 @@ docker-compose build && docker-compose up -d
 With Hytale Downloader:
 ```bash
 docker stop hytale
-docker volume rm hytale-server
+# NOTE: data lives in BIND-MOUNTS under ${HOST_DATA_PATH} (the only Docker
+# *named* volume is manager-data). The table above lists subdirectories of
+# that path, not named volumes — `docker volume rm hytale-server` does NOT
+# exist. To force a fresh server download, clear the server directory
+# (or just delete its .hytale-version marker):
+rm -rf "${HOST_DATA_PATH:-./hytale-data}/server"/*
 docker start hytale
 ```
 

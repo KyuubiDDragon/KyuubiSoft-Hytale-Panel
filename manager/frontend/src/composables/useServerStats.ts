@@ -1,5 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue'
-import { serverApi, type ServerStatus, type ServerStats, type PluginServerInfo } from '@/api/server'
+import { serverApi, type ServerStatus, type ServerStats } from '@/api/server'
 import { playersApi } from '@/api/players'
 
 export function useServerStats(pollInterval = 5000) {

@@ -84,14 +84,14 @@ onMounted(() => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z" />
         </svg>
       </div>
-      <h2 class="text-2xl font-bold text-white mb-2">{{ t('setup.plugin.title') }}</h2>
-      <p class="text-gray-400">{{ t('setup.plugin.description') }}</p>
+      <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.plugin.title') }}</h2>
+      <p class="text-ink-muted">{{ t('setup.plugin.description') }}</p>
     </div>
 
     <!-- Plugin Description -->
     <div class="card">
       <div class="card-body">
-        <h3 class="text-lg font-semibold text-white mb-4">{{ t('setup.plugin.featuresTitle') }}</h3>
+        <h3 class="text-lg font-semibold text-ink mb-4">{{ t('setup.plugin.featuresTitle') }}</h3>
 
         <div class="space-y-4">
           <div
@@ -109,8 +109,8 @@ onMounted(() => {
               />
             </div>
             <div>
-              <p class="text-white font-medium">{{ feature.title }}</p>
-              <p class="text-sm text-gray-400">{{ feature.description }}</p>
+              <p class="text-ink font-medium">{{ feature.title }}</p>
+              <p class="text-sm text-ink-muted">{{ feature.description }}</p>
             </div>
           </div>
         </div>
@@ -126,7 +126,7 @@ onMounted(() => {
         :class="[
           installPlugin
             ? 'border-hytale-orange bg-hytale-orange/10'
-            : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+            : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
         ]"
       >
         <div class="flex items-start gap-3">
@@ -141,12 +141,12 @@ onMounted(() => {
           </div>
           <div class="flex-1">
             <div class="flex items-center gap-2">
-              <p class="text-white font-medium">{{ t('setup.plugin.optionInstall') }}</p>
+              <p class="text-ink font-medium">{{ t('setup.plugin.optionInstall') }}</p>
               <span class="text-xs px-2 py-0.5 rounded bg-status-success/20 text-status-success">
                 {{ t('setup.recommended') }}
               </span>
             </div>
-            <p class="text-sm text-gray-400 mt-1">{{ t('setup.plugin.optionInstallDesc') }}</p>
+            <p class="text-sm text-ink-muted mt-1">{{ t('setup.plugin.optionInstallDesc') }}</p>
           </div>
         </div>
       </button>
@@ -158,7 +158,7 @@ onMounted(() => {
         :class="[
           !installPlugin
             ? 'border-hytale-orange bg-hytale-orange/10'
-            : 'border-dark-50 bg-dark-200 hover:border-gray-600 hover:bg-dark-100'
+            : 'border-border bg-surface-raised hover:border-gray-600 hover:bg-surface-overlay'
         ]"
       >
         <div class="flex items-start gap-3">
@@ -172,15 +172,15 @@ onMounted(() => {
             />
           </div>
           <div class="flex-1">
-            <p class="text-white font-medium">{{ t('setup.plugin.optionSkip') }}</p>
-            <p class="text-sm text-gray-400 mt-1">{{ t('setup.plugin.optionSkipDesc') }}</p>
+            <p class="text-ink font-medium">{{ t('setup.plugin.optionSkip') }}</p>
+            <p class="text-sm text-ink-muted mt-1">{{ t('setup.plugin.optionSkipDesc') }}</p>
           </div>
         </div>
       </button>
     </div>
 
     <!-- Plugin Version Info -->
-    <div class="flex items-center justify-center gap-6 text-sm text-gray-400">
+    <div class="flex items-center justify-center gap-6 text-sm text-ink-muted">
       <div class="flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -196,12 +196,12 @@ onMounted(() => {
     </div>
 
     <!-- Port Info Notice -->
-    <div class="p-4 bg-dark-300 rounded-lg border border-dark-50/50">
+    <div class="p-4 bg-surface-muted rounded-lg border border-border/60">
       <div class="flex items-start gap-3">
-        <svg class="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="w-5 h-5 text-ink-muted mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <div class="text-sm text-gray-400">
+        <div class="text-sm text-ink-muted">
           <p>{{ t('setup.plugin.portInfo', { port: pluginInfo.port }) }}</p>
         </div>
       </div>

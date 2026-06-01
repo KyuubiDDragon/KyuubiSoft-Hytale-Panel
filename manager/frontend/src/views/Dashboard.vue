@@ -3,18 +3,20 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
-import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type PatchlineResponse, type DownloaderAuthStatus, type NewFeaturesStatus, type PanelVersionInfo } from '@/api/server'
+import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type DownloaderAuthStatus, type NewFeaturesStatus, type PanelVersionInfo } from '@/api/server'
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import { schedulerApi, type SchedulerStatus } from '@/api/scheduler'
-import { modupdatesApi, modsApi, type ModUpdateStatus } from '@/api/management'
+import { modsApi, type ModUpdateStatus } from '@/api/management'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 import PluginBanner from '@/components/dashboard/PluginBanner.vue'
 import DashboardBanner from '@/components/dashboard/DashboardBanner.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
 
 const { t } = useI18n()
 const router = useRouter()
-const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, mspt, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
+const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
 
 // Server JVM memory stats
 const serverMemory = ref<ServerMemoryStats | null>(null)
@@ -51,6 +53,36 @@ const isInRestartGrace = computed(() =>
 const newFeaturesStatus = ref<NewFeaturesStatus | null>(null)
 const showNewFeaturesBanner = ref(false)
 
+// Map each backend feature key to a friendly label + the route that actually
+// configures it. The old banner sent everyone to /configuration (the SERVER
+// config editor), which has nothing to do with these panel features — so the
+// button felt like it did nothing. Now each feature is a direct shortcut.
+const FEATURE_META: Record<string, { label: string; route: string }> = {
+  two_factor_auth: { label: 'Two-Factor Auth', route: '/security' },
+  api_keys: { label: 'API Keys', route: '/security' },
+  audit_log: { label: 'Audit Log', route: '/audit' },
+  webhooks: { label: 'Webhooks', route: '/webhooks' },
+  sso: { label: 'Single Sign-On', route: '/security' },
+  file_manager: { label: 'File Manager', route: '/files' },
+  notifications: { label: 'Notifications', route: '/settings' },
+  multi_server: { label: 'Multi-Server', route: '/servers' },
+  live_map: { label: 'Live Map', route: '/live-map' },
+  replay: { label: 'Replay', route: '/replay' },
+  wiki: { label: 'Wiki', route: '/wiki' },
+}
+
+function humanizeFeature(key: string): string {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+const featureLinks = computed(() =>
+  (newFeaturesStatus.value?.features ?? []).map((key) => ({
+    key,
+    label: FEATURE_META[key]?.label ?? humanizeFeature(key),
+    route: FEATURE_META[key]?.route ?? '/settings',
+  })),
+)
+
 // Panel Version Check (check for panel updates from GitHub)
 const panelVersionInfo = ref<PanelVersionInfo | null>(null)
 const checkingPanelVersion = ref(false)
@@ -61,7 +93,6 @@ const schedulerStatus = ref<SchedulerStatus | null>(null)
 
 // Mod update status (unified from all sources)
 const modUpdateStatus = ref<ModUpdateStatus | null>(null)
-const checkingModUpdates = ref(false)
 
 // Panel patchline setting (fallback when plugin not available)
 const panelPatchline = ref<string | null>(null)
@@ -161,7 +192,7 @@ async function checkHytaleAuth() {
     // Check if server is running
     if (status.value?.running) {
       // First verify auth status with the backend
-      const checkResult = await authApi.checkHytaleAuthCompletion()
+      await authApi.checkHytaleAuthCompletion()
 
       // Then get the updated status (which may have been modified by checkHytaleAuthCompletion)
       const authStatus = await authApi.getHytaleAuthStatus()
@@ -227,23 +258,6 @@ async function fetchModUpdateStatus() {
   } catch {
     // Silently fail
   }
-}
-
-async function checkModUpdates() {
-  checkingModUpdates.value = true
-  try {
-    // Check all updates and then refresh
-    await modupdatesApi.checkAll()
-    await fetchModUpdateStatus()
-  } catch {
-    // Silently fail
-  } finally {
-    checkingModUpdates.value = false
-  }
-}
-
-function goToMods() {
-  router.push('/mods')
 }
 
 async function fetchPanelPatchline() {
@@ -362,13 +376,11 @@ const cpuValue = computed(() => {
 
 // Show JVM heap memory if available, otherwise fall back to Docker memory
 const memoryValue = computed(() => {
-  // Prefer JVM heap memory from server stats
-  if (serverMemory.value?.available && serverMemory.value.heap?.used !== null) {
-    const used = serverMemory.value.heap.used
-    const max = serverMemory.value.heap.max
-    if (used !== null && max !== null) {
-      return `${used.toFixed(1)} / ${max.toFixed(1)} GiB`
-    }
+  // Prefer JVM heap memory from server stats (narrow `heap` to a local so TS
+  // knows it's defined before reading used/max).
+  const heap = serverMemory.value?.available ? serverMemory.value.heap : undefined
+  if (heap && heap.used !== null && heap.max !== null) {
+    return `${heap.used.toFixed(1)} / ${heap.max.toFixed(1)} GiB`
   }
   // Fall back to Docker container memory
   if (!stats.value?.memory_mb) return '0 MB'
@@ -377,12 +389,9 @@ const memoryValue = computed(() => {
 
 // Memory percent for status color (based on JVM heap or Docker)
 const memoryPercent = computed(() => {
-  if (serverMemory.value?.available && serverMemory.value.heap?.used !== null && serverMemory.value.heap?.max !== null) {
-    const used = serverMemory.value.heap.used
-    const max = serverMemory.value.heap.max
-    if (used !== null && max !== null && max > 0) {
-      return (used / max) * 100
-    }
+  const heap = serverMemory.value?.available ? serverMemory.value.heap : undefined
+  if (heap && heap.used !== null && heap.max !== null && heap.max > 0) {
+    return (heap.used / heap.max) * 100
   }
   return stats.value?.memory_percent || 0
 })
@@ -506,22 +515,30 @@ async function tickDashboard() {
       @dismiss="dismissNewFeaturesBanner"
     >
       <ul class="space-y-1 mb-3">
-        <li v-for="(feature, index) in newFeaturesStatus.features" :key="index" class="flex items-center gap-2 text-sm text-gray-200">
-          <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          {{ feature }}
+        <li v-for="feature in featureLinks" :key="feature.key">
+          <router-link
+            :to="feature.route"
+            class="flex items-center gap-2 text-sm text-ink hover:text-hytale-orange transition-colors group"
+          >
+            <svg class="w-4 h-4 text-hytale-orange flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="group-hover:underline">{{ feature.label }}</span>
+            <svg class="w-3.5 h-3.5 opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </router-link>
         </li>
       </ul>
       <div class="flex items-center gap-3">
-        <router-link to="/configuration" class="btn btn-primary inline-flex items-center gap-2">
+        <router-link to="/settings" class="btn btn-primary inline-flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           {{ t('dashboard.newFeatures.configure') }}
         </router-link>
-        <button @click="dismissNewFeaturesBanner" class="text-sm text-gray-400 hover:text-white transition-colors">
+        <button @click="dismissNewFeaturesBanner" class="text-sm text-ink-muted hover:text-ink transition-colors">
           {{ t('common.dismiss') }}
         </button>
       </div>
@@ -545,17 +562,17 @@ async function tickDashboard() {
           </svg>
           {{ t('dashboard.panelUpdate.viewRelease') }}
         </a>
-        <button @click="checkPanelVersion(true)" :disabled="checkingPanelVersion" class="text-sm text-gray-400 hover:text-white transition-colors inline-flex items-center gap-1">
+        <button @click="checkPanelVersion(true)" :disabled="checkingPanelVersion" class="text-sm text-ink-muted hover:text-ink transition-colors inline-flex items-center gap-1">
           <svg class="w-4 h-4" :class="{ 'animate-spin': checkingPanelVersion }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           {{ t('common.refresh') }}
         </button>
-        <button @click="dismissPanelUpdateBanner" class="text-sm text-gray-400 hover:text-white transition-colors">
+        <button @click="dismissPanelUpdateBanner" class="text-sm text-ink-muted hover:text-ink transition-colors">
           {{ t('common.dismiss') }}
         </button>
       </div>
-      <p v-if="panelVersionInfo.publishedAt" class="text-xs text-gray-500 mt-2">
+      <p v-if="panelVersionInfo.publishedAt" class="text-xs text-ink-subtle mt-2">
         {{ t('dashboard.panelUpdate.publishedAt') }}: {{ new Date(panelVersionInfo.publishedAt).toLocaleDateString() }}
       </p>
     </DashboardBanner>
@@ -572,9 +589,9 @@ async function tickDashboard() {
       border-color="border-status-error"
       @dismiss="showDownloaderAuthWarning = false"
     >
-      <div v-if="reAuthenticating && reAuthCode" class="mb-3 p-3 bg-dark-300 rounded-lg border border-dark-50">
-        <p class="text-xs text-gray-400 mb-1">{{ t('dashboard.enterCodeOnHytale') }}:</p>
-        <p class="text-xl font-mono text-white tracking-wider">{{ reAuthCode }}</p>
+      <div v-if="reAuthenticating && reAuthCode" class="mb-3 p-3 bg-surface-muted rounded-lg border border-border">
+        <p class="text-xs text-ink-muted mb-1">{{ t('dashboard.enterCodeOnHytale') }}:</p>
+        <p class="text-xl font-mono text-ink tracking-wider">{{ reAuthCode }}</p>
         <a v-if="reAuthUrl" :href="reAuthUrl" target="_blank" rel="noopener noreferrer" class="text-sm text-hytale-orange hover:underline mt-2 inline-block">
           {{ t('dashboard.openAuthPage') }} →
         </a>
@@ -647,40 +664,80 @@ async function tickDashboard() {
       </button>
     </DashboardBanner>
 
-    <!-- Page Title -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('dashboard.title') }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('dashboard.subtitle') }}</p>
+    <!-- Page Header -->
+    <PageHeader :title="t('dashboard.title')" :subtitle="t('dashboard.subtitle')">
+      <template #actions>
+        <button
+          @click="refreshAll"
+          class="h-10 w-10 inline-flex items-center justify-center rounded-lg text-ink-muted hover:text-ink hover:bg-surface-muted transition-colors"
+          :aria-label="t('common.refresh')"
+        >
+          <svg class="w-5 h-5" :class="{ 'animate-spin': loading }" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </template>
+    </PageHeader>
+
+    <!-- Hero: Server Status -->
+    <div class="card overflow-hidden">
+      <div class="card-body p-5 sm:p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div class="relative">
+            <div
+              :class="[
+                'w-16 h-16 rounded-2xl flex items-center justify-center',
+                serverStatusType === 'success'
+                  ? 'bg-status-success/15'
+                  : serverStatusType === 'warning'
+                    ? 'bg-status-warning/15'
+                    : 'bg-status-error/15'
+              ]"
+            >
+              <svg
+                class="w-8 h-8"
+                :class="serverStatusType === 'success' ? 'text-status-success' : serverStatusType === 'warning' ? 'text-status-warning' : 'text-status-error'"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+              </svg>
+            </div>
+            <span
+              v-if="status?.running"
+              class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full ring-2 ring-surface-raised bg-status-success animate-pulse-soft"
+              aria-hidden="true"
+            />
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs uppercase tracking-wider text-ink-subtle mb-1">{{ t('dashboard.serverStatus') }}</p>
+            <p
+              class="text-2xl sm:text-3xl font-bold"
+              :class="serverStatusType === 'success' ? 'text-status-success' : serverStatusType === 'warning' ? 'text-status-warning' : 'text-status-error'"
+            >
+              {{ serverStatusText }}
+            </p>
+            <p class="text-sm text-ink-muted mt-1">
+              {{ status?.name || '-' }}<span v-if="status?.started_at"> · {{ t('dashboard.uptime') }} {{ uptimeValue }}</span>
+            </p>
+          </div>
+          <div class="hidden sm:flex flex-col items-end text-right text-sm text-ink-muted gap-1">
+            <span v-if="serverVersion">v{{ serverVersion }}</span>
+            <span v-if="displayPatchline" class="text-xs px-2 py-0.5 rounded-full border" :class="displayPatchline === 'release' ? 'border-status-success/40 text-status-success' : 'border-status-warning/40 text-status-warning'">
+              {{ displayPatchline === 'release' ? t('dashboard.serverInfo.release') : t('dashboard.serverInfo.preRelease') }}
+            </span>
+          </div>
+        </div>
       </div>
-      <button
-        @click="refreshAll"
-        class="p-2 text-gray-400 hover:text-white transition-colors"
-        :aria-label="t('common.refresh')"
-      >
-        <svg class="w-5 h-5" :class="{ 'animate-spin': loading }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-      </button>
     </div>
 
-    <!-- Error Message -->
-    <div v-if="error" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
-      <p class="text-status-error">{{ error }}</p>
-    </div>
+    <!-- Error State -->
+    <ErrorState v-if="error" size="sm" :message="error" @retry="refreshAll" />
 
     <!-- Plugin Status Banner -->
     <PluginBanner />
 
     <!-- Status Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-      <StatusCard
-        :title="t('dashboard.serverStatus')"
-        :value="serverStatusText"
-        :status="serverStatusType"
-        icon="server"
-      />
-
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <StatusCard
         :title="t('dashboard.cpu')"
         :value="cpuValue"
@@ -736,7 +793,7 @@ async function tickDashboard() {
               </svg>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs text-gray-400 mb-1">{{ t('settings.authStatus') }}</p>
+              <p class="text-xs text-ink-muted mb-1">{{ t('settings.authStatus') }}</p>
               <p class="text-sm font-semibold truncate" :class="hytaleAuthStatus.authenticated ? 'text-status-success' : 'text-status-warning'">
                 {{ hytaleAuthStatus.authenticated ? t('settings.authenticated') : t('settings.notAuthenticated') }}
               </p>
@@ -770,9 +827,9 @@ async function tickDashboard() {
               </svg>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs text-gray-400 mb-1">{{ t('dashboard.modUpdates.title') }}</p>
-              <p v-if="modUpdateStatus === null" class="text-sm text-gray-500">{{ t('dashboard.modUpdates.checking') }}</p>
-              <p v-else-if="modUpdateStatus.totalTracked === 0" class="text-sm text-gray-500">{{ t('dashboard.modUpdates.noTracked') }}</p>
+              <p class="text-xs text-ink-muted mb-1">{{ t('dashboard.modUpdates.title') }}</p>
+              <p v-if="modUpdateStatus === null" class="text-sm text-ink-subtle">{{ t('dashboard.modUpdates.checking') }}</p>
+              <p v-else-if="modUpdateStatus.totalTracked === 0" class="text-sm text-ink-subtle">{{ t('dashboard.modUpdates.noTracked') }}</p>
               <p v-else-if="modUpdateStatus.updatesAvailable > 0" class="text-sm font-semibold text-status-warning">
                 {{ t('dashboard.modUpdates.updatesAvailable', { count: modUpdateStatus.updatesAvailable }) }}
               </p>
@@ -791,16 +848,16 @@ async function tickDashboard() {
           <div class="flex items-center gap-3">
             <div class="flex-shrink-0">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.backups.enabled ? 'bg-hytale-orange/20' : 'bg-gray-600/20'">
-                <svg class="w-5 h-5" :class="schedulerStatus.backups.enabled ? 'text-hytale-orange' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-5 h-5" :class="schedulerStatus.backups.enabled ? 'text-hytale-orange' : 'text-ink-subtle'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                 </svg>
               </div>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs text-gray-400 mb-0.5">{{ t('dashboard.backupStatus') }}</p>
-              <p v-if="!schedulerStatus.backups.enabled" class="text-sm text-gray-500">{{ t('dashboard.backupsDisabled') }}</p>
+              <p class="text-xs text-ink-muted mb-0.5">{{ t('dashboard.backupStatus') }}</p>
+              <p v-if="!schedulerStatus.backups.enabled" class="text-sm text-ink-subtle">{{ t('dashboard.backupsDisabled') }}</p>
               <template v-else>
-                <p v-if="schedulerStatus.backups.lastRun" class="text-xs text-gray-400">
+                <p v-if="schedulerStatus.backups.lastRun" class="text-xs text-ink-muted">
                   {{ t('scheduler.lastBackup') }}: {{ new Date(schedulerStatus.backups.lastRun).toLocaleString() }}
                 </p>
                 <p v-if="schedulerStatus.backups.nextRun" class="text-sm font-medium text-hytale-orange">
@@ -818,14 +875,14 @@ async function tickDashboard() {
           <div class="flex items-center gap-3">
             <div class="flex-shrink-0">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.scheduledRestarts.enabled ? 'bg-hytale-orange/20' : 'bg-gray-600/20'">
-                <svg class="w-5 h-5" :class="schedulerStatus.scheduledRestarts.pendingRestart ? 'text-status-warning animate-pulse' : (schedulerStatus.scheduledRestarts.enabled ? 'text-hytale-orange' : 'text-gray-500')" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-5 h-5" :class="schedulerStatus.scheduledRestarts.pendingRestart ? 'text-status-warning animate-pulse' : (schedulerStatus.scheduledRestarts.enabled ? 'text-hytale-orange' : 'text-ink-subtle')" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </div>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs text-gray-400 mb-0.5">{{ t('dashboard.restartStatus') }}</p>
-              <p v-if="!schedulerStatus.scheduledRestarts.enabled" class="text-sm text-gray-500">{{ t('dashboard.restartsDisabled') }}</p>
+              <p class="text-xs text-ink-muted mb-0.5">{{ t('dashboard.restartStatus') }}</p>
+              <p v-if="!schedulerStatus.scheduledRestarts.enabled" class="text-sm text-ink-subtle">{{ t('dashboard.restartsDisabled') }}</p>
               <template v-else>
                 <p v-if="schedulerStatus.scheduledRestarts.pendingRestart" class="text-sm font-medium text-status-warning">
                   {{ t('scheduler.pendingRestart') }}: {{ new Date(schedulerStatus.scheduledRestarts.pendingRestart.scheduledAt).toLocaleTimeString() }}
@@ -845,14 +902,14 @@ async function tickDashboard() {
           <div class="flex items-center gap-3">
             <div class="flex-shrink-0">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.announcements.enabled ? 'bg-hytale-orange/20' : 'bg-gray-600/20'">
-                <svg class="w-5 h-5" :class="schedulerStatus.announcements.enabled ? 'text-hytale-orange' : 'text-gray-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="w-5 h-5" :class="schedulerStatus.announcements.enabled ? 'text-hytale-orange' : 'text-ink-subtle'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                 </svg>
               </div>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs text-gray-400 mb-0.5">{{ t('dashboard.announcementsStatus') }}</p>
-              <p v-if="!schedulerStatus.announcements.enabled" class="text-sm text-gray-500">{{ t('dashboard.announcementsDisabled') }}</p>
+              <p class="text-xs text-ink-muted mb-0.5">{{ t('dashboard.announcementsStatus') }}</p>
+              <p v-if="!schedulerStatus.announcements.enabled" class="text-sm text-ink-subtle">{{ t('dashboard.announcementsDisabled') }}</p>
               <p v-else class="text-sm font-medium text-hytale-orange">
                 {{ schedulerStatus.announcements.activeCount }} {{ t('dashboard.activeAnnouncements') }}
               </p>
@@ -870,7 +927,7 @@ async function tickDashboard() {
       <!-- Uptime Card -->
       <div class="card">
         <div class="card-header">
-          <h3 class="text-lg font-semibold text-white">{{ t('dashboard.uptime') }}</h3>
+          <h3 class="text-lg font-semibold text-ink">{{ t('dashboard.uptime') }}</h3>
         </div>
         <div class="card-body">
           <div class="flex items-center gap-4">
@@ -880,8 +937,8 @@ async function tickDashboard() {
               </svg>
             </div>
             <div>
-              <p class="text-3xl font-bold text-white">{{ uptimeValue }}</p>
-              <p v-if="status?.started_at" class="text-sm text-gray-400">
+              <p class="text-3xl font-bold text-ink">{{ uptimeValue }}</p>
+              <p v-if="status?.started_at" class="text-sm text-ink-muted">
                 {{ t('dashboard.serverStatus') }}: {{ new Date(status.started_at).toLocaleString() }}
               </p>
             </div>
@@ -892,7 +949,7 @@ async function tickDashboard() {
       <!-- Server Info Card -->
       <div class="card">
         <div class="card-header flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-white">{{ t('dashboard.serverInfo.title') }}</h3>
+          <h3 class="text-lg font-semibold text-ink">{{ t('dashboard.serverInfo.title') }}</h3>
           <span
             v-if="pluginAvailable"
             class="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30"
@@ -905,32 +962,32 @@ async function tickDashboard() {
             <!-- Plugin data (when available) -->
             <template v-if="pluginAvailable">
               <div class="flex justify-between">
-                <span class="text-gray-400">{{ t('dashboard.serverInfo.version') }}</span>
-                <span class="text-white font-mono">{{ serverVersion || '-' }}</span>
+                <span class="text-ink-muted">{{ t('dashboard.serverInfo.version') }}</span>
+                <span class="text-ink font-mono">{{ serverVersion || '-' }}</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-400">{{ t('dashboard.serverInfo.worlds') }}</span>
-                <span class="text-white">{{ worldCount ?? '-' }}</span>
+                <span class="text-ink-muted">{{ t('dashboard.serverInfo.worlds') }}</span>
+                <span class="text-ink">{{ worldCount ?? '-' }}</span>
               </div>
             </template>
             <!-- Container info -->
             <div class="flex justify-between">
-              <span class="text-gray-400">{{ t('dashboard.serverInfo.container') }}</span>
-              <span class="text-white font-mono">{{ status?.name || '-' }}</span>
+              <span class="text-ink-muted">{{ t('dashboard.serverInfo.container') }}</span>
+              <span class="text-ink font-mono">{{ status?.name || '-' }}</span>
             </div>
             <div v-if="!pluginAvailable" class="flex justify-between">
-              <span class="text-gray-400">{{ t('dashboard.serverInfo.containerId') }}</span>
-              <span class="text-white font-mono text-xs">{{ status?.id || '-' }}</span>
+              <span class="text-ink-muted">{{ t('dashboard.serverInfo.containerId') }}</span>
+              <span class="text-ink font-mono text-xs">{{ status?.id || '-' }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">{{ t('dashboard.serverInfo.status') }}</span>
+              <span class="text-ink-muted">{{ t('dashboard.serverInfo.status') }}</span>
               <span :class="status?.running ? 'text-status-success' : 'text-status-error'">
                 {{ status?.status || '-' }}
               </span>
             </div>
             <!-- Patchline (always visible) -->
             <div class="flex justify-between items-center">
-              <span class="text-gray-400">{{ t('dashboard.serverInfo.patchline') }}</span>
+              <span class="text-ink-muted">{{ t('dashboard.serverInfo.patchline') }}</span>
               <span
                 v-if="displayPatchline"
                 :class="[
@@ -942,7 +999,7 @@ async function tickDashboard() {
               >
                 {{ displayPatchline === 'release' ? t('dashboard.serverInfo.release') : t('dashboard.serverInfo.preRelease') }}
               </span>
-              <span v-else class="text-white font-mono">-</span>
+              <span v-else class="text-ink font-mono">-</span>
             </div>
           </div>
         </div>
@@ -952,7 +1009,7 @@ async function tickDashboard() {
     <!-- Update Check Card -->
     <div class="card">
       <div class="card-header flex items-center justify-between">
-        <h3 class="text-lg font-semibold text-white">{{ t('dashboard.hytaleUpdates.title') }}</h3>
+        <h3 class="text-lg font-semibold text-ink">{{ t('dashboard.hytaleUpdates.title') }}</h3>
         <button
           @click="checkForUpdates"
           :disabled="checkingUpdate"
@@ -977,7 +1034,7 @@ async function tickDashboard() {
         </div>
 
         <!-- No check yet -->
-        <div v-else-if="!updateInfo" class="text-gray-400 text-sm">
+        <div v-else-if="!updateInfo" class="text-ink-muted text-sm">
           {{ t('dashboard.hytaleUpdates.clickToCheck') }}
         </div>
 
@@ -985,31 +1042,31 @@ async function tickDashboard() {
         <div v-else class="space-y-4">
           <!-- Installed Version -->
           <div class="flex justify-between items-center">
-            <span class="text-gray-400">{{ t('dashboard.hytaleUpdates.installedVersion') }}</span>
-            <span class="text-white font-mono">{{ updateInfo.installedVersion }}</span>
+            <span class="text-ink-muted">{{ t('dashboard.hytaleUpdates.installedVersion') }}</span>
+            <span class="text-ink font-mono">{{ updateInfo.installedVersion }}</span>
           </div>
 
           <!-- Both Patchline Versions -->
           <div v-if="updateInfo.versions" class="grid grid-cols-2 gap-3">
             <!-- Release Version -->
-            <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'release' ? 'border-status-success bg-status-success/10' : 'border-dark-50 bg-dark-300'">
+            <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'release' ? 'border-status-success bg-status-success/10' : 'border-border bg-surface-muted'">
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-success/20 text-status-success">{{ t('dashboard.hytaleUpdates.release') }}</span>
-                <span v-if="updateInfo.patchline === 'release'" class="text-xs text-gray-400">({{ t('dashboard.hytaleUpdates.active') }})</span>
+                <span v-if="updateInfo.patchline === 'release'" class="text-xs text-ink-muted">({{ t('dashboard.hytaleUpdates.active') }})</span>
               </div>
-              <span class="text-white font-mono text-lg">{{ updateInfo.versions.release || '-' }}</span>
+              <span class="text-ink font-mono text-lg">{{ updateInfo.versions.release || '-' }}</span>
               <div v-if="updateInfo.patchline === 'release' && updateInfo.installedVersion !== updateInfo.versions.release && updateInfo.versions.release !== 'unknown'" class="mt-1 text-xs text-hytale-orange">
                 {{ t('dashboard.hytaleUpdates.updateAvailable') }}
               </div>
             </div>
 
             <!-- Pre-Release Version -->
-            <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'pre-release' ? 'border-status-warning bg-status-warning/10' : 'border-dark-50 bg-dark-300'">
+            <div class="p-3 rounded-lg border" :class="updateInfo.patchline === 'pre-release' ? 'border-status-warning bg-status-warning/10' : 'border-border bg-surface-muted'">
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-status-warning/20 text-status-warning">{{ t('dashboard.hytaleUpdates.preRelease') }}</span>
-                <span v-if="updateInfo.patchline === 'pre-release'" class="text-xs text-gray-400">({{ t('dashboard.hytaleUpdates.active') }})</span>
+                <span v-if="updateInfo.patchline === 'pre-release'" class="text-xs text-ink-muted">({{ t('dashboard.hytaleUpdates.active') }})</span>
               </div>
-              <span class="text-white font-mono text-lg">{{ updateInfo.versions.preRelease || '-' }}</span>
+              <span class="text-ink font-mono text-lg">{{ updateInfo.versions.preRelease || '-' }}</span>
               <div v-if="updateInfo.patchline === 'pre-release' && updateInfo.installedVersion !== updateInfo.versions.preRelease && updateInfo.versions.preRelease !== 'unknown'" class="mt-1 text-xs text-hytale-orange">
                 {{ t('dashboard.hytaleUpdates.updateAvailable') }}
               </div>
@@ -1029,9 +1086,9 @@ async function tickDashboard() {
             </p>
 
             <!-- Show auth code when authenticating -->
-            <div v-if="reAuthenticating && reAuthCode" class="mt-3 p-2 bg-dark-300 rounded border border-dark-50">
-              <p class="text-xs text-gray-400 mb-1">{{ t('dashboard.hytaleUpdates.enterCode') }}</p>
-              <p class="text-lg font-mono text-white tracking-wider">{{ reAuthCode }}</p>
+            <div v-if="reAuthenticating && reAuthCode" class="mt-3 p-2 bg-surface-muted rounded border border-border">
+              <p class="text-xs text-ink-muted mb-1">{{ t('dashboard.hytaleUpdates.enterCode') }}</p>
+              <p class="text-lg font-mono text-ink tracking-wider">{{ reAuthCode }}</p>
               <a
                 v-if="reAuthUrl"
                 :href="reAuthUrl"

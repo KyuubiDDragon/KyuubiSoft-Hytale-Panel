@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop, 'claude/**']
+
+# Opt every JavaScript action into Node 24 ahead of the June 2026 forced
+# cut-over so we don't accumulate deprecation noise on every run. Older
+# action versions that genuinely need Node 20 can override this per step.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  backend:
+    name: Backend (TypeScript)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: manager/backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm', cache-dependency-path: manager/backend/package-lock.json }
+      # bcrypt and better-sqlite3 ship prebuilt binaries for node 20 + linux-x64,
+      # but apt-installing the toolchain keeps fallbacks working if a future
+      # node bump drops the prebuilt.
+      - run: sudo apt-get update && sudo apt-get install -y python3 make g++
+      - run: npm ci --no-audit --no-fund
+      - name: TypeScript build
+        run: npx tsc --noEmit
+      # ESLint reports a pre-existing backlog; non-blocking so the build stays
+      # green while it's burned down. Flip to blocking once it reaches zero.
+      - name: Lint (eslint, non-blocking)
+        run: npm run lint
+        continue-on-error: true
+      - name: Vitest (if any)
+        run: npx vitest run --passWithNoTests
+
+  frontend:
+    name: Frontend (Vue / Vite)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: manager/frontend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm', cache-dependency-path: manager/frontend/package-lock.json }
+      - run: npm ci --no-audit --no-fund
+      # Frontend type-check (vue-tsc 2.x). The pre-existing backlog has been
+      # cleared, so this is now a blocking gate — keep it green.
+      - name: Type check (vue-tsc)
+        run: npm run type-check
+      # ESLint (vue3-essential) — non-blocking pre-existing backlog.
+      - name: Lint (eslint, non-blocking)
+        run: npm run lint
+        continue-on-error: true
+      - name: Vite build
+        run: npx vite build
+
+  backup-hook-sync:
+    name: backup-hook.sh is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: diff scripts/backup-hook.sh ↔ manager/backup-hook.sh
+        run: diff -u scripts/backup-hook.sh manager/backup-hook.sh
+
+  docker-image:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build hytale image
+        run: docker buildx build --platform linux/amd64 -f Dockerfile .
+      - name: Build manager image
+        run: docker buildx build --platform linux/amd64 -f manager/Dockerfile ./manager

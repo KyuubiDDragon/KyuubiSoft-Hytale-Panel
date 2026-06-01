@@ -8,7 +8,9 @@ import { verifyUserCredentials, updateLastLogin, getTokenVersion, type User } fr
 interface WsTicket {
   username: string;
   createdAt: number;
-  used: boolean;
+  /** Server id this ticket is bound to. Tickets without scope are
+   *  legacy / default-server. Verify enforces the binding. */
+  serverId?: string;
 }
 
 const wsTickets = new Map<string, WsTicket>();
@@ -19,7 +21,7 @@ const WS_TICKET_CLEANUP_INTERVAL = 60000; // 1 minute
 setInterval(() => {
   const now = Date.now();
   for (const [ticketId, ticket] of wsTickets.entries()) {
-    if (now - ticket.createdAt > WS_TICKET_TTL || ticket.used) {
+    if (now - ticket.createdAt > WS_TICKET_TTL) {
       wsTickets.delete(ticketId);
     }
   }
@@ -48,9 +50,11 @@ export async function createAccessToken(subject: string): Promise<string> {
   );
 }
 
-export function createRefreshToken(subject: string): string {
+// Refresh tokens also carry tokenVersion so password/role changes invalidate them.
+export async function createRefreshToken(subject: string): Promise<string> {
+  const tokenVersion = await getTokenVersion(subject);
   return jwt.sign(
-    { sub: subject, type: 'refresh' },
+    { sub: subject, type: 'refresh', tokenVersion },
     config.jwtSecret,
     { expiresIn: config.refreshExpiresIn, algorithm: 'HS256' } as SignOptions
   );
@@ -69,42 +73,51 @@ export function verifyToken(token: string, type: 'access' | 'refresh' = 'access'
 }
 
 // WebSocket Ticket System
-// Creates short-lived, single-use tickets for WebSocket authentication
-// This prevents tokens from being exposed in URL query strings
+// Creates short-lived, single-use tickets for WebSocket authentication.
+// Tickets are deleted atomically on first verify to eliminate any race window.
 
-export function createWsTicket(username: string): string {
+export function createWsTicket(username: string, serverId?: string): string {
   const ticketId = crypto.randomBytes(32).toString('hex');
   wsTickets.set(ticketId, {
     username,
     createdAt: Date.now(),
-    used: false,
+    serverId,
   });
   return ticketId;
 }
 
-export function verifyWsTicket(ticketId: string): { valid: boolean; username?: string } {
+/**
+ * Verify a single-use ticket. When `expectedServerId` is passed, the ticket
+ * must have been issued for the same server (or unscoped). Tickets issued
+ * with a serverId can only open WebSockets for that server — this prevents
+ * cross-server ticket reuse.
+ */
+export function verifyWsTicket(ticketId: string, expectedServerId?: string): { valid: boolean; username?: string; serverId?: string } {
+  // Atomic check-and-delete: Map.delete returns true only if it existed.
+  // This guarantees that even if two requests arrive with the same ticket,
+  // only one of them gets past this point.
   const ticket = wsTickets.get(ticketId);
-
   if (!ticket) {
     return { valid: false };
   }
+  const removed = wsTickets.delete(ticketId);
+  if (!removed) {
+    return { valid: false };
+  }
 
-  // Check if ticket is expired
   if (Date.now() - ticket.createdAt > WS_TICKET_TTL) {
-    wsTickets.delete(ticketId);
     return { valid: false };
   }
 
-  // Check if ticket was already used
-  if (ticket.used) {
-    wsTickets.delete(ticketId);
+  // Scoped ticket must match the request's server scope. Unscoped tickets
+  // (legacy single-server) only open unscoped connections.
+  if (ticket.serverId !== undefined && expectedServerId !== undefined && ticket.serverId !== expectedServerId) {
+    return { valid: false };
+  }
+  if (ticket.serverId !== undefined && expectedServerId === undefined) {
+    // A scoped ticket can't open the legacy unscoped WS endpoint.
     return { valid: false };
   }
 
-  // Mark ticket as used and return success
-  ticket.used = true;
-  // Delete ticket after short delay to allow for connection establishment
-  setTimeout(() => wsTickets.delete(ticketId), 5000);
-
-  return { valid: true, username: ticket.username };
+  return { valid: true, username: ticket.username, serverId: ticket.serverId };
 }
