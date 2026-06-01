@@ -22,6 +22,33 @@ import { createDockerClient } from './dockerClient.js';
 
 const docker = createDockerClient();
 
+// A hung Docker daemon (or a wedged socket/proxy) would otherwise block these
+// calls forever and freeze every operator request that depends on them. We race
+// each one-shot Docker call against a timeout so the handler always returns.
+// Streaming calls (log follow, stdin attach) are deliberately NOT wrapped.
+const DOCKER_OP_TIMEOUT_MS = 30_000;
+// Graceful stop/restart asks the engine for up to 30s (`t: 30`) before SIGKILL,
+// so allow extra headroom before we give up on the whole operation.
+const DOCKER_STOP_TIMEOUT_MS = 45_000;
+
+class DockerTimeoutError extends Error {
+  constructor(op: string, ms: number) {
+    super(`Docker '${op}' timed out after ${ms}ms (daemon unresponsive?)`);
+    this.name = 'DockerTimeoutError';
+  }
+}
+
+function withTimeout<T>(op: string, promise: Promise<T>, ms: number = DOCKER_OP_TIMEOUT_MS): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DockerTimeoutError(op, ms)), ms);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 /** Resolve the container name for an explicit or default server id. */
 async function resolveContainerName(serverId?: string): Promise<string> {
   // Fast path for legacy single-server boot before servers.json exists.
@@ -53,7 +80,7 @@ export async function getStatus(serverId?: string): Promise<ServerStatus> {
   try {
     const container = await getContainer(serverId);
     if (!container) return { status: 'not_found', running: false, error: 'Container not found' };
-    const info = await container.inspect();
+    const info = await withTimeout('inspect', container.inspect());
     return {
       status: info.State.Status,
       running: info.State.Running,
@@ -72,9 +99,9 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
   try {
     const container = await getContainer(serverId);
     if (!container) return { error: 'Container not found' };
-    const info = await container.inspect();
+    const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { error: 'Container not running' };
-    const stats = await container.stats({ stream: false });
+    const stats = await withTimeout('stats', container.stats({ stream: false }));
     const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
     const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
     const cpuCount = stats.cpu_stats.online_cpus || 1;
@@ -112,7 +139,7 @@ export async function startContainer(serverId?: string): Promise<ActionResponse>
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
-    await container.start();
+    await withTimeout('start', container.start());
     return { success: true, message: 'Container started' };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -125,7 +152,7 @@ export async function stopContainer(serverId?: string): Promise<ActionResponse> 
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
     noteIntentionalStop(serverId); // tell the watchdog this stop was deliberate
-    await container.stop({ t: 30 });
+    await withTimeout('stop', container.stop({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
     clearOnlinePlayers();
     return { success: true, message: 'Container stopped' };
   } catch (error) {
@@ -139,7 +166,7 @@ export async function restartContainer(serverId?: string): Promise<ActionRespons
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
     noteIntentionalStop(serverId); // restart cycles through "stopped"; don't treat as a crash
-    await container.restart({ t: 30 });
+    await withTimeout('restart', container.restart({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
     clearOnlinePlayers();
     return { success: true, message: 'Container restarted' };
   } catch (error) {
@@ -152,7 +179,7 @@ export async function getLogs(tail: number = 100, serverId?: string): Promise<st
   try {
     const container = await getContainer(serverId);
     if (!container) return '';
-    const logs = await container.logs({ stdout: true, stderr: true, tail, timestamps: true });
+    const logs = await withTimeout('logs', container.logs({ stdout: true, stderr: true, tail, timestamps: true }) as Promise<Buffer>);
     return logs.toString('utf-8');
   } catch {
     return '';
@@ -170,7 +197,7 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
   try {
     const container = await getContainer(serverId);
     if (!container) return { ok: false, key };
-    const info = await container.inspect();
+    const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { ok: false, key };
     const stream = await container.attach({ stream: true, stdin: true, stdout: false, stderr: false, hijack: true });
     stdinStreams.set(key, stream);
@@ -197,7 +224,7 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     }
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
-    const info = await container.inspect();
+    const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
 
     const attached = await ensureStdinAttached(serverId);
@@ -212,7 +239,7 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     }
 
     const escapedCommand = escapeShellArg(command);
-    const exec = await container.exec({
+    const exec = await withTimeout('exec', container.exec({
       Cmd: ['sh', '-c', `
         if command -v screen > /dev/null && screen -list | grep -q hytale; then
           screen -S hytale -p 0 -X stuff ${escapedCommand}$'\n'
@@ -224,7 +251,7 @@ export async function execCommand(command: string, serverId?: string): Promise<A
       `],
       AttachStdout: true,
       AttachStderr: true,
-    });
+    }));
     const execStream = await exec.start({});
     return new Promise((resolve) => {
       execStream.on('end', () => resolve({ success: true, message: `Command sent: ${command}` }));
@@ -247,9 +274,9 @@ export async function execInContainer(command: string, serverId?: string): Promi
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
-    const info = await container.inspect();
+    const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
-    const exec = await container.exec({ Cmd: ['sh', '-c', command], AttachStdout: true, AttachStderr: true });
+    const exec = await withTimeout('exec', container.exec({ Cmd: ['sh', '-c', command], AttachStdout: true, AttachStderr: true }));
     const stream = await exec.start({});
     return new Promise((resolve) => {
       let output = '';
