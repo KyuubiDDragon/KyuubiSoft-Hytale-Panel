@@ -222,14 +222,16 @@ const webMapProxy = createProxyMiddleware({
           delete newHeaders['transfer-encoding'];
           // This proxied map is a trusted local mod page rendered in an isolated
           // iframe; give that document a permissive CSP so its (and our injected)
-          // inline scripts run. Scoped to /api/webmap only — the panel shell
-          // keeps its strict helmet CSP.
+          // inline scripts run AND it can pull its own deps (e.g. Leaflet) from
+          // external CDNs like unpkg.com. Scoped to /api/webmap only — the panel
+          // shell keeps its strict helmet CSP.
           newHeaders['content-security-policy'] =
-            "default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; " +
-            "script-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; " +
-            "connect-src 'self' ws: wss: http: https:; " +
-            "img-src 'self' data: blob: http: https:; " +
-            "style-src 'self' 'unsafe-inline';";
+            "default-src 'self' https: http: data: blob: 'unsafe-inline' 'unsafe-eval'; " +
+            "script-src 'self' https: http: data: blob: 'unsafe-inline' 'unsafe-eval'; " +
+            "style-src 'self' https: http: 'unsafe-inline'; " +
+            "img-src 'self' https: http: data: blob:; " +
+            "font-src 'self' https: http: data:; " +
+            "connect-src 'self' https: http: ws: wss:;";
 
           res.writeHead(proxyRes.statusCode || 200, newHeaders);
           res.end(body);
