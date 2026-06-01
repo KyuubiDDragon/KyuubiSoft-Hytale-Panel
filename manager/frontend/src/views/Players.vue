@@ -528,7 +528,7 @@ onUnmounted(() => {
         <div
           v-for="player in onlinePlayers"
           :key="player.name"
-          class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
+          class="cv-auto flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
         >
           <!-- Player Info (Clickable for details) -->
           <div
@@ -732,7 +732,7 @@ onUnmounted(() => {
         <div
           v-for="player in offlinePlayers"
           :key="player.name"
-          class="flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
+          class="cv-auto flex items-center justify-between p-4 hover:bg-surface-overlay/20 transition-colors"
         >
           <!-- Player Info (Clickable for details) -->
           <div

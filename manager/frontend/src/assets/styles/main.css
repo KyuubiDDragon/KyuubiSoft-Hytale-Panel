@@ -394,3 +394,13 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Performance: let the browser skip layout/paint of OFF-screen rows in long
+   lists (console logs, player rows, asset/file rows). Native virtualization —
+   DOM structure, scrolling and search stay identical, but a list with hundreds
+   or thousands of rows only renders what's near the viewport. The intrinsic
+   size is an estimate used for off-screen rows so the scrollbar stays sane. */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 40px;
+}

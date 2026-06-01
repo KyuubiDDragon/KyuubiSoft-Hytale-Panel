@@ -419,7 +419,7 @@ onUnmounted(stopProgressPolling)
             v-for="result in searchResults"
             :key="result.path"
             @click="selectSearchResult(result)"
-            class="w-full text-left px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-start gap-3 transition-colors"
+            class="cv-auto w-full text-left px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-start gap-3 transition-colors"
           >
             <svg v-if="result.type === 'directory'" class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -589,7 +589,7 @@ onUnmounted(stopProgressPolling)
                 v-for="file in files"
                 :key="file.path"
                 @click="selectFile(file)"
-                class="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-3 border-b border-gray-700/50 transition-colors"
+                class="cv-auto w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-3 border-b border-gray-700/50 transition-colors"
                 :class="{ 'bg-hytale-orange/20 border-l-2 border-l-hytale-orange': selectedFile?.path === file.path }"
               >
                 <!-- Icon -->

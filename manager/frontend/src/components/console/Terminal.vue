@@ -433,6 +433,7 @@ watch(
       <div
         v-for="log in filteredLogs"
         :key="log.id"
+        class="cv-auto"
         :class="getLogClass(log.level)"
       >
         <span class="text-ink-subtle mr-2">[{{ log.timestamp.split('T')[1]?.split('.')[0] || log.timestamp }}]</span>
