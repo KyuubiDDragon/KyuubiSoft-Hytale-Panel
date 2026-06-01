@@ -34,8 +34,12 @@ let ws: WebSocket | null = null
 let pollTimer: number | null = null
 const BUFFER_MS = 10 * 60 * 1000
 
-// History buffer, keyed by uuid -> samples sorted by ts
+// History buffer, keyed by uuid -> samples sorted by ts. It's a plain Map (not
+// reactive), so every mutation bumps `sampleTick` to drive the computeds below —
+// otherwise visibleSamples only recomputed when playbackOffsetMs changed, i.e.
+// players appeared only after the user nudged the playback slider.
 const history = new Map<string, LocationSample[]>()
+const sampleTick = ref(0)
 
 function ingest(sample: LocationSample) {
   let arr = history.get(sample.uuid)
@@ -46,10 +50,12 @@ function ingest(sample: LocationSample) {
   arr.push(sample)
   const cutoff = Date.now() - BUFFER_MS
   while (arr.length > 0 && arr[0].ts < cutoff) arr.shift()
+  sampleTick.value++
 }
 
 // Latest sample per uuid, optionally rewound to a target time.
 const visibleSamples = computed<LocationSample[]>(() => {
+  void sampleTick.value // re-run whenever a new sample is ingested
   const live = playbackOffsetMs.value === 0
   // Anchor the timeline on the newest sample we actually hold, NOT the browser
   // clock. The backend stamps samples with server time; any clock skew between

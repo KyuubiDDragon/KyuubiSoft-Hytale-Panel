@@ -193,12 +193,16 @@ public class PositionTicker {
     }
 
     /**
-     * Heuristic unit conversion: metric values above ~1e5 are nanoseconds
-     * (50 ms ≈ 5e7 ns), otherwise already milliseconds. Clamp to [0, 60000].
+     * Convert a raw ping-metric value to milliseconds using the metric's actual
+     * unit. {@code PacketHandler.PingInfo.TIME_UNIT} is MICROSECONDS on this API
+     * (verified via javap), so a real ~18 ms ping is stored as ~18000 — the old
+     * "nanoseconds-if-big-else-milliseconds" heuristic mis-read that as 18000 ms.
+     * Using TIME_UNIT keeps this correct even if Hytale changes the unit. Clamp
+     * to [0, 60000] ms.
      */
     private Integer normalizeToMs(long raw) {
         if (raw <= 0) return null;
-        long ms = raw > 100_000L ? raw / 1_000_000L : raw;
+        long ms = PacketHandler.PingInfo.TIME_UNIT.toMillis(raw);
         if (ms < 0 || ms > 60_000L) return null;
         return (int) ms;
     }

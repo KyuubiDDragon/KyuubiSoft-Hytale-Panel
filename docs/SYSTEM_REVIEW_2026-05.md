@@ -16,7 +16,7 @@
 
 Das Panel ist deutlich reifer als die eigene Doku (`docs/V3_ROADMAP.md`) suggeriert: Auth-Kern (bcrypt(12), JWT HS256 mit Algorithmus-Pinning, tokenVersion-Invalidierung, WS-Tickets, TOTP, IP-Rate-Limiting, HttpOnly-Refresh-Cookie, CSRF-Origin-Check, Command-Whitelist, gehärteter File-Manager) ist solide. Multi-Server-Registry, 2FA, API-Keys, Audit-Log, Webhooks, SSO, LiveMap, Replay, Wiki und ein nativer Update-Flow sind bereits implementiert.
 
-**Wichtige Einordnung zur Verifikation:** Mehrere als kritisch/hoch gemeldete Funde wurden durch Code-Gegenlesung **widerlegt (real=false)**, weil mehrere Reviewer auf einem **veralteten Stand** gearbeitet haben. Insbesondere das Java-Plugin ist inzwischen auf **v1.4.2** und implementiert **alle** Spieleraktionen nativ (über `CommandExecutor` → `CommandManager.handleCommand`), liest echte Health/Gamemode-Werte aus `EntityStatMap`/`Player`, hat eine echte Bearer-Token-Auth + CORS-Wiring, eine funktionierende TPS-Messung über `World.getTick()` und einen korrekten Ping-Probe über `getPacketHandler().getPingInfo()`. Diese Funde wurden **verworfen oder herabgestuft** und sind unten unter „Bereits behoben / widerlegt" dokumentiert, damit kein Doppelaufwand entsteht.
+**Wichtige Einordnung zur Verifikation:** Mehrere als kritisch/hoch gemeldete Funde wurden durch Code-Gegenlesung **widerlegt (real=false)**, weil mehrere Reviewer auf einem **veralteten Stand** gearbeitet haben. Insbesondere das Java-Plugin ist inzwischen auf **v1.4.3** und implementiert **alle** Spieleraktionen nativ (über `CommandExecutor` → `CommandManager.handleCommand`), liest echte Health/Gamemode-Werte aus `EntityStatMap`/`Player`, hat eine echte Bearer-Token-Auth + CORS-Wiring, eine funktionierende TPS-Messung über `World.getTick()` und einen korrekten Ping-Probe über `getPacketHandler().getPingInfo()`. Diese Funde wurden **verworfen oder herabgestuft** und sind unten unter „Bereits behoben / widerlegt" dokumentiert, damit kein Doppelaufwand entsteht.
 
 **Verbleibende, real bestätigte Probleme** konzentrieren sich auf: (1) ungeauthentifizierte Setup-Routen, die nach Abschluss weiterhin Server starten/stoppen und Konsolenbefehle injizieren können; (2) HTTP-Konsolenroute umgeht die Admin-Command-Gate und Whitelist; (3) mehrere Multi-Server-Bugs, bei denen Aktionen still auf dem **Default-Server** landen; (4) destruktiver Restore ohne Rollback; (5) ein per-Default deaktiver LiveMap/Replay-Datenpfad (Plugin sendet `player_position`, Panel-Zod-Union verwirft es); (6) flächendeckende Versions-/Doku-Inkonsistenzen.
 
@@ -203,7 +203,7 @@ Kategorien (bestätigt): Sicherheit ~13 · Bugs/Logik ~17 · Fehlerhafte Infos ~
 
 ## 🧩 Plugin & Hytale-API-Update
 
-> **Wichtig — bereits erledigt:** Das Plugin ist auf **v1.4.2** und implementiert alle Spieleraktionen nativ über `CommandExecutor` → `CommandManager.handleCommand` (verifiziert: `PlayersHandler.java:42-106`). Health/Gamemode werden echt aus `EntityStatMap`/`Player.getGameMode()` gelesen (`:245-270`). Bearer-Auth + CORS sind verdrahtet, TPS wird über `World.getTick()` gemessen, Ping über `getPacketHandler().getPingInfo(PongType)` ermittelt. Versionen sind über `build.gradle`/`manifest.json`/`kyuubiApi.ts`/`README` einheitlich `1.4.2`; das Bundle `assets/plugins/KyuubiSoftAPI-1.4.2.jar` matcht das Installer-Regex. **Die früher gemeldeten „Stubs/Fake-Daten/Build-kaputt/Versions-Chaos/Auth-tot"-Funde sind veraltet und verworfen.**
+> **Wichtig — bereits erledigt:** Das Plugin ist auf **v1.4.3** und implementiert alle Spieleraktionen nativ über `CommandExecutor` → `CommandManager.handleCommand` (verifiziert: `PlayersHandler.java:42-106`). Health/Gamemode werden echt aus `EntityStatMap`/`Player.getGameMode()` gelesen (`:245-270`). Bearer-Auth + CORS sind verdrahtet, TPS wird über `World.getTick()` gemessen, Ping über `getPacketHandler().getPingInfo(PongType)` ermittelt. Versionen sind über `build.gradle`/`manifest.json`/`kyuubiApi.ts`/`README` einheitlich `1.4.3`; das Bundle `assets/plugins/KyuubiSoftAPI-1.4.3.jar` matcht das Installer-Regex. **Die früher gemeldeten „Stubs/Fake-Daten/Build-kaputt/Versions-Chaos/Auth-tot"-Funde sind veraltet und verworfen.**
 
 ### 20. Plugin-`player_position`/`tps_update`-WS-Events werden still verworfen → LiveMap & Replay laufen dauerhaft auf Simulationsdaten `[HOCH]`
 - **Ort:** `manager/backend/src/schemas/pluginEvents.ts:51-56`; `services/pluginEvents.ts:57-96,133-138` vs `EventBroadcaster.java:111-128` + `PositionTicker.java:155` + `KyuubiSoftAPI.java:100-105`
@@ -226,7 +226,7 @@ Kategorien (bestätigt): Sicherheit ~13 · Bugs/Logik ~17 · Fehlerhafte Infos ~
 
 ## 🚀 Feature-Vorschläge
 
-> **Hinweis:** Der gemeldete „Java-Plugin stubt alle Aktionen / LiveMap-Ping-Heatmap nicht funktional"-Fund ist **widerlegt** (Plugin v1.4.2 implementiert Aktionen + echten Ping). Der „Hytale-Server-Discovery-USP"-Fund ist **nicht belegt** — die autoritative `HYTALE_API_FINDINGS.md` (Jar-Extraktion 2026-05-30) erwähnt kein Discovery-API; daher als spekulativer Low-Roadmap-Punkt geführt.
+> **Hinweis:** Der gemeldete „Java-Plugin stubt alle Aktionen / LiveMap-Ping-Heatmap nicht funktional"-Fund ist **widerlegt** (Plugin v1.4.3 implementiert Aktionen + echten Ping). Der „Hytale-Server-Discovery-USP"-Fund ist **nicht belegt** — die autoritative `HYTALE_API_FINDINGS.md` (Jar-Extraktion 2026-05-30) erwähnt kein Discovery-API; daher als spekulativer Low-Roadmap-Punkt geführt.
 
 Priorisierung (Impact × Effort):
 
@@ -302,13 +302,13 @@ Diese als kritisch/hoch gemeldeten Funde wurden per Code-Gegenlesung **widerlegt
 
 | Gemeldeter Fund | Status | Beleg |
 |-----------------|--------|-------|
-| Plugin gibt bei Aktionen 200 + `success:false` → stiller No-Op | **Widerlegt** | `postToPlugin` ehrt `data.success`; Plugin v1.4.2 implementiert Aktionen |
+| Plugin gibt bei Aktionen 200 + `success:false` → stiller No-Op | **Widerlegt** | `postToPlugin` ehrt `data.success`; Plugin v1.4.3 implementiert Aktionen |
 | Java-Plugin stubt alle Spieleraktionen | **Widerlegt** | `PlayersHandler.java:42-106` führt echte Commands aus |
 | Plugin: keine Auth, Token/CORS toter Config | **Widerlegt** | Bearer-Auth + CORS verdrahtet (`HttpRequestHandler.java:83-111`); nur Defaults schwach |
 | Player-Details = Fake Health 20.0/Gamemode „unknown" | **Widerlegt** | Echte Werte aus `EntityStatMap`/`Player.getGameMode()` |
 | TPS/MSPT dauerhaft fabriziert (`onTick` nie gerufen) | **Widerlegt** | TPS aus `World.getTick()`-Delta gemessen |
 | Build kaputt (`./gradlew shadowJar`, kein Wrapper) | **Widerlegt** | README sagt `gradle jar`; plain-jar-Build korrekt |
-| Plugin 4-fach widersprüchliche Versionen | **Widerlegt** | Alles einheitlich `1.4.2` |
+| Plugin 4-fach widersprüchliche Versionen | **Widerlegt** | Alles einheitlich `1.4.3` |
 | LiveMap-Ping-Heatmap nicht funktional (Ping null) | **Widerlegt** | `getPacketHandler().getPingInfo(PongType)` korrekt verdrahtet |
 | Frontend zeigt Success-Toast trotz Backend-Fehler | **Widerlegt** | Backend liefert Non-2xx; Axios-Interceptor rejected → `catch` greift |
 | Hytale-Server-Discovery-USP | **Unbelegt** | `HYTALE_API_FINDINGS.md` (2026-05-30) kennt kein Discovery-API |
@@ -372,7 +372,7 @@ clean + 72/72 Vitest grün; Frontend `vite build` grün; Plugin `javac` clean).
 - **#12 Restore-Safety** — Pre-Restore-Backup-Fehler bricht ab; Daten werden zur Seite geschoben (Rollback) statt gelöscht; EXDEV-Copy-Fallback. *(backup.ts)*
 - **#4 (Top-5) Multi-Server** — `req.serverId` in alle 19 `execCommand`-Aufrufe in `players.ts` + die Konsolenroute durchgereicht.
 - **Versions-Vereinheitlichung** — `migration.ts` liest jetzt `package.json` (statt hartem `2.1.1`); Banner + README-Badge auf `3.0.0-alpha`.
-- *(Vorheriger Durchlauf: Plugin v1.4.2 + #20 `player_position`/`tps_update` in die Zod-Union → LiveMap/Replay echt.)*
+- *(Vorheriger Durchlauf: Plugin v1.4.3 + #20 `player_position`/`tps_update` in die Zod-Union → LiveMap/Replay echt.)*
 
 ### Design / UX
 - **#16 Theme-Systeme konsolidiert** auf den Pinia-Store (Composable ist jetzt Adapter, ein Key, Migration vom alten Key). *(stores/theme.ts, composables/useTheme.ts)*
@@ -394,7 +394,7 @@ clean + 72/72 Vitest grün; Frontend `vite build` grün; Plugin `javac` clean).
 Der oben als „bewusst offen" markierte Backlog wurde anschließend vollständig
 autonom abgearbeitet. Stand jetzt sind **alle** geplanten Etappen erledigt und
 verifiziert (Backend `tsc` clean + 72/72 Vitest; Frontend `vite build` + `vue-tsc`
-**0 Fehler**; Plugin `javac` clean → Jar neu gebaut + Bundle `KyuubiSoftAPI-1.4.2.jar`).
+**0 Fehler**; Plugin `javac` clean → Jar neu gebaut + Bundle `KyuubiSoftAPI-1.4.3.jar`).
 
 ### Frontend-Typsicherheit & Build
 - **Frontend-Typ-Backlog komplett behoben** — die 60 vorbestehenden `vue-tsc`-Fehler über ~25 Dateien auf **0** gebracht; CI-Type-Check auf **blockierend** gestellt.
