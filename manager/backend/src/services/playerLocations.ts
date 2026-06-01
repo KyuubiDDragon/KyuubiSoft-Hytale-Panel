@@ -5,7 +5,7 @@
  *
  * Data sources (priority order):
  *  1. `player_position` plugin events via {@link eventBus}. The KyuubiSoft Java
- *     plugin (v1.4.1+) emits these every ~2 s/player; services/pluginEvents.ts
+ *     plugin (v1.4.2+) emits these every ~2 s/player; services/pluginEvents.ts
  *     validates and republishes them onto the bus.
  *  2. Simulated movement when {@link isDemoMode} is true OR when no real
  *     position events arrive for a few seconds (graceful fallback so the
@@ -135,7 +135,7 @@ function seedSimulatedPlayers(): void {
 function simulationTick(): void {
   // Simulated players are a DEMO-ONLY convenience. On a real server an empty
   // map must honestly mean "no live position data" — we never render fake
-  // players. Real positions require the KyuubiSoft plugin (v1.4.1+) running and
+  // players. Real positions require the KyuubiSoft plugin (v1.4.2+) running and
   // emitting player_position events.
   if (!isDemoMode()) return;
 
@@ -176,7 +176,7 @@ function simulationTick(): void {
 
 export function initializePlayerLocations(): void {
   // Subscribe to player_position plugin events (emitted by the KyuubiSoft
-  // plugin v1.4.1+ and republished by services/pluginEvents.ts).
+  // plugin v1.4.2+ and republished by services/pluginEvents.ts).
   eventBus.subscribe(['player_position'], (evt: PanelEvent) => {
     const p = evt.payload as Partial<PlayerLocationSample>;
     // uuid is optional in the plugin schema — fall back to playerName as a

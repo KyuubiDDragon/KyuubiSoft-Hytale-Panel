@@ -31,7 +31,7 @@ const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version in
 // manager/backend/assets/plugins/ and plugins/kyuubisoft-api/build.gradle).
-export const PLUGIN_VERSION = '1.4.1';
+export const PLUGIN_VERSION = '1.4.2';
 // Legacy default plugin port. Kept exported for back-compat with callers
 // that read this constant directly (e.g. configService snapshots, status
 // fallbacks). Per-server callers should use `resolvePluginEndpoint(serverId)`
