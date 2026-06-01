@@ -9,6 +9,7 @@ import * as dockerService from '../services/docker.js';
 import * as kyuubiApi from '../services/kyuubiApi.js';
 import * as chatLog from '../services/chatLog.js';
 import * as punishments from '../services/punishments.js';
+import { getLeaderboard, getPlayerSessions } from '../services/playtime.js';
 import { config } from '../config.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoWhitelist } from '../services/demoData.js';
@@ -186,6 +187,28 @@ router.get('/all', authMiddleware, requirePermission('players.view'), async (_re
   const players = await playersService.getAllPlayersUnified();
   const onlineCount = players.filter(p => p.online).length;
   res.json({ players, count: players.length, onlineCount });
+});
+
+// GET /api/players/playtime - playtime leaderboard (most-played first)
+router.get('/playtime', authMiddleware, requirePermission('players.view'), (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
+    res.json({ leaderboard: getLeaderboard(req.serverId, limit) });
+  } catch (error) {
+    logger.error('[Players] playtime leaderboard failed:', error);
+    res.status(500).json({ error: 'Failed to load playtime leaderboard' });
+  }
+});
+
+// GET /api/players/:uuid/playtime - per-player sessions + total
+router.get('/:uuid/playtime', authMiddleware, requirePermission('players.view'), (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
+    res.json(getPlayerSessions(req.params.uuid, limit));
+  } catch (error) {
+    logger.error('[Players] playtime sessions failed:', error);
+    res.status(500).json({ error: 'Failed to load playtime sessions' });
+  }
 });
 
 // POST /api/players/:name/kick

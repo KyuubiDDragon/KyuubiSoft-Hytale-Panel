@@ -130,6 +130,18 @@ function ensureSchema(conn: Database.Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_event_actions_enabled ON event_actions(enabled);
+
+    CREATE TABLE IF NOT EXISTS play_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id TEXT,
+      uuid TEXT NOT NULL,
+      player_name TEXT NOT NULL,
+      joined_at TEXT NOT NULL,         -- ISO timestamp
+      left_at TEXT,                    -- null = still online
+      duration_ms INTEGER              -- filled when the session ends
+    );
+    CREATE INDEX IF NOT EXISTS idx_play_sessions_uuid ON play_sessions(uuid, joined_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_play_sessions_open ON play_sessions(left_at);
   `);
 }
 

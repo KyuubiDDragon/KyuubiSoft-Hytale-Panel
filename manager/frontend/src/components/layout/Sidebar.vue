@@ -38,6 +38,7 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'statistics', path: '/statistics', icon: 'statistics', label: t('nav.statistics'), group: 'main', permission: 'dashboard.stats' },
   { name: 'help', path: '/help', icon: 'help', label: t('nav.help'), group: 'main', permission: 'all' },
   { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management', permission: 'players.view' },
+  { name: 'playtime', path: '/playtime', icon: 'statistics', label: t('nav.playtime'), group: 'management', permission: 'players.view' },
   { name: 'liveMap', path: '/live-map', icon: 'worlds', label: t('nav.liveMap'), group: 'management', permission: 'players.view' },
   { name: 'avatarInventory', path: '/avatar-inventory', icon: 'avatarInventory', label: t('nav.avatarInventory'), group: 'management', permission: 'players.view' },
   { name: 'chat', path: '/chat', icon: 'chat', label: t('nav.chat'), group: 'management', permission: 'chat.view' },

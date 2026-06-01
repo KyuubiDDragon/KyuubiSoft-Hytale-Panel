@@ -58,6 +58,7 @@ import { startAutoUpdateCheck } from './services/cfwidget.js';
 import { getCurrentVersion } from './services/panelVersionService.js';
 import { startWatchdog } from './services/watchdog.js';
 import { startPunishmentExpiry } from './services/punishments.js';
+import { startPlaytimeTracking } from './services/playtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -805,6 +806,9 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Start the punishment-expiry loop (lifts lapsed temp bans/mutes).
   startPunishmentExpiry();
+
+  // Start playtime/session tracking (records play_sessions from join/leave).
+  startPlaytimeTracking();
 
   // Start the event-action engine (reactive automations bound to the EventBus).
   const { startEventActions } = await import('./services/eventActions.js');

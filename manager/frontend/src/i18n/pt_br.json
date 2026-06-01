@@ -97,6 +97,7 @@
     "help": "Ajuda de Comandos",
     "avatarInventory": "Avatar e Inventário",
     "files": "Gerenciador de Arquivos",
+    "playtime": "Tempo de Jogo",
     "liveMap": "Mapa ao Vivo",
     "replay": "Replay",
     "wiki": "Wiki",
@@ -146,6 +147,18 @@
       "message": "Outro processo modificou este arquivo desde que você o abriu. Recarregue para obter a versão mais recente (alterações não salvas serão perdidas).",
       "reload": "Recarregar do disco"
     }
+  },
+  "playtime": {
+    "title": "Ranking de Tempo de Jogo",
+    "subtitle": "Tempo total jogado por jogador, mais ativos primeiro",
+    "player": "Jogador",
+    "total": "Tempo de Jogo",
+    "sessions": "Sessões",
+    "status": "Status",
+    "online": "Online",
+    "never": "Nunca",
+    "empty": "Nenhuma sessão de jogo registrada ainda.",
+    "loadError": "Falha ao carregar o ranking de tempo de jogo"
   },
   "liveMap": {
     "title": "Mapa ao Vivo",

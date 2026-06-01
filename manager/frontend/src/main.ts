@@ -147,6 +147,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/playtime',
+      name: 'playtime',
+      component: () => import('./views/Playtime.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/webmap',
       name: 'webmap',
       component: () => import('./views/WebMap.vue'),

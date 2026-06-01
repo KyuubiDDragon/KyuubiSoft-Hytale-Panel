@@ -98,6 +98,7 @@
     "avatarInventory": "Avatar & Inventar",
     "modUpdates": "Mod Updates",
     "files": "Dateimanager",
+    "playtime": "Spielzeit",
     "liveMap": "Live-Karte",
     "replay": "Replay",
     "wiki": "Wiki"
@@ -146,6 +147,18 @@
       "message": "Ein anderer Prozess hat diese Datei seit dem Öffnen verändert. Lade neu, um die aktuelle Version zu erhalten (ungespeicherte Änderungen gehen verloren).",
       "reload": "Von Festplatte neu laden"
     }
+  },
+  "playtime": {
+    "title": "Spielzeit-Rangliste",
+    "subtitle": "Gesamte Spielzeit pro Spieler, aktivste zuerst",
+    "player": "Spieler",
+    "total": "Spielzeit",
+    "sessions": "Sitzungen",
+    "status": "Status",
+    "online": "Online",
+    "never": "Nie",
+    "empty": "Noch keine Spiel-Sitzungen erfasst.",
+    "loadError": "Spielzeit-Rangliste konnte nicht geladen werden"
   },
   "liveMap": {
     "title": "Live-Karte",

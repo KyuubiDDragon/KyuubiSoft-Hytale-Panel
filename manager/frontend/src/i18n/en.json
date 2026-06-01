@@ -98,6 +98,7 @@
     "avatarInventory": "Avatar & Inventory",
     "modUpdates": "Mod Updates",
     "files": "File Manager",
+    "playtime": "Playtime",
     "liveMap": "Live Map",
     "replay": "Replay",
     "wiki": "Wiki"
@@ -146,6 +147,18 @@
       "message": "Another process modified this file since you opened it. Reload to get the latest version (your unsaved changes will be lost).",
       "reload": "Reload from disk"
     }
+  },
+  "playtime": {
+    "title": "Playtime Leaderboard",
+    "subtitle": "Total time played per player, most active first",
+    "player": "Player",
+    "total": "Playtime",
+    "sessions": "Sessions",
+    "status": "Status",
+    "online": "Online",
+    "never": "Never",
+    "empty": "No play sessions recorded yet.",
+    "loadError": "Failed to load playtime leaderboard"
   },
   "liveMap": {
     "title": "Live Map",
