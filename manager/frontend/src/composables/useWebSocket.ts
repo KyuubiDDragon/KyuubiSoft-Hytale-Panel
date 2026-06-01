@@ -94,6 +94,16 @@ export function useWebSocket() {
                 message: data.output,
               })
             }
+            // Surface failures (permission denied, validation, server not
+            // running, …) instead of silently dropping them — otherwise a
+            // rejected command looks like it just did nothing.
+            if (data.success === false && data.error) {
+              consoleStore.addLog({
+                timestamp: new Date().toISOString(),
+                level: 'ERROR',
+                message: data.error,
+              })
+            }
             break
 
           case 'error':
@@ -159,7 +169,10 @@ export function useWebSocket() {
     }
   }
 
-  function sendCommand(command: string) {
+  // Returns true if the command was actually sent. When the socket isn't open
+  // the caller can keep the typed text and surface a "not connected" message
+  // instead of the command silently vanishing.
+  function sendCommand(command: string): boolean {
     if (ws.value && ws.value.readyState === WebSocket.OPEN) {
       ws.value.send(JSON.stringify({
         type: 'command',
@@ -172,7 +185,14 @@ export function useWebSocket() {
         level: 'INFO',
         message: `> ${command}`,
       })
+      return true
     }
+
+    // Not connected — try to re-establish so the next attempt works.
+    if (!ws.value || ws.value.readyState === WebSocket.CLOSED) {
+      void reconnect()
+    }
+    return false
   }
 
   function ping() {

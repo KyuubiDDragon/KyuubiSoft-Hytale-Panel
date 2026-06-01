@@ -257,8 +257,18 @@ const filteredLogs = computed(() => {
 async function handleSubmit() {
   if (!commandInput.value.trim()) return
   showSuggestions.value = false
-  sendCommand(commandInput.value)
-  commandInput.value = ''
+  const sent = sendCommand(commandInput.value)
+  if (sent) {
+    commandInput.value = ''
+  } else {
+    // Keep the typed command so the user can retry, and tell them why nothing
+    // happened (the socket was reconnecting / disconnected).
+    consoleStore.addLog({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      message: t('console.notConnected'),
+    })
+  }
 
   // Auto-scroll to bottom after command is sent
   await nextTick()

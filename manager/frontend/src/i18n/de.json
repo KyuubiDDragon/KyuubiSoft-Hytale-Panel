@@ -389,6 +389,7 @@
     "connected": "Verbunden",
     "disconnected": "Getrennt",
     "reconnecting": "Verbinde...",
+    "notConnected": "Nicht verbunden — Befehl nicht gesendet. Verbinde neu, bitte erneut versuchen.",
     "reconnect": "Verbinden",
     "noLogs": "Keine Logs vorhanden",
     "filter": "Filter",

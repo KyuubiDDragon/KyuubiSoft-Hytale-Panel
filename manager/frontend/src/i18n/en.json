@@ -389,6 +389,7 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "reconnecting": "Reconnecting...",
+    "notConnected": "Not connected — command not sent. Reconnecting, please try again.",
     "reconnect": "Reconnect",
     "noLogs": "No logs available",
     "filter": "Filter",
