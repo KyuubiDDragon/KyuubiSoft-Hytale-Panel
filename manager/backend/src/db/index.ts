@@ -142,6 +142,16 @@ function ensureSchema(conn: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_play_sessions_uuid ON play_sessions(uuid, joined_at DESC);
     CREATE INDEX IF NOT EXISTS idx_play_sessions_open ON play_sessions(left_at);
+
+    CREATE TABLE IF NOT EXISTS crash_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id TEXT,
+      detected_at TEXT NOT NULL,
+      log_tail TEXT,                  -- captured container log tail around the crash
+      auto_restarted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_crash_reports_time ON crash_reports(created_at DESC);
   `);
 }
 

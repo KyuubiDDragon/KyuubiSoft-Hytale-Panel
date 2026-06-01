@@ -99,6 +99,7 @@
     "modUpdates": "Mod Updates",
     "files": "File Manager",
     "playtime": "Playtime",
+    "crashes": "Crashes",
     "liveMap": "Live Map",
     "replay": "Replay",
     "wiki": "Wiki"
@@ -159,6 +160,14 @@
     "never": "Never",
     "empty": "No play sessions recorded yet.",
     "loadError": "Failed to load playtime leaderboard"
+  },
+  "crashes": {
+    "title": "Crash Reports",
+    "subtitle": "Captured server crashes with the surrounding log",
+    "autoRestarted": "Auto-restarted",
+    "empty": "No crashes recorded. Nice and stable!",
+    "noLog": "No log was captured for this crash.",
+    "loadError": "Failed to load crash reports"
   },
   "liveMap": {
     "title": "Live Map",

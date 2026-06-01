@@ -98,6 +98,7 @@
     "avatarInventory": "Avatar e Inventário",
     "files": "Gerenciador de Arquivos",
     "playtime": "Tempo de Jogo",
+    "crashes": "Falhas",
     "liveMap": "Mapa ao Vivo",
     "replay": "Replay",
     "wiki": "Wiki",
@@ -159,6 +160,14 @@
     "never": "Nunca",
     "empty": "Nenhuma sessão de jogo registrada ainda.",
     "loadError": "Falha ao carregar o ranking de tempo de jogo"
+  },
+  "crashes": {
+    "title": "Relatórios de Falhas",
+    "subtitle": "Falhas do servidor capturadas com o log ao redor",
+    "autoRestarted": "Reiniciado automaticamente",
+    "empty": "Nenhuma falha registrada. Bem estável!",
+    "noLog": "Nenhum log foi capturado para esta falha.",
+    "loadError": "Falha ao carregar os relatórios de falhas"
   },
   "liveMap": {
     "title": "Mapa ao Vivo",

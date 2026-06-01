@@ -153,6 +153,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/crashes',
+      name: 'crashes',
+      component: () => import('./views/Crashes.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/webmap',
       name: 'webmap',
       component: () => import('./views/WebMap.vue'),

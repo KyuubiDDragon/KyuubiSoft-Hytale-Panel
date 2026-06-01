@@ -11,6 +11,7 @@ import configRoutes from './config.js';
 import updatesRoutes from './updates.js';
 import authRoutes from './auth.js';
 import panelRoutes from './panel.js';
+import crashesRoutes from './crashes.js';
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use('/', configRoutes);
 router.use('/', updatesRoutes);
 router.use('/', authRoutes);
 router.use('/', panelRoutes);
+router.use('/', crashesRoutes);
 
 export default router;

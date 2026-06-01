@@ -59,6 +59,7 @@ import { getCurrentVersion } from './services/panelVersionService.js';
 import { startWatchdog } from './services/watchdog.js';
 import { startPunishmentExpiry } from './services/punishments.js';
 import { startPlaytimeTracking } from './services/playtime.js';
+import { startCrashCapture } from './services/crashReports.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -809,6 +810,9 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Start playtime/session tracking (records play_sessions from join/leave).
   startPlaytimeTracking();
+
+  // Capture a log snapshot whenever the watchdog reports a crash.
+  startCrashCapture();
 
   // Start the event-action engine (reactive automations bound to the EventBus).
   const { startEventActions } = await import('./services/eventActions.js');

@@ -99,6 +99,7 @@
     "modUpdates": "Mod Updates",
     "files": "Dateimanager",
     "playtime": "Spielzeit",
+    "crashes": "Abstürze",
     "liveMap": "Live-Karte",
     "replay": "Replay",
     "wiki": "Wiki"
@@ -159,6 +160,14 @@
     "never": "Nie",
     "empty": "Noch keine Spiel-Sitzungen erfasst.",
     "loadError": "Spielzeit-Rangliste konnte nicht geladen werden"
+  },
+  "crashes": {
+    "title": "Absturzberichte",
+    "subtitle": "Erfasste Server-Abstürze mit dem umliegenden Log",
+    "autoRestarted": "Auto-Neustart",
+    "empty": "Keine Abstürze erfasst. Schön stabil!",
+    "noLog": "Für diesen Absturz wurde kein Log erfasst.",
+    "loadError": "Absturzberichte konnten nicht geladen werden"
   },
   "liveMap": {
     "title": "Live-Karte",
