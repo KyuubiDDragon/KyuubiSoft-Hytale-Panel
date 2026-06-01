@@ -328,6 +328,30 @@ async function runExtraction(sourceFile: string): Promise<void> {
       fs.rmSync(itemPath, { recursive: true, force: true });
     }
 
+    // Pre-flight: make sure there's enough free space. Game assets are large
+    // and already compressed, so the extracted size is roughly the archive
+    // size; require ~1.5x as a margin. Failing here gives a clear message
+    // instead of unzip aborting mid-way with the cryptic "exited with code 50"
+    // (disk full).
+    let freeBytes: number | null = null;
+    try {
+      const st = fs.statfsSync(config.assetsPath);
+      freeBytes = st.bavail * st.bsize;
+    } catch {
+      freeBytes = null; // statfs unsupported on this filesystem — skip the check
+    }
+    if (freeBytes !== null) {
+      const requiredBytes = Math.ceil(fs.statSync(sourceFile).size * 1.5);
+      if (freeBytes < requiredBytes) {
+        const gb = (n: number) => (n / 1024 ** 3).toFixed(1);
+        throw new Error(
+          `Not enough disk space to extract assets: need ~${gb(requiredBytes)} GB free, ` +
+          `only ${gb(freeBytes)} GB available on the assets volume (${config.assetsPath}). ` +
+          `Free up space (or set ASSETS_PATH to a larger disk) and retry.`
+        );
+      }
+    }
+
     // Extract using unzip command with verbose output to track progress
     if (extractionProgress) {
       extractionProgress.currentFile = 'Extracting...';
@@ -367,6 +391,11 @@ async function runExtraction(sourceFile: string): Promise<void> {
       unzip.on('close', (code) => {
         if (code === 0) {
           resolve();
+        } else if (code === 50) {
+          reject(new Error(
+            `Ran out of disk space while extracting assets (unzip code 50). Free up space on ` +
+            `the assets volume (${config.assetsPath}) and retry.`
+          ));
         } else {
           reject(new Error(`unzip exited with code ${code}`));
         }
@@ -408,6 +437,17 @@ async function runExtraction(sourceFile: string): Promise<void> {
     logger.info(`[Assets] Extraction complete: ${fileCount} files`);
   } catch (error) {
     logger.error('[Assets] Extraction failed:', error);
+    // Remove the half-extracted tree so a failed run (e.g. disk full) doesn't
+    // leave junk occupying the volume. The old assets were already cleared
+    // before extraction started, so there's nothing useful to keep. Best-effort.
+    try {
+      if (fs.existsSync(config.assetsPath)) {
+        for (const item of fs.readdirSync(config.assetsPath)) {
+          if (item === ASSET_META_FILE) continue;
+          fs.rmSync(path.join(config.assetsPath, item), { recursive: true, force: true });
+        }
+      }
+    } catch { /* best-effort cleanup */ }
     if (extractionProgress) {
       extractionProgress.status = 'failed';
       extractionProgress.error = error instanceof Error ? error.message : 'Unknown error';
