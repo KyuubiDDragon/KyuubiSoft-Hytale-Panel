@@ -37,6 +37,7 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), group: 'main', permission: 'performance.view' },
   { name: 'statistics', path: '/statistics', icon: 'statistics', label: t('nav.statistics'), group: 'main', permission: 'dashboard.stats' },
   { name: 'crashes', path: '/crashes', icon: 'console', label: t('nav.crashes'), group: 'main', permission: 'server.view_status' },
+  { name: 'updates', path: '/updates', icon: 'download', label: t('nav.updates'), group: 'main', permission: 'updates.view' },
   { name: 'help', path: '/help', icon: 'help', label: t('nav.help'), group: 'main', permission: 'all' },
   { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management', permission: 'players.view' },
   { name: 'playtime', path: '/playtime', icon: 'statistics', label: t('nav.playtime'), group: 'management', permission: 'players.view' },

@@ -16,6 +16,7 @@ import path from 'path';
 import { config } from '../config.js';
 import { createBackup, listBackups, deleteBackup } from './backup.js';
 import * as dockerService from './docker.js';
+import { validateCommand } from '../utils/sanitize.js';
 import { ensureLoaded, getDefaultId, getServer, listServers, onServerAdded, onServerDeleted } from './servers.js';
 
 // Scheduler configuration
@@ -40,6 +41,7 @@ interface ScheduleConfig {
     createBackup: boolean; // Create backup before restart
   };
   quickCommands: QuickCommand[];
+  scheduledCommands: ScheduledCommand[];
 }
 
 interface ScheduledAnnouncement {
@@ -47,6 +49,23 @@ interface ScheduledAnnouncement {
   message: string;
   intervalMinutes: number;
   enabled: boolean;
+}
+
+/**
+ * A console command run automatically on a schedule. `command` is validated
+ * against the same console whitelist as manual execution before every run, so
+ * a persisted config can't be used to smuggle an arbitrary shell command.
+ *   - mode 'daily'    → runs at each "HH:MM" in `times` every day
+ *   - mode 'interval' → runs every `intervalMinutes` minutes
+ */
+interface ScheduledCommand {
+  id: string;
+  name: string;
+  command: string;
+  enabled: boolean;
+  mode: 'daily' | 'interval';
+  times: string[];
+  intervalMinutes: number;
 }
 
 interface QuickCommand {
@@ -86,6 +105,7 @@ const DEFAULT_CONFIG: ScheduleConfig = {
     { id: '5', name: 'Clear Weather', command: '/weather clear', icon: 'cloud', category: 'world' },
     { id: '6', name: 'Rain', command: '/weather rain', icon: 'cloud-rain', category: 'world' },
   ],
+  scheduledCommands: [],
 };
 
 // Per-server configuration cache (keyed by serverId).
@@ -98,6 +118,11 @@ interface SchedulerTimers {
   restartTimers: Map<string, NodeJS.Timeout>;
   restartWarningTimers: NodeJS.Timeout[];
   pendingRestart: { time: string; scheduledAt: Date } | null;
+  // One timer per scheduled command id. Daily-mode commands store a setTimeout
+  // (re-armed on fire); interval-mode commands store a setInterval.
+  commandTimers: Map<string, NodeJS.Timeout>;
+  // Last successful run per command id (epoch-ms), in-memory only.
+  commandLastRun: Map<string, number>;
 }
 const timersByServer: Record<string, SchedulerTimers> = {};
 
@@ -108,6 +133,8 @@ function emptyTimers(): SchedulerTimers {
     restartTimers: new Map(),
     restartWarningTimers: [],
     pendingRestart: null,
+    commandTimers: new Map(),
+    commandLastRun: new Map(),
   };
 }
 
@@ -464,6 +491,85 @@ export function getPendingRestart(serverId?: string): { time: string; scheduledA
   };
 }
 
+// ============================================================
+// Scheduled custom commands
+// ============================================================
+
+// Compute the next daily occurrence (ms-from-now) among a list of "HH:MM".
+function msUntilNextDailyTime(times: string[]): number | null {
+  const now = new Date();
+  let best: number | null = null;
+  for (const timeStr of times) {
+    const [h, m] = timeStr.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) continue;
+    const next = new Date(now);
+    next.setHours(h, m, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    const delta = next.getTime() - now.getTime();
+    if (best === null || delta < best) best = delta;
+  }
+  return best;
+}
+
+// Run a scheduled command after re-validating it against the console whitelist.
+async function runScheduledCommand(cmd: ScheduledCommand, serverId: string): Promise<void> {
+  const check = validateCommand(cmd.command);
+  if (!check.valid) {
+    console.error(`[Scheduler:${serverId}] Skipping scheduled command "${cmd.name}": ${check.error}`);
+    return;
+  }
+  try {
+    const result = await dockerService.execCommand(cmd.command, serverId);
+    const timers = timersByServer[serverId];
+    if (timers && result.success) timers.commandLastRun.set(cmd.id, Date.now());
+    console.log(`[Scheduler:${serverId}] Ran scheduled command "${cmd.name}": ${cmd.command} (${result.success ? 'ok' : 'failed'})`);
+  } catch (err) {
+    console.error(`[Scheduler:${serverId}] Scheduled command "${cmd.name}" failed:`, err);
+  }
+}
+
+function clearScheduledCommands(timers: SchedulerTimers): void {
+  for (const [, t] of timers.commandTimers) {
+    clearTimeout(t);
+    clearInterval(t);
+  }
+  timers.commandTimers.clear();
+}
+
+function scheduleCommandsForServer(serverId: string): void {
+  const cfg = schedulerConfig[serverId];
+  const timers = timersByServer[serverId];
+  if (!cfg || !timers) return;
+
+  clearScheduledCommands(timers);
+
+  for (const cmd of cfg.scheduledCommands ?? []) {
+    if (!cmd.enabled) continue;
+
+    if (cmd.mode === 'interval') {
+      if (!cmd.intervalMinutes || cmd.intervalMinutes <= 0) continue;
+      const timer = setInterval(() => { void runScheduledCommand(cmd, serverId); }, cmd.intervalMinutes * 60_000);
+      timer.unref?.();
+      timers.commandTimers.set(cmd.id, timer);
+      console.log(`[Scheduler:${serverId}] Scheduled command "${cmd.name}" every ${cmd.intervalMinutes} min`);
+    } else {
+      // daily mode: arm a one-shot to the next "HH:MM", re-arming after each fire.
+      const arm = (): void => {
+        const ms = msUntilNextDailyTime(cmd.times ?? []);
+        if (ms === null) return;
+        const timer = setTimeout(() => {
+          void runScheduledCommand(cmd, serverId);
+          arm(); // schedule tomorrow's (or next time's) occurrence
+        }, ms);
+        timer.unref?.();
+        timers.commandTimers.set(cmd.id, timer);
+      };
+      arm();
+      console.log(`[Scheduler:${serverId}] Scheduled command "${cmd.name}" daily at ${(cmd.times ?? []).join(', ')}`);
+    }
+  }
+}
+
 /**
  * Start schedulers for a specific server.
  */
@@ -510,6 +616,7 @@ function startSchedulersForServer(serverId: string): void {
   }
 
   scheduleNextRestart(serverId);
+  scheduleCommandsForServer(serverId);
 }
 
 function stopSchedulersForServer(serverId: string): void {
@@ -527,6 +634,7 @@ function stopSchedulersForServer(serverId: string): void {
   for (const t of timers.restartWarningTimers) clearTimeout(t);
   timers.restartWarningTimers = [];
   timers.pendingRestart = null;
+  clearScheduledCommands(timers);
   console.log(`[Scheduler:${serverId}] Schedulers stopped`);
 }
 
@@ -626,11 +734,63 @@ export function deleteQuickCommand(qcId: string, serverId?: string): boolean {
   return true;
 }
 
+// Run a configured scheduled command immediately (used by the "Run now" button).
+export async function runScheduledCommandNow(commandId: string, serverId?: string): Promise<{ success: boolean; error?: string }> {
+  const id = await resolveServerId(serverId);
+  const cfg = schedulerConfig[id] ?? (await loadConfig(id));
+  const cmd = (cfg.scheduledCommands ?? []).find(c => c.id === commandId);
+  if (!cmd) return { success: false, error: 'Scheduled command not found' };
+  const check = validateCommand(cmd.command);
+  if (!check.valid) return { success: false, error: check.error };
+  await runScheduledCommand(cmd, id);
+  return { success: true };
+}
+
+export interface ScheduledCommandStatus {
+  id: string;
+  name: string;
+  command: string;
+  enabled: boolean;
+  mode: 'daily' | 'interval';
+  nextRun: string | null;
+  lastRun: string | null;
+}
+
+function getScheduledCommandStatuses(serverId: string): ScheduledCommandStatus[] {
+  const cfg = schedulerConfig[serverId];
+  const timers = timersByServer[serverId];
+  if (!cfg) return [];
+  const now = Date.now();
+  return (cfg.scheduledCommands ?? []).map(cmd => {
+    let nextRun: string | null = null;
+    if (cmd.enabled) {
+      if (cmd.mode === 'interval' && cmd.intervalMinutes > 0) {
+        const last = timers?.commandLastRun.get(cmd.id) ?? now;
+        nextRun = new Date(last + cmd.intervalMinutes * 60_000).toISOString();
+      } else if (cmd.mode === 'daily') {
+        const ms = msUntilNextDailyTime(cmd.times ?? []);
+        if (ms !== null) nextRun = new Date(now + ms).toISOString();
+      }
+    }
+    const lastRunMs = timers?.commandLastRun.get(cmd.id);
+    return {
+      id: cmd.id,
+      name: cmd.name,
+      command: cmd.command,
+      enabled: cmd.enabled,
+      mode: cmd.mode,
+      nextRun,
+      lastRun: lastRunMs ? new Date(lastRunMs).toISOString() : null,
+    };
+  });
+}
+
 // Get scheduler status
 export async function getSchedulerStatus(serverId?: string): Promise<{
   backups: { enabled: boolean; nextRun: string | null; lastRun: string | null; schedule: string };
   announcements: { enabled: boolean; activeCount: number };
   scheduledRestarts: { enabled: boolean; nextRestart: string | null; pendingRestart: { time: string; scheduledAt: string } | null; times: string[] };
+  scheduledCommands: ScheduledCommandStatus[];
 }> {
   const id = await resolveServerId(serverId);
   const cfg = schedulerConfig[id] ?? (await loadConfig(id));
@@ -657,6 +817,7 @@ export async function getSchedulerStatus(serverId?: string): Promise<{
       pendingRestart: getPendingRestart(id),
       times: cfg.scheduledRestarts.times,
     },
+    scheduledCommands: getScheduledCommandStatuses(id),
   };
 }
 

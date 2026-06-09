@@ -221,6 +221,36 @@ Das Admin Panel ist unter `http://SERVER-IP:18080` erreichbar.
 
 Rollen können im Panel unter "Roles" angepasst werden. Du kannst auch eigene Rollen erstellen.
 
+### Login-Probleme & Passwort-Reset (CLI)
+
+**Wichtig zu wissen:** `MANAGER_USERNAME`/`MANAGER_PASSWORD` aus der `.env` werden nur **einmalig** verwendet, um beim allerersten Start den Admin-Account anzulegen (Datei `users.json` im Manager-Datenvolume). Danach gilt ausschließlich das Passwort aus dem Panel bzw. aus dem Setup-Wizard — Änderungen an `MANAGER_PASSWORD` in der `.env` haben **keine Wirkung** mehr.
+
+Wenn du dich ausgesperrt hast (Passwort vergessen, .env-Passwort funktioniert nicht, 2FA-Gerät verloren), nutze das eingebaute Recovery-CLI im Manager-Container:
+
+```bash
+# Diagnose: Welche Credential-Quelle ist aktiv? Welche User existieren?
+docker exec -it hytale-manager node dist/cli.js auth-status
+
+# Passwort zurücksetzen (generiert ein sicheres Passwort und zeigt es an)
+docker exec -it hytale-manager node dist/cli.js reset-password admin
+
+# Passwort auf einen eigenen Wert setzen
+docker exec -it hytale-manager node dist/cli.js reset-password admin 'MeinNeues-Passwort123'
+
+# Neuen Admin-Account anlegen (falls users.json leer/beschädigt ist)
+docker exec -it hytale-manager node dist/cli.js create-admin admin
+
+# 2FA entfernen (Authenticator verloren)
+docker exec -it hytale-manager node dist/cli.js disable-2fa admin
+
+# Alle User auflisten
+docker exec -it hytale-manager node dist/cli.js list-users
+```
+
+> Bei eigenem `STACK_NAME` heißt der Container entsprechend, z.B. `hytale-prod-manager`. Mit Docker Compose geht auch: `docker compose exec manager node dist/cli.js auth-status`
+>
+> Ein Passwort-Reset macht alle aktiven Sessions des Accounts sofort ungültig. Die Änderungen wirken ohne Neustart.
+
 ### Umgebungsvariablen
 
 #### Pflicht (v2.0)
@@ -229,8 +259,8 @@ Rollen können im Panel unter "Roles" angepasst werden. Du kannst auch eigene Ro
 |----------|--------------|
 | `JWT_SECRET` | Geheimer Schlüssel (min. 32 Zeichen) - `openssl rand -base64 48` |
 | `CORS_ORIGINS` | Erlaubte Origins (z.B. `http://localhost:18080`) |
-| `MANAGER_USERNAME` | Admin-Benutzername |
-| `MANAGER_PASSWORD` | Admin-Passwort (min. 12 Zeichen empfohlen) |
+| `MANAGER_USERNAME` | Admin-Benutzername (nur für die **Erstanlage** — danach gilt `users.json`) |
+| `MANAGER_PASSWORD` | Admin-Passwort (min. 12 Zeichen; nur für die **Erstanlage** — spätere Änderungen per Panel oder `reset-password`-CLI, siehe oben) |
 
 #### Server
 

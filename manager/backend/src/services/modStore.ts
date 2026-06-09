@@ -10,6 +10,7 @@ import path from 'path';
 import https from 'https';
 import http from 'http';
 import { config } from '../config.js';
+import { assertSafeResolvedUrl, UnsafeUrlError } from '../utils/urlGuard.js';
 
 // External registry URL
 const EXTERNAL_REGISTRY_URL = 'https://kyuubisoft.com/hytale-mods.json';
@@ -37,6 +38,12 @@ export interface ModStoreEntry {
   website?: string;
   version?: string; // For direct downloads
   hints?: LocalizedString;
+  // Optional compatibility metadata (populated by the registry). Used by the
+  // mod-compatibility checker to warn before installing a mod built for a
+  // different server version.
+  gameVersions?: string[];
+  minServerVersion?: string;
+  maxServerVersion?: string;
 }
 
 // Built-in fallback registry (used if external registry fails)
@@ -271,57 +278,92 @@ export async function getLatestRelease(githubRepo: string): Promise<GitHubReleas
   });
 }
 
+const MAX_DOWNLOAD_REDIRECTS = 5;
+
 /**
- * Download file from URL
+ * Download file from URL.
+ *
+ * SECURITY: the URL and every redirect target are SSRF-checked
+ * (assertSafeResolvedUrl) before a connection is made, so a malicious mod
+ * registry / release asset can't redirect the panel into internal services
+ * (localhost, 169.254.169.254, RFC1918). Redirects are capped to avoid loops.
  */
 async function downloadFile(url: string, destPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const protocol = url.startsWith('https') ? https : http;
+  const fetchWithGuard = (currentUrl: string, redirectsLeft: number): Promise<boolean> =>
+    new Promise<boolean>((resolve) => {
+      // Validate BEFORE connecting (resolves DNS, rejects private ranges).
+      assertSafeResolvedUrl(currentUrl)
+        .then((safeUrl) => {
+          const proto = safeUrl.protocol === 'https:' ? https : http;
+          proto.get(safeUrl.toString(), { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } }, (res) => {
+            // Handle redirects (301/302/303/307/308)
+            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+              res.resume(); // drain the socket
+              if (redirectsLeft <= 0) {
+                logger.error('Download failed: too many redirects');
+                resolve(false);
+                return;
+              }
+              // location may be relative — resolve against the current URL.
+              const next = new URL(res.headers.location, safeUrl).toString();
+              fetchWithGuard(next, redirectsLeft - 1).then(resolve);
+              return;
+            }
 
-    const request = (currentUrl: string) => {
-      const proto = currentUrl.startsWith('https') ? https : http;
+            if (res.statusCode !== 200) {
+              logger.error(`Download failed: ${res.statusCode}`);
+              res.resume();
+              resolve(false);
+              return;
+            }
 
-      proto.get(currentUrl, { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } }, (res) => {
-        // Handle redirects
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            request(redirectUrl);
-            return;
-          }
-        }
-
-        if (res.statusCode !== 200) {
-          logger.error(`Download failed: ${res.statusCode}`);
-          resolve(false);
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', async () => {
-          try {
-            const buffer = Buffer.concat(chunks);
-            await writeFile(destPath, buffer);
-            resolve(true);
-          } catch (e) {
-            logger.error('Failed to write file:', e);
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('end', async () => {
+              try {
+                const buffer = Buffer.concat(chunks);
+                await writeFile(destPath, buffer);
+                resolve(true);
+              } catch (e) {
+                logger.error('Failed to write file:', e);
+                resolve(false);
+              }
+            });
+            res.on('error', (e) => {
+              logger.error('Download error:', e);
+              resolve(false);
+            });
+          }).on('error', (e) => {
+            logger.error('Request error:', e);
             resolve(false);
+          });
+        })
+        .catch((e) => {
+          if (e instanceof UnsafeUrlError) {
+            logger.error(`Download blocked (unsafe URL: ${e.reason}): ${currentUrl}`);
+          } else {
+            logger.error('Download URL validation failed:', e);
           }
-        });
-        res.on('error', (e) => {
-          logger.error('Download error:', e);
           resolve(false);
         });
-      }).on('error', (e) => {
-        logger.error('Request error:', e);
-        resolve(false);
-      });
-    };
+    });
 
-    request(url);
-  });
+  return fetchWithGuard(url, MAX_DOWNLOAD_REDIRECTS);
+}
+
+/**
+ * Reduce an untrusted download filename to a safe basename inside modsPath.
+ * Strips any directory components and rejects anything that isn't a plain
+ * `.jar`/`.zip` file name — defends against `..` traversal and absolute paths
+ * coming from a release asset name or a registry-supplied download URL.
+ */
+function safeModFilename(rawName: string, fallback: string): string {
+  const clean = (name: string): string | null => {
+    const base = path.basename((name || '').replace(/\\/g, '/').trim());
+    return base && /^[A-Za-z0-9._+-]+\.(jar|zip)$/i.test(base) && !base.startsWith('.') ? base : null;
+  };
+  // Sanitize the fallback too: it derives from mod.name which is registry data.
+  return clean(rawName) ?? clean(fallback) ?? 'mod.jar';
 }
 
 /**
@@ -482,14 +524,16 @@ export async function installMod(modId: string): Promise<InstallResult> {
     }
 
     downloadUrl = jarAsset.browser_download_url;
-    filename = jarAsset.name;
+    // SECURITY: never trust the asset name as a path component.
+    filename = safeModFilename(jarAsset.name, `${mod.name}.jar`);
     version = release.tag_name;
   } else if (mod.downloadUrl) {
     // Direct download URL
     downloadUrl = mod.downloadUrl;
-    // Extract filename from URL or use mod name
+    // Extract filename from URL but reduce it to a safe basename so a
+    // registry-supplied URL ending in e.g. /../../foo can't escape modsPath.
     const urlParts = mod.downloadUrl.split('/');
-    filename = urlParts[urlParts.length - 1] || `${mod.name}.jar`;
+    filename = safeModFilename(urlParts[urlParts.length - 1], `${mod.name}.jar`);
     version = mod.version || 'unknown';
   } else {
     return { success: false, error: 'No download source available' };

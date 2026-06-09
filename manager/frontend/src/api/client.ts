@@ -53,64 +53,114 @@ setupApiClient.interceptors.request.use(
   }
 )
 
-// Response interceptor - handle token refresh and forced logout
-api.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError<{ detail?: string; code?: string }>) => {
-    const originalRequest = error.config
+// ============================================================
+// Single-flight token refresh
+// ============================================================
+// When a long-idle tab wakes up, every polling component fires at once and
+// every request 401s simultaneously. Without coordination each of them would
+// POST /api/auth/refresh on its own — tripping the server-side refresh rate
+// limit (10/min) and kicking the user out even though their refresh token was
+// perfectly valid. All callers therefore share one in-flight refresh promise.
+let refreshPromise: Promise<string> | null = null
+
+export function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
     const authStore = useAuthStore()
-    const responseData = error.response?.data
-
-    // Check for token invalidation codes - immediate logout, no refresh attempt
-    if (error.response?.status === 401) {
-      const invalidationCodes = ['USER_DELETED', 'TOKEN_INVALIDATED']
-      if (responseData?.code && invalidationCodes.includes(responseData.code)) {
-        const message = responseData.code === 'USER_DELETED'
-          ? 'Your account has been deleted.'
-          : 'Your session has expired due to account changes. Please log in again.'
-        authStore.logout(message)
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-        return Promise.reject(error)
-      }
-    }
-
-    // 401 → try a refresh. We rely on the HttpOnly kp_refresh cookie (sent
-    // automatically because withCredentials: true) and fall back to the
-    // stored refresh token from localStorage for installations that haven't
-    // logged in yet under v2.2.
-    if (
-      error.response?.status === 401 &&
-      originalRequest &&
-      !(originalRequest as any)._retry
-    ) {
-      (originalRequest as any)._retry = true
-
-      try {
-        const payload = authStore.refreshToken ? { refresh_token: authStore.refreshToken } : {}
-        const response = await axios.post('/api/auth/refresh', payload, {
-          withCredentials: true,
-        })
-
+    // Cookie is the primary path; in-memory token is the legacy body fallback
+    // for installs where the HttpOnly cookie was blocked or not yet set.
+    const payload = authStore.refreshToken ? { refresh_token: authStore.refreshToken } : {}
+    refreshPromise = axios
+      .post('/api/auth/refresh', payload, { withCredentials: true })
+      .then((response) => {
         const { access_token, refresh_token } = response.data
         authStore.setTokens(access_token, refresh_token)
-
-        // Retry original request
-        originalRequest.headers.Authorization = `Bearer ${access_token}`
-        return api(originalRequest)
-      } catch (refreshError) {
-        // Refresh failed, logout
-        authStore.logout()
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-        return Promise.reject(refreshError)
-      }
-    }
-
-    return Promise.reject(error)
+        return access_token as string
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
   }
-)
+  return refreshPromise
+}
+
+/**
+ * Returns true when a failed refresh means the session is genuinely dead
+ * (server said the token is invalid/expired) as opposed to a transient
+ * problem (network down, panel restarting, rate limit). Only the former
+ * should force a logout — transient errors used to log people out for no
+ * reason whenever the panel container restarted mid-poll.
+ */
+function isSessionDeadError(error: unknown): boolean {
+  const status = (error as AxiosError)?.response?.status
+  return status === 400 || status === 401 || status === 403
+}
+
+export function forceLogout(message?: string): void {
+  const authStore = useAuthStore()
+  authStore.logout(message ?? 'Your session has expired. Please log in again.')
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login'
+  }
+}
+
+// Response interceptor - handle token refresh and forced logout.
+// Applied to BOTH clients (the setup client previously had no 401 handling
+// at all, so an expired token during a long setup step surfaced as a dead UI).
+function attachAuthRefreshInterceptor(client: AxiosInstance): void {
+  client.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError<{ detail?: string; code?: string }>) => {
+      const originalRequest = error.config
+      const authStore = useAuthStore()
+      const responseData = error.response?.data
+
+      // Check for token invalidation codes - immediate logout, no refresh attempt
+      if (error.response?.status === 401) {
+        const invalidationCodes = ['USER_DELETED', 'TOKEN_INVALIDATED']
+        if (responseData?.code && invalidationCodes.includes(responseData.code)) {
+          const message = responseData.code === 'USER_DELETED'
+            ? 'Your account has been deleted.'
+            : 'Your session has expired due to account changes. Please log in again.'
+          forceLogout(message)
+          return Promise.reject(error)
+        }
+      }
+
+      // 401 → try a refresh. We rely on the HttpOnly kp_refresh cookie (sent
+      // automatically because withCredentials: true) and fall back to the
+      // in-memory refresh token for installations that haven't picked up the
+      // cookie flow yet.
+      if (
+        error.response?.status === 401 &&
+        originalRequest &&
+        !(originalRequest as any)._retry
+      ) {
+        (originalRequest as any)._retry = true
+        const hadSession = !!authStore.accessToken
+
+        try {
+          const accessToken = await refreshAccessToken()
+
+          // Retry original request
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`
+          return client(originalRequest)
+        } catch (refreshError) {
+          // Only end the session when the server explicitly rejected the
+          // refresh token — and only if there was a session to begin with
+          // (unauthenticated setup-wizard calls must not bounce to /login).
+          if (hadSession && isSessionDeadError(refreshError)) {
+            forceLogout()
+          }
+          return Promise.reject(refreshError)
+        }
+      }
+
+      return Promise.reject(error)
+    }
+  )
+}
+
+attachAuthRefreshInterceptor(api)
+attachAuthRefreshInterceptor(setupApiClient)
 
 export default api

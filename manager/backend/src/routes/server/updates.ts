@@ -19,6 +19,14 @@ import {
   getDefaultUpdateConfig,
   parseUpdateStatusOutput,
 } from './shared.js';
+import {
+  getUpdateHistory,
+  recordUpdate,
+  snapshotCurrentJar,
+  listJarSnapshots,
+  rollbackToSnapshot,
+} from '../../services/updateHistory.js';
+import type { AuthenticatedRequest } from '../../types/index.js';
 
 const router = Router();
 
@@ -315,7 +323,7 @@ router.post('/update-download', authMiddleware, requirePermission('updates.downl
 });
 
 // POST /api/server/update-apply - Apply downloaded update (restarts server)
-router.post('/update-apply', authMiddleware, requirePermission('updates.apply'), async (_req: Request, res: Response) => {
+router.post('/update-apply', authMiddleware, requirePermission('updates.apply'), async (req: AuthenticatedRequest, res: Response) => {
   // Demo mode: simulate update apply
   if (isDemoMode()) {
     res.json({ success: true, message: '[DEMO] Update applied (simulated)', warning: 'Server would restart in real mode' });
@@ -335,8 +343,22 @@ router.post('/update-apply', authMiddleware, requirePermission('updates.apply'),
       });
     }
 
+    // Snapshot the current JAR BEFORE applying so a bad release can be rolled
+    // back. Best-effort — never block the update on a snapshot failure.
+    const fromVersion = status.currentVersion && status.currentVersion !== 'unknown' ? status.currentVersion : null;
+    const toVersion = status.latestVersion && status.latestVersion !== 'unknown' ? status.latestVersion : null;
+    await snapshotCurrentJar(req.serverId).catch(() => null);
+
     // Apply update (server will restart with exit code 8)
     await dockerService.execCommand('/update apply');
+
+    recordUpdate({
+      action: 'apply',
+      fromVersion,
+      toVersion,
+      by: req.user ?? null,
+      success: true,
+    });
 
     res.json({
       success: true,
@@ -344,12 +366,99 @@ router.post('/update-apply', authMiddleware, requirePermission('updates.apply'),
       warning: 'Server will restart shortly. Players will be disconnected.'
     });
   } catch (error) {
+    recordUpdate({ action: 'apply', fromVersion: null, toVersion: null, by: req.user ?? null, success: false, note: error instanceof Error ? error.message : 'unknown' });
     res.status(500).json({
       success: false,
       error: 'Apply update failed',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+});
+
+// GET /api/server/update-history - Applied/rolled-back update log
+router.get('/update-history', authMiddleware, requirePermission('updates.view'), (_req: Request, res: Response) => {
+  if (isDemoMode()) {
+    res.json({
+      history: [
+        { id: 'demo-1', at: new Date(Date.now() - 86400000).toISOString(), fromVersion: '1.0.3', toVersion: '1.0.4', action: 'apply', by: 'admin', success: true },
+      ],
+    });
+    return;
+  }
+  res.json({ history: getUpdateHistory() });
+});
+
+// GET /api/server/jar-snapshots - Available rollback points
+router.get('/jar-snapshots', authMiddleware, requirePermission('updates.view'), async (req: AuthenticatedRequest, res: Response) => {
+  if (isDemoMode()) {
+    res.json({
+      snapshots: [
+        { id: 'demo-snap-1', version: '1.0.3', createdAt: new Date(Date.now() - 86400000).toISOString(), sizeBytes: 104857600, file: 'HytaleServer-1.0.3.jar' },
+      ],
+    });
+    return;
+  }
+  res.json({ snapshots: await listJarSnapshots(req.serverId) });
+});
+
+// POST /api/server/jar-snapshot - Manually snapshot the current JAR
+router.post('/jar-snapshot', authMiddleware, requirePermission('updates.apply'), async (req: AuthenticatedRequest, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] JAR snapshot created (simulated)' });
+    return;
+  }
+  const snap = await snapshotCurrentJar(req.serverId);
+  if (!snap) {
+    res.status(400).json({ success: false, error: 'No server JAR to snapshot yet' });
+    return;
+  }
+  res.json({ success: true, snapshot: snap });
+});
+
+// POST /api/server/rollback - Restore a JAR snapshot and restart the server
+router.post('/rollback', authMiddleware, requirePermission('updates.apply'), async (req: AuthenticatedRequest, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Rolled back (simulated)', warning: 'Server would restart in real mode' });
+    return;
+  }
+
+  const { snapshotId } = req.body as { snapshotId?: string };
+  if (!snapshotId) {
+    res.status(400).json({ success: false, error: 'snapshotId required' });
+    return;
+  }
+
+  // Best-effort current version for the history entry's fromVersion.
+  let currentVersion: string | null = null;
+  try {
+    const statusResult = await dockerService.execCommand('/update status');
+    const parsed = parseUpdateStatusOutput(statusResult.message || '');
+    currentVersion = parsed.currentVersion && parsed.currentVersion !== 'unknown' ? parsed.currentVersion : null;
+  } catch { /* server may be down — fromVersion stays null */ }
+
+  const result = await rollbackToSnapshot(snapshotId, req.serverId);
+  if (!result.success) {
+    recordUpdate({ action: 'rollback', fromVersion: currentVersion, toVersion: null, by: req.user ?? null, success: false, note: result.error });
+    res.status(400).json(result);
+    return;
+  }
+
+  recordUpdate({
+    action: 'rollback',
+    fromVersion: currentVersion,
+    toVersion: result.restoredVersion ?? null,
+    by: req.user ?? null,
+    success: true,
+  });
+
+  // Restart so the restored JAR takes effect.
+  await dockerService.restartContainer(req.serverId).catch(() => null);
+
+  res.json({
+    success: true,
+    message: `Rolled back to ${result.restoredVersion ?? 'previous version'}. Server is restarting...`,
+    restoredVersion: result.restoredVersion ?? null,
+  });
 });
 
 // POST /api/server/update-cancel - Cancel ongoing download

@@ -2,6 +2,123 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [Unreleased] - Session reliability, credential-conflict fix, recovery CLI, security hardening & new operator features
+
+### New features
+
+- **Update Center** (`/updates`): a dedicated view over the native Hytale update
+  system — check/download/apply/cancel with live state, patchline + auto-apply
+  settings, an **update history** log, and **JAR rollback** (the server JAR is
+  snapshotted before each apply; a bad release can be reverted with a restart).
+- **Scheduled console commands**: run any whitelisted command automatically,
+  daily at set times or every N minutes, with run-now and next/last-run display.
+  Re-validated against the console whitelist before every run.
+- **Storage / disk monitor**: a Performance-page panel showing filesystem
+  total/used/free plus a per-category breakdown (worlds, backups, server,
+  assets, mods, plugins) so you can see what's filling the disk. (The watchdog
+  already alerts on low disk.)
+- **Per-world management**: backup/restore/upload individual worlds, world seed
+  display, and chunk pre-generation with live progress. (The `/pregen` command
+  set is assumed pending Hytale finalizing it; it degrades to "unsupported"
+  cleanly.)
+- **Mod compatibility check**: warns before installing a mod built for a
+  different server version (from declared registry metadata or a probed JAR
+  manifest), with a badge in the store and a pre-install confirmation.
+- **GDPR / DSGVO player data**: export everything the panel stores about a
+  player as JSON, and erase it (right to be forgotten), from the player profile.
+
+### Hardening
+
+- Shell-escape the config-derived paths interpolated into `execInContainer`
+  shell commands (asset extraction, patchline file delete, downloader probe) —
+  not exploitable before, but no longer fragile.
+- Resolve two pre-existing `no-case-declarations` ESLint errors.
+
+### Security
+
+- **Setup-gate bypass via path casing (critical)**: Express matched route mounts
+  case-insensitively while the post-setup seal compared `req.path` against the
+  lowercase `/api/setup`. `POST /API/setup/server/start`, `GET /API/setup/server/logs`
+  (raw logs that can contain OAuth device codes) and the Hytale-auth endpoints
+  were therefore reachable unauthenticated after setup — and the same trick
+  skipped the CSRF origin check on `/API/...`. Fixed by enabling
+  `case sensitive routing` and lower-casing the seal comparison.
+- **Privilege escalation / RCE via `config/write` (high)**: `/api/management/config/{read,write}`
+  validated only the root boundary, not the deny-list, so a non-admin holder of
+  `config.edit` (the built-in **Operator** role) could overwrite `HytaleServer.jar`
+  (code execution on next restart) or read `auth.enc`. Both routes now enforce the
+  file-manager deny rules (JAR, `auth.enc`, `config.json`, `users.json`, `*.key`/`*.pem`).
+- **Unauthenticated player-location WebSocket (high)**: `/api/players/locations/ws`
+  streamed live player UUIDs + world coordinates to anyone who could reach the
+  panel — no token, no permission. It now requires a WS ticket (or access token)
+  and `players.view`, matching the console WS; the live-map client uses a
+  single-use ticket so no access token rides in the URL.
+- **Mod-download SSRF / path hardening (medium)**: mod/asset downloads now
+  SSRF-check the URL and every redirect target (rejecting localhost/metadata/RFC1918),
+  cap redirects, and reduce the download filename to a safe `.jar`/`.zip` basename
+  so a malicious registry entry can't write outside the mods directory.
+- **Metrics token timing (low)**: the static `METRICS_TOKEN` is compared with
+  `crypto.timingSafeEqual` instead of `===`.
+
+### Fixed
+
+- **"Logged in but session dead" after returning to an idle tab**: the UI rendered
+  the cached login state from localStorage while the 15-minute access token behind
+  it had long expired. A new session guard validates/refreshes the token on app
+  start, on tab-visible/focus/online and on a slow interval, and logs out cleanly
+  (with a message on the login screen) when the server rejects the refresh.
+- **Refresh stampede on tab wake**: concurrent 401s each fired their own
+  `/api/auth/refresh`, tripping the 10/min rate limit and force-logging users out
+  although their refresh token was valid. All callers now share a single-flight
+  refresh promise; transient refresh failures (network blip, panel restart, 429)
+  no longer end the session — only an explicit 400/401/403 from the server does.
+- **Refresh cookie silently dropped on HTTP + `TRUST_PROXY=true`**: the `kp_refresh`
+  cookie was unconditionally marked `Secure` when `TRUST_PROXY` was on, so browsers
+  reaching the panel over plain HTTP (LAN IP, proxy bypass) never stored it —
+  causing forced logouts after every access-token expiry. The flag now follows the
+  actual (proxy-resolved) connection scheme via `req.secure`.
+- **Setup wizard wiped `users.json`**: finalizing setup overwrote the whole user
+  store with just the wizard admin — deleting the `.env`-bootstrapped admin and any
+  other accounts, and silently invalidating the `MANAGER_PASSWORD` credentials.
+  The wizard admin is now MERGED into the existing store (same username → password
+  updated + sessions invalidated; other accounts kept).
+- The `setupApiClient` had no 401/refresh response interceptor at all.
+- `users.json` bootstrap no longer mints a broken account when
+  `MANAGER_USERNAME`/`MANAGER_PASSWORD` are empty; startup now logs which
+  credential source is active (users.json vs env) so "changed .env password has
+  no effect" stops being a mystery.
+
+### Added
+
+- **Password reset / admin recovery from Docker** — you can now reset a panel
+  password (or recover a locked-out account) directly via the container, no
+  database surgery required:
+
+  ```bash
+  # Reset a password (prints a freshly generated secure password)
+  docker exec -it hytale-manager node dist/cli.js reset-password admin
+  # …or set your own
+  docker exec -it hytale-manager node dist/cli.js reset-password admin 'My-New-Pass123'
+  ```
+
+  The full **admin-recovery CLI** (`node dist/cli.js` inside the manager
+  container) also provides: `auth-status` (setup state, which credential
+  source is active, user list), `list-users`, `create-admin <user> [pw]`, and
+  `disable-2fa <user>` for a lost authenticator. A reset invalidates the
+  account's existing sessions and applies immediately (no restart). It works
+  with `docker exec` even while the panel is down and preserves `users.json`
+  ownership/mode when run as root. With a custom `STACK_NAME` the container is
+  named e.g. `hytale-prod-manager`; Docker Compose works too
+  (`docker compose exec manager node dist/cli.js …`). Documented in README and
+  `.env.example`.
+
+- **Clearer credential model** — `MANAGER_USERNAME`/`MANAGER_PASSWORD` from the
+  environment are only used **once**, to create the admin account on first
+  start. After that the password lives in `users.json` and is changed via the
+  panel or the `reset-password` CLI above — editing `MANAGER_PASSWORD` in
+  `.env` has no effect on an existing install (this previously caused "my
+  configured password doesn't work" confusion).
+
 ## [3.0.0] - 2026-06-01 - New operator features, reliability hardening & DR
 
 Builds on `3.0.0-alpha` with a wave of operator-facing features and a focused

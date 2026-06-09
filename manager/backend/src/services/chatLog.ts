@@ -5,7 +5,7 @@
  * Also tracks player death positions for teleportation.
  */
 
-import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, readdir, rm } from 'fs/promises';
 import path from 'path';
 import { isDemoMode, getDemoGlobalChatLog, getDemoPlayerChatLog } from './demoData.js';
 
@@ -392,6 +392,25 @@ export async function getPlayerDeathPositions(
   }
 
   return result;
+}
+
+/**
+ * Erase a player's per-player chat history + death positions (GDPR erasure).
+ * Their lines in the GLOBAL daily logs are left in place — rewriting every
+ * global file is expensive and the global log is an aggregate moderation
+ * record; the per-player store is the personal-data copy. Returns true if a
+ * directory was removed.
+ */
+export async function deletePlayerChatData(playerName: string): Promise<boolean> {
+  if (isDemoMode()) return true;
+  const normalized = normalizePlayerName(playerName);
+  const playerDir = path.join(PLAYER_CHAT_DIR, normalized);
+  try {
+    await rm(playerDir, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Initialize on module load

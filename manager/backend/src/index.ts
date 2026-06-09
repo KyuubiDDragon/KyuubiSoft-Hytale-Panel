@@ -15,6 +15,8 @@ import httpProxy from 'http-proxy';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
+import { verifyWsTicket, verifyToken } from './services/auth.js';
+import { hasPermission } from './services/roles.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { logger } from './utils/logger.js';
 
@@ -71,6 +73,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = createServer(app);
 
+// SECURITY: case-sensitive routing. Express matches mounts case-INsensitively
+// by default, so `/API/setup/...` would reach the setup router while the
+// security gates (which compare req.path === '/api/setup...') were bypassed —
+// re-opening sealed setup endpoints and the CSRF origin check after setup is
+// complete. With this flag, `/API/...` no longer matches the lowercase API
+// mounts; the gates below additionally lower-case their comparisons as
+// defense-in-depth.
+app.set('case sensitive routing', true);
+
 // Reverse Proxy Support - must be set before other middleware
 // This enables proper handling of X-Forwarded-* headers when behind nginx, traefik, etc.
 if (config.trustProxy) {
@@ -85,8 +96,39 @@ setupWebSocket(wss);
 // Secondary WSS for live player-location broadcasts. Kept separate so the
 // console WS handler stays untouched.
 const locationsWss = new WebSocketServer({ noServer: true });
-locationsWss.on('connection', (socket) => {
-  // Send initial snapshot, then stream subsequent updates.
+locationsWss.on('connection', async (socket: import('ws').WebSocket, req: IncomingMessage) => {
+  // SECURITY: authenticate BEFORE streaming. This socket exposes live player
+  // UUIDs + world coordinates, so it must enforce the same players.view gate
+  // as GET /api/players/locations. Previously it streamed to anyone who could
+  // reach the panel — no token, no permission check. Accepts a single-use WS
+  // ticket (preferred) or an access token (legacy fallback, mirrors the
+  // console WS).
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const ticket = url.searchParams.get('ticket');
+    const token = url.searchParams.get('token');
+    let username: string | null = null;
+    if (ticket) {
+      const r = verifyWsTicket(ticket);
+      if (r.valid && r.username) username = r.username;
+    } else if (token) {
+      const r = verifyToken(token, 'access');
+      if (r) username = r.username;
+    }
+    if (!username) {
+      socket.close(4001, 'Authentication required');
+      return;
+    }
+    if (!(await hasPermission(username, 'players.view'))) {
+      socket.close(4003, 'Permission denied: players.view required');
+      return;
+    }
+  } catch {
+    socket.close(4001, 'Authentication failed');
+    return;
+  }
+
+  // Authenticated: send initial snapshot, then stream subsequent updates.
   try {
     socket.send(JSON.stringify({ type: 'snapshot', samples: playerLocations.getLatestSnapshot() }));
   } catch { /* socket may already be closed */ }
@@ -479,8 +521,11 @@ app.use((req, res, next) => {
 // return 410 for everything else. Fails open during first run so the wizard
 // can never lock itself out.
 app.use(async (req, res, next) => {
-  if (!req.path.startsWith('/api/setup')) return next();
-  const sub = req.path.slice('/api/setup'.length); // '', '/status', '/server/start', …
+  // Lower-cased comparison so a case-variant path can't slip past the seal
+  // (belt-and-braces with `case sensitive routing` set above).
+  const lowerPath = req.path.toLowerCase();
+  if (!lowerPath.startsWith('/api/setup')) return next();
+  const sub = lowerPath.slice('/api/setup'.length); // '', '/status', '/server/start', …
   const readOnlyAllowed = req.method === 'GET' && (sub === '/status' || sub === '/check');
   if (readOnlyAllowed) return next();
   try {
@@ -784,6 +829,14 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Initialize roles (load or create default roles)
   await initializeRoles();
+
+  // Initialize users early so the startup log states which credential source
+  // is active (users.json vs MANAGER_USERNAME/MANAGER_PASSWORD) instead of
+  // operators discovering it at the first failed login.
+  const { initializeUsers } = await import('./services/users.js');
+  await initializeUsers().catch(err => {
+    console.error('Failed to initialize users:', err);
+  });
 
   // Initialize player tracking (load persisted data)
   initializePlayerTracking().catch(err => {

@@ -11,6 +11,7 @@ import * as chatLog from '../services/chatLog.js';
 import * as punishments from '../services/punishments.js';
 import { getLeaderboard, getPlayerSessions } from '../services/playtime.js';
 import * as playerNotes from '../services/playerNotes.js';
+import { exportPlayerData, deletePlayerData } from '../services/playerDataExport.js';
 import { config } from '../config.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoWhitelist } from '../services/demoData.js';
@@ -1361,6 +1362,41 @@ router.delete('/:name/mute', authMiddleware, requirePermission('players.ban'), a
   punishments.deactivateActiveForPlayer(playerName, ['mute', 'tempmute'], username);
   await logActivity(username, 'unmute', 'player', true, playerName);
   res.json({ success: true, message: `Unmuted ${playerName}` });
+});
+
+// ============== GDPR / DSGVO: data export & erasure ==============
+
+// GET /api/players/:name/export-data - download everything the panel stores
+// about a player (notes, punishments, sessions, chat) as a JSON file.
+router.get('/:name/export-data', authMiddleware, requirePermission('players.view'), async (req: AuthenticatedRequest, res: Response) => {
+  const playerName = req.params.name;
+  if (!validatePlayerName(res, playerName)) return;
+  try {
+    const data = await exportPlayerData(playerName);
+    await logActivity(req.user || 'system', 'export_player_data', 'player', true, playerName);
+    res.setHeader('Content-Disposition', `attachment; filename="player-data-${playerName}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(data, null, 2));
+  } catch (err) {
+    logger.error('[GDPR] export failed:', err);
+    res.status(500).json({ error: 'Failed to export player data' });
+  }
+});
+
+// DELETE /api/players/:name/data - erase the panel's personal data for a player
+// (right to be forgotten). Gated behind players.ban — the highest-trust player
+// permission moderators hold. The on-disk game save is NOT touched.
+router.delete('/:name/data', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
+  const playerName = req.params.name;
+  if (!validatePlayerName(res, playerName)) return;
+  try {
+    const result = await deletePlayerData(playerName);
+    await logActivity(req.user || 'system', 'erase_player_data', 'player', true, playerName, JSON.stringify(result.deleted));
+    res.json({ success: true, ...result });
+  } catch (err) {
+    logger.error('[GDPR] erasure failed:', err);
+    res.status(500).json({ success: false, error: 'Failed to erase player data' });
+  }
 });
 
 export default router;

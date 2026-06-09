@@ -5,6 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api/client'
 import Card from '@/components/ui/Card.vue'
+import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
 interface Note { id: number; note: string; byUser: string; createdAt: string }
 interface Punishment { id: number; type: string; reason: string | null; byUser: string; createdAt: string; expiresAt: string | null; active: number }
@@ -12,8 +14,51 @@ interface Punishment { id: number; type: string; reason: string | null; byUser: 
 const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
+const { addToast } = useToast()
+const { ask } = useConfirm()
 const playerName = computed(() => String(route.params.name || ''))
 const canEdit = computed(() => authStore.hasPermission('players.kick'))
+const canErase = computed(() => authStore.hasPermission('players.ban'))
+const exporting = ref(false)
+const erasing = ref(false)
+
+async function exportData() {
+  exporting.value = true
+  try {
+    const res = await api.get(`/players/${encodeURIComponent(playerName.value)}/export-data`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `player-data-${playerName.value}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    addToast(t('profile.gdpr.exported'), 'success')
+  } catch {
+    addToast(t('profile.gdpr.exportFailed'), 'error')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function eraseData() {
+  const ok = await ask({
+    title: t('profile.gdpr.eraseTitle'),
+    message: t('profile.gdpr.eraseConfirm', { name: playerName.value }),
+    variant: 'danger',
+    confirmText: t('profile.gdpr.erase'),
+  })
+  if (!ok) return
+  erasing.value = true
+  try {
+    await api.delete(`/players/${encodeURIComponent(playerName.value)}/data`)
+    addToast(t('profile.gdpr.erased'), 'success')
+    await load()
+  } catch {
+    addToast(t('profile.gdpr.eraseFailed'), 'error')
+  } finally {
+    erasing.value = false
+  }
+}
 
 const notes = ref<Note[]>([])
 const punishments = ref<Punishment[]>([])
@@ -76,6 +121,27 @@ onMounted(load)
       <div>
         <h1 class="text-2xl font-bold text-ink">{{ playerName }}</h1>
         <p class="text-ink-muted text-sm">{{ t('profile.subtitle') }}</p>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <button
+          @click="exportData"
+          :disabled="exporting"
+          class="flex items-center gap-2 px-3 py-2 bg-surface-overlay text-ink rounded-lg text-sm hover:bg-border transition-colors disabled:opacity-50"
+          :title="t('profile.gdpr.exportHint')"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          {{ exporting ? t('common.loading') : t('profile.gdpr.export') }}
+        </button>
+        <button
+          v-if="canErase"
+          @click="eraseData"
+          :disabled="erasing"
+          class="flex items-center gap-2 px-3 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-colors disabled:opacity-50"
+          :title="t('profile.gdpr.eraseHint')"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          {{ t('profile.gdpr.erase') }}
+        </button>
       </div>
     </div>
 

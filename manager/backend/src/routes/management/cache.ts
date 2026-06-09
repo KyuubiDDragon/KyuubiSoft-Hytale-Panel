@@ -8,6 +8,7 @@ import { logActivity } from '../../services/activityLog.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 import { isDemoMode, getDemoModStore, getDemoModtaleResults, getDemoStackMartResults } from '../../services/demoData.js';
 
+import path from 'path';
 import {
   getAvailableMods,
   installMod,
@@ -16,7 +17,10 @@ import {
   getLatestRelease,
   refreshRegistry,
   getRegistryInfo,
+  getModRegistry,
 } from '../../services/modStore.js';
+import { config } from '../../config.js';
+import { checkRegistryMod, checkInstalledJar } from '../../services/modCompat.js';
 import {
   searchMods as modtaleSearch,
   getModDetails as modtaleGetDetails,
@@ -146,6 +150,48 @@ router.get('/modstore/:modId/release', authMiddleware, requirePermission('mods.v
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get release info' });
+  }
+});
+
+// GET /api/management/modstore/:modId/compat - compatibility of a registry mod
+// with the installed server version, BEFORE installing.
+router.get('/modstore/:modId/compat', authMiddleware, requirePermission('mods.view'), async (req: AuthenticatedRequest, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ verdict: 'compatible', serverVersion: '1.0.4', declared: { gameVersions: ['1.0.4'], source: 'registry' }, reason: '[DEMO] Compatible with the installed server.' });
+    return;
+  }
+  try {
+    const registry = await getModRegistry();
+    const entry = registry.find(m => m.id === req.params.modId);
+    if (!entry) { res.status(404).json({ error: 'Mod not found in registry' }); return; }
+    const result = await checkRegistryMod({
+      gameVersions: entry.gameVersions,
+      minServerVersion: entry.minServerVersion,
+      maxServerVersion: entry.maxServerVersion,
+    }, req.serverId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check compatibility' });
+  }
+});
+
+// GET /api/management/mods/:filename/compat - compatibility of an INSTALLED
+// mod/plugin JAR (probes the JAR manifest).
+router.get('/mods/:filename/compat', authMiddleware, requirePermission('mods.view'), async (req: AuthenticatedRequest, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ verdict: 'unknown', serverVersion: '1.0.4', declared: { source: 'none' }, reason: '[DEMO] The mod does not declare a compatible version.' });
+    return;
+  }
+  try {
+    const filename = path.basename(req.params.filename); // no traversal
+    // Look in mods first; if the mod declares nothing there, try plugins.
+    const fromMods = await checkInstalledJar(path.join(config.modsPath, filename), req.serverId);
+    const result = fromMods.declared.source === 'none'
+      ? await checkInstalledJar(path.join(config.pluginsPath, filename), req.serverId)
+      : fromMods;
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check compatibility' });
   }
 });
 

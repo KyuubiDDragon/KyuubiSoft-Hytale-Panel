@@ -4,6 +4,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import * as schedulerService from '../services/scheduler.js';
 import * as dockerService from '../services/docker.js';
+import { validateCommand } from '../utils/sanitize.js';
 import { isDemoMode, getDemoSchedulerTasks } from '../services/demoData.js';
 
 const router = Router();
@@ -47,11 +48,40 @@ router.put('/config', authMiddleware, requirePermission('scheduler.edit'), async
     res.json({ success: true, message: '[DEMO] Configuration saved (simulated)' });
     return;
   }
+
+  // Reject scheduled commands that aren't on the console whitelist up front,
+  // so the operator gets a clear error instead of the command being silently
+  // skipped when its timer fires.
+  const incoming = req.body as { scheduledCommands?: Array<{ name?: string; command?: string }> };
+  if (Array.isArray(incoming?.scheduledCommands)) {
+    for (const cmd of incoming.scheduledCommands) {
+      const check = validateCommand(cmd?.command ?? '');
+      if (!check.valid) {
+        res.status(400).json({ success: false, error: `Scheduled command "${cmd?.name || cmd?.command || ''}": ${check.error}` });
+        return;
+      }
+    }
+  }
+
   const success = schedulerService.saveConfig(req.body, req.serverId);
   if (success) {
     res.json({ success: true, message: 'Configuration saved' });
   } else {
     res.status(500).json({ success: false, error: 'Failed to save configuration' });
+  }
+});
+
+// POST /api/scheduler/commands/:id/run - Run a scheduled command immediately
+router.post('/commands/:id/run', authMiddleware, requirePermission('scheduler.edit'), async (req: AuthenticatedRequest, res: Response) => {
+  if (isDemoMode()) {
+    res.json({ success: true, message: '[DEMO] Scheduled command executed (simulated)' });
+    return;
+  }
+  const result = await schedulerService.runScheduledCommandNow(req.params.id, req.serverId);
+  if (result.success) {
+    res.json({ success: true });
+  } else {
+    res.status(400).json(result);
   }
 });
 

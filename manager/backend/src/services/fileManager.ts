@@ -234,6 +234,44 @@ export function isDenied(root: FileManagerRoot, relPath: string, isDir = false):
   return false;
 }
 
+/**
+ * Gate for callers that work with ABSOLUTE paths instead of root+relpath
+ * (the legacy /api/management/config/{read,write} routes). Returns true only
+ * when `absPath` resolves inside one of the managed roots AND is not blocked
+ * by that root's deny rules (the same secret/JAR/credential protections the
+ * file manager enforces). Anything outside every root, or hitting a deny
+ * pattern, returns false.
+ *
+ * This closes a path where config.edit holders (e.g. the Operator role, which
+ * is NOT admin) could overwrite HytaleServer.jar (RCE on restart) or read
+ * auth.enc, because getRealPathIfSafe() only checks the root boundary and
+ * never consulted the deny-list.
+ */
+export function isAbsolutePathAllowed(absPath: string, mode: 'read' | 'write'): boolean {
+  let resolved: string;
+  try {
+    resolved = path.resolve(absPath);
+  } catch {
+    return false;
+  }
+  for (const root of getRoots()) {
+    const rootAbs = path.resolve(root.path);
+    const relative = path.relative(rootAbs, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) continue; // not under this root
+    // Found the owning root. Writes are only allowed under a read-write root.
+    if (mode === 'write' && !root.rw) return false;
+    let isDir = false;
+    try {
+      isDir = lstatSync(resolved).isDirectory();
+    } catch {
+      isDir = false; // non-existent target (create) → treat as file
+    }
+    const relForCheck = (relative || '').replace(/\\/g, '/');
+    return !isDenied(root, relForCheck, isDir);
+  }
+  return false; // outside every managed root
+}
+
 // ============================================================
 // Binary detection
 // ============================================================

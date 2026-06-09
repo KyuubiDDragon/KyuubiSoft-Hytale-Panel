@@ -3,8 +3,8 @@
 // Extracted from the previously monolithic routes/server.ts to keep behavior
 // identical while splitting the router into smaller, focused modules.
 import { readFile, writeFile, access, constants } from 'fs/promises';
-import { config } from '../../config.js';
 import * as dockerService from '../../services/docker.js';
+import { escapeShellArg } from '../../utils/sanitize.js';
 
 // Allowed config file extensions
 export const CONFIG_EXTENSIONS = ['.json', '.properties', '.yml', '.yaml', '.toml', '.cfg', '.conf', '.ini'];
@@ -116,7 +116,7 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   // cache/credential files in /opt/hytale/downloader that then block the
   // hytale-user download. Running as hytale keeps probe and download in sync.
   const checkResult = await dockerService.execInContainer(
-    `cd /opt/hytale/downloader && gosu hytale ./hytale-downloader-linux-amd64 -patchline ${patchline} -print-version 2>&1`
+    `cd /opt/hytale/downloader && gosu hytale ./hytale-downloader-linux-amd64 -patchline ${escapeShellArg(patchline)} -print-version 2>&1`
   );
 
   if (!checkResult.success) {

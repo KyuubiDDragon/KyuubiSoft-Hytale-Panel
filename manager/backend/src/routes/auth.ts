@@ -1,6 +1,5 @@
 import { Router, Request, Response, CookieOptions } from 'express';
 import rateLimit from 'express-rate-limit';
-import { config } from '../config.js';
 import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken, createWsTicket } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -22,16 +21,18 @@ import { authLogins } from '../services/metrics.js';
 // API live on the same origin in every supported deployment, so the cookie
 // only needs to ride first-party navigations. `Secure` is set whenever the
 // actual (proxy-resolved) connection is HTTPS — `req.secure` already reflects
-// a trusted X-Forwarded-Proto when TRUST_PROXY is on, and we keep the
-// trustProxy fallback so the flag is never weaker than the operator's intent.
-// Over plain HTTP a Secure cookie would just be dropped silently.
+// a trusted X-Forwarded-Proto when TRUST_PROXY is on. Deliberately NO blanket
+// `|| config.trustProxy` here: with TRUST_PROXY=true but the panel reached
+// over plain HTTP (LAN IP, proxy bypass) the browser silently drops a Secure
+// cookie — refresh then breaks and users get "logged in but session dead"
+// states after the 15-minute access token expires.
 const REFRESH_COOKIE_NAME = 'kp_refresh';
 const REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches refreshExpiresIn
 
 function refreshCookieOptions(req?: Request): CookieOptions {
   return {
     httpOnly: true,
-    secure: (req?.secure ?? false) || config.trustProxy,
+    secure: req?.secure ?? false,
     sameSite: 'strict',
     path: '/api/auth',
     maxAge: REFRESH_COOKIE_MAX_AGE_MS,
@@ -391,10 +392,15 @@ router.post('/ws-ticket', authMiddleware, wsTicketLimiter, async (req: Authentic
     ? (req.body as { serverId?: string }).serverId
     : undefined;
 
-  // Verify user has console.view permission before issuing ticket
+  // A WS ticket only binds the username; the concrete per-socket permission is
+  // re-checked on connect (console.view for the console stream, players.view
+  // for the live player-locations stream). Issue a ticket if the caller holds
+  // either of those view rights, so a players.view-only user can still open the
+  // live map without being granted console access.
   const canViewConsole = await hasPermission(username, 'console.view', requestedServerId);
-  if (!canViewConsole) {
-    res.status(403).json({ error: 'Permission denied: console.view required' });
+  const canViewPlayers = await hasPermission(username, 'players.view', requestedServerId);
+  if (!canViewConsole && !canViewPlayers) {
+    res.status(403).json({ error: 'Permission denied: console.view or players.view required' });
     return;
   }
 

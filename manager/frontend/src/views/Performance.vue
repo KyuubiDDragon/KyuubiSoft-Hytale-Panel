@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { statsApi, type StatsEntry } from '@/api/management'
-import { serverApi, type PluginMemoryInfo, type PluginTpsMetrics, type PrometheusMetrics, type PerfSample } from '@/api/server'
+import { serverApi, type PluginMemoryInfo, type PluginTpsMetrics, type PrometheusMetrics, type PerfSample, type StorageBreakdown } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
 
 const { t } = useI18n()
@@ -44,6 +44,39 @@ async function fetchPerfHistory() {
     // History endpoint not available (e.g. demo mode / insufficient permission)
   }
 }
+
+// Disk / storage usage (refreshed on a slow cadence — a full directory walk is
+// cached server-side for 60s, so polling faster would just return the cache).
+const storage = ref<StorageBreakdown | null>(null)
+async function fetchStorage() {
+  try {
+    storage.value = await serverApi.getStorage()
+  } catch {
+    // endpoint unavailable / insufficient permission — hide the card
+  }
+}
+
+const STORAGE_COLORS: Record<string, string> = {
+  worlds: 'bg-emerald-500',
+  backups: 'bg-sky-500',
+  server: 'bg-hytale-orange',
+  assets: 'bg-purple-500',
+  mods: 'bg-pink-500',
+  plugins: 'bg-yellow-500',
+}
+function storageColor(name: string): string {
+  return STORAGE_COLORS[name] ?? 'bg-gray-500'
+}
+function storagePercent(bytes: number): number {
+  const total = storage.value?.filesystem?.totalBytes || storage.value?.trackedBytes || 0
+  return total > 0 ? (bytes / total) * 100 : 0
+}
+const storageLowSpace = computed(() => {
+  const fs = storage.value?.filesystem
+  if (!fs) return false
+  const freeGb = fs.freeBytes / 1024 ** 3
+  return freeGb < 2 || fs.usedPercent > 90
+})
 
 async function loadHistory() {
   try {
@@ -266,8 +299,10 @@ onMounted(async () => {
   await fetchTpsMetrics()
   await fetchPrometheusMetrics()
   await fetchPerfHistory()
+  await fetchStorage()
   addLocalEntry()
 
+  let tick = 0
   // Update every 5 seconds
   refreshInterval = setInterval(async () => {
     if (!isMounted || paused.value) return
@@ -277,6 +312,8 @@ onMounted(async () => {
     await fetchPrometheusMetrics()
     await fetchPerfHistory()
     addLocalEntry()
+    // Storage is cached 60s server-side — refresh it roughly once a minute.
+    if (++tick % 12 === 0) await fetchStorage()
   }, 5000)
 })
 
@@ -340,6 +377,47 @@ onUnmounted(() => {
                       stroke-width="2" vector-effect="non-scaling-stroke"
                       stroke-linejoin="round" stroke-linecap="round" />
           </svg>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Storage / Disk usage -->
+    <Card v-if="storage">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+          </svg>
+          <h3 class="text-lg font-semibold text-ink">{{ t('performance.storage') }}</h3>
+        </div>
+        <div v-if="storage.filesystem" class="text-sm text-ink-muted">
+          {{ formatBytes(storage.filesystem.freeBytes) }} {{ t('performance.free') }}
+          <span class="text-ink-subtle">/ {{ formatBytes(storage.filesystem.totalBytes) }}</span>
+        </div>
+      </div>
+
+      <div v-if="storageLowSpace" class="mb-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-400">
+        {{ t('performance.lowDiskWarning') }}
+      </div>
+
+      <!-- Stacked usage bar (per category against filesystem total) -->
+      <div v-if="storage.filesystem" class="h-3 w-full rounded-full bg-surface-overlay overflow-hidden flex mb-4">
+        <div
+          v-for="cat in storage.categories.filter(c => c.bytes > 0)"
+          :key="cat.name"
+          :class="storageColor(cat.name)"
+          :style="{ width: storagePercent(cat.bytes) + '%' }"
+          :title="`${cat.name}: ${formatBytes(cat.bytes)}`"
+        ></div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div v-for="cat in storage.categories" :key="cat.name" class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-sm shrink-0" :class="storageColor(cat.name)"></span>
+          <div class="min-w-0">
+            <p class="text-sm text-ink capitalize truncate">{{ t('performance.storageCategories.' + cat.name) }}</p>
+            <p class="text-xs text-ink-subtle">{{ formatBytes(cat.bytes) }}</p>
+          </div>
         </div>
       </div>
     </Card>

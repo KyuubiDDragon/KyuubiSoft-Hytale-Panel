@@ -1,13 +1,140 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { worldsApi, type WorldInfo, type WorldConfig } from '@/api/management'
+import { worldsApi, type WorldInfo, type WorldConfig, type WorldBackup, type PregenStatus } from '@/api/management'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Icon from '@/components/ui/Icon.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const { addToast } = useToast()
+const { ask } = useConfirm()
+
+// ===== World tools (backup / restore / upload / pregen) =====
+const canManageWorlds = computed(() => authStore.hasPermission('worlds.manage'))
+const worldBackups = ref<WorldBackup[]>([])
+const worldToolsBusy = ref(false)
+const uploadingWorld = ref(false)
+const pregen = ref<PregenStatus>({ state: 'idle', world: null, radius: null, percent: 0, chunksDone: null, chunksTotal: null, startedAt: null })
+const pregenWorld = ref('')
+const pregenRadius = ref(8)
+let pregenTimer: ReturnType<typeof setInterval> | null = null
+
+function fmtBytes(b: number): string {
+  if (b < 1024) return `${b} B`
+  if (b < 1024 ** 2) return `${(b / 1024).toFixed(0)} KB`
+  if (b < 1024 ** 3) return `${(b / 1024 ** 2).toFixed(1)} MB`
+  return `${(b / 1024 ** 3).toFixed(2)} GB`
+}
+
+async function loadWorldBackups() {
+  try {
+    worldBackups.value = (await worldsApi.listBackups()).backups
+  } catch { /* ignore */ }
+}
+
+async function refreshPregen() {
+  try {
+    pregen.value = await worldsApi.getPregenStatus()
+  } catch { /* ignore */ }
+}
+
+async function backupOneWorld(name: string) {
+  worldToolsBusy.value = true
+  try {
+    const r = await worldsApi.backup(name)
+    if (r.success) {
+      addToast(t('worlds.tools.backupCreated', { name }), 'success')
+      await loadWorldBackups()
+    } else {
+      addToast(r.error || t('errors.serverError'), 'error')
+    }
+  } finally {
+    worldToolsBusy.value = false
+  }
+}
+
+async function restoreWorldBackup(b: WorldBackup) {
+  const ok = await ask({
+    title: t('worlds.tools.restoreTitle'),
+    message: t('worlds.tools.restoreConfirm', { world: b.world }),
+    variant: 'danger',
+    confirmText: t('worlds.tools.restore'),
+  })
+  if (!ok) return
+  worldToolsBusy.value = true
+  try {
+    const r = await worldsApi.restoreBackup(b.id)
+    if (r.success) {
+      addToast(t('worlds.tools.restored'), 'success')
+      await loadWorlds()
+    } else {
+      addToast(r.error || t('errors.serverError'), 'error')
+    }
+  } finally {
+    worldToolsBusy.value = false
+  }
+}
+
+async function deleteWorldBackup(b: WorldBackup) {
+  const ok = await ask({ title: t('common.delete'), message: t('worlds.tools.deleteBackupConfirm'), variant: 'danger', confirmText: t('common.delete') })
+  if (!ok) return
+  try {
+    await worldsApi.deleteBackup(b.id)
+    await loadWorldBackups()
+  } catch {
+    addToast(t('errors.serverError'), 'error')
+  }
+}
+
+async function onWorldUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploadingWorld.value = true
+  try {
+    const r = await worldsApi.uploadWorld(file)
+    if (r.success) {
+      addToast(t('worlds.tools.uploaded'), 'success')
+      await loadWorlds()
+    } else {
+      addToast(r.error || t('errors.serverError'), 'error')
+    }
+  } catch (e: any) {
+    addToast(e?.response?.data?.error || t('errors.serverError'), 'error')
+  } finally {
+    uploadingWorld.value = false
+    input.value = ''
+  }
+}
+
+async function startWorldPregen() {
+  if (!pregenWorld.value) return
+  worldToolsBusy.value = true
+  try {
+    const r = await worldsApi.startPregen(pregenWorld.value, pregenRadius.value)
+    if (r.success) {
+      addToast(t('worlds.tools.pregenStarted'), 'success')
+      await refreshPregen()
+    } else {
+      addToast(r.error || t('errors.serverError'), 'error')
+    }
+  } finally {
+    worldToolsBusy.value = false
+  }
+}
+
+async function cancelWorldPregen() {
+  try {
+    await worldsApi.cancelPregen()
+    await refreshPregen()
+  } catch {
+    addToast(t('errors.serverError'), 'error')
+  }
+}
 
 // State
 const worlds = ref<WorldInfo[]>([])
@@ -222,7 +349,21 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-onMounted(loadWorlds)
+onMounted(async () => {
+  await loadWorlds()
+  if (authStore.hasPermission('worlds.view')) {
+    await loadWorldBackups()
+    await refreshPregen()
+    // Poll pregen progress while a job is active.
+    pregenTimer = setInterval(() => {
+      if (pregen.value.state === 'running') void refreshPregen()
+    }, 4000)
+  }
+})
+
+onUnmounted(() => {
+  if (pregenTimer) clearInterval(pregenTimer)
+})
 </script>
 
 <template>
@@ -241,6 +382,94 @@ onMounted(loadWorlds)
     <!-- Error Message -->
     <div v-if="error" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
       <p class="text-status-error">{{ error }}</p>
+    </div>
+
+    <!-- World Tools: backup / restore / upload / pregeneration -->
+    <div v-if="!loading && canManageWorlds" class="card">
+      <div class="card-header flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-ink">{{ t('worlds.tools.title') }}</h3>
+        <label class="flex items-center gap-2 px-3 py-1.5 bg-surface-overlay text-ink rounded-lg text-sm cursor-pointer hover:bg-border transition-colors" :class="{ 'opacity-50 pointer-events-none': uploadingWorld }">
+          <Icon name="download" class="w-4 h-4 rotate-180" />
+          {{ uploadingWorld ? t('worlds.tools.uploading') : t('worlds.tools.upload') }}
+          <input type="file" accept=".zip,.tar.gz,.tgz" class="hidden" @change="onWorldUpload" />
+        </label>
+      </div>
+      <div class="card-body space-y-5">
+        <!-- Per-world backup buttons + seed -->
+        <div>
+          <p class="text-sm text-ink-muted mb-2">{{ t('worlds.tools.backupDesc') }}</p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="w in worlds"
+              :key="'bk-' + w.name"
+              @click="backupOneWorld(w.name)"
+              :disabled="worldToolsBusy"
+              class="flex items-center gap-2 px-3 py-1.5 bg-surface text-ink rounded-lg text-sm hover:bg-surface-overlay transition-colors disabled:opacity-50"
+            >
+              <Icon name="backup" class="w-4 h-4 text-hytale-orange" />
+              {{ w.name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- World backups list -->
+        <div>
+          <h4 class="text-sm font-medium text-ink-muted uppercase tracking-wider mb-2">{{ t('worlds.tools.backups') }}</h4>
+          <div v-if="worldBackups.length === 0" class="text-sm text-ink-subtle">{{ t('worlds.tools.noBackups') }}</div>
+          <div v-else class="space-y-2 max-h-56 overflow-y-auto">
+            <div v-for="b in worldBackups" :key="b.id" class="flex items-center gap-3 p-2.5 bg-surface rounded-lg text-sm">
+              <Icon name="worlds" class="w-4 h-4 text-ink-muted shrink-0" />
+              <div class="flex-1 min-w-0">
+                <p class="text-ink font-medium truncate">{{ b.world }}</p>
+                <p class="text-xs text-ink-subtle">{{ new Date(b.createdAt).toLocaleString() }} · {{ fmtBytes(b.sizeBytes) }}</p>
+              </div>
+              <button @click="restoreWorldBackup(b)" :disabled="worldToolsBusy" class="px-2.5 py-1 text-xs bg-surface-overlay rounded hover:bg-hytale-orange/20 hover:text-hytale-orange transition-colors disabled:opacity-50">
+                {{ t('worlds.tools.restore') }}
+              </button>
+              <button @click="deleteWorldBackup(b)" class="p-1 text-ink-subtle hover:text-red-400">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pregeneration -->
+        <div class="border-t border-border/60 pt-4">
+          <h4 class="text-sm font-medium text-ink-muted uppercase tracking-wider mb-2">{{ t('worlds.tools.pregen') }}</h4>
+          <p class="text-xs text-ink-subtle mb-3">{{ t('worlds.tools.pregenDesc') }}</p>
+
+          <div v-if="pregen.state === 'running'" class="space-y-2">
+            <div class="flex justify-between text-xs text-ink-muted">
+              <span>{{ t('worlds.tools.pregenRunning', { world: pregen.world }) }}</span>
+              <span>{{ pregen.percent }}%<span v-if="pregen.chunksTotal"> · {{ pregen.chunksDone }}/{{ pregen.chunksTotal }}</span></span>
+            </div>
+            <div class="h-2 w-full rounded-full bg-surface-overlay overflow-hidden">
+              <div class="h-full bg-hytale-orange transition-all" :style="{ width: pregen.percent + '%' }"></div>
+            </div>
+            <button @click="cancelWorldPregen" class="text-xs text-red-400 hover:underline">{{ t('common.cancel') }}</button>
+          </div>
+
+          <div v-else class="flex flex-wrap items-end gap-2">
+            <div>
+              <label class="block text-xs text-ink-subtle mb-1">{{ t('worlds.world') || 'World' }}</label>
+              <select v-model="pregenWorld" class="bg-surface text-ink px-3 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none text-sm">
+                <option value="" disabled>{{ t('worlds.tools.selectWorld') }}</option>
+                <option v-for="w in worlds" :key="'pg-' + w.name" :value="w.name">{{ w.name }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-ink-subtle mb-1">{{ t('worlds.tools.radius') }}</label>
+              <input v-model.number="pregenRadius" type="number" min="1" max="256" class="w-24 bg-surface text-ink px-3 py-2 rounded-lg border border-border focus:border-hytale-orange focus:outline-none text-sm" />
+            </div>
+            <button @click="startWorldPregen" :disabled="!pregenWorld || worldToolsBusy" class="px-4 py-2 bg-hytale-orange text-dark rounded-lg text-sm font-medium hover:bg-hytale-yellow transition-colors disabled:opacity-50">
+              {{ t('worlds.tools.startPregen') }}
+            </button>
+            <span v-if="pregen.state === 'unsupported'" class="text-xs text-amber-400">{{ pregen.message || t('worlds.tools.pregenUnsupported') }}</span>
+            <span v-else-if="pregen.state === 'complete'" class="text-xs text-emerald-400">{{ t('worlds.tools.pregenComplete') }}</span>
+            <span v-else-if="pregen.state === 'cancelled'" class="text-xs text-ink-subtle">{{ t('worlds.tools.pregenCancelled') }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Loading -->

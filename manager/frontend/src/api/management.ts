@@ -193,6 +193,83 @@ export const worldsApi = {
     )
     return response.data
   },
+
+  // ----- Per-world management: backup / restore / upload / pregen -----
+  async getDetails(worldName: string): Promise<WorldDetails> {
+    const response = await api.get<WorldDetails>(`/management/worlds/${encodeURIComponent(worldName)}/details`)
+    return response.data
+  },
+
+  async backup(worldName: string): Promise<{ success: boolean; backup?: WorldBackup; error?: string }> {
+    const response = await api.post(`/management/worlds/${encodeURIComponent(worldName)}/backup`)
+    return response.data
+  },
+
+  async listBackups(): Promise<{ backups: WorldBackup[] }> {
+    const response = await api.get<{ backups: WorldBackup[] }>('/management/worlds/backups')
+    return response.data
+  },
+
+  async restoreBackup(backupId: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.post('/management/worlds/restore', { backupId })
+    return response.data
+  },
+
+  async deleteBackup(backupId: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.delete(`/management/worlds/backups/${encodeURIComponent(backupId)}`)
+    return response.data
+  },
+
+  async uploadWorld(file: File): Promise<{ success: boolean; error?: string }> {
+    const formData = new FormData()
+    formData.append('archive', file)
+    const response = await api.post('/management/worlds/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+    })
+    return response.data
+  },
+
+  async startPregen(worldName: string, radius: number): Promise<{ success: boolean; error?: string }> {
+    const response = await api.post(`/management/worlds/${encodeURIComponent(worldName)}/pregen`, { radius })
+    return response.data
+  },
+
+  async getPregenStatus(): Promise<PregenStatus> {
+    const response = await api.get<PregenStatus>('/management/worlds/pregen/status')
+    return response.data
+  },
+
+  async cancelPregen(): Promise<{ success: boolean; error?: string }> {
+    const response = await api.post('/management/worlds/pregen/cancel')
+    return response.data
+  },
+}
+
+export interface WorldDetails {
+  name: string
+  path: string
+  seed: string | null
+  sizeBytes: number
+  fileCount: number
+}
+
+export interface WorldBackup {
+  id: string
+  world: string
+  createdAt: string
+  sizeBytes: number
+}
+
+export interface PregenStatus {
+  state: 'idle' | 'running' | 'complete' | 'cancelled' | 'error' | 'unsupported'
+  world: string | null
+  radius: number | null
+  percent: number
+  chunksDone: number | null
+  chunksTotal: number | null
+  startedAt: string | null
+  message?: string
 }
 
 // ============== MODS & PLUGINS ==============
@@ -223,6 +300,11 @@ export interface ConfigFile {
 export const modsApi = {
   async get(): Promise<{ mods: ModInfo[]; path: string }> {
     const response = await api.get<{ mods: ModInfo[]; path: string }>('/management/mods')
+    return response.data
+  },
+
+  async checkCompat(filename: string): Promise<CompatResult> {
+    const response = await api.get<CompatResult>(`/management/mods/${encodeURIComponent(filename)}/compat`)
     return response.data
   },
 
@@ -407,6 +489,23 @@ export const modStoreApi = {
     const response = await api.post<InstallResult>(`/management/modstore/${modId}/update`)
     return response.data
   },
+
+  async checkCompat(modId: string): Promise<CompatResult> {
+    const response = await api.get<CompatResult>(`/management/modstore/${encodeURIComponent(modId)}/compat`)
+    return response.data
+  },
+}
+
+export interface CompatResult {
+  verdict: 'compatible' | 'incompatible' | 'unknown'
+  serverVersion: string | null
+  declared: {
+    gameVersions?: string[]
+    minServerVersion?: string
+    maxServerVersion?: string
+    source: 'registry' | 'jar' | 'none'
+  }
+  reason: string
 }
 
 // ============== MODTALE API ==============
