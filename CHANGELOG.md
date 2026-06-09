@@ -4,6 +4,32 @@ All notable changes to the Hytale Server Manager will be documented in this file
 
 ## [Unreleased] - Session reliability, credential-conflict fix & recovery CLI
 
+### Security
+
+- **Setup-gate bypass via path casing (critical)**: Express matched route mounts
+  case-insensitively while the post-setup seal compared `req.path` against the
+  lowercase `/api/setup`. `POST /API/setup/server/start`, `GET /API/setup/server/logs`
+  (raw logs that can contain OAuth device codes) and the Hytale-auth endpoints
+  were therefore reachable unauthenticated after setup — and the same trick
+  skipped the CSRF origin check on `/API/...`. Fixed by enabling
+  `case sensitive routing` and lower-casing the seal comparison.
+- **Privilege escalation / RCE via `config/write` (high)**: `/api/management/config/{read,write}`
+  validated only the root boundary, not the deny-list, so a non-admin holder of
+  `config.edit` (the built-in **Operator** role) could overwrite `HytaleServer.jar`
+  (code execution on next restart) or read `auth.enc`. Both routes now enforce the
+  file-manager deny rules (JAR, `auth.enc`, `config.json`, `users.json`, `*.key`/`*.pem`).
+- **Unauthenticated player-location WebSocket (high)**: `/api/players/locations/ws`
+  streamed live player UUIDs + world coordinates to anyone who could reach the
+  panel — no token, no permission. It now requires a WS ticket (or access token)
+  and `players.view`, matching the console WS; the live-map client uses a
+  single-use ticket so no access token rides in the URL.
+- **Mod-download SSRF / path hardening (medium)**: mod/asset downloads now
+  SSRF-check the URL and every redirect target (rejecting localhost/metadata/RFC1918),
+  cap redirects, and reduce the download filename to a safe `.jar`/`.zip` basename
+  so a malicious registry entry can't write outside the mods directory.
+- **Metrics token timing (low)**: the static `METRICS_TOKEN` is compared with
+  `crypto.timingSafeEqual` instead of `===`.
+
 ### Fixed
 
 - **"Logged in but session dead" after returning to an idle tab**: the UI rendered

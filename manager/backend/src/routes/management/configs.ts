@@ -8,6 +8,7 @@ import { config } from '../../config.js';
 import { logActivity } from '../../services/activityLog.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 import { getRealPathIfSafe } from '../../utils/pathSecurity.js';
+import { isAbsolutePathAllowed } from '../../services/fileManager.js';
 import {
   extractBaseModName,
   findConfigDirs,
@@ -163,8 +164,11 @@ router.get('/config/read', authMiddleware, requirePermission('config.view'), asy
     const allowedDirectories = [config.modsPath, config.pluginsPath, config.serverPath, config.dataPath];
     const safePath = getRealPathIfSafe(configPath, allowedDirectories);
 
-    if (!safePath) {
-      console.warn(`[SECURITY] Blocked path traversal attempt: ${configPath}`);
+    // The root-boundary check above does NOT block secret/credential files.
+    // Apply the file-manager deny-list so config.view can't be used to read
+    // auth.enc, users.json, *.key/*.pem, etc. inside an allowed root.
+    if (!safePath || !isAbsolutePathAllowed(safePath, 'read')) {
+      console.warn(`[SECURITY] Blocked config read for disallowed path: ${configPath}`);
       res.status(403).json({ error: 'Access denied - invalid path' });
       return;
     }
@@ -189,8 +193,12 @@ router.put('/config/write', authMiddleware, requirePermission('config.edit'), as
     const allowedDirectories = [config.modsPath, config.pluginsPath, config.serverPath, config.dataPath];
     const safePath = getRealPathIfSafe(configPath, allowedDirectories);
 
-    if (!safePath) {
-      console.warn(`[SECURITY] Blocked path traversal attempt (write): ${configPath}`);
+    // Root-boundary alone is not enough for writes: without the deny-list a
+    // config.edit holder (e.g. the non-admin Operator role) could overwrite
+    // HytaleServer.jar (RCE on restart) or the schema-validated config.json /
+    // users.json. Enforce the same deny rules the file manager uses.
+    if (!safePath || !isAbsolutePathAllowed(safePath, 'write')) {
+      console.warn(`[SECURITY] Blocked config write for disallowed path: ${configPath}`);
       res.status(403).json({ error: 'Access denied - invalid path' });
       return;
     }

@@ -1,6 +1,5 @@
 import { Router, Request, Response, CookieOptions } from 'express';
 import rateLimit from 'express-rate-limit';
-import { config } from '../config.js';
 import { verifyCredentials, createAccessToken, createRefreshToken, verifyToken, createWsTicket } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -393,10 +392,15 @@ router.post('/ws-ticket', authMiddleware, wsTicketLimiter, async (req: Authentic
     ? (req.body as { serverId?: string }).serverId
     : undefined;
 
-  // Verify user has console.view permission before issuing ticket
+  // A WS ticket only binds the username; the concrete per-socket permission is
+  // re-checked on connect (console.view for the console stream, players.view
+  // for the live player-locations stream). Issue a ticket if the caller holds
+  // either of those view rights, so a players.view-only user can still open the
+  // live map without being granted console access.
   const canViewConsole = await hasPermission(username, 'console.view', requestedServerId);
-  if (!canViewConsole) {
-    res.status(403).json({ error: 'Permission denied: console.view required' });
+  const canViewPlayers = await hasPermission(username, 'players.view', requestedServerId);
+  if (!canViewConsole && !canViewPlayers) {
+    res.status(403).json({ error: 'Permission denied: console.view or players.view required' });
     return;
   }
 

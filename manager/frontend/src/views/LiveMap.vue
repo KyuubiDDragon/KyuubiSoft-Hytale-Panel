@@ -11,7 +11,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
-import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/api/auth'
 
 interface LocationSample {
   playerName: string
@@ -25,7 +25,6 @@ interface LocationSample {
 }
 
 const { t } = useI18n()
-const authStore = useAuthStore()
 
 const samples = ref<LocationSample[]>([])
 const showHeatmap = ref(true)
@@ -126,13 +125,23 @@ async function refreshSnapshot() {
   samples.value = visibleSamples.value
 }
 
-function connectWebSocket() {
+async function connectWebSocket() {
   // Reuse the panel's same-origin to keep auth cookies / proxies happy. The
-  // backend exposes the WS at /api/players/locations/ws.
+  // backend exposes the WS at /api/players/locations/ws and requires a
+  // single-use ticket (same scheme as the console WS) — this keeps the
+  // short-lived access token out of the URL (and out of proxy/server logs).
+  // If a ticket can't be obtained we simply rely on the 2s polling fallback.
   try {
+    let ticket: string
+    try {
+      const res = await authApi.getWsTicket()
+      ticket = res.ticket
+    } catch {
+      // No ticket (e.g. missing permission) — polling already covers updates.
+      return
+    }
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const token = authStore.accessToken
-    const wsUrl = `${proto}://${window.location.host}/api/players/locations/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`
+    const wsUrl = `${proto}://${window.location.host}/api/players/locations/ws?ticket=${encodeURIComponent(ticket)}`
     ws = new WebSocket(wsUrl)
     ws.onmessage = (ev) => {
       try {

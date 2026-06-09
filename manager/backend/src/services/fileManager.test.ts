@@ -9,9 +9,11 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import {
   resolveSafe,
   isDenied,
+  isAbsolutePathAllowed,
   type FileManagerRoot,
   FileManagerError,
 } from './fileManager.js';
+import { config } from '../config.js';
 
 let tmpRoot: string;
 let root: FileManagerRoot;
@@ -91,5 +93,40 @@ describe('fileManager.isDenied', () => {
   it('allows normal files', () => {
     expect(isDenied(root, 'hello.txt')).toBe(false);
     expect(isDenied(root, 'sub/nested.txt')).toBe(false);
+  });
+});
+
+// Guards the legacy /api/management/config/{read,write} routes. These take an
+// ABSOLUTE path, so getRealPathIfSafe()'s root-boundary check alone let a
+// config.edit holder overwrite the server JAR (RCE) or read auth.enc.
+describe('fileManager.isAbsolutePathAllowed', () => {
+  const server = config.serverPath;
+  const mods = config.modsPath;
+  const data = config.dataPath;
+
+  it('blocks overwriting the server JAR (RCE on restart)', () => {
+    expect(isAbsolutePathAllowed(path.join(server, 'HytaleServer.jar'), 'write')).toBe(false);
+  });
+  it('blocks reading encrypted Hytale auth credentials', () => {
+    expect(isAbsolutePathAllowed(path.join(server, 'auth.enc'), 'read')).toBe(false);
+  });
+  it('blocks the schema-validated config.json and users.json', () => {
+    expect(isAbsolutePathAllowed(path.join(server, 'config.json'), 'write')).toBe(false);
+    expect(isAbsolutePathAllowed(path.join(data, 'users.json'), 'read')).toBe(false);
+  });
+  it('blocks key/pem secret files', () => {
+    expect(isAbsolutePathAllowed(path.join(server, 'server.key'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(path.join(server, 'tls.pem'), 'read')).toBe(false);
+  });
+  it('blocks paths outside every managed root', () => {
+    expect(isAbsolutePathAllowed('/etc/passwd', 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(path.join(server, '..', '..', 'etc', 'shadow'), 'read')).toBe(false);
+  });
+  it('blocks writes under the read-only data root', () => {
+    expect(isAbsolutePathAllowed(path.join(data, 'whatever.json'), 'write')).toBe(false);
+  });
+  it('allows legitimate mod/server config files', () => {
+    expect(isAbsolutePathAllowed(path.join(mods, 'SomeMod', 'config.yml'), 'write')).toBe(true);
+    expect(isAbsolutePathAllowed(path.join(server, 'server.properties'), 'write')).toBe(true);
   });
 });
