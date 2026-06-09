@@ -2,7 +2,37 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
-## [Unreleased] - Session reliability, credential-conflict fix & recovery CLI
+## [Unreleased] - Session reliability, credential-conflict fix, recovery CLI, security hardening & new operator features
+
+### New features
+
+- **Update Center** (`/updates`): a dedicated view over the native Hytale update
+  system — check/download/apply/cancel with live state, patchline + auto-apply
+  settings, an **update history** log, and **JAR rollback** (the server JAR is
+  snapshotted before each apply; a bad release can be reverted with a restart).
+- **Scheduled console commands**: run any whitelisted command automatically,
+  daily at set times or every N minutes, with run-now and next/last-run display.
+  Re-validated against the console whitelist before every run.
+- **Storage / disk monitor**: a Performance-page panel showing filesystem
+  total/used/free plus a per-category breakdown (worlds, backups, server,
+  assets, mods, plugins) so you can see what's filling the disk. (The watchdog
+  already alerts on low disk.)
+- **Per-world management**: backup/restore/upload individual worlds, world seed
+  display, and chunk pre-generation with live progress. (The `/pregen` command
+  set is assumed pending Hytale finalizing it; it degrades to "unsupported"
+  cleanly.)
+- **Mod compatibility check**: warns before installing a mod built for a
+  different server version (from declared registry metadata or a probed JAR
+  manifest), with a badge in the store and a pre-install confirmation.
+- **GDPR / DSGVO player data**: export everything the panel stores about a
+  player as JSON, and erase it (right to be forgotten), from the player profile.
+
+### Hardening
+
+- Shell-escape the config-derived paths interpolated into `execInContainer`
+  shell commands (asset extraction, patchline file delete, downloader probe) —
+  not exploitable before, but no longer fragile.
+- Resolve two pre-existing `no-case-declarations` ESLint errors.
 
 ### Security
 

@@ -116,7 +116,7 @@ function readSeed(worldPath: string): string | null {
   return null;
 }
 
-export async function getWorldDetails(worldName: string, serverId?: string): Promise<WorldDetails | null> {
+export async function getWorldDetails(worldName: string, _serverId?: string): Promise<WorldDetails | null> {
   const found = await findWorldDir(worldName);
   if (!found) return null;
   const { bytes, files } = dirSizeSync(found.worldPath);
@@ -197,7 +197,7 @@ export async function restoreWorld(backupId: string, serverId?: string): Promise
 
   // Restore into the primary worlds dir (first existing root, else the default).
   const roots = getWorldsPaths();
-  let target = roots.find(r => fs.existsSync(r)) ?? roots[0];
+  const target = roots.find(r => fs.existsSync(r)) ?? roots[0];
   fs.mkdirSync(target, { recursive: true });
 
   try {
@@ -225,7 +225,7 @@ export async function deleteWorldBackup(backupId: string, serverId?: string): Pr
  * The archive is expected to contain a single top-level world folder. The
  * caller has already written the upload to `archivePath` (a temp file).
  */
-export async function importWorldArchive(archivePath: string, originalName: string, serverId?: string): Promise<{ success: boolean; error?: string }> {
+export async function importWorldArchive(archivePath: string, originalName: string, _serverId?: string): Promise<{ success: boolean; error?: string }> {
   const roots = getWorldsPaths();
   const target = roots.find(r => fs.existsSync(r)) ?? roots[0];
   fs.mkdirSync(target, { recursive: true });
@@ -297,7 +297,8 @@ function publicStatus(job: PregenJob | undefined): PregenStatus {
   if (!job) {
     return { state: 'idle', world: null, radius: null, percent: 0, chunksDone: null, chunksTotal: null, startedAt: null };
   }
-  const { poll, firstProgressSeen, startMs, ...rest } = job;
+  // Strip the internal bookkeeping fields, returning only the public status.
+  const { poll: _poll, firstProgressSeen: _fps, startMs: _startMs, ...rest } = job;
   return rest;
 }
 
