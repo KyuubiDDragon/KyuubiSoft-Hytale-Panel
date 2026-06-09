@@ -236,6 +236,18 @@
   "profile": {
     "viewProfile": "Profil ansehen",
     "subtitle": "Spieler-Profil — Staff-Notizen & Strafhistorie",
+    "gdpr": {
+      "export": "Daten exportieren",
+      "exportHint": "Alle Panel-Daten zu diesem Spieler herunterladen (DSGVO-Auskunft)",
+      "exported": "Spielerdaten exportiert",
+      "exportFailed": "Spielerdaten konnten nicht exportiert werden",
+      "erase": "Daten löschen",
+      "eraseHint": "Die Panel-Daten zu diesem Spieler löschen (DSGVO-Löschung)",
+      "eraseTitle": "Spielerdaten löschen",
+      "eraseConfirm": "Die im Panel gespeicherten Daten (Notizen, Strafen, Sitzungen, Chat) für \"{name}\" dauerhaft löschen? Der Spielstand im Spiel ist nicht betroffen. Das kann nicht rückgängig gemacht werden.",
+      "erased": "Spielerdaten gelöscht",
+      "eraseFailed": "Spielerdaten konnten nicht gelöscht werden"
+    },
     "notes": "Staff-Notizen",
     "addNotePlaceholder": "Notiz hinzufügen…",
     "add": "Hinzufügen",

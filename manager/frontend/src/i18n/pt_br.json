@@ -236,6 +236,18 @@
   "profile": {
     "viewProfile": "Ver Perfil",
     "subtitle": "Perfil do jogador — notas da equipe e histórico de punições",
+    "gdpr": {
+      "export": "Exportar dados",
+      "exportHint": "Baixar todos os dados do painel sobre este jogador (solicitação de acesso GDPR)",
+      "exported": "Dados do jogador exportados",
+      "exportFailed": "Falha ao exportar os dados do jogador",
+      "erase": "Apagar dados",
+      "eraseHint": "Excluir os dados do painel sobre este jogador (exclusão GDPR)",
+      "eraseTitle": "Apagar dados do jogador",
+      "eraseConfirm": "Excluir permanentemente os dados armazenados pelo painel (notas, punições, sessões, chat) de \"{name}\"? O save no jogo não é afetado. Isso não pode ser desfeito.",
+      "erased": "Dados do jogador apagados",
+      "eraseFailed": "Falha ao apagar os dados do jogador"
+    },
     "notes": "Notas da Equipe",
     "addNotePlaceholder": "Adicionar uma nota…",
     "add": "Adicionar",

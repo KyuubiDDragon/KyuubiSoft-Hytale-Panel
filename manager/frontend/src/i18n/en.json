@@ -236,6 +236,18 @@
   "profile": {
     "viewProfile": "View Profile",
     "subtitle": "Player profile — staff notes & punishment history",
+    "gdpr": {
+      "export": "Export data",
+      "exportHint": "Download all panel data about this player (GDPR access request)",
+      "exported": "Player data exported",
+      "exportFailed": "Failed to export player data",
+      "erase": "Erase data",
+      "eraseHint": "Delete the panel's data about this player (GDPR erasure)",
+      "eraseTitle": "Erase player data",
+      "eraseConfirm": "Permanently delete the panel's stored data (notes, punishments, sessions, chat) for \"{name}\"? The in-game save is not affected. This cannot be undone.",
+      "erased": "Player data erased",
+      "eraseFailed": "Failed to erase player data"
+    },
     "notes": "Staff Notes",
     "addNotePlaceholder": "Add a note…",
     "add": "Add",
