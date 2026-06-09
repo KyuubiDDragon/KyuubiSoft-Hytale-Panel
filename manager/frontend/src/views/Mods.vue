@@ -38,6 +38,7 @@ import {
   type CurseForgeSortField,
   type CurseForgeInstalledInfo,
   type ModUpdateStatus,
+  type CompatResult,
 } from '@/api/management'
 
 const { t } = useI18n()
@@ -211,6 +212,7 @@ async function loadStoreData() {
   try {
     const result = await modStoreApi.getAvailable()
     storeMods.value = result.mods
+    void loadStoreCompat()
   } catch (e) {
     error.value = t('errors.connectionFailed')
   } finally {
@@ -218,7 +220,39 @@ async function loadStoreData() {
   }
 }
 
+// Compatibility verdicts per store mod, loaded lazily and best-effort so a
+// missing/erroring endpoint never blocks the store from rendering.
+const compatByMod = ref<Record<string, CompatResult>>({})
+async function loadStoreCompat() {
+  const results = await Promise.allSettled(
+    storeMods.value.map(async (m) => ({ id: m.id, compat: await modStoreApi.checkCompat(m.id) }))
+  )
+  const map: Record<string, CompatResult> = {}
+  for (const r of results) {
+    if (r.status === 'fulfilled') map[r.value.id] = r.value.compat
+  }
+  compatByMod.value = map
+}
+
 async function installStoreMod(modId: string) {
+  // Compatibility pre-check: warn (don't hard-block) before installing a mod
+  // declared for a different server version. Unknown/compatible installs proceed
+  // silently; only a clear incompatibility prompts a confirmation.
+  try {
+    const compat = await modStoreApi.checkCompat(modId)
+    if (compat.verdict === 'incompatible') {
+      const proceed = await askConfirm({
+        title: t('mods.compat.incompatibleTitle'),
+        message: t('mods.compat.incompatibleConfirm', { reason: compat.reason }),
+        confirmText: t('mods.compat.installAnyway'),
+        variant: 'danger',
+      })
+      if (!proceed) return
+    }
+  } catch {
+    // compat endpoint unavailable — don't block the install
+  }
+
   installingMod.value = modId
   installSuccess.value = null
   error.value = ''
@@ -1633,6 +1667,13 @@ onUnmounted(() => {
                 </span>
                 <span v-if="updateSuccess === mod.id" class="px-2 py-0.5 rounded text-xs bg-hytale-orange/20 text-hytale-orange animate-pulse">
                   {{ t('mods.updateSuccess') }}
+                </span>
+                <span
+                  v-if="compatByMod[mod.id] && compatByMod[mod.id].verdict !== 'unknown'"
+                  :class="['px-2 py-0.5 rounded text-xs', compatByMod[mod.id].verdict === 'compatible' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400']"
+                  :title="compatByMod[mod.id].reason"
+                >
+                  {{ compatByMod[mod.id].verdict === 'compatible' ? t('mods.compat.compatible') : t('mods.compat.incompatible') }}
                 </span>
               </div>
               <p class="text-sm text-ink-muted mt-1">{{ getLocalizedText(mod.description) }}</p>

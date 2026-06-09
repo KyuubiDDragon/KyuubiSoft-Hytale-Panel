@@ -38,6 +38,12 @@ export interface ModStoreEntry {
   website?: string;
   version?: string; // For direct downloads
   hints?: LocalizedString;
+  // Optional compatibility metadata (populated by the registry). Used by the
+  // mod-compatibility checker to warn before installing a mod built for a
+  // different server version.
+  gameVersions?: string[];
+  minServerVersion?: string;
+  maxServerVersion?: string;
 }
 
 // Built-in fallback registry (used if external registry fails)

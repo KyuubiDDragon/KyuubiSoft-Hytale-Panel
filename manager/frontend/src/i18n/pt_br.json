@@ -849,6 +849,13 @@
     "storeTitle": "Loja de Mods",
     "storeDescription": "Instale mods populares com um clique. Mods são baixados de releases do GitHub.",
     "availableMods": "Mods Disponíveis",
+    "compat": {
+      "compatible": "Compatível",
+      "incompatible": "Incompatível",
+      "incompatibleTitle": "Mod pode ser incompatível",
+      "incompatibleConfirm": "{reason}\n\nInstalar um mod incompatível pode travar o servidor na inicialização. Instalar mesmo assim?",
+      "installAnyway": "Instalar mesmo assim"
+    },
     "installed": "Instalado",
     "install": "Instalar",
     "installing": "Instalando...",

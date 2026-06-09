@@ -303,6 +303,11 @@ export const modsApi = {
     return response.data
   },
 
+  async checkCompat(filename: string): Promise<CompatResult> {
+    const response = await api.get<CompatResult>(`/management/mods/${encodeURIComponent(filename)}/compat`)
+    return response.data
+  },
+
   async toggle(filename: string): Promise<{ success: boolean }> {
     const response = await api.put<{ success: boolean }>(`/management/mods/${encodeURIComponent(filename)}/toggle`)
     return response.data
@@ -484,6 +489,23 @@ export const modStoreApi = {
     const response = await api.post<InstallResult>(`/management/modstore/${modId}/update`)
     return response.data
   },
+
+  async checkCompat(modId: string): Promise<CompatResult> {
+    const response = await api.get<CompatResult>(`/management/modstore/${encodeURIComponent(modId)}/compat`)
+    return response.data
+  },
+}
+
+export interface CompatResult {
+  verdict: 'compatible' | 'incompatible' | 'unknown'
+  serverVersion: string | null
+  declared: {
+    gameVersions?: string[]
+    minServerVersion?: string
+    maxServerVersion?: string
+    source: 'registry' | 'jar' | 'none'
+  }
+  reason: string
 }
 
 // ============== MODTALE API ==============
