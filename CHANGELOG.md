@@ -2,6 +2,46 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
+## [Unreleased] - Session reliability, credential-conflict fix & recovery CLI
+
+### Fixed
+
+- **"Logged in but session dead" after returning to an idle tab**: the UI rendered
+  the cached login state from localStorage while the 15-minute access token behind
+  it had long expired. A new session guard validates/refreshes the token on app
+  start, on tab-visible/focus/online and on a slow interval, and logs out cleanly
+  (with a message on the login screen) when the server rejects the refresh.
+- **Refresh stampede on tab wake**: concurrent 401s each fired their own
+  `/api/auth/refresh`, tripping the 10/min rate limit and force-logging users out
+  although their refresh token was valid. All callers now share a single-flight
+  refresh promise; transient refresh failures (network blip, panel restart, 429)
+  no longer end the session — only an explicit 400/401/403 from the server does.
+- **Refresh cookie silently dropped on HTTP + `TRUST_PROXY=true`**: the `kp_refresh`
+  cookie was unconditionally marked `Secure` when `TRUST_PROXY` was on, so browsers
+  reaching the panel over plain HTTP (LAN IP, proxy bypass) never stored it —
+  causing forced logouts after every access-token expiry. The flag now follows the
+  actual (proxy-resolved) connection scheme via `req.secure`.
+- **Setup wizard wiped `users.json`**: finalizing setup overwrote the whole user
+  store with just the wizard admin — deleting the `.env`-bootstrapped admin and any
+  other accounts, and silently invalidating the `MANAGER_PASSWORD` credentials.
+  The wizard admin is now MERGED into the existing store (same username → password
+  updated + sessions invalidated; other accounts kept).
+- The `setupApiClient` had no 401/refresh response interceptor at all.
+- `users.json` bootstrap no longer mints a broken account when
+  `MANAGER_USERNAME`/`MANAGER_PASSWORD` are empty; startup now logs which
+  credential source is active (users.json vs env) so "changed .env password has
+  no effect" stops being a mystery.
+
+### Added
+
+- **Admin-recovery CLI** (`node dist/cli.js` inside the manager container):
+  `auth-status` (setup state, credential source, user list), `list-users`,
+  `reset-password <user> [pw] [--force]` (generates a strong password when
+  omitted; invalidates the account's sessions), `create-admin <user> [pw]` and
+  `disable-2fa <user>` for lost authenticators. Works with `docker exec` even
+  while the panel is down; preserves `users.json` ownership/mode when run as
+  root. Documented in README and `.env.example`.
+
 ## [3.0.0] - 2026-06-01 - New operator features, reliability hardening & DR
 
 Builds on `3.0.0-alpha` with a wave of operator-facing features and a focused

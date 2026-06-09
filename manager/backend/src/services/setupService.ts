@@ -578,24 +578,45 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
     // Generate new JWT secret
     const jwtSecret = crypto.randomBytes(48).toString('base64');
 
-    // Create admin user using the users service
+    // Create or update the wizard admin in users.json. MERGE — never replace
+    // the whole file: a users.json may already exist (auto-created from
+    // MANAGER_USERNAME/MANAGER_PASSWORD on first login, or carried over from
+    // a previous installation with additional accounts). Overwriting it wiped
+    // those accounts and silently invalidated the .env password, which left
+    // operators unable to tell which credentials were still valid.
     try {
-      // We need to create the user with the pre-hashed password
-      // Since createUser hashes the password, we'll write directly to users.json
       const usersFile = path.join(DATA_DIR, 'users.json');
-      const usersData = {
-        users: [{
+      let usersData: { users: Array<Record<string, unknown>> } = { users: [] };
+      try {
+        usersData = JSON.parse(await readFile(usersFile, 'utf-8'));
+        if (!Array.isArray(usersData.users)) usersData.users = [];
+      } catch {
+        // No existing file — start fresh
+      }
+
+      const existing = usersData.users.find(u => u.username === setupConfig.admin!.username);
+      if (existing) {
+        // Same username as a pre-existing account (typically the .env-created
+        // admin): the wizard password becomes the valid one. Bump tokenVersion
+        // so any tokens issued under the old password die immediately.
+        existing.passwordHash = adminPasswordHash;
+        existing.roleId = 'admin';
+        existing.tokenVersion = ((existing.tokenVersion as number) || 0) + 1;
+        logger.info(`[Setup] Updated existing user '${setupConfig.admin.username}' with the wizard password`);
+      } else {
+        usersData.users.push({
           username: setupConfig.admin.username,
           passwordHash: adminPasswordHash,
           roleId: 'admin',
           createdAt: new Date().toISOString(),
           tokenVersion: 1,
-        }]
-      };
+        });
+        logger.info(`[Setup] Created admin user '${setupConfig.admin.username}' (existing accounts kept)`);
+      }
       await writeFile(usersFile, JSON.stringify(usersData, null, 2), 'utf-8');
     } catch (error) {
-      // User might already exist, which is fine
-      logger.info('Note: Admin user creation skipped (may already exist)');
+      logger.error('[Setup] Failed to write admin user:', error);
+      return { success: false, error: 'Failed to create admin account' };
     }
 
     // Write panel config

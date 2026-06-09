@@ -785,6 +785,14 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Initialize roles (load or create default roles)
   await initializeRoles();
 
+  // Initialize users early so the startup log states which credential source
+  // is active (users.json vs MANAGER_USERNAME/MANAGER_PASSWORD) instead of
+  // operators discovering it at the first failed login.
+  const { initializeUsers } = await import('./services/users.js');
+  await initializeUsers().catch(err => {
+    console.error('Failed to initialize users:', err);
+  });
+
   // Initialize player tracking (load persisted data)
   initializePlayerTracking().catch(err => {
     console.error('Failed to initialize player tracking:', err);

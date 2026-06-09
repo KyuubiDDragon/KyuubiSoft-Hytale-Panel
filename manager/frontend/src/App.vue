@@ -6,12 +6,16 @@ import CommandPalette from './components/ui/CommandPalette.vue'
 import ConfirmHost from './components/ui/ConfirmHost.vue'
 import { useAuthStore } from './stores/auth'
 import { useThemeStore } from './stores/theme'
+import { useSessionGuard } from './composables/useSessionGuard'
 
 const route = useRoute()
 const authStore = useAuthStore()
 // Initialise the theme store early so the class lands on <html> before the
 // first render — avoids a flash of the wrong theme.
 useThemeStore()
+// Validate the session on app start and whenever the tab wakes up, so the UI
+// never shows "logged in" while the token behind it is long dead.
+useSessionGuard()
 
 const showLayout = computed(() => {
   return authStore.isAuthenticated && route.name !== 'login'

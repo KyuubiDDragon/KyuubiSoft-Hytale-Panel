@@ -94,7 +94,18 @@ async function readUsers(): Promise<UsersData> {
 
     return data;
   } catch {
-    // If file doesn't exist, create default admin user from env
+    // File doesn't exist yet. Bootstrap a default admin from the env vars —
+    // but only when BOTH are actually set. Minting a user with an empty
+    // username/password (e.g. post-setup installs that removed
+    // MANAGER_PASSWORD from .env, then lost their users.json) would create a
+    // broken account record instead of surfacing the real problem.
+    if (!config.managerUsername || !config.managerPassword) {
+      console.error(
+        '[Users] users.json is missing and MANAGER_USERNAME/MANAGER_PASSWORD are not set — ' +
+        'no login is possible. Recover with: docker exec -it <manager-container> node dist/cli.js reset-password <username>'
+      );
+      return { users: [] };
+    }
     // SECURITY: Use async bcrypt to prevent blocking the event loop
     const passwordHash = await bcrypt.hash(config.managerPassword, 12);
     const defaultAdmin: User = {
@@ -106,6 +117,7 @@ async function readUsers(): Promise<UsersData> {
     };
     const data: UsersData = { users: [defaultAdmin] };
     await writeUsers(data);
+    console.log(`[Users] Created users.json with admin '${config.managerUsername}' from MANAGER_USERNAME/MANAGER_PASSWORD`);
     return data;
   }
 }
@@ -359,6 +371,24 @@ export async function initializeUsers(): Promise<void> {
   if (isDemoMode()) {
     console.log('[Users] Demo mode - using in-memory demo users');
     return;
+  }
+
+  // Make the active credential source explicit at startup. The single most
+  // common support case is an operator changing MANAGER_PASSWORD in .env and
+  // expecting it to take effect — it never does once users.json exists.
+  let usersFileExists = false;
+  try {
+    await readFile(USERS_FILE, 'utf-8');
+    usersFileExists = true;
+  } catch {
+    // not created yet
+  }
+  if (usersFileExists && config.managerPassword) {
+    console.log(
+      '[Users] users.json exists — logins are validated against it. ' +
+      'MANAGER_USERNAME/MANAGER_PASSWORD from the environment are IGNORED. ' +
+      'To reset a password run: docker exec -it <manager-container> node dist/cli.js reset-password <username>'
+    );
   }
 
   await readUsers();
