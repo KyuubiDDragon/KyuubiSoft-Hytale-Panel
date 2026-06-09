@@ -21,6 +21,7 @@ export interface ScheduleConfig {
     createBackup: boolean
   }
   quickCommands: QuickCommand[]
+  scheduledCommands: ScheduledCommand[]
 }
 
 export interface ScheduledAnnouncement {
@@ -36,6 +37,26 @@ export interface QuickCommand {
   command: string
   icon: string
   category: string
+}
+
+export interface ScheduledCommand {
+  id: string
+  name: string
+  command: string
+  enabled: boolean
+  mode: 'daily' | 'interval'
+  times: string[]
+  intervalMinutes: number
+}
+
+export interface ScheduledCommandStatus {
+  id: string
+  name: string
+  command: string
+  enabled: boolean
+  mode: 'daily' | 'interval'
+  nextRun: string | null
+  lastRun: string | null
 }
 
 export interface SchedulerStatus {
@@ -55,6 +76,7 @@ export interface SchedulerStatus {
     pendingRestart: { time: string; scheduledAt: string } | null
     times: string[]
   }
+  scheduledCommands: ScheduledCommandStatus[]
 }
 
 export interface PlayerStatistics {
@@ -122,6 +144,11 @@ export const schedulerApi = {
 
   async broadcast(message: string): Promise<{ success: boolean }> {
     const response = await api.post('/scheduler/broadcast', { message })
+    return response.data
+  },
+
+  async runScheduledCommand(id: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.post(`/scheduler/commands/${id}/run`)
     return response.data
   },
 

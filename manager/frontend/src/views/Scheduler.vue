@@ -4,7 +4,8 @@ import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
 import Modal from '@/components/ui/Modal.vue'
 import { useAuthStore } from '@/stores/auth'
-import { schedulerApi, type ScheduleConfig, type QuickCommand, type SchedulerStatus } from '@/api/scheduler'
+import { schedulerApi, type ScheduleConfig, type QuickCommand, type ScheduledCommand, type SchedulerStatus } from '@/api/scheduler'
+import { useToast } from '@/composables/useToast'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -36,11 +37,28 @@ const config = reactive<ScheduleConfig>({
     createBackup: true,
   },
   quickCommands: [],
+  scheduledCommands: [],
 })
+
+const { addToast: showToast } = useToast()
 
 // New restart time input
 const newRestartTime = ref('03:00')
 const cancellingRestart = ref(false)
+
+// Scheduled command form
+const showScheduledForm = ref(false)
+const editingScheduled = ref<ScheduledCommand | null>(null)
+const scheduledForm = reactive<{ name: string; command: string; mode: 'daily' | 'interval'; times: string[]; intervalMinutes: number; enabled: boolean }>({
+  name: '',
+  command: '',
+  mode: 'daily',
+  times: ['03:00'],
+  intervalMinutes: 60,
+  enabled: true,
+})
+const scheduledTimeInput = ref('03:00')
+const savingScheduled = ref(false)
 
 // Quick command form
 const showCommandForm = ref(false)
@@ -262,6 +280,132 @@ const commandsByCategory = computed(() => {
   }
   return grouped
 })
+
+// ===== Scheduled commands =====
+function scheduledStatusFor(id: string) {
+  return status.value?.scheduledCommands?.find(s => s.id === id) ?? null
+}
+
+function openScheduledForm(cmd?: ScheduledCommand) {
+  if (cmd) {
+    editingScheduled.value = cmd
+    scheduledForm.name = cmd.name
+    scheduledForm.command = cmd.command
+    scheduledForm.mode = cmd.mode
+    scheduledForm.times = [...(cmd.times ?? [])]
+    scheduledForm.intervalMinutes = cmd.intervalMinutes || 60
+    scheduledForm.enabled = cmd.enabled
+  } else {
+    editingScheduled.value = null
+    scheduledForm.name = ''
+    scheduledForm.command = ''
+    scheduledForm.mode = 'daily'
+    scheduledForm.times = ['03:00']
+    scheduledForm.intervalMinutes = 60
+    scheduledForm.enabled = true
+  }
+  scheduledTimeInput.value = '03:00'
+  showScheduledForm.value = true
+}
+
+function addScheduledTime() {
+  const v = scheduledTimeInput.value
+  if (/^\d{2}:\d{2}$/.test(v) && !scheduledForm.times.includes(v)) {
+    scheduledForm.times.push(v)
+    scheduledForm.times.sort()
+  }
+}
+
+function removeScheduledTime(time: string) {
+  scheduledForm.times = scheduledForm.times.filter(t => t !== time)
+}
+
+async function persistScheduledCommands() {
+  await schedulerApi.saveConfig({ scheduledCommands: config.scheduledCommands })
+  await loadData()
+}
+
+async function saveScheduledCommand() {
+  if (!scheduledForm.name.trim() || !scheduledForm.command.trim()) return
+  if (!scheduledForm.command.trim().startsWith('/')) {
+    showToast(t('scheduler.commandMustStartWithSlash'), 'error')
+    return
+  }
+  if (scheduledForm.mode === 'daily' && scheduledForm.times.length === 0) {
+    showToast(t('scheduler.needAtLeastOneTime'), 'error')
+    return
+  }
+  try {
+    savingScheduled.value = true
+    const entry: ScheduledCommand = {
+      id: editingScheduled.value?.id ?? `sc-${Date.now()}`,
+      name: scheduledForm.name.trim(),
+      command: scheduledForm.command.trim(),
+      mode: scheduledForm.mode,
+      times: scheduledForm.mode === 'daily' ? [...scheduledForm.times] : [],
+      intervalMinutes: scheduledForm.mode === 'interval' ? Number(scheduledForm.intervalMinutes) : 0,
+      enabled: scheduledForm.enabled,
+    }
+    if (editingScheduled.value) {
+      const idx = config.scheduledCommands.findIndex(c => c.id === editingScheduled.value!.id)
+      if (idx !== -1) config.scheduledCommands[idx] = entry
+    } else {
+      config.scheduledCommands.push(entry)
+    }
+    await persistScheduledCommands()
+    showScheduledForm.value = false
+    showToast(t('common.success'), 'success')
+  } catch (e: any) {
+    showToast(e?.response?.data?.error || t('errors.serverError'), 'error')
+  } finally {
+    savingScheduled.value = false
+  }
+}
+
+async function toggleScheduledCommand(cmd: ScheduledCommand) {
+  cmd.enabled = !cmd.enabled
+  try {
+    await persistScheduledCommands()
+  } catch {
+    cmd.enabled = !cmd.enabled
+    showToast(t('errors.serverError'), 'error')
+  }
+}
+
+async function deleteScheduledCommand(id: string) {
+  config.scheduledCommands = config.scheduledCommands.filter(c => c.id !== id)
+  try {
+    await persistScheduledCommands()
+  } catch {
+    showToast(t('errors.serverError'), 'error')
+  }
+}
+
+async function runScheduledCommandNow(id: string) {
+  try {
+    const r = await schedulerApi.runScheduledCommand(id)
+    if (r.success) {
+      showToast(t('scheduler.commandExecuted'), 'success')
+      setTimeout(loadData, 500)
+    } else {
+      showToast(r.error || t('errors.serverError'), 'error')
+    }
+  } catch (e: any) {
+    showToast(e?.response?.data?.error || t('errors.serverError'), 'error')
+  }
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso).getTime()
+  const diff = d - Date.now()
+  const abs = Math.abs(diff)
+  const mins = Math.round(abs / 60000)
+  if (mins < 60) return diff >= 0 ? t('scheduler.inMinutes', { n: mins }) : t('scheduler.minutesAgo', { n: mins })
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return diff >= 0 ? t('scheduler.inHours', { n: hours }) : t('scheduler.hoursAgo', { n: hours })
+  return new Date(iso).toLocaleString()
+}
 
 onMounted(() => {
   loadData()
@@ -680,7 +824,190 @@ onMounted(() => {
           </div>
         </div>
       </Card>
+
+      <!-- Scheduled Commands -->
+      <Card :title="t('scheduler.scheduledCommands')">
+        <template v-if="authStore.hasPermission('scheduler.edit')" #actions>
+          <button
+            @click="openScheduledForm()"
+            class="flex items-center gap-2 px-3 py-1.5 bg-hytale-orange text-dark rounded-lg text-sm font-medium hover:bg-hytale-yellow transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            {{ t('scheduler.addScheduledCommand') }}
+          </button>
+        </template>
+
+        <div class="space-y-3">
+          <p class="text-sm text-ink-muted">{{ t('scheduler.scheduledCommandsDesc') }}</p>
+
+          <div v-if="config.scheduledCommands.length === 0" class="text-sm text-ink-subtle py-4 text-center">
+            {{ t('scheduler.noScheduledCommands') }}
+          </div>
+
+          <div
+            v-for="cmd in config.scheduledCommands"
+            :key="cmd.id"
+            class="flex items-center gap-3 p-3 bg-surface rounded-lg"
+          >
+            <button
+              @click="toggleScheduledCommand(cmd)"
+              :disabled="!authStore.hasPermission('scheduler.edit')"
+              class="shrink-0 w-10 h-6 rounded-full transition-colors relative"
+              :class="cmd.enabled ? 'bg-hytale-orange' : 'bg-surface-overlay'"
+              :title="cmd.enabled ? t('common.enabled') : t('common.disabled')"
+            >
+              <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-all" :class="cmd.enabled ? 'left-5' : 'left-1'"></span>
+            </button>
+
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-medium text-ink truncate">{{ cmd.name }}</p>
+                <span class="text-xs px-1.5 py-0.5 rounded bg-surface-overlay text-ink-subtle">
+                  {{ cmd.mode === 'daily' ? cmd.times.join(', ') : t('scheduler.everyNMinutes', { n: cmd.intervalMinutes }) }}
+                </span>
+              </div>
+              <p class="text-xs text-ink-subtle font-mono truncate">{{ cmd.command }}</p>
+              <p v-if="scheduledStatusFor(cmd.id) && cmd.enabled" class="text-xs text-ink-subtle mt-0.5">
+                {{ t('scheduler.nextRun') }}: {{ formatRelative(scheduledStatusFor(cmd.id)!.nextRun) }}
+                <span v-if="scheduledStatusFor(cmd.id)!.lastRun"> · {{ t('scheduler.lastRun') }}: {{ formatRelative(scheduledStatusFor(cmd.id)!.lastRun) }}</span>
+              </p>
+            </div>
+
+            <div v-if="authStore.hasPermission('scheduler.edit')" class="flex gap-1 shrink-0">
+              <button
+                @click="runScheduledCommandNow(cmd.id)"
+                class="p-1.5 text-ink-muted hover:text-hytale-orange bg-surface-overlay rounded"
+                :title="t('scheduler.runNow')"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+              <button
+                @click="openScheduledForm(cmd)"
+                class="p-1.5 text-ink-muted hover:text-ink bg-surface-overlay rounded"
+                :title="t('common.edit')"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+              <button
+                @click="deleteScheduledCommand(cmd.id)"
+                class="p-1.5 text-ink-muted hover:text-red-400 bg-surface-overlay rounded"
+                :title="t('common.delete')"
+              >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Card>
     </template>
+
+    <!-- Scheduled Command Form Modal -->
+    <Modal
+      :open="showScheduledForm"
+      :title="editingScheduled ? t('scheduler.editScheduledCommand') : t('scheduler.addScheduledCommand')"
+      @close="showScheduledForm = false"
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('scheduler.commandName') }}</label>
+          <input
+            v-model="scheduledForm.name"
+            type="text"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('scheduler.command') }}</label>
+          <input
+            v-model="scheduledForm.command"
+            type="text"
+            placeholder="/save"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none font-mono"
+          />
+          <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.commandWhitelistHint') }}</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('scheduler.scheduleMode') }}</label>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              @click="scheduledForm.mode = 'daily'"
+              class="flex-1 px-4 py-2 rounded-lg border transition-colors"
+              :class="scheduledForm.mode === 'daily' ? 'border-hytale-orange bg-hytale-orange/10 text-ink' : 'border-border text-ink-muted'"
+            >{{ t('scheduler.modeDaily') }}</button>
+            <button
+              type="button"
+              @click="scheduledForm.mode = 'interval'"
+              class="flex-1 px-4 py-2 rounded-lg border transition-colors"
+              :class="scheduledForm.mode === 'interval' ? 'border-hytale-orange bg-hytale-orange/10 text-ink' : 'border-border text-ink-muted'"
+            >{{ t('scheduler.modeInterval') }}</button>
+          </div>
+        </div>
+
+        <div v-if="scheduledForm.mode === 'daily'">
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('scheduler.times') }}</label>
+          <div class="flex gap-2 mb-2">
+            <input
+              v-model="scheduledTimeInput"
+              type="time"
+              class="flex-1 bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+            />
+            <button @click="addScheduledTime" class="px-4 py-2 bg-surface-overlay text-ink rounded-lg hover:bg-border transition-colors">
+              {{ t('common.add') }}
+            </button>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <span
+              v-for="time in scheduledForm.times"
+              :key="time"
+              class="flex items-center gap-1 px-2 py-1 bg-surface-overlay rounded text-sm text-ink"
+            >
+              {{ time }}
+              <button @click="removeScheduledTime(time)" class="text-ink-subtle hover:text-red-400">×</button>
+            </span>
+          </div>
+        </div>
+
+        <div v-else>
+          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('scheduler.intervalMinutes') }}</label>
+          <input
+            v-model.number="scheduledForm.intervalMinutes"
+            type="number"
+            min="1"
+            class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
+          />
+        </div>
+
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input v-model="scheduledForm.enabled" type="checkbox" class="accent-hytale-orange" />
+          <span class="text-sm text-ink-muted">{{ t('scheduler.enabledLabel') }}</span>
+        </label>
+      </div>
+      <template #footer>
+        <button
+          @click="showScheduledForm = false"
+          class="px-4 py-2 text-ink-muted hover:text-ink transition-colors"
+        >
+          {{ t('common.cancel') }}
+        </button>
+        <button
+          @click="saveScheduledCommand"
+          :disabled="!scheduledForm.name || !scheduledForm.command || savingScheduled"
+          class="px-4 py-2 bg-hytale-orange text-dark rounded-lg font-medium hover:bg-hytale-yellow transition-colors disabled:opacity-50"
+        >
+          {{ t('common.save') }}
+        </button>
+      </template>
+    </Modal>
 
     <!-- Command Form Modal -->
     <Modal
