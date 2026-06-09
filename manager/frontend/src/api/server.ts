@@ -131,6 +131,25 @@ export interface NativeUpdateStatus {
   error?: string
 }
 
+export interface UpdateHistoryEntry {
+  id: string
+  at: string
+  fromVersion: string | null
+  toVersion: string | null
+  action: 'apply' | 'rollback'
+  by: string | null
+  success: boolean
+  note?: string
+}
+
+export interface JarSnapshot {
+  id: string
+  version: string | null
+  createdAt: string
+  sizeBytes: number
+  file: string
+}
+
 export interface NewFeaturesStatus {
   hasNewFeatures: boolean
   features: string[]
@@ -731,6 +750,26 @@ export const serverApi = {
 
   async cancelNativeUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
     const response = await api.post<{ success: boolean; message?: string; error?: string }>('/server/update-cancel')
+    return response.data
+  },
+
+  async getUpdateHistory(): Promise<{ history: UpdateHistoryEntry[] }> {
+    const response = await api.get<{ history: UpdateHistoryEntry[] }>('/server/update-history')
+    return response.data
+  },
+
+  async getJarSnapshots(): Promise<{ snapshots: JarSnapshot[] }> {
+    const response = await api.get<{ snapshots: JarSnapshot[] }>('/server/jar-snapshots')
+    return response.data
+  },
+
+  async createJarSnapshot(): Promise<{ success: boolean; snapshot?: JarSnapshot; error?: string }> {
+    const response = await api.post<{ success: boolean; snapshot?: JarSnapshot; error?: string }>('/server/jar-snapshot')
+    return response.data
+  },
+
+  async rollbackJar(snapshotId: string): Promise<{ success: boolean; message?: string; restoredVersion?: string | null; error?: string }> {
+    const response = await api.post<{ success: boolean; message?: string; restoredVersion?: string | null; error?: string }>('/server/rollback', { snapshotId })
     return response.data
   },
 
