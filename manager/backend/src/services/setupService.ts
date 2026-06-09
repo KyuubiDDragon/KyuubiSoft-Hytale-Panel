@@ -10,6 +10,7 @@ import { runSystemChecks as runSystemChecksFromService, type SystemCheck, type S
 import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
 import { saveConfig as saveSchedulerConfig } from './scheduler.js';
 import { installMod, ensureEasyWebMapConfig } from './modStore.js';
+import { escapeShellArg } from '../utils/sanitize.js';
 
 // Re-export system check types and function
 export type { SystemCheck, SystemCheckResult };
@@ -369,7 +370,7 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         };
         break;
 
-      case 'automation':
+      case 'automation': {
         // Frontend sends nested objects: { backups: {...}, restart: {...} }
         const backupsData = data.backups as Record<string, unknown> | undefined;
         const restartData = data.restart as Record<string, unknown> | undefined;
@@ -386,6 +387,7 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
           },
         };
         break;
+      }
 
       case 'assets-extract':
         setupConfig.assets = {
@@ -895,14 +897,16 @@ export async function startAssetsExtraction(): Promise<{ success: boolean; error
     // Ensure extract directory exists
     await mkdir(extractPath, { recursive: true }).catch(() => {});
 
-    // Run unzip via docker exec (in the game container which has the tools)
+    // Run unzip via docker exec (in the game container which has the tools).
+    // Paths are escaped even though they are config-derived: keeps the shell
+    // command injection-proof if these ever become operator-influenced.
     dockerService.execInContainer(
-      `unzip -o "${assetsZipPath}" -d "${extractPath}" 2>&1`
+      `unzip -o ${escapeShellArg(assetsZipPath)} -d ${escapeShellArg(extractPath)} 2>&1`
     ).then(async (result) => {
       if (result.success) {
         // Get directory size
         const sizeResult = await dockerService.execInContainer(
-          `du -sb "${extractPath}" | cut -f1`
+          `du -sb ${escapeShellArg(extractPath)} | cut -f1`
         );
         const sizeBytes = sizeResult.success && sizeResult.output
           ? parseInt(sizeResult.output.trim(), 10)

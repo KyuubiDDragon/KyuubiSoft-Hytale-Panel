@@ -7,6 +7,7 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import * as dockerService from '../../services/docker.js';
 import { config } from '../../config.js';
+import { escapeShellArg } from '../../utils/sanitize.js';
 import {
   isDemoMode,
   getDemoQuickSettings,
@@ -147,9 +148,10 @@ router.put('/patchline', authMiddleware, requirePermission('config.edit'), async
       const assetsZip = path.join(config.serverPath, 'Assets.zip');
       const versionFile = path.join(config.serverPath, '.hytale-version');
 
-      // Delete via container exec to ensure proper permissions
+      // Delete via container exec to ensure proper permissions. Paths are
+      // config-derived, but shell-escaped so the command stays injection-proof.
       await dockerService.execInContainer(
-        `rm -f "${serverJar}" "${assetsZip}" "${versionFile}" 2>/dev/null || true`
+        `rm -f ${escapeShellArg(serverJar)} ${escapeShellArg(assetsZip)} ${escapeShellArg(versionFile)} 2>/dev/null || true`
       );
 
       res.json({
