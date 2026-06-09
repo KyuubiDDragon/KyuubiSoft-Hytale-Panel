@@ -450,6 +450,28 @@ export interface PerfHistory {
   samples: PerfSample[]
 }
 
+export interface StorageCategory {
+  name: string
+  path: string
+  bytes: number
+  exists: boolean
+}
+
+export interface FilesystemUsage {
+  path: string
+  totalBytes: number
+  freeBytes: number
+  usedBytes: number
+  usedPercent: number
+}
+
+export interface StorageBreakdown {
+  filesystem: FilesystemUsage | null
+  categories: StorageCategory[]
+  trackedBytes: number
+  generatedAt: string
+}
+
 export interface JvmSettings {
   javaMinRam: string
   javaMaxRam: string
@@ -483,6 +505,11 @@ export const serverApi = {
 
   async getPerfHistory(): Promise<PerfHistory> {
     const response = await api.get<PerfHistory>('/server/perf-history')
+    return response.data
+  },
+
+  async getStorage(): Promise<StorageBreakdown> {
+    const response = await api.get<StorageBreakdown>('/server/storage')
     return response.data
   },
 

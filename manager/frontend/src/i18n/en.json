@@ -883,6 +883,17 @@
   },
   "performance": {
     "title": "Performance Monitor",
+    "storage": "Storage",
+    "free": "free",
+    "lowDiskWarning": "Low disk space — free up backups or worlds to avoid the server failing to start.",
+    "storageCategories": {
+      "worlds": "Worlds",
+      "backups": "Backups",
+      "server": "Server",
+      "assets": "Assets",
+      "mods": "Mods",
+      "plugins": "Plugins"
+    },
     "history": {
       "title": "Performance History",
       "window": "Last {min} min",

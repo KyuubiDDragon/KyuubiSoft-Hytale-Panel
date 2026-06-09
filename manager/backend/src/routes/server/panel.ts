@@ -8,6 +8,8 @@ import { config } from '../../config.js';
 import { dismissNewFeaturesBanner } from '../../services/migration.js';
 import { checkPanelUpdate, getCurrentVersion } from '../../services/panelVersionService.js';
 import { isDemoMode, getDemoNewFeatures } from '../../services/demoData.js';
+import { getStorageBreakdown } from '../../services/storage.js';
+import type { AuthenticatedRequest } from '../../types/index.js';
 
 const router = Router();
 
@@ -112,6 +114,20 @@ router.get('/panel-version', authMiddleware, requirePermission('dashboard.view')
     res.status(500).json({
       error: 'Failed to check panel version',
       message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/server/storage - disk usage + per-category size breakdown.
+// Scoped: respects req.serverId when mounted under /api/servers/:id/server.
+router.get('/storage', authMiddleware, requirePermission('performance.view'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const breakdown = await getStorageBreakdown(req.serverId);
+    res.json(breakdown);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to read storage usage',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });

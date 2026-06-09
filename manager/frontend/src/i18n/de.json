@@ -883,6 +883,17 @@
   },
   "performance": {
     "title": "Performance Monitor",
+    "storage": "Speicher",
+    "free": "frei",
+    "lowDiskWarning": "Wenig Speicherplatz — Backups oder Welten freigeben, damit der Server weiter startet.",
+    "storageCategories": {
+      "worlds": "Welten",
+      "backups": "Backups",
+      "server": "Server",
+      "assets": "Assets",
+      "mods": "Mods",
+      "plugins": "Plugins"
+    },
     "history": {
       "title": "Performance-Verlauf",
       "window": "Letzte {min} Min",

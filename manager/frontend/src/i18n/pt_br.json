@@ -846,6 +846,17 @@
   },
   "performance": {
     "title": "Monitor de Desempenho",
+    "storage": "Armazenamento",
+    "free": "livre",
+    "lowDiskWarning": "Pouco espaço em disco — libere backups ou mundos para evitar que o servidor não inicie.",
+    "storageCategories": {
+      "worlds": "Mundos",
+      "backups": "Backups",
+      "server": "Servidor",
+      "assets": "Assets",
+      "mods": "Mods",
+      "plugins": "Plugins"
+    },
     "history": {
       "title": "Histórico de Desempenho",
       "window": "Últimos {min} min",
