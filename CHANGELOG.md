@@ -90,13 +90,34 @@ All notable changes to the Hytale Server Manager will be documented in this file
 
 ### Added
 
-- **Admin-recovery CLI** (`node dist/cli.js` inside the manager container):
-  `auth-status` (setup state, credential source, user list), `list-users`,
-  `reset-password <user> [pw] [--force]` (generates a strong password when
-  omitted; invalidates the account's sessions), `create-admin <user> [pw]` and
-  `disable-2fa <user>` for lost authenticators. Works with `docker exec` even
-  while the panel is down; preserves `users.json` ownership/mode when run as
-  root. Documented in README and `.env.example`.
+- **Password reset / admin recovery from Docker** — you can now reset a panel
+  password (or recover a locked-out account) directly via the container, no
+  database surgery required:
+
+  ```bash
+  # Reset a password (prints a freshly generated secure password)
+  docker exec -it hytale-manager node dist/cli.js reset-password admin
+  # …or set your own
+  docker exec -it hytale-manager node dist/cli.js reset-password admin 'My-New-Pass123'
+  ```
+
+  The full **admin-recovery CLI** (`node dist/cli.js` inside the manager
+  container) also provides: `auth-status` (setup state, which credential
+  source is active, user list), `list-users`, `create-admin <user> [pw]`, and
+  `disable-2fa <user>` for a lost authenticator. A reset invalidates the
+  account's existing sessions and applies immediately (no restart). It works
+  with `docker exec` even while the panel is down and preserves `users.json`
+  ownership/mode when run as root. With a custom `STACK_NAME` the container is
+  named e.g. `hytale-prod-manager`; Docker Compose works too
+  (`docker compose exec manager node dist/cli.js …`). Documented in README and
+  `.env.example`.
+
+- **Clearer credential model** — `MANAGER_USERNAME`/`MANAGER_PASSWORD` from the
+  environment are only used **once**, to create the admin account on first
+  start. After that the password lives in `users.json` and is changed via the
+  panel or the `reset-password` CLI above — editing `MANAGER_PASSWORD` in
+  `.env` has no effect on an existing install (this previously caused "my
+  configured password doesn't work" confusion).
 
 ## [3.0.0] - 2026-06-01 - New operator features, reliability hardening & DR
 
