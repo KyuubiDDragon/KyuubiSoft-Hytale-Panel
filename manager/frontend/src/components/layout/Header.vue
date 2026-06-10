@@ -48,12 +48,13 @@ const currentPageTitle = computed(() => {
 })
 
 async function logout() {
-  // Clear the server-side refresh cookie too, not just localStorage —
-  // otherwise the kp_refresh cookie lingers for 7 days and could silently
-  // revive the session. Best-effort: never block the local logout on it.
-  try { await authApi.logout() } catch { /* ignore network/auth errors */ }
-  authStore.logout()
   showUserMenu.value = false
+  // Best-effort server-side refresh-cookie clear — fire-and-forget so the UI
+  // logs out and navigates INSTANTLY even if the request is slow/unreachable.
+  // Without this the kp_refresh cookie would linger for 7 days and could
+  // silently revive the session.
+  authApi.logout().catch(() => { /* ignore network/auth errors */ })
+  authStore.logout()
   router.push('/login')
 }
 
@@ -151,6 +152,12 @@ onMounted(() => {
 
       <!-- User Menu -->
       <div class="relative">
+        <!-- Click-outside backdrop. MUST live inside the header so it shares the
+             header's (sticky, z-20) stacking context and stays BELOW the z-50
+             dropdown. A root-level overlay (its old position after </header>)
+             rendered ABOVE the whole z-20 header, covering the menu and
+             swallowing clicks on its items — so logout/settings did nothing. -->
+        <div v-if="showUserMenu" class="fixed inset-0 z-40" @click="showUserMenu = false" />
         <button
           @click="showUserMenu = !showUserMenu"
           class="h-10 px-2 sm:px-3 inline-flex items-center gap-2 text-sm text-ink-muted hover:text-ink hover:bg-surface-muted transition-colors rounded-lg"
@@ -226,7 +233,4 @@ onMounted(() => {
       </div>
     </div>
   </header>
-
-  <!-- Click outside to close menu -->
-  <div v-if="showUserMenu" class="fixed inset-0 z-40" @click="showUserMenu = false" />
 </template>
