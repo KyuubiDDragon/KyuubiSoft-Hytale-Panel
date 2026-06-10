@@ -62,6 +62,17 @@ All notable changes to the Hytale Server Manager will be documented in this file
 
 ### Fixed
 
+- **Admin shown as a permission-less "viewer" after F5 (root cause)**: in
+  production, `getUserPermissions()` resolved an admin purely through
+  `roles.json` — so if that file no longer contained a cleanly-resolvable
+  `admin`/`Administrator` role (edited via the Roles UI, a migration, or a bad
+  merge) a real admin fell through to an empty permission set and the UI
+  rendered them as a viewer with nothing available; the identity re-sync then
+  persisted that empty set across reloads. The built-in `admin` role now always
+  resolves to full access (`['*']`), mirroring the demo-mode shortcut, and
+  `/api/auth/me` returns `['*']` for the env-bootstrap admin instead of an empty
+  list. The client also never downgrades to an empty permission set from a
+  questionable `/me` response. Regression-tested.
 - **Stuck as a "viewer" / had to delete cookies to log in**: role and permissions
   were cached at login and never refreshed, while the cookie-based silent token
   refresh kept the session alive for the cookie's 7-day life. After a role change

@@ -380,6 +380,16 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
     return [];
   }
 
+  // SAFETY NET: the built-in system admin always has full access, regardless of
+  // the state of roles.json. Without this, a real admin whose 'admin' role no
+  // longer resolves cleanly from roles.json (edited/renamed via the Roles UI, a
+  // migration, or a bad merge) would fall through to `return []` below and be
+  // presented as a permission-less "viewer" — the exact "stuck as Betrachter
+  // after F5" symptom. Mirrors the demo-mode shortcut above.
+  if (roleId === 'admin') {
+    return ['*'];
+  }
+
   // First try to find role by ID (UUID)
   let role = await getRole(roleId);
 

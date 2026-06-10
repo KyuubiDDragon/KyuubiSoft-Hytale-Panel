@@ -434,7 +434,11 @@ router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Respons
   const user = await getUser(username);
   const permissions = await getUserPermissions(username);
   if (!user) {
-    res.json({ username, role: 'admin', permissions });
+    // Validly-signed token for a username with no users.json record (the
+    // env-bootstrap admin before the file is written). It claims the admin
+    // role, so return admin permissions to match — otherwise the client would
+    // render a full admin as a permission-less "viewer".
+    res.json({ username, role: 'admin', permissions: ['*'] });
     return;
   }
   res.json({ username, role: user.roleId, permissions });
