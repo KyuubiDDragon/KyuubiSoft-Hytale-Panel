@@ -4,6 +4,7 @@ import { onKeyStroke } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { authApi } from '@/api/auth'
 import { setLocale, getLocale } from '@/i18n'
 import { modStoreApi } from '@/api/management'
 import { useTheme } from '@/composables/useTheme'
@@ -46,7 +47,11 @@ const currentPageTitle = computed(() => {
   return translated !== key ? translated : name.charAt(0).toUpperCase() + name.slice(1)
 })
 
-function logout() {
+async function logout() {
+  // Clear the server-side refresh cookie too, not just localStorage —
+  // otherwise the kp_refresh cookie lingers for 7 days and could silently
+  // revive the session. Best-effort: never block the local logout on it.
+  try { await authApi.logout() } catch { /* ignore network/auth errors */ }
   authStore.logout()
   showUserMenu.value = false
   router.push('/login')

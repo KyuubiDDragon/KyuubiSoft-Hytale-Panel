@@ -361,11 +361,21 @@ router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/logout
-// SECURITY: Invalidate tokens on logout to prevent token reuse
-router.post('/logout', authMiddleware, async (req: Request, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  if (authReq.user) {
-    await invalidateUserTokens(authReq.user);
+// Clears the refresh cookie ALWAYS — even when the access token is already
+// dead — so a client can never get stuck "authenticated" with a lingering
+// kp_refresh cookie that silently revives the session (the root of the
+// "had to delete cookies to log in" reports). Not behind authMiddleware for
+// that reason; when a valid token IS present we also bump the user's
+// tokenVersion to invalidate any other outstanding sessions.
+router.post('/logout', async (req: Request, res: Response) => {
+  // Best-effort: if a valid bearer token is present, invalidate that user's
+  // tokens server-side too. A missing/expired token is fine — we still clear.
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const result = verifyToken(authHeader.substring(7), 'access');
+    if (result && !isDemoMode()) {
+      try { await invalidateUserTokens(result.username); } catch { /* ignore */ }
+    }
   }
   clearRefreshCookie(res, req);
   res.json({ message: 'Logged out successfully' });
