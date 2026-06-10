@@ -97,15 +97,6 @@ function isSessionDeadError(error: unknown): boolean {
 
 export function forceLogout(message?: string): void {
   const authStore = useAuthStore()
-  // Actively clear the HttpOnly refresh cookie too. Without this the dead
-  // session's kp_refresh cookie would linger and could silently revive the
-  // session on the next refresh — the reason users had to delete cookies by
-  // hand. Fire-and-forget via fetch (not the axios client, to avoid the
-  // interceptor looping on its own 401). The endpoint clears the cookie even
-  // without a valid token.
-  if (typeof fetch !== 'undefined') {
-    void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
-  }
   authStore.logout(message ?? 'Your session has expired. Please log in again.')
   if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
     window.location.href = '/login'

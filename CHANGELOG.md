@@ -62,17 +62,6 @@ All notable changes to the Hytale Server Manager will be documented in this file
 
 ### Fixed
 
-- **Stuck as a "viewer" / had to delete cookies to log in**: role and permissions
-  were cached at login and never refreshed, while the cookie-based silent token
-  refresh kept the session alive for the cookie's 7-day life. After a role change
-  (or a degraded first login) the UI was pinned to outdated/empty permissions —
-  looking like a read-only viewer — and the navigation guard blocked reaching
-  `/login`, so deleting the `kp_refresh` cookie was the only escape. Now the app
-  **re-syncs identity from `/me` on every start and tab re-focus** (permissions
-  always match the server), the **logout button and forced logout clear the
-  server-side refresh cookie** (it no longer lingers to silently revive a dead
-  session), and `POST /api/auth/logout` clears the cookie even without a valid
-  token so a client can always escape a wedged session.
 - **"Logged in but session dead" after returning to an idle tab**: the UI rendered
   the cached login state from localStorage while the 15-minute access token behind
   it had long expired. A new session guard validates/refreshes the token on app
