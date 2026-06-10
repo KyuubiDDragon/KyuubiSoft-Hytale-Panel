@@ -70,7 +70,16 @@ export function useSessionGuard() {
     try {
       const me = await authApi.getMe()
       if (me?.username) {
-        authStore.setUser(me.username, me.role as UserRole | undefined, me.permissions)
+        // Never downgrade to an EMPTY permission set: a real account always has
+        // at least one permission (or '*'), so an empty array signals a
+        // transient/edge backend state — not a legitimate "no access" user.
+        // Passing undefined makes setUser keep the existing (good) permissions
+        // instead of persisting an empty set that would lock the UI into a
+        // permission-less "viewer" across reloads.
+        const perms = Array.isArray(me.permissions) && me.permissions.length > 0
+          ? me.permissions
+          : undefined
+        authStore.setUser(me.username, me.role as UserRole | undefined, perms)
       }
     } catch {
       /* interceptor handles auth failures; ignore transient errors */
