@@ -48,7 +48,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
     @Override
     protected void setup() {
         LOGGER.info("╔════════════════════════════════════════╗");
-        LOGGER.info("║       KyuubiSoft API v1.4.3            ║");
+        LOGGER.info("║       KyuubiSoft API v2.0.0            ║");
         LOGGER.info("║       by KyuubiDDragon                 ║");
         LOGGER.info("║       + Prometheus Metrics Support     ║");
         LOGGER.info("╚════════════════════════════════════════╝");
@@ -71,6 +71,7 @@ public class KyuubiSoftAPI extends JavaPlugin {
 
         // Start HTTP/WebSocket server
         int port = config.getHttpPort();
+        config.logSecurityPosture(port);
         webServer = new WebServer(port, eventBroadcaster);
         webServer.setApiConfig(config);
 

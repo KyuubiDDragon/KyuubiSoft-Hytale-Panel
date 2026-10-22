@@ -3,7 +3,6 @@ package com.kyuubisoft.api.web;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.kyuubisoft.api.KyuubiSoftAPI;
-import com.kyuubisoft.api.config.ApiConfig;
 import com.kyuubisoft.api.handlers.MetricsHandler;
 import com.kyuubisoft.api.handlers.PlayersHandler;
 import com.kyuubisoft.api.handlers.ServerHandler;
@@ -16,14 +15,14 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
 import io.netty.util.CharsetUtil;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Handles HTTP requests and routes them to appropriate handlers
+ * Handles HTTP requests and routes them to appropriate handlers.
+ * Authentication happens earlier in the pipeline ({@link AuthGate}); every
+ * request that reaches this handler is already authorized.
  */
 public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
@@ -55,50 +54,20 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     private final WorldsHandler worldsHandler = new WorldsHandler();
     private final ServerHandler serverHandler = new ServerHandler();
     private MetricsHandler metricsHandler;
-    private ApiConfig apiConfig;
-    // Keep-alive decision for the request currently being processed. The handler
-    // is per-connection and Netty delivers requests sequentially, so a single
-    // field is safe across keep-alive requests on the same channel.
+    private CorsPolicy corsPolicy;
+    // Keep-alive decision and Origin header of the request currently being
+    // processed. The handler is per-connection and Netty delivers requests
+    // sequentially, so single fields are safe across keep-alive requests on
+    // the same channel.
     private boolean keepAlive = false;
+    private String requestOrigin = null;
 
     public void setMetricsHandler(MetricsHandler metricsHandler) {
         this.metricsHandler = metricsHandler;
     }
 
-    public void setApiConfig(ApiConfig apiConfig) {
-        this.apiConfig = apiConfig;
-    }
-
-    /** Configured CORS origin, or "*" when CORS is enabled without an explicit origin. */
-    private String corsOrigin() {
-        if (apiConfig == null) return "*";
-        if (!apiConfig.isCorsEnabled()) return null; // CORS disabled → omit header
-        String origin = apiConfig.getCorsOrigin();
-        return (origin == null || origin.isBlank()) ? "*" : origin;
-    }
-
-    /**
-     * Enforce bearer-token auth when enabled in config. Returns true if the
-     * request is allowed to proceed. OPTIONS preflight is always allowed so the
-     * browser can negotiate CORS before sending credentials.
-     *
-     * <p>NOTE: auth is OFF by default. Enabling it requires API clients
-     * (incl. the panel) to send {@code Authorization: Bearer <authToken>}.</p>
-     */
-    private boolean isAuthorized(FullHttpRequest request) {
-        if (apiConfig == null || !apiConfig.isAuthEnabled()) return true;
-        if (request.method() == HttpMethod.OPTIONS) return true;
-
-        String expected = apiConfig.getAuthToken();
-        if (expected == null || expected.isBlank()) return true; // misconfigured → don't lock out
-
-        String header = request.headers().get(HttpHeaderNames.AUTHORIZATION);
-        if (header == null) return false;
-        String provided = header.startsWith("Bearer ") ? header.substring(7).trim() : header.trim();
-
-        return MessageDigest.isEqual(
-                provided.getBytes(StandardCharsets.UTF_8),
-                expected.getBytes(StandardCharsets.UTF_8));
+    public void setCorsPolicy(CorsPolicy corsPolicy) {
+        this.corsPolicy = corsPolicy;
     }
 
     @Override
@@ -112,12 +81,7 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         // Honor HTTP keep-alive so the panel can reuse connections instead of
         // a TCP handshake per poll. All responses set Content-Length already.
         this.keepAlive = HttpUtil.isKeepAlive(request);
-
-        // Optional bearer-token auth (no-op unless enabled in config).
-        if (!isAuthorized(request)) {
-            sendError(ctx, HttpResponseStatus.UNAUTHORIZED, "Unauthorized");
-            return;
-        }
+        this.requestOrigin = request.headers().get(HttpHeaderNames.ORIGIN);
 
         String uri = request.uri();
         Object response = null;
@@ -312,13 +276,10 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         writeResponse(ctx, response);
     }
 
-    /** Apply CORS headers using the configured origin (omitted if CORS disabled). */
+    /** Apply CORS headers when the request comes from an allow-listed origin (CORS is off by default). */
     private void applyCors(HttpHeaders headers) {
-        String origin = corsOrigin();
-        if (origin == null) return;
-        headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-        headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS");
-        headers.set(HttpHeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization");
+        if (corsPolicy == null) return;
+        corsPolicy.apply(headers, requestOrigin);
     }
 
     /**

@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.kyuubisoft'
-version = '1.4.3'
+version = '2.0.0'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -20,8 +20,9 @@ tasks.withType(JavaCompile).configureEach {
 
 dependencies {
     // Hytale Server API (includes Netty, Gson, fastutil, JOML, etc.)
-    // Copy the running server's HytaleServer.jar here before building.
-    compileOnly files('lib/HytaleServer.jar')
+    // Copy the running server's HytaleServer.jar here before building, or
+    // point at it with -PhytaleServerJar=/path/to/HytaleServer.jar.
+    compileOnly files(findProperty('hytaleServerJar') ?: 'lib/HytaleServer.jar')
 }
 
 jar {

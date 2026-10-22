@@ -39,12 +39,19 @@ public class WebServer {
         this.metricsHandler = metricsHandler;
     }
 
-    /** Optional API config used for auth + CORS on each request handler. */
+    /** API config providing the auth token and the CORS allowlist. Required. */
     public void setApiConfig(ApiConfig apiConfig) {
         this.apiConfig = apiConfig;
     }
 
     public void start() throws InterruptedException {
+        if (apiConfig == null) {
+            // Without its config the API cannot authenticate anyone: stay closed.
+            throw new IllegalStateException("ApiConfig missing, refusing to start the API server");
+        }
+        final CorsPolicy corsPolicy = new CorsPolicy(apiConfig.getCorsAllowedOrigins());
+        final AuthGate authGate = new AuthGate(apiConfig, corsPolicy);
+
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
@@ -61,6 +68,10 @@ public class WebServer {
                         pipeline.addLast(new HttpObjectAggregator(65536));
                         pipeline.addLast(new ChunkedWriteHandler());
 
+                        // Auth before the WebSocket handshake: an upgrade without
+                        // a valid token gets 401 instead of 101.
+                        pipeline.addLast(authGate);
+
                         // WebSocket support
                         pipeline.addLast(new WebSocketServerProtocolHandler("/ws", null, true));
 
@@ -69,9 +80,7 @@ public class WebServer {
                         if (metricsHandler != null) {
                             httpHandler.setMetricsHandler(metricsHandler);
                         }
-                        if (apiConfig != null) {
-                            httpHandler.setApiConfig(apiConfig);
-                        }
+                        httpHandler.setCorsPolicy(corsPolicy);
                         pipeline.addLast(httpHandler);
                         pipeline.addLast(new WebSocketFrameHandler(eventBroadcaster));
                     }
