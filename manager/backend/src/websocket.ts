@@ -55,10 +55,12 @@ async function sendExistingLogs(ws: WebSocket, serverId: string): Promise<void> 
 
       const parsed = parseLogLine(trimmed);
       if (parsed && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'log',
-          ...parsed,
-        }));
+        ws.send(
+          JSON.stringify({
+            type: 'log',
+            ...parsed,
+          }),
+        );
       }
     }
   } catch (error) {
@@ -83,8 +85,11 @@ export async function resolveSocketServerId(reqUrl: string): Promise<string | nu
     return id;
   }
   if (reqUrl.startsWith('/api/console/ws')) {
-    try { return await getDefaultId(); }
-    catch { return 'default'; }
+    try {
+      return await getDefaultId();
+    } catch {
+      return 'default';
+    }
   }
   return null;
 }
@@ -122,7 +127,9 @@ export function setupWebSocket(wss: WebSocketServer): void {
       }
       username = ticketResult.username;
     } else if (token) {
-      console.warn('WebSocket: Client using deprecated token auth. Should use /api/auth/ws-ticket instead.');
+      console.warn(
+        'WebSocket: Client using deprecated token auth. Should use /api/auth/ws-ticket instead.',
+      );
       const tokenResult = verifyToken(token, 'access');
       if (!tokenResult) {
         ws.close(4001, 'Invalid token');
@@ -134,7 +141,11 @@ export function setupWebSocket(wss: WebSocketServer): void {
       return;
     }
 
-    const canViewLogs = await hasPermission(username, 'console.view', isScoped ? serverId : undefined);
+    const canViewLogs = await hasPermission(
+      username,
+      'console.view',
+      isScoped ? serverId : undefined,
+    );
     if (!canViewLogs) {
       ws.close(4003, 'Permission denied: console.view required');
       return;
@@ -162,28 +173,33 @@ export function setupWebSocket(wss: WebSocketServer): void {
             if (message.payload) {
               const wsUsername = clientUsernames.get(ws);
               const wsServerId = clientServerId.get(ws);
-              const requiredPerm = getCommandRequiredPermission(message.payload) ?? 'console.execute';
+              const requiredPerm =
+                getCommandRequiredPermission(message.payload) ?? 'console.execute';
               // Authorize against the SAME server the command will run on, so a
               // per-server operator role is honoured (global scope alone would
               // wrongly reject it).
               if (!wsUsername || !(await hasPermission(wsUsername, requiredPerm, wsServerId))) {
-                ws.send(JSON.stringify({
-                  type: 'command_response',
-                  command: message.payload,
-                  success: false,
-                  error: `Permission denied: ${requiredPerm} required`,
-                }));
+                ws.send(
+                  JSON.stringify({
+                    type: 'command_response',
+                    command: message.payload,
+                    success: false,
+                    error: `Permission denied: ${requiredPerm} required`,
+                  }),
+                );
                 break;
               }
 
               const result = await execCommand(message.payload, wsServerId);
-              ws.send(JSON.stringify({
-                type: 'command_response',
-                command: message.payload,
-                success: result.success,
-                output: result.message,
-                error: result.error,
-              }));
+              ws.send(
+                JSON.stringify({
+                  type: 'command_response',
+                  command: message.payload,
+                  success: result.success,
+                  output: result.message,
+                  error: result.error,
+                }),
+              );
             }
             break;
 
@@ -272,30 +288,33 @@ function startDemoLogStreaming(serverId: string): void {
 
   console.log(`[DEMO] Demo log streaming started for ${serverId}`);
 
-  state.demoInterval = setInterval(() => {
-    const set = clientsByServer.get(serverId);
-    if (!set || set.size === 0) {
-      stopDemoLogStreaming(serverId);
-      return;
-    }
-
-    const logLine = getNextDemoLogLine();
-    const parsed = parseLogLine(logLine);
-
-    if (parsed) {
-      broadcast(serverId, { type: 'log', ...parsed });
-
-      const playerEvent = processLogLine(logLine);
-      if (playerEvent) {
-        broadcast(serverId, {
-          type: 'player_event',
-          event: playerEvent.event,
-          player: playerEvent.player,
-          timestamp: new Date().toISOString(),
-        });
+  state.demoInterval = setInterval(
+    () => {
+      const set = clientsByServer.get(serverId);
+      if (!set || set.size === 0) {
+        stopDemoLogStreaming(serverId);
+        return;
       }
-    }
-  }, 3000 + Math.random() * 5000);
+
+      const logLine = getNextDemoLogLine();
+      const parsed = parseLogLine(logLine);
+
+      if (parsed) {
+        broadcast(serverId, { type: 'log', ...parsed });
+
+        const playerEvent = processLogLine(logLine);
+        if (playerEvent) {
+          broadcast(serverId, {
+            type: 'player_event',
+            event: playerEvent.event,
+            player: playerEvent.player,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+    },
+    3000 + Math.random() * 5000,
+  );
 }
 
 function stopDemoLogStreaming(serverId: string): void {
@@ -389,7 +408,6 @@ async function startLogStreaming(serverId: string): Promise<void> {
       console.log(`Log stream closed (${serverId})`);
       scheduleStreamRestart(serverId);
     });
-
   } catch (error) {
     console.error(`Failed to start log streaming (${serverId}):`, error);
     broadcast(serverId, { type: 'error', message: 'Failed to connect to container logs' });
