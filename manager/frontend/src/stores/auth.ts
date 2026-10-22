@@ -51,7 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function hasAnyPermission(...perms: string[]): boolean {
-    return perms.some(p => hasPermission(p))
+    return perms.some((p) => hasPermission(p))
   }
 
   // Permission-based computed properties
@@ -59,7 +59,9 @@ export const useAuthStore = defineStore('auth', () => {
   const canRestartServer = computed(() => hasPermission('server.restart'))
   const canViewConsole = computed(() => hasPermission('console.view'))
   const canViewPerformance = computed(() => hasPermission('performance.view'))
-  const canManagePlayers = computed(() => hasAnyPermission('players.view', 'players.kick', 'players.ban'))
+  const canManagePlayers = computed(() =>
+    hasAnyPermission('players.view', 'players.kick', 'players.ban'),
+  )
   const canManageBackups = computed(() => hasPermission('backups.view'))
   const canManageConfig = computed(() => hasPermission('config.view'))
 
@@ -110,7 +112,11 @@ export const useAuthStore = defineStore('auth', () => {
   async function completeSsoLogin() {
     const tokens = await authApi.refresh('') // empty body → server reads the cookie
     setTokens(tokens.access_token, tokens.refresh_token || '')
-    const me = await authApi.getMe() as { username: string; role?: UserRole; permissions?: string[] }
+    const me = (await authApi.getMe()) as {
+      username: string
+      role?: UserRole
+      permissions?: string[]
+    }
     setUser(me.username, me.role, me.permissions || [])
     return me
   }

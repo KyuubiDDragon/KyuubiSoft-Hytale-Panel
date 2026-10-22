@@ -48,7 +48,9 @@ export function startPerfHistory(): void {
     if (typeof p.tps === 'number') latestTps = round1(p.tps);
     if (typeof p.mspt === 'number') latestMspt = round1(p.mspt);
   });
-  timer = setInterval(() => { sample().catch(() => {}); }, SAMPLE_INTERVAL_MS);
+  timer = setInterval(() => {
+    sample().catch(() => {});
+  }, SAMPLE_INTERVAL_MS);
   timer.unref?.();
   console.log('[perf] history sampling started');
 }

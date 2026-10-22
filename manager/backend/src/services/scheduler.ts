@@ -990,7 +990,9 @@ export type ScheduledCommandView = ScheduledCommand & { blockedReason: StoredCom
  */
 export async function getConfigView(
   serverId?: string,
-): Promise<Omit<ScheduleConfig, 'scheduledCommands'> & { scheduledCommands: ScheduledCommandView[] }> {
+): Promise<
+  Omit<ScheduleConfig, 'scheduledCommands'> & { scheduledCommands: ScheduledCommandView[] }
+> {
   const cfg = getConfig(serverId);
   const id = await resolveServerId(serverId);
   const scheduledCommands = await Promise.all(

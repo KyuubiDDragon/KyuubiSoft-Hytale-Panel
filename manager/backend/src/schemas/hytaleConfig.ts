@@ -14,19 +14,24 @@ import { z } from 'zod';
 
 export const HytaleGameModeSchema = z.enum(['Exploration', 'Creative', 'Adventure']);
 
-export const HytaleConfigSchema = z.object({
-  ServerName: z.string().min(1).max(64).optional(),
-  MOTD: z.string().max(256).optional(),
-  Password: z.string().max(128).optional(),
-  MaxPlayers: z.number().int().min(1).max(2000).optional(),
-  MaxViewRadius: z.number().int().min(4).max(64).optional(),
-  Defaults: z.object({
-    GameMode: HytaleGameModeSchema.optional(),
-  }).passthrough().optional(),
-  // Hytale lists the server in the public browser when Listed === true.
-  // Shipped with Update 5 (2026-05-28); older builds ignore the field.
-  Listed: z.boolean().optional(),
-}).passthrough();
+export const HytaleConfigSchema = z
+  .object({
+    ServerName: z.string().min(1).max(64).optional(),
+    MOTD: z.string().max(256).optional(),
+    Password: z.string().max(128).optional(),
+    MaxPlayers: z.number().int().min(1).max(2000).optional(),
+    MaxViewRadius: z.number().int().min(4).max(64).optional(),
+    Defaults: z
+      .object({
+        GameMode: HytaleGameModeSchema.optional(),
+      })
+      .passthrough()
+      .optional(),
+    // Hytale lists the server in the public browser when Listed === true.
+    // Shipped with Update 5 (2026-05-28); older builds ignore the field.
+    Listed: z.boolean().optional(),
+  })
+  .passthrough();
 
 export type HytaleConfig = z.infer<typeof HytaleConfigSchema>;
 
@@ -43,7 +48,7 @@ export function parseHytaleConfig(raw: unknown): HytaleConfigParseResult {
   }
   return {
     ok: false,
-    config: (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {},
-    issues: result.error.issues.map(i => `${i.path.join('.') || '<root>'}: ${i.message}`),
+    config: raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {},
+    issues: result.error.issues.map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`),
   };
 }

@@ -27,7 +27,7 @@ export const PERMISSIONS = {
 
   // API keys (per-user; admins can list across users)
   'apikeys.manage': 'Create / revoke own API keys',
-  'apikeys.manage.all': 'Manage all users\' API keys',
+  'apikeys.manage.all': "Manage all users' API keys",
 
   // Webhooks
   'webhooks.view': 'View webhooks',
@@ -314,10 +314,7 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
 ];
 
 // Helper to check if a role has a specific permission
-export const hasPermission = (
-  role: Role,
-  permission: Permission
-): boolean => {
+export const hasPermission = (role: Role, permission: Permission): boolean => {
   if (role.permissions.includes('*')) {
     return true;
   }
@@ -325,10 +322,7 @@ export const hasPermission = (
 };
 
 // Helper to check if a role has any of the specified permissions
-export const hasAnyPermission = (
-  role: Role,
-  permissions: Permission[]
-): boolean => {
+export const hasAnyPermission = (role: Role, permissions: Permission[]): boolean => {
   if (role.permissions.includes('*')) {
     return true;
   }
@@ -336,10 +330,7 @@ export const hasAnyPermission = (
 };
 
 // Helper to check if a role has all of the specified permissions
-export const hasAllPermissions = (
-  role: Role,
-  permissions: Permission[]
-): boolean => {
+export const hasAllPermissions = (role: Role, permissions: Permission[]): boolean => {
   if (role.permissions.includes('*')) {
     return true;
   }

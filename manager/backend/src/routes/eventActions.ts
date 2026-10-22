@@ -48,7 +48,11 @@ router.get(
   requirePermission('scheduler.view'),
   asyncRoute(async (_req: Request, res: Response) => {
     // Command rules come with a derived blockedReason (see approve below).
-    res.json({ rules: await listEventActionViews(), events: availableEvents(), actionTypes: ACTION_TYPES });
+    res.json({
+      rules: await listEventActionViews(),
+      events: availableEvents(),
+      actionTypes: ACTION_TYPES,
+    });
   }),
 );
 

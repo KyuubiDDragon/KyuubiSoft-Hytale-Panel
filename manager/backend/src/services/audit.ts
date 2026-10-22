@@ -29,7 +29,8 @@ export function audit(req: Request | null, action: string, opts: AuditOptions = 
   try {
     const authReq = req as AuthenticatedRequest | null;
     const actor = opts.actor ?? authReq?.user ?? 'anonymous';
-    const ip = opts.ip ?? (req?.ip || (req?.headers['x-forwarded-for'] as string | undefined) || null);
+    const ip =
+      opts.ip ?? (req?.ip || (req?.headers['x-forwarded-for'] as string | undefined) || null);
     const userAgent = opts.userAgent ?? (req?.headers['user-agent'] as string | undefined) ?? null;
     const stmt = getDb().prepare(`
       INSERT INTO audit_events
@@ -104,22 +105,42 @@ function rowToEvent(row: AuditRow): AuditEvent {
   };
 }
 
-export function listAuditEvents(filter: AuditFilter): { events: AuditEvent[]; nextCursor: number | null } {
+export function listAuditEvents(filter: AuditFilter): {
+  events: AuditEvent[];
+  nextCursor: number | null;
+} {
   const limit = Math.min(Math.max(filter.limit ?? 50, 1), 500);
   const where: string[] = [];
   const params: Array<string | number> = [];
-  if (filter.actor) { where.push('actor_username = ?'); params.push(filter.actor); }
-  if (filter.action) { where.push('action LIKE ?'); params.push(`${filter.action}%`); }
-  if (filter.from) { where.push('ts >= ?'); params.push(filter.from); }
-  if (filter.to) { where.push('ts <= ?'); params.push(filter.to); }
-  if (filter.cursor) { where.push('id < ?'); params.push(filter.cursor); }
+  if (filter.actor) {
+    where.push('actor_username = ?');
+    params.push(filter.actor);
+  }
+  if (filter.action) {
+    where.push('action LIKE ?');
+    params.push(`${filter.action}%`);
+  }
+  if (filter.from) {
+    where.push('ts >= ?');
+    params.push(filter.from);
+  }
+  if (filter.to) {
+    where.push('ts <= ?');
+    params.push(filter.to);
+  }
+  if (filter.cursor) {
+    where.push('id < ?');
+    params.push(filter.cursor);
+  }
   const sql = `
     SELECT * FROM audit_events
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY id DESC LIMIT ?
   `;
   params.push(limit + 1);
-  const rows = getDb().prepare(sql).all(...params) as AuditRow[];
+  const rows = getDb()
+    .prepare(sql)
+    .all(...params) as AuditRow[];
   const overflow = rows.length > limit;
   const events = rows.slice(0, limit).map(rowToEvent);
   const nextCursor = overflow ? events[events.length - 1].id : null;
@@ -127,8 +148,11 @@ export function listAuditEvents(filter: AuditFilter): { events: AuditEvent[]; ne
 }
 
 export function listDistinctActions(): string[] {
-  return (getDb().prepare('SELECT DISTINCT action FROM audit_events ORDER BY action').all() as { action: string }[])
-    .map(r => r.action);
+  return (
+    getDb().prepare('SELECT DISTINCT action FROM audit_events ORDER BY action').all() as {
+      action: string;
+    }[]
+  ).map((r) => r.action);
 }
 
 export function pruneOldAuditEvents(retentionDays: number): number {

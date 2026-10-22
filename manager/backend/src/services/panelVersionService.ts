@@ -109,13 +109,13 @@ async function fetchLatestRelease(): Promise<{
 
     const response = await fetch(releaseUrl, {
       headers: {
-        'Accept': 'application/vnd.github.v3+json',
+        Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'KyuubiSoft-Hytale-Panel',
       },
     });
 
     if (response.ok) {
-      const release = await response.json() as GitHubRelease;
+      const release = (await response.json()) as GitHubRelease;
       return {
         version: release.tag_name?.replace(/^v/, '') || release.name || 'unknown',
         url: release.html_url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`,
@@ -129,13 +129,13 @@ async function fetchLatestRelease(): Promise<{
       const tagsUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/tags`;
       const tagsResponse = await fetch(tagsUrl, {
         headers: {
-          'Accept': 'application/vnd.github.v3+json',
+          Accept: 'application/vnd.github.v3+json',
           'User-Agent': 'KyuubiSoft-Hytale-Panel',
         },
       });
 
       if (tagsResponse.ok) {
-        const tags = await tagsResponse.json() as GitHubTag[];
+        const tags = (await tagsResponse.json()) as GitHubTag[];
         if (tags && tags.length > 0) {
           const latestTag = tags[0];
           return {
@@ -165,7 +165,7 @@ export async function checkPanelUpdate(forceRefresh = false): Promise<PanelVersi
   const now = Date.now();
 
   // Use cache if available and not expired
-  if (!forceRefresh && versionCache && (now - versionCache.checkedAt) < CACHE_DURATION_MS) {
+  if (!forceRefresh && versionCache && now - versionCache.checkedAt < CACHE_DURATION_MS) {
     const updateAvailable = compareVersions(versionCache.latestVersion, currentVersion) > 0;
     return {
       currentVersion,

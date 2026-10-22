@@ -22,16 +22,40 @@ const seed = {
   defaultId: 'default',
   servers: [
     {
-      id: 'default', name: 'Primary', containerName: 'hytale-primary', status: 'ready',
+      id: 'default',
+      name: 'Primary',
+      containerName: 'hytale-primary',
+      status: 'ready',
       network: { serverPort: 5520, webMapPort: 18081, webMapWsPort: 18082, pluginPort: 18085 },
-      paths: { server: '/tmp/s1', data: dataDir, backups: '/tmp/b1', mods: '/tmp/m1', plugins: '/tmp/p1', assets: '/tmp/a1', auth: '/tmp/au1' },
-      createdAt: new Date().toISOString(), createdBy: 'system',
+      paths: {
+        server: '/tmp/s1',
+        data: dataDir,
+        backups: '/tmp/b1',
+        mods: '/tmp/m1',
+        plugins: '/tmp/p1',
+        assets: '/tmp/a1',
+        auth: '/tmp/au1',
+      },
+      createdAt: new Date().toISOString(),
+      createdBy: 'system',
     },
     {
-      id: 'secondary', name: 'Secondary', containerName: 'hytale-secondary', status: 'ready',
+      id: 'secondary',
+      name: 'Secondary',
+      containerName: 'hytale-secondary',
+      status: 'ready',
       network: { serverPort: 5521, webMapPort: 18083, webMapWsPort: 18084, pluginPort: 18090 },
-      paths: { server: '/tmp/s2', data: secondDataDir, backups: '/tmp/b2', mods: '/tmp/m2', plugins: '/tmp/p2', assets: '/tmp/a2', auth: '/tmp/au2' },
-      createdAt: new Date().toISOString(), createdBy: 'system',
+      paths: {
+        server: '/tmp/s2',
+        data: secondDataDir,
+        backups: '/tmp/b2',
+        mods: '/tmp/m2',
+        plugins: '/tmp/p2',
+        assets: '/tmp/a2',
+        auth: '/tmp/au2',
+      },
+      createdAt: new Date().toISOString(),
+      createdBy: 'system',
     },
   ],
 };
@@ -66,10 +90,15 @@ describe('scheduler per-server config', () => {
 
   it('writes default-server config to legacy <dataPath>/manager-config.json', async () => {
     const { saveConfig } = await import('./scheduler.js');
-    saveConfig({ backups: { enabled: true, schedule: '04:30', retentionDays: 5, beforeRestart: false } }, 'default');
+    saveConfig(
+      { backups: { enabled: true, schedule: '04:30', retentionDays: 5, beforeRestart: false } },
+      'default',
+    );
     // Wait for the async persist to land.
-    await new Promise(resolve => setTimeout(resolve, 100));
-    const persisted = JSON.parse(fs.readFileSync(path.join(dataDir, 'manager-config.json'), 'utf-8'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(dataDir, 'manager-config.json'), 'utf-8'),
+    );
     expect(persisted.backups.schedule).toBe('04:30');
     expect(persisted.backups.enabled).toBe(true);
   });

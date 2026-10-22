@@ -92,9 +92,9 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
   res.on('finish', () => {
     const ns = Number(process.hrtime.bigint() - start);
     const route =
-      (req.route as { path?: string } | undefined)?.path
-      || (req.baseUrl + (req.path || ''))
-      || '<unknown>';
+      (req.route as { path?: string } | undefined)?.path ||
+      req.baseUrl + (req.path || '') ||
+      '<unknown>';
     const labels = { method: req.method, route, status: String(res.statusCode) };
     httpRequests.inc(labels);
     httpDuration.observe({ method: req.method, route }, ns / 1e9);

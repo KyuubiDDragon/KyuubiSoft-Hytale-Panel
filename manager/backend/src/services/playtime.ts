@@ -21,18 +21,26 @@ const nowIso = (): string => new Date().toISOString();
 function closeOpenFor(uuid: string): void {
   const db = getDb();
   const sess = db
-    .prepare('SELECT id, joined_at FROM play_sessions WHERE uuid = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1')
+    .prepare(
+      'SELECT id, joined_at FROM play_sessions WHERE uuid = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1',
+    )
     .get(uuid) as { id: number; joined_at: string } | undefined;
   if (!sess) return;
   const joined = Date.parse(sess.joined_at);
   const dur = Number.isFinite(joined) ? Math.max(0, Date.now() - joined) : 0;
-  db.prepare('UPDATE play_sessions SET left_at = ?, duration_ms = ? WHERE id = ?').run(nowIso(), dur, sess.id);
+  db.prepare('UPDATE play_sessions SET left_at = ?, duration_ms = ? WHERE id = ?').run(
+    nowIso(),
+    dur,
+    sess.id,
+  );
 }
 
 /** On startup, close any sessions orphaned by a panel/server restart. */
 function closeAllOpen(): void {
   const db = getDb();
-  const open = db.prepare('SELECT uuid FROM play_sessions WHERE left_at IS NULL').all() as Array<{ uuid: string }>;
+  const open = db.prepare('SELECT uuid FROM play_sessions WHERE left_at IS NULL').all() as Array<{
+    uuid: string;
+  }>;
   for (const o of open) closeOpenFor(o.uuid);
 }
 
@@ -41,7 +49,9 @@ function onJoin(p: JoinLeavePayload): void {
   if (!uuid) return;
   closeOpenFor(uuid); // defensive: never leave two sessions open for one player
   getDb()
-    .prepare('INSERT INTO play_sessions (server_id, uuid, player_name, joined_at) VALUES (?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO play_sessions (server_id, uuid, player_name, joined_at) VALUES (?, ?, ?, ?)',
+    )
     .run(p.serverId ?? null, uuid, String(p.player ?? uuid), nowIso());
 }
 
@@ -54,12 +64,24 @@ let started = false;
 export function startPlaytimeTracking(): void {
   if (started) return;
   started = true;
-  try { closeAllOpen(); } catch (e) { console.error('[playtime] startup cleanup failed', e); }
+  try {
+    closeAllOpen();
+  } catch (e) {
+    console.error('[playtime] startup cleanup failed', e);
+  }
   eventBus.subscribe(['player_join'], (evt: PanelEvent) => {
-    try { onJoin(evt.payload as JoinLeavePayload); } catch (e) { console.error('[playtime] join error', e); }
+    try {
+      onJoin(evt.payload as JoinLeavePayload);
+    } catch (e) {
+      console.error('[playtime] join error', e);
+    }
   });
   eventBus.subscribe(['player_leave'], (evt: PanelEvent) => {
-    try { onLeave(evt.payload as JoinLeavePayload); } catch (e) { console.error('[playtime] leave error', e); }
+    try {
+      onLeave(evt.payload as JoinLeavePayload);
+    } catch (e) {
+      console.error('[playtime] leave error', e);
+    }
   });
   console.log('[playtime] tracking started');
 }
@@ -87,10 +109,17 @@ export function getLeaderboard(serverId?: string, limit = 50): PlaytimeEntry[] {
          FROM play_sessions ${filter}
         GROUP BY uuid`,
     )
-    .all(...params) as Array<{ uuid: string; closedMs: number; sessions: number; lastLeft: string | null }>;
+    .all(...params) as Array<{
+    uuid: string;
+    closedMs: number;
+    sessions: number;
+    lastLeft: string | null;
+  }>;
 
   const openRows = db
-    .prepare(`SELECT uuid, player_name, joined_at FROM play_sessions WHERE left_at IS NULL ${serverId ? 'AND server_id = ?' : ''}`)
+    .prepare(
+      `SELECT uuid, player_name, joined_at FROM play_sessions WHERE left_at IS NULL ${serverId ? 'AND server_id = ?' : ''}`,
+    )
     .all(...params) as Array<{ uuid: string; player_name: string; joined_at: string }>;
   const now = Date.now();
   const openByUuid = new Map<string, number>();
@@ -130,7 +159,10 @@ export interface SessionRow {
   serverId: string | null;
 }
 
-export function getPlayerSessions(uuid: string, limit = 50): {
+export function getPlayerSessions(
+  uuid: string,
+  limit = 50,
+): {
   uuid: string;
   playerName: string;
   totalMs: number;
@@ -139,17 +171,23 @@ export function getPlayerSessions(uuid: string, limit = 50): {
 } {
   const db = getDb();
   const rows = db
-    .prepare('SELECT player_name, joined_at, left_at, duration_ms, server_id FROM play_sessions WHERE uuid = ? ORDER BY joined_at DESC LIMIT ?')
+    .prepare(
+      'SELECT player_name, joined_at, left_at, duration_ms, server_id FROM play_sessions WHERE uuid = ? ORDER BY joined_at DESC LIMIT ?',
+    )
     .all(uuid, Math.max(1, limit)) as Array<{
-      player_name: string;
-      joined_at: string;
-      left_at: string | null;
-      duration_ms: number | null;
-      server_id: string | null;
-    }>;
-  const totalRow = db.prepare('SELECT SUM(COALESCE(duration_ms, 0)) AS t FROM play_sessions WHERE uuid = ?').get(uuid) as { t: number | null };
+    player_name: string;
+    joined_at: string;
+    left_at: string | null;
+    duration_ms: number | null;
+    server_id: string | null;
+  }>;
+  const totalRow = db
+    .prepare('SELECT SUM(COALESCE(duration_ms, 0)) AS t FROM play_sessions WHERE uuid = ?')
+    .get(uuid) as { t: number | null };
   const open = db
-    .prepare('SELECT joined_at FROM play_sessions WHERE uuid = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1')
+    .prepare(
+      'SELECT joined_at FROM play_sessions WHERE uuid = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1',
+    )
     .get(uuid) as { joined_at: string } | undefined;
   let total = totalRow.t ?? 0;
   if (open) {
@@ -161,6 +199,11 @@ export function getPlayerSessions(uuid: string, limit = 50): {
     playerName: rows[0]?.player_name ?? uuid,
     totalMs: total,
     online: !!open,
-    sessions: rows.map((r) => ({ joinedAt: r.joined_at, leftAt: r.left_at, durationMs: r.duration_ms, serverId: r.server_id })),
+    sessions: rows.map((r) => ({
+      joinedAt: r.joined_at,
+      leftAt: r.left_at,
+      durationMs: r.duration_ms,
+      serverId: r.server_id,
+    })),
   };
 }

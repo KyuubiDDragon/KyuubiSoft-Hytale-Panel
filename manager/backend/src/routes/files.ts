@@ -43,14 +43,7 @@ async function audit(
   details?: string,
 ): Promise<void> {
   try {
-    await logActivity(
-      req.user || 'unknown',
-      action,
-      'config',
-      success,
-      target,
-      details,
-    );
+    await logActivity(req.user || 'unknown', action, 'config', success, target, details);
   } catch (e) {
     console.error('[files] audit failed:', e);
   }
@@ -166,14 +159,19 @@ router.put(
   writeRateLimiter,
   writeJsonParser,
   async (req: AuthenticatedRequest, res: Response) => {
-    const { rootId, path: relPath, content, encoding, ifMatchMtime } =
-      req.body as {
-        rootId?: string;
-        path?: string;
-        content?: string;
-        encoding?: 'utf-8' | 'base64';
-        ifMatchMtime?: number;
-      };
+    const {
+      rootId,
+      path: relPath,
+      content,
+      encoding,
+      ifMatchMtime,
+    } = req.body as {
+      rootId?: string;
+      path?: string;
+      content?: string;
+      encoding?: 'utf-8' | 'base64';
+      ifMatchMtime?: number;
+    };
 
     if (!rootId || !relPath || content === undefined) {
       res.status(400).json({ error: 'rootId, path and content are required' });
@@ -181,13 +179,7 @@ router.put(
     }
 
     try {
-      const result = await writeFile(
-        rootId,
-        relPath,
-        content,
-        encoding || 'utf-8',
-        ifMatchMtime,
-      );
+      const result = await writeFile(rootId, relPath, content, encoding || 'utf-8', ifMatchMtime);
       await audit(req, 'file.write', `files:${rootId}:${relPath}`, true);
       res.json({ ok: true, ...result });
     } catch (err) {
@@ -260,7 +252,11 @@ router.delete(
   requirePermission('files.write'),
   writeRateLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
-    const { rootId, path: relPath, confirmToken } = req.body as {
+    const {
+      rootId,
+      path: relPath,
+      confirmToken,
+    } = req.body as {
       rootId?: string;
       path?: string;
       confirmToken?: string;
@@ -339,10 +335,7 @@ router.get(
       const { stream, size, filename } = await openDownloadStream(rootId, relPath);
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Length', String(size));
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${filename.replace(/"/g, '')}"`,
-      );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
       stream.on('error', (err) => {
         console.error('[files] download stream error:', err);
         if (!res.headersSent) {

@@ -14,7 +14,8 @@ import { getLocale } from '@/i18n'
  * extracted ModsList / ModsStore / ModsFilter components can share the
  * same union without each redeclaring it.
  */
-export type ModsTab = 'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge' | 'updates'
+export type ModsTab =
+  'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge' | 'updates'
 
 /**
  * Resolve a localized string returned by a mod registry into the user's
@@ -35,12 +36,13 @@ export function getLocalizedText(text: string | LocalizedString | undefined | nu
     const localeKey = locale === 'pt_br' ? 'pt_br' : locale
 
     // Try current locale, then English, then German, then Portuguese, then first available value
-    const result = text[localeKey as keyof LocalizedString]
-      || text.en
-      || text.de
-      || text.pt_br
-      || Object.values(text).find(v => typeof v === 'string' && v.length > 0)
-      || ''
+    const result =
+      text[localeKey as keyof LocalizedString] ||
+      text.en ||
+      text.de ||
+      text.pt_br ||
+      Object.values(text).find((v) => typeof v === 'string' && v.length > 0) ||
+      ''
 
     return result
   }

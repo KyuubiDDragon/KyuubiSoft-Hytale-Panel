@@ -25,7 +25,15 @@ describe('db migrations', () => {
     const db = getDb();
     const exists = (name: string) =>
       db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
-    for (const t of ['audit_events', 'api_keys', 'punishments', 'notifications', 'crash_reports', 'push_subscriptions', 'play_sessions']) {
+    for (const t of [
+      'audit_events',
+      'api_keys',
+      'punishments',
+      'notifications',
+      'crash_reports',
+      'push_subscriptions',
+      'play_sessions',
+    ]) {
       expect(exists(t), `table ${t} should exist`).toBeTruthy();
     }
   });

@@ -15,7 +15,10 @@
  * to the names it cares about.
  */
 import { EventEmitter } from 'events';
-import type { PanelEvent as PanelDomainEvent, PanelEventName as PanelDomainEventName } from '../schemas/events.js';
+import type {
+  PanelEvent as PanelDomainEvent,
+  PanelEventName as PanelDomainEventName,
+} from '../schemas/events.js';
 
 // ---------- Panel domain events (webhooks/notifications/audit) ----------
 
@@ -42,7 +45,11 @@ export function subscribe(patterns: string[], listener: Listener): () => void {
   };
 }
 
-export function publish(name: PanelDomainEventName, payload: Record<string, unknown> = {}, serverId?: string): void {
+export function publish(
+  name: PanelDomainEventName,
+  payload: Record<string, unknown> = {},
+  serverId?: string,
+): void {
   const event: PanelDomainEvent = {
     name,
     timestamp: new Date().toISOString(),
@@ -50,7 +57,7 @@ export function publish(name: PanelDomainEventName, payload: Record<string, unkn
     payload,
   };
   for (const sub of subs) {
-    if (sub.patterns.some(p => matches(p, name))) {
+    if (sub.patterns.some((p) => matches(p, name))) {
       try {
         sub.listener(event);
       } catch (err) {

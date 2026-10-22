@@ -43,9 +43,13 @@ export const backupApi = {
 
   async create(name?: string): Promise<ActionResponse> {
     // Use extended timeout for backup creation (can take 30+ minutes for large servers)
-    const response = await api.post<ActionResponse>('/backups', { name }, {
-      timeout: BACKUP_TIMEOUT,
-    })
+    const response = await api.post<ActionResponse>(
+      '/backups',
+      { name },
+      {
+        timeout: BACKUP_TIMEOUT,
+      },
+    )
     return response.data
   },
 
@@ -56,9 +60,13 @@ export const backupApi = {
 
   async restore(backupId: string): Promise<ActionResponse> {
     // Use extended timeout for backup restoration (can take 30+ minutes for large backups)
-    const response = await api.post<ActionResponse>(`/backups/${backupId}/restore`, {}, {
-      timeout: BACKUP_TIMEOUT,
-    })
+    const response = await api.post<ActionResponse>(
+      `/backups/${backupId}/restore`,
+      {},
+      {
+        timeout: BACKUP_TIMEOUT,
+      },
+    )
     return response.data
   },
 

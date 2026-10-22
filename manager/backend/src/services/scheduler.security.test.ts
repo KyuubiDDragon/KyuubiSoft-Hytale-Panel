@@ -281,7 +281,9 @@ describe('scheduler: blocked entries are reported and can be approved', () => {
       'admin-stop': 'creator_lacks_permission',
       bad: 'invalid_command',
     });
-    expect(scheduler.getConfig('default').scheduledCommands.every((c) => !('blockedReason' in c))).toBe(true);
+    expect(
+      scheduler.getConfig('default').scheduledCommands.every((c) => !('blockedReason' in c)),
+    ).toBe(true);
   });
 
   it('approve: a non-admin gets 403, an admin is stamped as creator and the entry runs', async () => {

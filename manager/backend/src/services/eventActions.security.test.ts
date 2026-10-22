@@ -197,8 +197,14 @@ describe('event actions: firing', () => {
 
 describe('event actions: blocked rules are reported and can be approved', () => {
   it('derives blockedReason for command rules only', async () => {
-    const opRule = ea.createEventAction({ ...draft({ actionPayload: { command: '/stop' } }), createdBy: 'operator' });
-    const adminRule = ea.createEventAction({ ...draft({ actionPayload: { command: '/kick {player}' } }), createdBy: 'admin' });
+    const opRule = ea.createEventAction({
+      ...draft({ actionPayload: { command: '/stop' } }),
+      createdBy: 'operator',
+    });
+    const adminRule = ea.createEventAction({
+      ...draft({ actionPayload: { command: '/kick {player}' } }),
+      createdBy: 'admin',
+    });
     const announce = ea.createEventAction({
       ...draft({ actionType: 'announce', actionPayload: { message: 'Hi {player}' } }),
       createdBy: 'ghost',
@@ -210,9 +216,15 @@ describe('event actions: blocked rules are reported and can be approved', () => 
   });
 
   it('approve: a non-admin gets 403, an admin is stamped as creator and the rule runs', async () => {
-    const rule = ea.createEventAction({ ...draft({ actionPayload: { command: '/kick {player}' } }), createdBy: 'operator' });
+    const rule = ea.createEventAction({
+      ...draft({ actionPayload: { command: '/kick {player}' } }),
+      createdBy: 'operator',
+    });
 
-    expect(await ea.approveEventAction(rule.id, operator)).toMatchObject({ ok: false, status: 403 });
+    expect(await ea.approveEventAction(rule.id, operator)).toMatchObject({
+      ok: false,
+      status: 403,
+    });
     expect(ea.getEventAction(rule.id)?.createdBy).toBe('operator');
 
     const approved = await ea.approveEventAction(rule.id, admin);
@@ -224,7 +236,10 @@ describe('event actions: blocked rules are reported and can be approved', () => 
   });
 
   it('approve rejects non-command rules and unknown ids', async () => {
-    const backup = ea.createEventAction({ ...draft({ actionType: 'backup', actionPayload: {} }), createdBy: 'admin' });
+    const backup = ea.createEventAction({
+      ...draft({ actionType: 'backup', actionPayload: {} }),
+      createdBy: 'admin',
+    });
     expect(await ea.approveEventAction(backup.id, admin)).toMatchObject({ ok: false, status: 400 });
     expect(await ea.approveEventAction('missing', admin)).toMatchObject({ ok: false, status: 404 });
   });

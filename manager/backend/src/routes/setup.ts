@@ -18,7 +18,7 @@ import {
   getStatus as getDockerStatus,
   getLogs,
   startContainer,
-  execCommand
+  execCommand,
 } from '../services/docker.js';
 import { config } from '../config.js';
 
@@ -50,7 +50,11 @@ router.get('/detect-existing', async (_req: Request, res: Response) => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const stat = async (p: string) => {
-      try { return await fs.stat(p); } catch { return null; }
+      try {
+        return await fs.stat(p);
+      } catch {
+        return null;
+      }
     };
 
     const serverJar = path.join(config.serverPath, 'HytaleServer.jar');
@@ -64,13 +68,19 @@ router.get('/detect-existing', async (_req: Request, res: Response) => {
     const panelConfig = path.join(managerData, 'config.json');
 
     const [jarStat, assetsStat, cfgStat, usersStat, panelStat] = await Promise.all([
-      stat(serverJar), stat(assets), stat(serverConfig), stat(usersFile), stat(panelConfig),
+      stat(serverJar),
+      stat(assets),
+      stat(serverConfig),
+      stat(usersFile),
+      stat(panelConfig),
     ]);
 
     let version: string | null = null;
     try {
       version = (await fs.readFile(versionFile, 'utf-8')).trim() || null;
-    } catch { /* no version file */ }
+    } catch {
+      /* no version file */
+    }
 
     // Enumerate worlds: universe/worlds/<name>/config.json is Hytale's layout.
     const worlds: string[] = [];
@@ -84,7 +94,9 @@ router.get('/detect-existing', async (_req: Request, res: Response) => {
             worlds.push(e.name);
           }
         }
-      } catch { /* directory absent */ }
+      } catch {
+        /* directory absent */
+      }
     }
 
     res.json({
@@ -231,7 +243,7 @@ router.get('/ports', async (_req: Request, res: Response) => {
     webMapWsPort: config.webMapWsPort,
     serverPort: config.serverPort,
     managerPort: config.externalPort,
-  })
+  });
 });
 
 /**
@@ -476,11 +488,11 @@ function parseOAuthFromLogs(logs: string): {
   // Helper to clean ANSI escape codes from strings
   const cleanAnsi = (str: string): string => {
     return str
-      .replace(/\x1b\[[0-9;]*m/g, '')  // Standard ANSI escapes
-      .replace(/\[m/g, '')              // Standalone [m
-      .replace(/\[\d+;\d+m/g, '')       // Color codes like [0;32m without ESC
-      .replace(/\[0m/g, '')             // Reset codes
-      .replace(/%1B\[m/gi, '')          // URL-encoded ANSI escapes
+      .replace(/\x1b\[[0-9;]*m/g, '') // Standard ANSI escapes
+      .replace(/\[m/g, '') // Standalone [m
+      .replace(/\[\d+;\d+m/g, '') // Color codes like [0;32m without ESC
+      .replace(/\[0m/g, '') // Reset codes
+      .replace(/%1B\[m/gi, '') // URL-encoded ANSI escapes
       .trim();
   };
 
@@ -498,7 +510,15 @@ function parseOAuthFromLogs(logs: string): {
   ];
 
   // Words to exclude from being matched as codes
-  const excludeWords = ['waiting', 'loading', 'checking', 'starting', 'authenticating', 'connecting', 'initializing'];
+  const excludeWords = [
+    'waiting',
+    'loading',
+    'checking',
+    'starting',
+    'authenticating',
+    'connecting',
+    'initializing',
+  ];
 
   for (const pattern of codePatterns) {
     const codeMatch = cleanedLogs.match(pattern);
@@ -525,7 +545,9 @@ function parseOAuthFromLogs(logs: string): {
   }
 
   // Look for base verification URL
-  const baseUrlMatch = cleanedLogs.match(/Visit:\s*(https:\/\/oauth\.accounts\.hytale\.com\/[^\s\n?]+)/i);
+  const baseUrlMatch = cleanedLogs.match(
+    /Visit:\s*(https:\/\/oauth\.accounts\.hytale\.com\/[^\s\n?]+)/i,
+  );
   if (baseUrlMatch) {
     result.verificationUrl = cleanAnsi(baseUrlMatch[1]);
     logger.info('[Setup] Found base URL:', result.verificationUrl);
@@ -577,13 +599,15 @@ function parseOAuthFromLogs(logs: string): {
 
   // Check if authentication succeeded
   // Look for specific Hytale server auth success messages
-  if (cleanedLogs.includes('Authentication successful! Mode:') ||
-      cleanedLogs.includes('Authentication successful! Use') ||
-      cleanedLogs.includes('Connection Auth: Authenticated') ||
-      cleanedLogs.includes('Successfully created game session') ||
-      cleanedLogs.includes('Token Source: OAuth') ||
-      cleanedLogs.includes('Download successful') ||
-      cleanedLogs.includes('Credentials saved')) {
+  if (
+    cleanedLogs.includes('Authentication successful! Mode:') ||
+    cleanedLogs.includes('Authentication successful! Use') ||
+    cleanedLogs.includes('Connection Auth: Authenticated') ||
+    cleanedLogs.includes('Successfully created game session') ||
+    cleanedLogs.includes('Token Source: OAuth') ||
+    cleanedLogs.includes('Download successful') ||
+    cleanedLogs.includes('Credentials saved')
+  ) {
     result.authenticated = true;
     logger.info('[Setup] Authentication success detected in logs');
   }
@@ -651,7 +675,7 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
       await startContainer();
 
       // Wait a bit for container to start
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
     // Poll logs for OAuth info (initial check)
@@ -679,11 +703,12 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
       res.json({
         success: false,
         needsEnvConfig: true,
-        error: 'USE_HYTALE_DOWNLOADER=true is not set. Please add it to your .env file and restart containers with docker-compose up -d',
+        error:
+          'USE_HYTALE_DOWNLOADER=true is not set. Please add it to your .env file and restart containers with docker-compose up -d',
         instructions: [
           '1. Add USE_HYTALE_DOWNLOADER=true to your .env file',
           '2. Run: docker-compose down && docker-compose up -d',
-          '3. Then retry the download'
+          '3. Then retry the download',
         ],
       });
       return;
@@ -827,7 +852,7 @@ router.post('/download/start', async (req: Request, res: Response) => {
           'Add to .env:',
           '  SERVER_JAR_URL=https://your-url/HytaleServer.jar',
           '  ASSETS_URL=https://your-url/Assets.zip',
-          'Then restart: docker-compose up -d'
+          'Then restart: docker-compose up -d',
         ],
       });
     } else {
@@ -938,7 +963,11 @@ function parseDownloadProgress(logs: string): {
   // Try to detect which file is being downloaded
   if (logs.includes('Downloading server') || logs.includes('HytaleServer')) {
     result.currentFile = 'HytaleServer.jar';
-  } else if (logs.includes('Downloading assets') || logs.includes('Assets.zip') || logs.includes('assets')) {
+  } else if (
+    logs.includes('Downloading assets') ||
+    logs.includes('Assets.zip') ||
+    logs.includes('assets')
+  ) {
     result.currentFile = 'Assets.zip';
   }
 
@@ -964,10 +993,10 @@ function parseDownloadProgress(logs: string): {
   ];
 
   const unitMultipliers: Record<string, number> = {
-    'B': 1,
-    'KB': 1024,
-    'MB': 1024 * 1024,
-    'GB': 1024 * 1024 * 1024,
+    B: 1,
+    KB: 1024,
+    MB: 1024 * 1024,
+    GB: 1024 * 1024 * 1024,
   };
 
   for (const pattern of bytePatterns) {
@@ -988,7 +1017,8 @@ function parseDownloadProgress(logs: string): {
   // Parse speed - patterns like "10MB/s", "10 MB/s"
   const speedMatch = logs.match(/(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)\/s/i);
   if (speedMatch) {
-    result.bytesPerSecond = parseFloat(speedMatch[1]) * (unitMultipliers[speedMatch[2].toUpperCase()] || 1);
+    result.bytesPerSecond =
+      parseFloat(speedMatch[1]) * (unitMultipliers[speedMatch[2].toUpperCase()] || 1);
   }
 
   return result;
@@ -1025,7 +1055,9 @@ router.get('/download/progress', (req: Request, res: Response) => {
       }
 
       // Determine current file and estimate bytes if not available from logs
-      let currentFile = downloadInfo.currentFile || (oauthInfo.authenticated ? 'Downloading...' : 'Waiting for authentication...');
+      let currentFile =
+        downloadInfo.currentFile ||
+        (oauthInfo.authenticated ? 'Downloading...' : 'Waiting for authentication...');
       let bytesDone = downloadInfo.bytesDone || 0;
       let bytesTotal = downloadInfo.bytesTotal || 0;
       let percent = downloadInfo.percent || 0;
@@ -1041,18 +1073,20 @@ router.get('/download/progress', (req: Request, res: Response) => {
         }
       }
 
-      res.write(`data: ${JSON.stringify({
-        type: 'progress',
-        currentFile,
-        percent,
-        bytesDone,
-        bytesTotal,
-        bytesPerSecond: downloadInfo.bytesPerSecond || 0,
-        authenticated: oauthInfo.authenticated,
-        verificationUrl: oauthInfo.verificationUrl,
-        verificationUrlDirect: oauthInfo.verificationUrlDirect,
-        userCode: oauthInfo.userCode,
-      })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'progress',
+          currentFile,
+          percent,
+          bytesDone,
+          bytesTotal,
+          bytesPerSecond: downloadInfo.bytesPerSecond || 0,
+          authenticated: oauthInfo.authenticated,
+          verificationUrl: oauthInfo.verificationUrl,
+          verificationUrlDirect: oauthInfo.verificationUrlDirect,
+          userCode: oauthInfo.userCode,
+        })}\n\n`,
+      );
     } catch (error) {
       res.write(`data: ${JSON.stringify({ type: 'error', error: 'Failed to get progress' })}\n\n`);
     }
@@ -1187,15 +1221,22 @@ const assetsProgressHandler = (req: Request, res: Response) => {
     const progress = getExtractionProgress();
 
     // Calculate percent for frontend
-    const percent = progress.bytesTotal > 0
-      ? Math.round((progress.bytesDone / progress.bytesTotal) * 100)
-      : (progress.filesTotal > 0 ? Math.round((progress.filesDone / progress.filesTotal) * 100) : 0);
+    const percent =
+      progress.bytesTotal > 0
+        ? Math.round((progress.bytesDone / progress.bytesTotal) * 100)
+        : progress.filesTotal > 0
+          ? Math.round((progress.filesDone / progress.filesTotal) * 100)
+          : 0;
 
     // Map status to type for frontend compatibility
-    const type = progress.status === 'extracting' ? 'progress'
-      : progress.status === 'complete' ? 'complete'
-      : progress.status === 'error' ? 'error'
-      : 'progress';
+    const type =
+      progress.status === 'extracting'
+        ? 'progress'
+        : progress.status === 'complete'
+          ? 'complete'
+          : progress.status === 'error'
+            ? 'error'
+            : 'progress';
 
     // Send response with both status (backend) and type (frontend) fields
     const response = {
@@ -1257,9 +1298,11 @@ router.get('/detect-ip', async (req: Request, res: Response) => {
         if (net.internal || net.family !== 'IPv4') continue;
 
         // Prefer addresses in common private ranges
-        if (net.address.startsWith('192.168.') ||
-            net.address.startsWith('10.') ||
-            net.address.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+        if (
+          net.address.startsWith('192.168.') ||
+          net.address.startsWith('10.') ||
+          net.address.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)
+        ) {
           detectedIp = net.address;
           break;
         }
@@ -1520,9 +1563,11 @@ router.get('/server/logs', async (req: Request, res: Response) => {
     if (logs.includes('Server Booted') || logs.includes('Hytale Server Booted')) {
       booted = true;
     }
-    if (logs.includes('No server tokens configured') ||
-        logs.includes('/auth login') ||
-        logs.includes('AUTHENTICATION REQUIRED')) {
+    if (
+      logs.includes('No server tokens configured') ||
+      logs.includes('/auth login') ||
+      logs.includes('AUTHENTICATION REQUIRED')
+    ) {
       authRequired = true;
     }
 
@@ -1569,9 +1614,11 @@ router.get('/server/console', async (req: Request, res: Response) => {
     }
 
     // Check for auth required
-    if (logs.includes('No server tokens configured') ||
-        logs.includes('/auth login') ||
-        logs.includes('AUTHENTICATION REQUIRED')) {
+    if (
+      logs.includes('No server tokens configured') ||
+      logs.includes('/auth login') ||
+      logs.includes('AUTHENTICATION REQUIRED')
+    ) {
       result.authRequired = true;
     }
 
@@ -1619,10 +1666,10 @@ router.get('/server/console', async (req: Request, res: Response) => {
 
         // Clean ANSI escape codes for display - be more aggressive
         let cleanLine = trimmedLine
-          .replace(/\x1b\[[0-9;]*m/g, '')  // Standard ANSI escapes
-          .replace(/\[m/g, '')              // Standalone [m
-          .replace(/\[\d+;\d+m/g, '')       // Color codes like [0;32m without ESC
-          .replace(/\[0m/g, '');            // Reset codes
+          .replace(/\x1b\[[0-9;]*m/g, '') // Standard ANSI escapes
+          .replace(/\[m/g, '') // Standalone [m
+          .replace(/\[\d+;\d+m/g, '') // Color codes like [0;32m without ESC
+          .replace(/\[0m/g, ''); // Reset codes
 
         // Skip if we've already sent this line (use hash of content)
         const lineHash = cleanLine.substring(0, 100);
@@ -1632,7 +1679,7 @@ router.get('/server/console', async (req: Request, res: Response) => {
         // Keep seen lines set manageable
         if (seenLines.size > 200) {
           const toDelete = Array.from(seenLines).slice(0, 100);
-          toDelete.forEach(h => seenLines.delete(h));
+          toDelete.forEach((h) => seenLines.delete(h));
         }
 
         // Determine log level from content
@@ -1647,20 +1694,21 @@ router.get('/server/console', async (req: Request, res: Response) => {
         res.write(`data: ${JSON.stringify({ type: 'log', message: cleanLine, level })}\n\n`);
 
         // Check for server booted - look for the actual boot message
-        if (!serverBootedDetected && (
-          cleanLine.includes('Server Booted') ||
-          cleanLine.includes('Hytale Server Booted')
-        )) {
+        if (
+          !serverBootedDetected &&
+          (cleanLine.includes('Server Booted') || cleanLine.includes('Hytale Server Booted'))
+        ) {
           serverBootedDetected = true;
           logger.info('[Setup] Server boot detected from live logs');
         }
 
         // Check for authentication required
-        if (!authRequiredDetected && (
-          cleanLine.includes('No server tokens configured') ||
-          cleanLine.includes('/auth login') ||
-          cleanLine.includes('AUTHENTICATION REQUIRED')
-        )) {
+        if (
+          !authRequiredDetected &&
+          (cleanLine.includes('No server tokens configured') ||
+            cleanLine.includes('/auth login') ||
+            cleanLine.includes('AUTHENTICATION REQUIRED'))
+        ) {
           authRequiredDetected = true;
           logger.info('[Setup] Auth required detected from live logs');
         }
@@ -1723,7 +1771,7 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
     }
 
     // Wait a moment for the server to process the command
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Poll for auth code in logs with timeout (max 30 seconds, check every 2 seconds)
     let oauthInfo: ReturnType<typeof parseOAuthFromLogs> = {};
@@ -1747,7 +1795,7 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
 
       // Wait 2 seconds before next attempt
       if (attempt < maxAttempts - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
 
@@ -1766,7 +1814,8 @@ router.post('/auth/server/start', async (_req: Request, res: Response) => {
       logger.info('[Setup] No auth code found in logs after polling');
       res.json({
         success: false,
-        error: 'Auth code not found in server logs. Please ensure the server is running and needs authentication.',
+        error:
+          'Auth code not found in server logs. Please ensure the server is running and needs authentication.',
       });
       return;
     }

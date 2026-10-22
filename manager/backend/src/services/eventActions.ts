@@ -181,7 +181,11 @@ export async function listEventActionViews(): Promise<EventActionView[]> {
       ...rule,
       blockedReason:
         rule.actionType === 'command' && rule.actionPayload.command
-          ? await storedCommandBlockedReason(rule.createdBy, rule.actionPayload.command, rule.serverId ?? undefined)
+          ? await storedCommandBlockedReason(
+              rule.createdBy,
+              rule.actionPayload.command,
+              rule.serverId ?? undefined,
+            )
           : null,
     })),
   );
@@ -194,17 +198,25 @@ export async function listEventActionViews(): Promise<EventActionView[]> {
 export async function approveEventAction(
   id: string,
   actor: CommandActor,
-): Promise<{ ok: true; rule: EventAction } | { ok: false; status: 400 | 403 | 404; error: string }> {
+): Promise<
+  { ok: true; rule: EventAction } | { ok: false; status: 400 | 403 | 404; error: string }
+> {
   const rule = getEventAction(id);
   if (!rule) return { ok: false, status: 404, error: 'Rule not found' };
   if (rule.actionType !== 'command' || !rule.actionPayload.command) {
     return { ok: false, status: 400, error: 'Only command rules need approval' };
   }
-  const auth = await authorizeCommand(actor, rule.actionPayload.command, rule.serverId ?? undefined);
+  const auth = await authorizeCommand(
+    actor,
+    rule.actionPayload.command,
+    rule.serverId ?? undefined,
+  );
   if (!auth.allowed) return { ok: false, status: auth.status, error: auth.error };
   if (!actor.username) return { ok: false, status: 403, error: 'Authentication required' };
   const updated = updateEventAction(id, { createdBy: actor.username });
-  return updated ? { ok: true, rule: updated } : { ok: false, status: 404, error: 'Rule not found' };
+  return updated
+    ? { ok: true, rule: updated }
+    : { ok: false, status: 404, error: 'Rule not found' };
 }
 
 function patternMatches(pattern: string, name: string): boolean {

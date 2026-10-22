@@ -58,22 +58,46 @@ export async function createApiKey(opts: {
   const id = crypto.randomUUID();
   // The token format kp_<32 base32 chars>. base32 (no padding) gives ~160 bits
   // of entropy in 32 chars without ambiguous characters.
-  const raw = crypto.randomBytes(20).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 32);
+  const raw = crypto
+    .randomBytes(20)
+    .toString('base64')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, 32);
   const token = `kp_${raw}`;
   const prefix = token.slice(0, 8);
   const hashed = await bcrypt.hash(token, 10);
   const now = new Date().toISOString();
 
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO api_keys
       (id, owner_username, name, scopes, hashed_token, prefix, created_at, expires_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, opts.ownerUsername, opts.name, JSON.stringify(opts.scopes), hashed, prefix, now, opts.expiresAt ?? null);
+  `,
+    )
+    .run(
+      id,
+      opts.ownerUsername,
+      opts.name,
+      JSON.stringify(opts.scopes),
+      hashed,
+      prefix,
+      now,
+      opts.expiresAt ?? null,
+    );
 
   return {
     key: {
-      id, ownerUsername: opts.ownerUsername, name: opts.name, scopes: opts.scopes,
-      prefix, createdAt: now, lastUsedAt: null, expiresAt: opts.expiresAt ?? null, revokedAt: null,
+      id,
+      ownerUsername: opts.ownerUsername,
+      name: opts.name,
+      scopes: opts.scopes,
+      prefix,
+      createdAt: now,
+      lastUsedAt: null,
+      expiresAt: opts.expiresAt ?? null,
+      revokedAt: null,
     },
     token,
   };
@@ -88,7 +112,9 @@ export function listApiKeys(ownerUsername: string): ApiKey[] {
 
 export function revokeApiKey(ownerUsername: string, id: string): boolean {
   const info = getDb()
-    .prepare("UPDATE api_keys SET revoked_at = ? WHERE id = ? AND owner_username = ? AND revoked_at IS NULL")
+    .prepare(
+      'UPDATE api_keys SET revoked_at = ? WHERE id = ? AND owner_username = ? AND revoked_at IS NULL',
+    )
     .run(new Date().toISOString(), id, ownerUsername);
   return info.changes > 0;
 }
@@ -97,7 +123,9 @@ export function revokeApiKey(ownerUsername: string, id: string): boolean {
  * Look up a token. Returns null if the token is unknown, revoked, expired,
  * or doesn't match. Updates last_used_at on success.
  */
-export async function verifyApiKey(token: string): Promise<{ keyId: string; ownerUsername: string; scopes: string[] } | null> {
+export async function verifyApiKey(
+  token: string,
+): Promise<{ keyId: string; ownerUsername: string; scopes: string[] } | null> {
   if (!token.startsWith('kp_')) return null;
   const prefix = token.slice(0, 8);
   const candidates = getDb()
@@ -107,7 +135,9 @@ export async function verifyApiKey(token: string): Promise<{ keyId: string; owne
   for (const row of candidates) {
     if (row.expires_at && Date.parse(row.expires_at) < now) continue;
     if (await bcrypt.compare(token, row.hashed_token)) {
-      getDb().prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), row.id);
+      getDb()
+        .prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?')
+        .run(new Date().toISOString(), row.id);
       return {
         keyId: row.id,
         ownerUsername: row.owner_username,

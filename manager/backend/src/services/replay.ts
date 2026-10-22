@@ -82,20 +82,24 @@ export async function getReplayConfig(): Promise<ReplayConfigSlice> {
     const r = cfg.replay ?? {};
     return {
       recordingEnabled: r.recordingEnabled ?? false,
-      retentionDays: typeof r.retentionDays === 'number' && r.retentionDays > 0 ? r.retentionDays : 7,
+      retentionDays:
+        typeof r.retentionDays === 'number' && r.retentionDays > 0 ? r.retentionDays : 7,
     };
   } catch {
     return defaultReplayConfig();
   }
 }
 
-export async function setReplayConfig(next: Partial<ReplayConfigSlice>): Promise<ReplayConfigSlice> {
+export async function setReplayConfig(
+  next: Partial<ReplayConfigSlice>,
+): Promise<ReplayConfigSlice> {
   const current = await getReplayConfig();
   const merged: ReplayConfigSlice = {
     recordingEnabled: next.recordingEnabled ?? current.recordingEnabled,
-    retentionDays: typeof next.retentionDays === 'number' && next.retentionDays > 0
-      ? next.retentionDays
-      : current.retentionDays,
+    retentionDays:
+      typeof next.retentionDays === 'number' && next.retentionDays > 0
+        ? next.retentionDays
+        : current.retentionDays,
   };
   try {
     // We attach the slice to the full panel config but do not declare it in
@@ -137,7 +141,11 @@ async function appendGz(filePath: string, lines: string[]): Promise<void> {
 
 async function writeManifest(seg: ActiveSegment): Promise<void> {
   let sizeBytes = 0;
-  try { sizeBytes = (await stat(seg.filePath)).size; } catch { /* not yet flushed */ }
+  try {
+    sizeBytes = (await stat(seg.filePath)).size;
+  } catch {
+    /* not yet flushed */
+  }
   const manifest: ReplayManifest = {
     id: seg.id,
     startedAt: new Date(seg.startedAt).toISOString(),
@@ -176,12 +184,15 @@ async function startSegment(): Promise<ActiveSegment> {
   seg.unsubscribeBus = eventBus.subscribe('*', (evt: PanelEvent) => {
     seg.bufferedEvents.push(evt);
     seg.totalEvents++;
-    const player = (evt.payload as { player?: string; playerName?: string }).player
-      ?? (evt.payload as { playerName?: string }).playerName;
+    const player =
+      (evt.payload as { player?: string; playerName?: string }).player ??
+      (evt.payload as { playerName?: string }).playerName;
     if (player) seg.uniquePlayers.add(player);
   });
 
-  seg.flushTimer = setInterval(() => { flushSegment(seg).catch((err) => logger.error('[replay] flush error:', err)); }, FLUSH_INTERVAL_MS);
+  seg.flushTimer = setInterval(() => {
+    flushSegment(seg).catch((err) => logger.error('[replay] flush error:', err));
+  }, FLUSH_INTERVAL_MS);
   seg.flushTimer.unref?.();
 
   // Snapshot all player positions every TICK_INTERVAL_MS even when the bus is
@@ -189,7 +200,11 @@ async function startSegment(): Promise<ActiveSegment> {
   seg.tickTimer = setInterval(() => {
     const snap = locations.getLatestSnapshot();
     for (const s of snap) {
-      seg.bufferedEvents.push({ name: 'player_position', ts: Date.now(), payload: s as unknown as Record<string, unknown> });
+      seg.bufferedEvents.push({
+        name: 'player_position',
+        ts: Date.now(),
+        payload: s as unknown as Record<string, unknown>,
+      });
       seg.totalEvents++;
       seg.uniquePlayers.add(s.playerName);
     }
@@ -215,7 +230,9 @@ async function stopSegment(seg: ActiveSegment): Promise<void> {
   if (seg.unsubscribeBus) seg.unsubscribeBus();
   await flushSegment(seg);
   await writeManifest(seg);
-  logger.info(`[replay] segment closed: ${seg.id} (events=${seg.totalEvents}, players=${seg.uniquePlayers.size})`);
+  logger.info(
+    `[replay] segment closed: ${seg.id} (events=${seg.totalEvents}, players=${seg.uniquePlayers.size})`,
+  );
 }
 
 async function rotateIfNeeded(): Promise<void> {
@@ -286,7 +303,9 @@ export async function listSegments(): Promise<ReplayManifest[]> {
       try {
         const content = await readFile(mp, 'utf-8');
         out.push(JSON.parse(content) as ReplayManifest);
-      } catch { /* skip incomplete segments */ }
+      } catch {
+        /* skip incomplete segments */
+      }
     }
     out.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
     return out;
@@ -328,7 +347,10 @@ export async function deleteSegment(id: string): Promise<boolean> {
   }
 }
 
-export interface ExportToken { token: string; expiresAt: number; }
+export interface ExportToken {
+  token: string;
+  expiresAt: number;
+}
 
 export async function createExportToken(id: string): Promise<ExportToken | null> {
   const safe = sanitiseId(id);
@@ -341,7 +363,9 @@ export async function createExportToken(id: string): Promise<ExportToken | null>
   return { token, expiresAt };
 }
 
-export function consumeExportToken(token: string): { filePath: string; downloadName: string } | null {
+export function consumeExportToken(
+  token: string,
+): { filePath: string; downloadName: string } | null {
   const entry = exportTokens.get(token);
   if (!entry) return null;
   exportTokens.delete(token);
@@ -379,7 +403,9 @@ async function pruneRetention(): Promise<void> {
           await rm(path.join(REPLAY_ROOT, d), { recursive: true, force: true });
           logger.info(`[replay] pruned segment ${d}`);
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
   } catch (err) {
     logger.error('[replay] retention error:', err);
@@ -392,4 +418,3 @@ function sanitiseId(id: string): string | null {
   if (!/^[A-Za-z0-9_-]+$/.test(id)) return null;
   return id;
 }
-

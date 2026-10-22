@@ -76,9 +76,8 @@ export function useSessionGuard() {
         // Passing undefined makes setUser keep the existing (good) permissions
         // instead of persisting an empty set that would lock the UI into a
         // permission-less "viewer" across reloads.
-        const perms = Array.isArray(me.permissions) && me.permissions.length > 0
-          ? me.permissions
-          : undefined
+        const perms =
+          Array.isArray(me.permissions) && me.permissions.length > 0 ? me.permissions : undefined
         authStore.setUser(me.username, me.role as UserRole | undefined, perms)
       }
     } catch {

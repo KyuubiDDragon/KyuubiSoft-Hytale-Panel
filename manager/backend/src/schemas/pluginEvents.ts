@@ -93,10 +93,13 @@ export type PlayerPositionEvent = z.infer<typeof PlayerPositionEventSchema>;
 export type TpsUpdateEvent = z.infer<typeof TpsUpdateEventSchema>;
 export type PluginEvent = z.infer<typeof PluginEventSchema>;
 
-export function parsePluginEvent(raw: unknown):
-  | { ok: true; event: PluginEvent }
-  | { ok: false; error: string } {
+export function parsePluginEvent(
+  raw: unknown,
+): { ok: true; event: PluginEvent } | { ok: false; error: string } {
   const result = PluginEventSchema.safeParse(raw);
   if (result.success) return { ok: true, event: result.data };
-  return { ok: false, error: result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ') };
+  return {
+    ok: false,
+    error: result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+  };
 }

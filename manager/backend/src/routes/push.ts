@@ -21,24 +21,34 @@ const router = Router();
 
 // GET /api/push/vapid-public-key — the application server key for subscribe(),
 // or { enabled: false } when Web Push is off.
-router.get('/vapid-public-key', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const key = await getVapidPublicKey();
-    if (!key) {
-      res.json({ enabled: false, key: null, devices: 0 });
-      return;
+router.get(
+  '/vapid-public-key',
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const key = await getVapidPublicKey();
+      if (!key) {
+        res.json({ enabled: false, key: null, devices: 0 });
+        return;
+      }
+      res.json({ enabled: true, key, devices: countSubscriptions(req.user || '') });
+    } catch (error) {
+      logger.error('[push] failed to read VAPID key:', error);
+      res.status(500).json({ error: 'Failed to read push configuration' });
     }
-    res.json({ enabled: true, key, devices: countSubscriptions(req.user || '') });
-  } catch (error) {
-    logger.error('[push] failed to read VAPID key:', error);
-    res.status(500).json({ error: 'Failed to read push configuration' });
-  }
-});
+  },
+);
 
 function isValidSubscription(v: unknown): v is PushSubscriptionInput {
   const s = v as PushSubscriptionInput | undefined;
-  return !!(s && typeof s.endpoint === 'string' && /^https:\/\//.test(s.endpoint)
-    && s.keys && typeof s.keys.p256dh === 'string' && typeof s.keys.auth === 'string');
+  return !!(
+    s &&
+    typeof s.endpoint === 'string' &&
+    /^https:\/\//.test(s.endpoint) &&
+    s.keys &&
+    typeof s.keys.p256dh === 'string' &&
+    typeof s.keys.auth === 'string'
+  );
 }
 
 // POST /api/push/subscribe — persist a PushSubscription for this user/device.
@@ -49,7 +59,11 @@ router.post('/subscribe', authMiddleware, async (req: AuthenticatedRequest, res:
     return;
   }
   try {
-    saveSubscription(req.user || 'unknown', sub, String(req.headers['user-agent'] || '').slice(0, 256));
+    saveSubscription(
+      req.user || 'unknown',
+      sub,
+      String(req.headers['user-agent'] || '').slice(0, 256),
+    );
     res.json({ success: true, devices: countSubscriptions(req.user || '') });
   } catch (error) {
     logger.error('[push] failed to save subscription:', error);

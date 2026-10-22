@@ -20,7 +20,9 @@ export const pushApi = {
     return data
   },
 
-  async subscribe(subscription: PushSubscriptionJSON): Promise<{ success: boolean; devices: number }> {
+  async subscribe(
+    subscription: PushSubscriptionJSON,
+  ): Promise<{ success: boolean; devices: number }> {
     const { data } = await api.post('/push/subscribe', { subscription })
     return data
   },
@@ -41,7 +43,10 @@ export const pushApi = {
     return data
   },
 
-  async saveSettings(payload: { enabled?: boolean; subject?: string }): Promise<{ success: boolean; data: WebPushSettings }> {
+  async saveSettings(payload: {
+    enabled?: boolean
+    subject?: string
+  }): Promise<{ success: boolean; data: WebPushSettings }> {
     const { data } = await api.put('/settings/web-push', payload)
     return data
   },

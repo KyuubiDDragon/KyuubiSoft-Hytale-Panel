@@ -2,8 +2,11 @@ import { Router, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import {
-  listNotifications, markRead, dismissAll,
-  getPreferences, setPreference,
+  listNotifications,
+  markRead,
+  dismissAll,
+  getPreferences,
+  setPreference,
 } from '../services/notifications.js';
 
 const router = Router();
@@ -16,7 +19,10 @@ router.get('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
 
 router.post('/:id/read', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
   const id = parseInt(req.params.id, 10);
-  if (Number.isNaN(id)) { res.status(400).json({ detail: 'Invalid id' }); return; }
+  if (Number.isNaN(id)) {
+    res.status(400).json({ detail: 'Invalid id' });
+    return;
+  }
   markRead(req.user!, id);
   res.json({ success: true });
 });

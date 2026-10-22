@@ -34,12 +34,16 @@ export function runRetentionSweep(): void {
     const audit = pruneOldAuditEvents(AUDIT_RETENTION_DAYS);
     const notifications = pruneByAge('notifications', 'created_at', NOTIFICATION_RETENTION_DAYS);
     const crashes = pruneByAge('crash_reports', 'created_at', CRASH_RETENTION_DAYS);
-    const deliveries = pruneByAge('webhook_deliveries', 'created_at', WEBHOOK_DELIVERY_RETENTION_DAYS);
+    const deliveries = pruneByAge(
+      'webhook_deliveries',
+      'created_at',
+      WEBHOOK_DELIVERY_RETENTION_DAYS,
+    );
     const total = audit + notifications + crashes + deliveries;
     if (total > 0) {
       logger.info(
         `[retention] pruned ${total} rows (audit=${audit} notifications=${notifications} ` +
-        `crashes=${crashes} webhook_deliveries=${deliveries})`,
+          `crashes=${crashes} webhook_deliveries=${deliveries})`,
       );
     }
   } catch (err) {

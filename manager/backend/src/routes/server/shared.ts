@@ -7,7 +7,16 @@ import * as dockerService from '../../services/docker.js';
 import { escapeShellArg } from '../../utils/sanitize.js';
 
 // Allowed config file extensions
-export const CONFIG_EXTENSIONS = ['.json', '.properties', '.yml', '.yaml', '.toml', '.cfg', '.conf', '.ini'];
+export const CONFIG_EXTENSIONS = [
+  '.json',
+  '.properties',
+  '.yml',
+  '.yaml',
+  '.toml',
+  '.cfg',
+  '.conf',
+  '.ini',
+];
 
 // Quick settings interface
 export interface QuickSettings {
@@ -102,7 +111,7 @@ export interface VersionCheckResult {
 
 export async function getLatestVersion(patchline: string): Promise<VersionCheckResult> {
   // SECURITY: Validate patchline to prevent command injection
-  if (!VALID_PATCHLINES.includes(patchline as typeof VALID_PATCHLINES[number])) {
+  if (!VALID_PATCHLINES.includes(patchline as (typeof VALID_PATCHLINES)[number])) {
     console.error(`Invalid patchline attempted: ${patchline}`);
     return { version: 'unknown', error: 'Invalid patchline' };
   }
@@ -116,7 +125,7 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   // cache/credential files in /opt/hytale/downloader that then block the
   // hytale-user download. Running as hytale keeps probe and download in sync.
   const checkResult = await dockerService.execInContainer(
-    `cd /opt/hytale/downloader && gosu hytale ./hytale-downloader-linux-amd64 -patchline ${escapeShellArg(patchline)} -print-version 2>&1`
+    `cd /opt/hytale/downloader && gosu hytale ./hytale-downloader-linux-amd64 -patchline ${escapeShellArg(patchline)} -print-version 2>&1`,
   );
 
   if (!checkResult.success) {
@@ -164,9 +173,8 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   // not itself a date stamp.
   const labeled = output.match(/version[^0-9]*([0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z]+)?)/i);
   const labeledVersion = labeled && !isDateStamp(labeled[1]) ? labeled[1] : undefined;
-  const chosenVersion = labeledVersion
-    ?? versionTokens.find((v) => !isDateStamp(v))
-    ?? versionTokens[0];
+  const chosenVersion =
+    labeledVersion ?? versionTokens.find((v) => !isDateStamp(v)) ?? versionTokens[0];
   if (chosenVersion) {
     return { version: chosenVersion };
   }
@@ -249,7 +257,7 @@ export function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
       currentVersion: 'unknown',
       latestVersion: 'unknown',
       state: 'IDLE',
-      error: 'No output from server'
+      error: 'No output from server',
     };
   }
 
@@ -259,7 +267,8 @@ export function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
   let state: NativeUpdateStatus['state'] = 'IDLE';
   if (lower.includes('error') || lower.includes('failed')) state = 'ERROR';
   else if (lower.includes('applying') || lower.includes('installing')) state = 'APPLYING';
-  else if (lower.includes('ready') || lower.includes('staged') || lower.includes('downloaded')) state = 'READY';
+  else if (lower.includes('ready') || lower.includes('staged') || lower.includes('downloaded'))
+    state = 'READY';
   else if (lower.includes('downloading') || lower.includes('download')) state = 'DOWNLOADING';
   else if (lower.includes('checking')) state = 'CHECKING';
 
@@ -279,9 +288,7 @@ export function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
   }
 
   // Extract latest version
-  const latestPatterns = [
-    /(?:latest|available|new).*?([0-9]+\.[0-9]+\.[0-9]+)/i,
-  ];
+  const latestPatterns = [/(?:latest|available|new).*?([0-9]+\.[0-9]+\.[0-9]+)/i];
 
   let latestVersion = 'unknown';
   for (const pattern of latestPatterns) {
@@ -297,18 +304,19 @@ export function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
   const progress = progressMatch ? parseInt(progressMatch[1]) : undefined;
 
   return {
-    available: state === 'READY' || (latestVersion !== 'unknown' && currentVersion !== latestVersion),
+    available:
+      state === 'READY' || (latestVersion !== 'unknown' && currentVersion !== latestVersion),
     currentVersion,
     latestVersion,
     state,
     progress,
-    message: output.substring(0, 200)
+    message: output.substring(0, 200),
   };
 }
 
 // Helper function to parse Prometheus text format
 export function parsePrometheusMetrics(raw: string): Record<string, unknown> {
-  const lines = raw.split('\n').filter(line => line && !line.startsWith('#'));
+  const lines = raw.split('\n').filter((line) => line && !line.startsWith('#'));
   const metrics: Record<string, number> = {};
   const labeledMetrics: Record<string, Record<string, number>> = {};
 
@@ -413,7 +421,7 @@ export function parsePrometheusMetrics(raw: string): Record<string, unknown> {
 
 // Helper function to parse TPS metrics
 export function parseTpsMetrics(raw: string): Record<string, number> {
-  const lines = raw.split('\n').filter(line => line && !line.startsWith('#'));
+  const lines = raw.split('\n').filter((line) => line && !line.startsWith('#'));
   const metrics: Record<string, number> = {};
 
   for (const line of lines) {

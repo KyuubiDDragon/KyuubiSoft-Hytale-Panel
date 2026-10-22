@@ -36,7 +36,7 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error)
-  }
+  },
 )
 
 // Add same interceptors to setupApiClient
@@ -50,7 +50,7 @@ setupApiClient.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error)
-  }
+  },
 )
 
 // ============================================================
@@ -127,9 +127,10 @@ function attachAuthRefreshInterceptor(client: AxiosInstance): void {
       if (error.response?.status === 401) {
         const invalidationCodes = ['USER_DELETED', 'TOKEN_INVALIDATED']
         if (responseData?.code && invalidationCodes.includes(responseData.code)) {
-          const message = responseData.code === 'USER_DELETED'
-            ? 'Your account has been deleted.'
-            : 'Your session has expired due to account changes. Please log in again.'
+          const message =
+            responseData.code === 'USER_DELETED'
+              ? 'Your account has been deleted.'
+              : 'Your session has expired due to account changes. Please log in again.'
           forceLogout(message)
           return Promise.reject(error)
         }
@@ -139,12 +140,8 @@ function attachAuthRefreshInterceptor(client: AxiosInstance): void {
       // automatically because withCredentials: true) and fall back to the
       // in-memory refresh token for installations that haven't picked up the
       // cookie flow yet.
-      if (
-        error.response?.status === 401 &&
-        originalRequest &&
-        !(originalRequest as any)._retry
-      ) {
-        (originalRequest as any)._retry = true
+      if (error.response?.status === 401 && originalRequest && !(originalRequest as any)._retry) {
+        ;(originalRequest as any)._retry = true
         const hadSession = !!authStore.accessToken
 
         try {
@@ -165,7 +162,7 @@ function attachAuthRefreshInterceptor(client: AxiosInstance): void {
       }
 
       return Promise.reject(error)
-    }
+    },
   )
 }
 

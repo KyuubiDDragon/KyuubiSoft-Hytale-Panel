@@ -212,13 +212,18 @@ export function runMigrations(conn: Database.Database): void {
       applied_at TEXT NOT NULL
     );
   `);
-  const row = conn.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number | null };
+  const row = conn.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as {
+    v: number | null;
+  };
   const current = row?.v ?? 0;
-  const pending = MIGRATIONS.filter((m) => m.version > current).sort((a, b) => a.version - b.version);
+  const pending = MIGRATIONS.filter((m) => m.version > current).sort(
+    (a, b) => a.version - b.version,
+  );
   for (const m of pending) {
     const apply = conn.transaction(() => {
       m.up(conn);
-      conn.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+      conn
+        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(m.version, m.name, new Date().toISOString());
     });
     apply();
@@ -228,11 +233,13 @@ export function runMigrations(conn: Database.Database): void {
 
 /** Current schema version (highest applied migration), or 0 on a fresh DB. */
 export function getSchemaVersion(conn: Database.Database = getDb()): number {
-  const has = conn.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
-  ).get();
+  const has = conn
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'")
+    .get();
   if (!has) return 0;
-  const row = conn.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number | null };
+  const row = conn.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as {
+    v: number | null;
+  };
   return row?.v ?? 0;
 }
 

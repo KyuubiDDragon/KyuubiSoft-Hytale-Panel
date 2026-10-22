@@ -37,29 +37,65 @@ router.get('/', authOrPublicRead, async (_req: Request, res: Response) => {
   res.json(index);
 });
 
-router.get('/config', authMiddleware, requirePermission('wiki.view'), async (_req: Request, res: Response) => {
-  res.json(await wiki.getWikiConfig());
-});
+router.get(
+  '/config',
+  authMiddleware,
+  requirePermission('wiki.view'),
+  async (_req: Request, res: Response) => {
+    res.json(await wiki.getWikiConfig());
+  },
+);
 
-router.put('/config', authMiddleware, requirePermission('wiki.manage'), async (req: AuthenticatedRequest, res: Response) => {
-  const { publicAccess } = req.body ?? {};
-  const next = await wiki.setWikiConfig({
-    publicAccess: typeof publicAccess === 'boolean' ? publicAccess : undefined,
-  });
-  await logActivity(req.user || 'system', 'wiki.config_changed', 'wiki', true, undefined, JSON.stringify(next));
-  res.json(next);
-});
+router.put(
+  '/config',
+  authMiddleware,
+  requirePermission('wiki.manage'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { publicAccess } = req.body ?? {};
+    const next = await wiki.setWikiConfig({
+      publicAccess: typeof publicAccess === 'boolean' ? publicAccess : undefined,
+    });
+    await logActivity(
+      req.user || 'system',
+      'wiki.config_changed',
+      'wiki',
+      true,
+      undefined,
+      JSON.stringify(next),
+    );
+    res.json(next);
+  },
+);
 
-router.post('/regenerate', authMiddleware, requirePermission('wiki.manage'), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const index = await wiki.regenerateWiki();
-    await logActivity(req.user || 'system', 'wiki.regenerated', 'wiki', true, undefined, `${index.entries.length} entries`);
-    res.json({ success: true, count: index.entries.length, generatedAt: index.generatedAt });
-  } catch (err) {
-    await logActivity(req.user || 'system', 'wiki.regenerated', 'wiki', false, undefined, (err as Error).message);
-    res.status(500).json({ success: false, error: (err as Error).message });
-  }
-});
+router.post(
+  '/regenerate',
+  authMiddleware,
+  requirePermission('wiki.manage'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const index = await wiki.regenerateWiki();
+      await logActivity(
+        req.user || 'system',
+        'wiki.regenerated',
+        'wiki',
+        true,
+        undefined,
+        `${index.entries.length} entries`,
+      );
+      res.json({ success: true, count: index.entries.length, generatedAt: index.generatedAt });
+    } catch (err) {
+      await logActivity(
+        req.user || 'system',
+        'wiki.regenerated',
+        'wiki',
+        false,
+        undefined,
+        (err as Error).message,
+      );
+      res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  },
+);
 
 router.get('/:slug', authOrPublicRead, async (req: Request, res: Response) => {
   const page = await wiki.loadWikiPage(req.params.slug);

@@ -92,7 +92,16 @@ function statfsUsage(p: string): FilesystemUsage | null {
   }
 }
 
-async function resolveServerPaths(serverId?: string): Promise<{ server: string; data: string; backups: string; mods: string; plugins: string; assets: string }> {
+async function resolveServerPaths(
+  serverId?: string,
+): Promise<{
+  server: string;
+  data: string;
+  backups: string;
+  mods: string;
+  plugins: string;
+  assets: string;
+}> {
   try {
     const id = serverId ?? (await getDefaultId());
     const srv = await getServer(id);
@@ -123,7 +132,13 @@ export async function getStorageBreakdown(serverId?: string): Promise<StorageBre
     ];
     const trackedBytes = categories.reduce((s, c) => s + c.bytes, 0);
     return {
-      filesystem: { path: '/opt/hytale', totalBytes: gb(40), freeBytes: gb(31), usedBytes: gb(9), usedPercent: 22.5 },
+      filesystem: {
+        path: '/opt/hytale',
+        totalBytes: gb(40),
+        freeBytes: gb(31),
+        usedBytes: gb(9),
+        usedPercent: 22.5,
+      },
       categories,
       trackedBytes,
       generatedAt: new Date().toISOString(),

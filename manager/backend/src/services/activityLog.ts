@@ -10,7 +10,8 @@ export interface ActivityLogEntry {
   action: string;
   target?: string;
   details?: string;
-  category: 'player' | 'server' | 'backup' | 'config' | 'mod' | 'user' | 'system' | 'replay' | 'wiki';
+  category:
+    'player' | 'server' | 'backup' | 'config' | 'mod' | 'user' | 'system' | 'replay' | 'wiki';
   success: boolean;
 }
 
@@ -62,7 +63,7 @@ export async function logActivity(
   category: ActivityLogEntry['category'],
   success: boolean,
   target?: string,
-  details?: string
+  details?: string,
 ): Promise<ActivityLogEntry> {
   const entry: ActivityLogEntry = {
     id: generateId(),
@@ -104,7 +105,7 @@ export function getActivityLog(options?: {
   if (isDemoMode()) {
     const demoEntries = getDemoActivityLog();
     // Map demo entries to ActivityLogEntry format
-    let entries: ActivityLogEntry[] = demoEntries.map(e => ({
+    let entries: ActivityLogEntry[] = demoEntries.map((e) => ({
       id: e.id,
       timestamp: e.timestamp,
       user: e.user,
@@ -117,11 +118,11 @@ export function getActivityLog(options?: {
 
     // Filter by category
     if (options?.category) {
-      entries = entries.filter(e => e.category === options.category);
+      entries = entries.filter((e) => e.category === options.category);
     }
     // Filter by user
     if (options?.user) {
-      entries = entries.filter(e => e.user === options.user);
+      entries = entries.filter((e) => e.user === options.user);
     }
 
     const total = entries.length;
@@ -141,12 +142,12 @@ export function getActivityLog(options?: {
 
   // Filter by category
   if (options?.category) {
-    entries = entries.filter(e => e.category === options.category);
+    entries = entries.filter((e) => e.category === options.category);
   }
 
   // Filter by user
   if (options?.user) {
-    entries = entries.filter(e => e.user === options.user);
+    entries = entries.filter((e) => e.user === options.user);
   }
 
   const total = entries.length;
