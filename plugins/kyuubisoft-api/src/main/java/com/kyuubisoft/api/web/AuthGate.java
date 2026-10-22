@@ -25,7 +25,9 @@ import java.util.logging.Logger;
  * request without a valid token is answered with 401 and never gets a 101.
  * Fail-closed: without a usable token every request gets 503 with code
  * {@code auth_not_configured}. The only request let through without a token
- * is a CORS preflight from an allow-listed origin, which carries no data.</p>
+ * is a CORS preflight from an allow-listed origin, which carries no data.
+ * With {@code insecureDisableAuth} no token is needed, but only GET, HEAD and
+ * OPTIONS pass; everything else gets 403 {@code auth_disabled_read_only}.</p>
  */
 @ChannelHandler.Sharable
 public final class AuthGate extends ChannelInboundHandlerAdapter {
@@ -38,8 +40,9 @@ public final class AuthGate extends ChannelInboundHandlerAdapter {
 
     static final String CODE_INVALID = "auth_invalid";
     static final String CODE_NOT_CONFIGURED = "auth_not_configured";
+    static final String CODE_READ_ONLY = "auth_disabled_read_only";
 
-    enum Decision { ALLOW, REJECT_INVALID, REJECT_NOT_CONFIGURED }
+    enum Decision { ALLOW, REJECT_INVALID, REJECT_NOT_CONFIGURED, REJECT_READ_ONLY }
 
     private final boolean authDisabled;
     private final byte[] expectedDigest; // null when no usable token is configured
@@ -72,13 +75,19 @@ public final class AuthGate extends ChannelInboundHandlerAdapter {
         if (decision == Decision.REJECT_NOT_CONFIGURED) {
             reject(ctx, origin, HttpResponseStatus.SERVICE_UNAVAILABLE, CODE_NOT_CONFIGURED,
                     "API locked: no auth token configured");
+        } else if (decision == Decision.REJECT_READ_ONLY) {
+            reject(ctx, origin, HttpResponseStatus.FORBIDDEN, CODE_READ_ONLY,
+                    "insecureDisableAuth is true: the API is read-only (GET, HEAD and OPTIONS only)");
         } else {
             reject(ctx, origin, HttpResponseStatus.UNAUTHORIZED, CODE_INVALID, "Unauthorized");
         }
     }
 
     Decision decide(HttpRequest request) {
-        if (authDisabled) return Decision.ALLOW;
+        // Without a token nothing proves the caller is the panel; a web page in
+        // a developer's browser can send simple cross-site POSTs. Only reads
+        // stay open then: no commands, player actions or mod actions.
+        if (authDisabled) return isReadOnly(request.method()) ? Decision.ALLOW : Decision.REJECT_READ_ONLY;
         if (request.method() == HttpMethod.OPTIONS
                 && cors.isAllowed(request.headers().get(HttpHeaderNames.ORIGIN))) {
             return Decision.ALLOW;
@@ -92,6 +101,10 @@ public final class AuthGate extends ChannelInboundHandlerAdapter {
         return MessageDigest.isEqual(sha256(provided), expectedDigest)
                 ? Decision.ALLOW
                 : Decision.REJECT_INVALID;
+    }
+
+    static boolean isReadOnly(HttpMethod method) {
+        return method == HttpMethod.GET || method == HttpMethod.HEAD || method == HttpMethod.OPTIONS;
     }
 
     /** Token from {@code Authorization: Bearer <token>}, or null. */
@@ -132,7 +145,11 @@ public final class AuthGate extends ChannelInboundHandlerAdapter {
         long now = System.currentTimeMillis();
         long last = lastRejectLog.get();
         if (now - last < REJECT_LOG_INTERVAL_MS || !lastRejectLog.compareAndSet(last, now)) return;
-        String reason = decision == Decision.REJECT_NOT_CONFIGURED ? "no token configured" : "missing or wrong token";
+        String reason = switch (decision) {
+            case REJECT_NOT_CONFIGURED -> "no token configured";
+            case REJECT_READ_ONLY -> "insecureDisableAuth allows reads only";
+            default -> "missing or wrong token";
+        };
         LOGGER.warning("Rejected " + request.method() + " " + loggablePath(request.uri()) + " from " + ctx.channel().remoteAddress()
                 + " (" + reason + "; further rejections are logged at most once per minute)");
     }

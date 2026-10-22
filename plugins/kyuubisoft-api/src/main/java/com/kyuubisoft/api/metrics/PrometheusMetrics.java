@@ -3,6 +3,7 @@ package com.kyuubisoft.api.metrics;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.kyuubisoft.api.handlers.ServerHandler;
 
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -12,6 +13,7 @@ import java.lang.management.MemoryUsage;
 import java.lang.management.ThreadMXBean;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.ToDoubleFunction;
 import java.util.logging.Logger;
 
 /**
@@ -21,24 +23,13 @@ import java.util.logging.Logger;
 public class PrometheusMetrics {
 
     private static final Logger LOGGER = Logger.getLogger("KyuubiSoftAPI");
-    private static PrometheusMetrics instance;
-
-    private final TpsTracker tpsTracker;
-    private final long serverStartTime;
 
     // Counters for player events
     private final AtomicLong playerJoins = new AtomicLong(0);
     private final AtomicLong playerLeaves = new AtomicLong(0);
 
-    public PrometheusMetrics(TpsTracker tpsTracker) {
-        instance = this;
-        this.tpsTracker = tpsTracker;
-        this.serverStartTime = System.currentTimeMillis();
+    public PrometheusMetrics() {
         LOGGER.info("Prometheus metrics initialized (native implementation)");
-    }
-
-    public static PrometheusMetrics getInstance() {
-        return instance;
     }
 
     /**
@@ -47,15 +38,25 @@ public class PrometheusMetrics {
     public String generateMetrics() {
         StringBuilder sb = new StringBuilder();
 
-        // TPS metrics
-        TpsTracker.TpsSnapshot tps = tpsTracker.getSnapshot();
-        appendGauge(sb, "hytale_tps_current", "Current server TPS", tps.current());
-        appendGauge(sb, "hytale_tps_average", "Average TPS over last minute", tps.average());
-        appendGauge(sb, "hytale_tps_min", "Minimum TPS over last minute", tps.min());
-        appendGauge(sb, "hytale_tps_max", "Maximum TPS over last minute", tps.max());
-        appendGauge(sb, "hytale_tps_target", "Target TPS", tps.target());
-        appendGauge(sb, "hytale_mspt_current", "Current milliseconds per tick", tps.msptCurrent());
-        appendGauge(sb, "hytale_mspt_average", "Average milliseconds per tick", tps.msptAverage());
+        // TPS metrics. The unlabeled gauges keep their 2.0 names and describe
+        // the world with the lowest TPS relative to its target; the labeled
+        // hytale_world_* series below cover every world and window.
+        List<WorldPerf.Snapshot> worlds = WorldPerf.snapshotAll();
+        WorldPerf.Snapshot headline = WorldPerf.slowest(worlds);
+        if (headline != null) {
+            WorldPerf.Window shortest = headline.windows.isEmpty() ? null : headline.windows.get(0);
+            WorldPerf.Window minute = headline.window("1m") != null ? headline.window("1m") : shortest;
+            appendGauge(sb, "hytale_tps_current", "TPS, 10 s average (slowest world)", headline.tps);
+            if (minute != null) {
+                appendGauge(sb, "hytale_tps_average", "TPS, 1 min average (slowest world)", minute.tpsAvg);
+                appendGauge(sb, "hytale_tps_min", "Lowest TPS within 1 min (slowest world)", minute.tpsMin);
+                appendGauge(sb, "hytale_tps_max", "Highest TPS within 1 min (slowest world)", minute.tpsMax);
+                appendGauge(sb, "hytale_mspt_average", "Tick time in ms, 1 min average (slowest world)", minute.tickMsAvg);
+            }
+            appendGauge(sb, "hytale_tps_target", "Target TPS (slowest world)", headline.targetTps);
+            appendGauge(sb, "hytale_mspt_current", "Tick time in ms, 10 s average (slowest world)", headline.mspt);
+        }
+        appendWorldPerf(sb, worlds);
 
         // Player metrics
         int onlinePlayers = 0;
@@ -82,7 +83,10 @@ public class PrometheusMetrics {
         } catch (Exception ignored) {}
 
         appendGauge(sb, "hytale_players_online", "Number of players online", onlinePlayers);
-        appendGauge(sb, "hytale_players_max", "Maximum players allowed", 100); // TODO: Get from config
+        int maxPlayers = ServerHandler.maxPlayers();
+        if (maxPlayers >= 0) {
+            appendGauge(sb, "hytale_players_max", "Maximum players allowed (server config)", maxPlayers);
+        }
 
         // Players per world
         if (!playersPerWorld.isEmpty()) {
@@ -185,22 +189,79 @@ public class PrometheusMetrics {
         appendGauge(sb, "jvm_threads_daemon", "Daemon thread count", threadBean.getDaemonThreadCount());
         appendGauge(sb, "jvm_threads_peak", "Peak thread count", threadBean.getPeakThreadCount());
 
-        // CPU metrics
-        try {
-            com.sun.management.OperatingSystemMXBean osBean =
-                (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-            appendGauge(sb, "process_cpu_usage", "Process CPU usage (0-1)", osBean.getProcessCpuLoad());
-            appendGauge(sb, "system_cpu_usage", "System CPU usage (0-1)", osBean.getCpuLoad());
-        } catch (Exception e) {
-            appendGauge(sb, "process_cpu_usage", "Process CPU usage (0-1)", -1);
-            appendGauge(sb, "system_cpu_usage", "System CPU usage (0-1)", -1);
-        }
+        // CPU metrics from the background sampler (the MXBean read can block).
+        // A negative load means "no sample yet" and is left out, not exported as -1.
+        double processLoad = CpuSampler.processLoad();
+        double systemLoad = CpuSampler.systemLoad();
+        if (processLoad >= 0) appendGauge(sb, "process_cpu_usage", "Process CPU usage (0-1)", processLoad);
+        if (systemLoad >= 0) appendGauge(sb, "system_cpu_usage", "System CPU usage (0-1)", systemLoad);
 
-        // Uptime
-        long uptimeSeconds = (System.currentTimeMillis() - serverStartTime) / 1000;
-        appendGauge(sb, "hytale_uptime_seconds", "Server uptime in seconds", uptimeSeconds);
+        // Uptime of the server process, not of this plugin.
+        appendGauge(sb, "hytale_uptime_seconds", "Server uptime in seconds", ServerHandler.uptimeSeconds());
 
         return sb.toString();
+    }
+
+    /** Per-world tick metrics, entities and loaded chunks. */
+    private void appendWorldPerf(StringBuilder sb, List<WorldPerf.Snapshot> worlds) {
+        if (worlds.isEmpty()) return;
+
+        sb.append("# HELP hytale_world_tps World TPS per window (server formula)\n");
+        sb.append("# TYPE hytale_world_tps gauge\n");
+        for (WorldPerf.Snapshot w : worlds) {
+            for (WorldPerf.Window win : w.windows) {
+                appendWindowSample(sb, "hytale_world_tps", w.world, win.window, "avg", win.tpsAvg);
+                appendWindowSample(sb, "hytale_world_tps", w.world, win.window, "min", win.tpsMin);
+                appendWindowSample(sb, "hytale_world_tps", w.world, win.window, "max", win.tpsMax);
+            }
+        }
+
+        sb.append("# HELP hytale_world_tick_ms Time a world tick took to compute, in milliseconds\n");
+        sb.append("# TYPE hytale_world_tick_ms gauge\n");
+        for (WorldPerf.Snapshot w : worlds) {
+            for (WorldPerf.Window win : w.windows) {
+                appendWindowSample(sb, "hytale_world_tick_ms", w.world, win.window, "avg", win.tickMsAvg);
+                appendWindowSample(sb, "hytale_world_tick_ms", w.world, win.window, "min", win.tickMsMin);
+                appendWindowSample(sb, "hytale_world_tick_ms", w.world, win.window, "max", win.tickMsMax);
+            }
+        }
+
+        appendWorldGauge(sb, "hytale_world_tps_target", "Target TPS of the world", worlds, w -> w.targetTps);
+        appendWorldGauge(sb, "hytale_world_entities", "Entities in the world", worlds, w -> w.entities);
+        appendWorldGauge(sb, "hytale_world_chunks_loaded", "Loaded chunks of the world", worlds, w -> w.loadedChunks);
+
+        long entities = 0;
+        long chunks = 0;
+        for (WorldPerf.Snapshot w : worlds) {
+            if (w.entities > 0) entities += w.entities;
+            if (w.loadedChunks > 0) chunks += w.loadedChunks;
+        }
+        appendGauge(sb, "hytale_entities_total", "Entities in all worlds", entities);
+        appendGauge(sb, "hytale_chunks_loaded_total", "Loaded chunks in all worlds", chunks);
+    }
+
+    private void appendWindowSample(StringBuilder sb, String name, String world, String window, String stat, double value) {
+        sb.append(name)
+          .append("{world=\"").append(escapeLabel(world))
+          .append("\",window=\"").append(escapeLabel(window))
+          .append("\",stat=\"").append(stat)
+          .append("\"} ")
+          .append(formatValue(value))
+          .append("\n");
+    }
+
+    private void appendWorldGauge(StringBuilder sb, String name, String help, List<WorldPerf.Snapshot> worlds,
+                                  ToDoubleFunction<WorldPerf.Snapshot> value) {
+        sb.append("# HELP ").append(name).append(" ").append(help).append("\n");
+        sb.append("# TYPE ").append(name).append(" gauge\n");
+        for (WorldPerf.Snapshot w : worlds) {
+            double v = value.applyAsDouble(w);
+            if (v < 0) continue; // -1 = not available
+            sb.append(name)
+              .append("{world=\"").append(escapeLabel(w.world)).append("\"} ")
+              .append(formatValue(v))
+              .append("\n");
+        }
     }
 
     private void appendGauge(StringBuilder sb, String name, String help, double value) {

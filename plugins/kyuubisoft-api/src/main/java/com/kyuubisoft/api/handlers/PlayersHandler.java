@@ -10,11 +10,17 @@ import com.hypixel.hytale.server.core.modules.entitystats.EntityStatValue;
 import com.hypixel.hytale.server.core.modules.entitystats.asset.DefaultEntityStatTypes;
 import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.math.vector.Rotation3f;
+import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.server.core.modules.entity.component.HeadRotation;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import com.kyuubisoft.api.util.WorldThread;
+import com.kyuubisoft.api.web.ApiException;
 import org.joml.Vector3d;
 
 import java.util.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
 /**
@@ -193,10 +199,19 @@ public class PlayersHandler {
         return new PlayersResponse(playerDataList.size(), playerDataList);
     }
 
-    /** GET /api/players/{name}/details — detailed info about a specific player. */
-    public PlayerDetails getPlayerDetails(String playerName) {
+    /**
+     * GET /api/players/{name}/details — detailed info about a specific player.
+     *
+     * Components may only be read on the player's world thread, so the read is
+     * queued there and the future completes once it ran (404 when the player
+     * is offline or between worlds, 504 when the world does not answer).
+     */
+    public CompletableFuture<PlayerDetails> getPlayerDetails(String playerName) {
         PlayerRef player = findPlayer(playerName);
-        return player == null ? null : createPlayerDetails(player);
+        if (player == null) {
+            return CompletableFuture.failedFuture(new ApiException(404, "Player not found"));
+        }
+        return WorldThread.supplyForPlayer(player, (ref, store, world) -> createPlayerDetails(player, ref, store, world));
     }
 
     private PlayerData createPlayerData(PlayerRef player) {
@@ -231,66 +246,44 @@ public class PlayersHandler {
         return data;
     }
 
-    private PlayerDetails createPlayerDetails(PlayerRef player) {
+    /** Runs on the player's world thread: reads straight from the entity store. */
+    private PlayerDetails createPlayerDetails(PlayerRef player, Ref<EntityStore> ref, Store<EntityStore> store, World world) {
         PlayerDetails details = new PlayerDetails();
         details.uuid = player.getUuid().toString();
         details.name = player.getUsername();
+        details.world = world.getName();
 
-        try {
-            UUID worldUuid = player.getWorldUuid();
-            if (worldUuid != null) {
-                World world = Universe.get().getWorld(worldUuid);
-                if (world != null) {
-                    details.world = world.getName();
-                }
-            }
-        } catch (Exception e) {
-            details.world = "unknown";
+        // Position from the transform, look direction from the head rotation
+        // (the body rotation lags behind where the player actually looks).
+        TransformComponent transform = store.getComponent(ref, TransformComponent.getComponentType());
+        if (transform != null && transform.getPosition() != null) {
+            Vector3d pos = transform.getPosition();
+            details.position = new Position(pos.x(), pos.y(), pos.z());
         }
-
-        // Position and rotation from the transform.
-        try {
-            Transform transform = player.getTransform();
-            if (transform != null) {
-                Vector3d pos = transform.getPosition();
-                if (pos != null) {
-                    details.position = new Position(pos.x(), pos.y(), pos.z());
-                }
-                Rotation3f rot = transform.getRotation();
-                if (rot != null) {
-                    details.yaw = rot.yaw();
-                    details.pitch = rot.pitch();
-                }
-            }
-        } catch (Exception e) {
-            details.position = null;
+        HeadRotation head = store.getComponent(ref, HeadRotation.getComponentType());
+        Rotation3f rot = head != null ? head.getRotation() : (transform != null ? transform.getRotation() : null);
+        if (rot != null) {
+            details.yaw = rot.yaw();
+            details.pitch = rot.pitch();
         }
 
         // Real gamemode via the Player entity component (Adventure/Creative).
         details.gamemode = "unknown";
-        try {
-            Player p = player.getComponent(Player.getComponentType());
-            if (p != null && p.getGameMode() != null) {
-                details.gamemode = p.getGameMode().name().toLowerCase(Locale.ROOT);
-            }
-        } catch (Throwable ignored) {
-            // Component not readable off the world thread in this build — keep "unknown".
+        Player p = store.getComponent(ref, Player.getComponentType());
+        if (p != null && p.getGameMode() != null) {
+            details.gamemode = p.getGameMode().name().toLowerCase(Locale.ROOT);
         }
 
-        // Real health via the entity-stats component.
+        // Real health via the entity-stats component; -1 = unknown.
         details.health = -1;
         details.maxHealth = -1;
-        try {
-            EntityStatMap stats = player.getComponent(EntityStatMap.getComponentType());
-            if (stats != null) {
-                EntityStatValue health = stats.get(DefaultEntityStatTypes.getHealth());
-                if (health != null) {
-                    details.health = round2(health.get());
-                    details.maxHealth = round2(health.getMax());
-                }
+        EntityStatMap stats = store.getComponent(ref, EntityStatMap.getComponentType());
+        if (stats != null) {
+            EntityStatValue health = stats.get(DefaultEntityStatTypes.getHealth());
+            if (health != null) {
+                details.health = round2(health.get());
+                details.maxHealth = round2(health.getMax());
             }
-        } catch (Throwable ignored) {
-            // Stats not readable here — leave as -1 ("unknown").
         }
 
         return details;
@@ -298,43 +291,6 @@ public class PlayersHandler {
 
     private static double round2(double v) {
         return Math.round(v * 100.0) / 100.0;
-    }
-
-    /** GET /api/players/{name}/inventory — placeholder until item containers are mapped. */
-    public PlayerInventory getPlayerInventory(String playerName) {
-        PlayerRef player = findPlayer(playerName);
-        return player == null ? null : createPlayerInventory(player);
-    }
-
-    private PlayerInventory createPlayerInventory(PlayerRef player) {
-        PlayerInventory inventory = new PlayerInventory();
-        inventory.uuid = player.getUuid().toString();
-        inventory.name = player.getUsername();
-        inventory.items = new ArrayList<>();
-        inventory.totalSlots = 36;
-        inventory.usedSlots = 0;
-
-        // NOTE: Reading the live inventory requires walking the player's
-        // ItemContainer windows (HotbarManager / WindowManager). That is a
-        // larger, version-sensitive mapping deferred to a follow-up; the
-        // structure is returned empty rather than fabricated.
-        return inventory;
-    }
-
-    /** GET /api/players/{name}/appearance — placeholder structure. */
-    public PlayerAppearance getPlayerAppearance(String playerName) {
-        PlayerRef player = findPlayer(playerName);
-        return player == null ? null : createPlayerAppearance(player);
-    }
-
-    private PlayerAppearance createPlayerAppearance(PlayerRef player) {
-        PlayerAppearance appearance = new PlayerAppearance();
-        appearance.uuid = player.getUuid().toString();
-        appearance.name = player.getUsername();
-        appearance.skinId = null;
-        appearance.modelType = "default";
-        appearance.customization = new AppearanceCustomization();
-        return appearance;
     }
 
     // Response classes
@@ -373,67 +329,6 @@ public class PlayersHandler {
             this.x = Math.round(x * 100.0) / 100.0;
             this.y = Math.round(y * 100.0) / 100.0;
             this.z = Math.round(z * 100.0) / 100.0;
-        }
-    }
-
-    // Inventory classes
-
-    public static class PlayerInventory {
-        public String uuid;
-        public String name;
-        public List<InventoryItem> items;
-        public int totalSlots;
-        public int usedSlots;
-    }
-
-    public static class InventoryItem {
-        public int slot;
-        public String itemId;
-        public String displayName;
-        public int amount;
-        public int durability;
-        public int maxDurability;
-        public List<String> enchantments;
-        public Map<String, Object> nbt;
-
-        public InventoryItem() {
-            this.enchantments = new ArrayList<>();
-            this.nbt = new HashMap<>();
-        }
-
-        public InventoryItem(int slot, String itemId, int amount) {
-            this();
-            this.slot = slot;
-            this.itemId = itemId;
-            this.amount = amount;
-        }
-    }
-
-    // Appearance classes
-
-    public static class PlayerAppearance {
-        public String uuid;
-        public String name;
-        public String skinId;
-        public String skinUrl;
-        public String modelType; // "default" or "slim"
-        public String capeId;
-        public String capeUrl;
-        public AppearanceCustomization customization;
-    }
-
-    public static class AppearanceCustomization {
-        public String hairStyle;
-        public String hairColor;
-        public String eyeColor;
-        public String skinTone;
-        public String bodyType;
-        public List<String> accessories;
-        public Map<String, String> colors;
-
-        public AppearanceCustomization() {
-            this.accessories = new ArrayList<>();
-            this.colors = new HashMap<>();
         }
     }
 

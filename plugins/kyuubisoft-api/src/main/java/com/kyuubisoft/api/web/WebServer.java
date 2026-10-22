@@ -5,13 +5,17 @@ import com.kyuubisoft.api.handlers.MetricsHandler;
 import com.kyuubisoft.api.websocket.EventBroadcaster;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Future;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -20,11 +24,13 @@ import java.util.logging.Logger;
 public class WebServer {
 
     private static final Logger LOGGER = Logger.getLogger("KyuubiSoftAPI");
+    private static final long STOP_TIMEOUT_SECONDS = 5;
 
     private final int port;
     private final EventBroadcaster eventBroadcaster;
     private MetricsHandler metricsHandler;
     private ApiConfig apiConfig;
+    private Executor workers;
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -44,6 +50,11 @@ public class WebServer {
         this.apiConfig = apiConfig;
     }
 
+    /** Pool for blocking request work, so the Netty threads never wait on it. */
+    public void setWorkers(Executor workers) {
+        this.workers = workers;
+    }
+
     public void start() throws InterruptedException {
         if (apiConfig == null) {
             // Without its config the API cannot authenticate anyone: stay closed.
@@ -51,9 +62,10 @@ public class WebServer {
         }
         final CorsPolicy corsPolicy = new CorsPolicy(apiConfig.getCorsAllowedOrigins());
         final AuthGate authGate = new AuthGate(apiConfig, corsPolicy);
+        final ModPanelHttpHandler modPanelHandler = new ModPanelHttpHandler(corsPolicy);
 
-        bossGroup = new NioEventLoopGroup(1);
-        workerGroup = new NioEventLoopGroup();
+        bossGroup = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
+        workerGroup = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
 
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
@@ -75,12 +87,14 @@ public class WebServer {
                         // WebSocket support
                         pipeline.addLast(new WebSocketServerProtocolHandler("/ws", null, true));
 
-                        // Custom handlers
+                        // Custom handlers. /api/mods/panel* first; it passes everything else on.
+                        pipeline.addLast(modPanelHandler);
                         HttpRequestHandler httpHandler = new HttpRequestHandler();
                         if (metricsHandler != null) {
                             httpHandler.setMetricsHandler(metricsHandler);
                         }
                         httpHandler.setCorsPolicy(corsPolicy);
+                        httpHandler.setWorkers(workers);
                         pipeline.addLast(httpHandler);
                         pipeline.addLast(new WebSocketFrameHandler(eventBroadcaster));
                     }
@@ -92,16 +106,33 @@ public class WebServer {
         LOGGER.info("WebServer bound to port " + port);
     }
 
+    /**
+     * Close the port and wait (bounded) until the event loops are gone, so a
+     * plugin reload can bind the same port right away.
+     */
     public void stop() {
+        // Waiting from one of our own event loops (a request that triggered the
+        // shutdown) would block that loop on itself: then only ask, don't wait.
+        boolean mayWait = !inOwnEventLoop();
         if (serverChannel != null) {
-            serverChannel.close();
+            ChannelFuture closed = serverChannel.close();
+            if (mayWait) closed.awaitUninterruptibly(STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         }
-        if (bossGroup != null) {
-            bossGroup.shutdownGracefully();
-        }
-        if (workerGroup != null) {
-            workerGroup.shutdownGracefully();
+        for (EventLoopGroup group : new EventLoopGroup[] { bossGroup, workerGroup }) {
+            if (group == null) continue;
+            Future<?> terminated = group.shutdownGracefully(0, STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (mayWait) terminated.awaitUninterruptibly(STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         }
         LOGGER.info("WebServer stopped");
+    }
+
+    private boolean inOwnEventLoop() {
+        for (EventLoopGroup group : new EventLoopGroup[] { bossGroup, workerGroup }) {
+            if (group == null) continue;
+            for (EventExecutor executor : group) {
+                if (executor.inEventLoop()) return true;
+            }
+        }
+        return false;
     }
 }
