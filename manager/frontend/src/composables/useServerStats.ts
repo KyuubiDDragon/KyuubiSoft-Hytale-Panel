@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { serverApi, type ServerStatus, type ServerStats } from '@/api/server'
 import { playersApi } from '@/api/players'
+import { HYTALE_TARGET_TPS, LEGACY_PLUGIN_TARGET_TPS } from '@/utils/tps'
 
 export function useServerStats(pollInterval = 5000) {
   const status = ref<ServerStatus | null>(null)
@@ -13,6 +14,11 @@ export function useServerStats(pollInterval = 5000) {
   const pluginAvailable = ref(false)
   const tps = ref<number | null>(null)
   const mspt = ref<number | null>(null)
+  // Scale for tps: the world's target (plugin 2.1+), 20 for older plugins
+  // whose readings were capped there.
+  const targetTps = ref<number>(HYTALE_TARGET_TPS)
+  // World the headline TPS belongs to (the slowest one), plugin 2.1+
+  const tpsWorld = ref<string | null>(null)
   const maxPlayers = ref<number | null>(null)
   const serverVersion = ref<string | null>(null)
   const patchline = ref<string | null>(null)
@@ -39,8 +45,10 @@ export function useServerStats(pollInterval = 5000) {
           if (pluginInfo.success && pluginInfo.data) {
             pluginAvailable.value = true
             playerCount.value = pluginInfo.data.onlinePlayers
-            tps.value = pluginInfo.data.tps
-            mspt.value = pluginInfo.data.mspt
+            tps.value = typeof pluginInfo.data.tps === 'number' ? pluginInfo.data.tps : null
+            mspt.value = typeof pluginInfo.data.mspt === 'number' ? pluginInfo.data.mspt : null
+            targetTps.value = pluginInfo.data.targetTps ?? LEGACY_PLUGIN_TARGET_TPS
+            tpsWorld.value = pluginInfo.data.tpsWorld ?? null
             maxPlayers.value = pluginInfo.data.maxPlayers
             serverVersion.value = pluginInfo.data.version
             patchline.value = pluginInfo.data.patchline
@@ -132,6 +140,8 @@ export function useServerStats(pollInterval = 5000) {
     pluginAvailable,
     tps,
     mspt,
+    targetTps,
+    tpsWorld,
     maxPlayers,
     serverVersion,
     patchline,

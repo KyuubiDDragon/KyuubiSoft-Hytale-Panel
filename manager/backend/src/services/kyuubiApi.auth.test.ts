@@ -132,7 +132,8 @@ describe('plugin auth failures', () => {
       jsonResponse(503, { status: 503, error: 'Metrics not initialized' }),
     );
     const result = await api.fetchFromPlugin('/api/server/info');
-    expect(result).toEqual({ success: false, error: 'HTTP 503' });
+    // No authError; the status is passed through for callers that map it (live-data routes).
+    expect(result).toEqual({ success: false, error: 'HTTP 503', status: 503 });
   });
 
   it('a refused POST action fails with the auth hint (so routes fall back to the console)', async () => {

@@ -81,6 +81,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/mod-status/:id?',
+      name: 'modStatus',
+      component: () => import('./views/ModStatus.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/assets',
       name: 'assets',
       component: () => import('./views/Assets.vue'),

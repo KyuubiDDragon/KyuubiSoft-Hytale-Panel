@@ -15,6 +15,7 @@ import updatesRoutes from './updates.js';
 import authRoutes from './auth.js';
 import panelRoutes from './panel.js';
 import crashesRoutes from './crashes.js';
+import pluginLiveRoutes from './pluginLive.js';
 
 const router = Router();
 
@@ -43,5 +44,6 @@ router.use('/', updatesRoutes);
 router.use('/', authRoutes);
 router.use('/', panelRoutes);
 router.use('/', crashesRoutes);
+router.use('/', pluginLiveRoutes);
 
 export default router;

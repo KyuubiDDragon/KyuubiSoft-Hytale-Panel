@@ -91,6 +91,7 @@
     "permissions": "Permissões",
     "worlds": "Mundos",
     "mods": "Mods e Plugins",
+    "modStatus": "Status dos mods",
     "performance": "Desempenho",
     "configuration": "Configuração",
     "users": "Usuários",
@@ -487,7 +488,18 @@
     "showWarnings": "Avisos",
     "showInfo": "Informações",
     "bypassWarning": "Aviso: O acesso ao console permite executar todos os comandos do servidor, ignorando as restrições de permissão da UI.",
-    "filtered": "(filtrado)"
+    "filtered": "(filtrado)",
+    "syntax": "Sintaxe",
+    "suggestionBlocked": "não permitido no painel",
+    "suggestionAdmin": "admin",
+    "reply": {
+      "pending": "Aguardando o servidor…",
+      "running": "Ainda em execução no servidor; saídas posteriores aparecem apenas no log.",
+      "noOutput": "Concluído, sem saída.",
+      "sentOnly": "Enviado ao console do servidor. A resposta aparece no log acima; com o plugin KyuubiSoft API ela é exibida aqui.",
+      "noAnswer": "Ainda sem resposta. O comando pode ter sido executado; verifique o log.",
+      "connectionLost": "Conexão perdida antes da resposta. O comando pode ter sido executado; verifique o log."
+    }
   },
   "backups": {
     "title": "Gerenciamento de Backups",
@@ -562,6 +574,15 @@
       "deathCount": "{count} posições de morte",
       "deathDay": "Dia {day}",
       "latestDeath": "Mais recente",
+      "live": "Ao vivo no servidor",
+      "online": "Online",
+      "ping": "Ping",
+      "groups": "Grupos",
+      "joined": "Entrou em",
+      "language": "Idioma",
+      "protocol": "Protocolo",
+      "sourceLive": "Ao vivo do servidor em execução",
+      "sourceFile": "Último estado salvo",
       "appearance": "Aparência",
       "world": "Mundo",
       "gamemode": "Modo de Jogo",
@@ -1016,6 +1037,22 @@
     "min": "Mínimo",
     "msptAvg": "MSPT Méd.",
     "prometheusTpsMetrics": "Métricas TPS Prometheus (Janela 60s)",
+    "ofTarget": "de {target} TPS",
+    "tpsInWorld": "mundo mais lento: {world}",
+    "tickTime": "ms de tempo de tick",
+    "perWorld": {
+      "title": "TPS por mundo",
+      "hint": "Cada mundo roda em sua própria thread. O TPS é medido em relação à meta do mundo; o tempo de tick é quanto um tick levou para ser calculado (orçamento de {budget} ms por tick).",
+      "world": "Mundo",
+      "tps10s": "TPS (10 s)",
+      "tps1m": "TPS (1 min)",
+      "min1m": "Mínimo (1 min)",
+      "tickAvg": "Tick méd. (1 min)",
+      "tickMax": "Tick máx. (1 min)",
+      "players": "Jogadores",
+      "entities": "Entidades",
+      "chunks": "Chunks"
+    },
     "jvmDetails": "Detalhes JVM",
     "heapMemoryLabel": "Memória Heap",
     "nonHeapMemory": "Memória Non-Heap",
@@ -1682,6 +1719,37 @@
     "noRolesSubtitle": "Crie uma função personalizada para conceder permissões específicas.",
     "type": "Tipo"
   },
+  "modPanel": {
+    "title": "Status dos mods",
+    "subtitle": "Páginas de status e ações de administração que os mods registram no plugin KyuubiSoft API",
+    "autoRefresh": "Atualizar automaticamente",
+    "providers": "Mods",
+    "actions": "Ações de administração",
+    "dangerousNeedsAdmin": "O mod marca esta ação como perigosa: ela exige a permissão de admin do console",
+    "run": "Executar",
+    "confirmDefault": "Executar esta ação agora?",
+    "updatedAt": "Atualizado às {time}",
+    "noRows": "Nenhuma entrada",
+    "rowsTruncated": "Mostrando {shown} de {total} linhas",
+    "snapshotTruncated": "O mod enviou mais dados do que o painel mostra; algumas seções foram cortadas.",
+    "emptyTitle": "Nenhuma página de status ainda",
+    "emptyDescription": "Nenhum mod instalado registrou uma página de status. Mods com suporte ao painel (por exemplo KyuubiSoft Pets 1.12 ou mais recente) aparecem aqui automaticamente.",
+    "unavailableTitle": "Status dos mods indisponível",
+    "unavailable": {
+      "offline": "O plugin KyuubiSoft API não está acessível. O servidor está rodando e o plugin está instalado?",
+      "auth": "O plugin recusou o token do painel. Reinicie o servidor pelo painel para que o plugin carregue o token atual.",
+      "unsupported": "O plugin KyuubiSoft API instalado é antigo demais para páginas de status de mods. Atualize-o pelo painel.",
+      "unavailable": "O registro de mods do plugin ainda não está rodando. Tente novamente em instantes.",
+      "error": "O plugin respondeu com um erro."
+    },
+    "status": {
+      "ok": "Concluído",
+      "failed": "A ação relatou uma falha",
+      "error": "O mod relatou um erro",
+      "timeout": "O mod não respondeu a tempo",
+      "busy": "O mod ainda está ocupado com a solicitação anterior"
+    }
+  },
   "permissionCategories": {
     "dashboard": "Painel",
     "server": "Servidor",
@@ -1764,7 +1832,11 @@
       "install": "Instalar mods",
       "delete": "Excluir mods",
       "config": "Editar configuração de mods",
-      "toggle": "Ativar/desativar mods"
+      "toggle": "Ativar/desativar mods",
+      "panel": {
+        "view": "Ver páginas de status dos mods",
+        "action": "Executar ações de administração de mods (privilégio alto: rodam com todos os direitos do servidor; as perigosas também exigem admin do console)"
+      }
     },
     "plugins": {
       "view": "Ver plugins",

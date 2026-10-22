@@ -8,74 +8,69 @@ const tmpDir = path.join(os.tmpdir(), `kp-pluginauth-${Date.now()}`);
 const serverDir = path.join(tmpDir, 'srv-default');
 const modsDir = path.join(tmpDir, 'mods-default');
 const linkedServerDir = path.join(tmpDir, 'srv-linked');
-fs.mkdirSync(serverDir, { recursive: true });
-fs.mkdirSync(modsDir, { recursive: true });
-fs.mkdirSync(linkedServerDir, { recursive: true });
+const linkedModsDir = path.join(tmpDir, 'mods-linked');
+const legacyServerDir = path.join(tmpDir, 'srv-legacy');
+const legacyModsDir = path.join(tmpDir, 'mods-legacy');
+const oldJarServerDir = path.join(tmpDir, 'srv-oldjar');
+const oldJarModsDir = path.join(tmpDir, 'mods-oldjar');
+for (const dir of [
+  serverDir,
+  modsDir,
+  linkedServerDir,
+  linkedModsDir,
+  legacyServerDir,
+  legacyModsDir,
+  oldJarServerDir,
+  oldJarModsDir,
+]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 // Creating symlinks needs extra rights on Windows; the CI/containers run Linux.
 const noSymlinks = process.platform === 'win32';
 process.env.MANAGER_DATA_PATH = tmpDir;
 delete process.env.DEMO_MODE;
 
+const DATA_DIR = 'KyuubiDDragon_KyuubiSoftAPI';
+
+function serverEntry(id: string, server: string, mods: string, pluginPort: number) {
+  return {
+    id,
+    name: id,
+    containerName: `hytale-${id}`,
+    status: 'ready',
+    network: { serverPort: 5520, webMapPort: 18081, webMapWsPort: 18082, pluginPort },
+    paths: {
+      server,
+      data: `/tmp/d-${id}`,
+      backups: `/tmp/b-${id}`,
+      mods,
+      plugins: `/tmp/p-${id}`,
+      assets: `/tmp/a-${id}`,
+      auth: `/tmp/au-${id}`,
+    },
+    createdAt: new Date().toISOString(),
+    createdBy: 'system',
+  };
+}
+
 const seed = {
   schemaVersion: 1,
   defaultId: 'default',
   servers: [
-    {
-      id: 'default',
-      name: 'Primary',
-      containerName: 'hytale-primary',
-      status: 'ready',
-      network: { serverPort: 5520, webMapPort: 18081, webMapWsPort: 18082, pluginPort: 18085 },
-      paths: {
-        server: serverDir,
-        data: '/tmp/d1',
-        backups: '/tmp/b1',
-        mods: modsDir,
-        plugins: '/tmp/p1',
-        assets: '/tmp/a1',
-        auth: '/tmp/au1',
-      },
-      createdAt: new Date().toISOString(),
-      createdBy: 'system',
-    },
-    {
-      // Instance dirs live outside the manager container: not reachable here.
-      id: 'unmounted',
-      name: 'Second',
-      containerName: 'hytale-second',
-      status: 'ready',
-      network: { serverPort: 5521, webMapPort: 18083, webMapWsPort: 18084, pluginPort: 18086 },
-      paths: {
-        server: path.join(tmpDir, 'does-not-exist', 'server'),
-        data: '/tmp/d2',
-        backups: '/tmp/b2',
-        mods: '/tmp/m2',
-        plugins: '/tmp/p2',
-        assets: '/tmp/a2',
-        auth: '/tmp/au2',
-      },
-      createdAt: new Date().toISOString(),
-      createdBy: 'system',
-    },
-    {
-      // Its config dir gets replaced by a symlink in a test below.
-      id: 'linked',
-      name: 'Linked',
-      containerName: 'hytale-linked',
-      status: 'ready',
-      network: { serverPort: 5522, webMapPort: 18087, webMapWsPort: 18088, pluginPort: 18089 },
-      paths: {
-        server: linkedServerDir,
-        data: '/tmp/d3',
-        backups: '/tmp/b3',
-        mods: '/tmp/m3',
-        plugins: '/tmp/p3',
-        assets: '/tmp/a3',
-        auth: '/tmp/au3',
-      },
-      createdAt: new Date().toISOString(),
-      createdBy: 'system',
-    },
+    serverEntry('default', serverDir, modsDir, 18085),
+    // Instance dirs live outside the manager container: not reachable here.
+    serverEntry(
+      'unmounted',
+      path.join(tmpDir, 'does-not-exist', 'server'),
+      path.join(tmpDir, 'does-not-exist', 'mods'),
+      18086,
+    ),
+    // Its plugin data dir gets replaced by a symlink in a test below.
+    serverEntry('linked', linkedServerDir, linkedModsDir, 18089),
+    // Still has the config of a 2.0 plugin.
+    serverEntry('legacy', legacyServerDir, legacyModsDir, 18090),
+    // Runs a 2.0.0 jar that has not created its config yet.
+    serverEntry('oldjar', oldJarServerDir, oldJarModsDir, 18091),
   ],
 };
 fs.writeFileSync(path.join(tmpDir, 'servers.json'), JSON.stringify(seed));
@@ -93,6 +88,14 @@ afterEach(() => {
 
 function readJson(file: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
+}
+
+function legacyFile(dir: string): string {
+  return path.join(dir, 'config', 'kyuubisoft-api', 'config.json');
+}
+
+function dataDirFile(dir: string): string {
+  return path.join(dir, DATA_DIR, 'config.json');
 }
 
 describe('plugin token store', () => {
@@ -145,13 +148,42 @@ describe('plugin token store', () => {
   });
 });
 
+describe('config locations', () => {
+  it('puts the 2.1 config into the plugin data dir below mods', () => {
+    expect(auth.pluginConfigPath('/opt/hytale/mods')).toBe(
+      path.join('/opt/hytale/mods', DATA_DIR, 'config.json'),
+    );
+    expect(auth.legacyPluginConfigPath('/opt/hytale/server')).toBe(
+      path.join('/opt/hytale/server', 'config', 'kyuubisoft-api', 'config.json'),
+    );
+  });
+
+  it('reads the version from the jar name', () => {
+    expect(auth.pluginJarVersion('KyuubiSoftAPI-2.1.0.jar')).toEqual([2, 1, 0]);
+    expect(auth.pluginJarVersion('kyuubisoftapi-1.4.3.jar')).toEqual([1, 4, 3]);
+    expect(auth.pluginJarVersion('KyuubiSoftAPI.jar')).toBeNull();
+  });
+
+  it('needs the old config only for jars older than 2.1.0', () => {
+    expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.1.0.jar', 'Other.jar'])).toBe(false);
+    expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.10.0.jar'])).toBe(false);
+    expect(auth.needsLegacyConfig(['KyuubiSoftAPI-3.0.0.jar'])).toBe(false);
+    expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.0.0.jar'])).toBe(true);
+    expect(auth.needsLegacyConfig(['kyuubisoftapi-1.4.3.jar'])).toBe(true);
+    // Unknown version: keep the old path alive to be safe.
+    expect(auth.needsLegacyConfig(['KyuubiSoftAPI.jar'])).toBe(true);
+    // Disabled jars and plain folders do not count.
+    expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.0.0.jar.disabled', DATA_DIR])).toBe(false);
+  });
+});
+
 describe('writePluginAuthConfig', () => {
   const token = 'a'.repeat(64);
 
-  /** Fresh server dir; optionally with an existing plugin config. */
-  function newServer(name: string, configContent?: string): { dir: string; file: string } {
+  /** Fresh mods dir; optionally with an existing plugin config. */
+  function newMods(name: string, configContent?: string): { dir: string; file: string } {
     const dir = path.join(tmpDir, name);
-    const file = path.join(dir, 'config', 'kyuubisoft-api', 'config.json');
+    const file = dataDirFile(dir);
     fs.mkdirSync(dir, { recursive: true });
     if (configContent !== undefined) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -161,13 +193,25 @@ describe('writePluginAuthConfig', () => {
   }
 
   it('creates the plugin config when none exists', async () => {
-    const { dir, file } = newServer('cfg-new');
+    const { dir, file } = newMods('cfg-new');
     expect(await auth.writePluginAuthConfig(dir, token)).toEqual({ changed: true });
     expect(readJson(file)).toEqual({ authEnabled: true, authToken: token });
   });
 
+  it('starts a new config from the seed (keys of the old config)', async () => {
+    const { dir, file } = newMods('cfg-seed');
+    await auth.writePluginAuthConfig(dir, token, { httpPort: 18099, authToken: 'old' });
+    expect(readJson(file)).toEqual({ httpPort: 18099, authEnabled: true, authToken: token });
+  });
+
+  it('ignores the seed when the config already exists', async () => {
+    const { dir, file } = newMods('cfg-seed-existing', JSON.stringify({ httpPort: 18100 }));
+    await auth.writePluginAuthConfig(dir, token, { httpPort: 18099 });
+    expect(readJson(file)).toEqual({ httpPort: 18100, authEnabled: true, authToken: token });
+  });
+
   it('keeps every other key the operator set', async () => {
-    const { dir, file } = newServer(
+    const { dir, file } = newMods(
       'cfg-keep',
       JSON.stringify({
         httpPort: 18099,
@@ -191,7 +235,7 @@ describe('writePluginAuthConfig', () => {
 
   it('keeps an explicit insecureDisableAuth but warns about it', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { dir, file } = newServer('cfg-insecure', JSON.stringify({ insecureDisableAuth: true }));
+    const { dir, file } = newMods('cfg-insecure', JSON.stringify({ insecureDisableAuth: true }));
 
     await auth.writePluginAuthConfig(dir, token);
 
@@ -204,7 +248,7 @@ describe('writePluginAuthConfig', () => {
   });
 
   it('leaves an up-to-date file untouched', async () => {
-    const { dir, file } = newServer('cfg-same');
+    const { dir, file } = newMods('cfg-same');
     await auth.writePluginAuthConfig(dir, token);
     const mtime = fs.statSync(file).mtimeMs;
     expect(await auth.writePluginAuthConfig(dir, token)).toEqual({ changed: false });
@@ -214,7 +258,7 @@ describe('writePluginAuthConfig', () => {
   it('replaces a broken file and keeps its copy in the panel volume, not in the server dir', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const broken = '{ "httpPort": 18085, "authToken": "old-token-old-token", ';
-    const { dir, file } = newServer('cfg-broken', broken);
+    const { dir, file } = newMods('cfg-broken', broken);
 
     expect(await auth.writePluginAuthConfig(dir, token)).toEqual({ changed: true });
 
@@ -232,20 +276,27 @@ describe('writePluginAuthConfig', () => {
   });
 
   it('refuses when a path segment is not a directory', async () => {
-    const { dir } = newServer('cfg-notdir');
-    fs.writeFileSync(path.join(dir, 'config'), 'not a directory');
+    const { dir } = newMods('cfg-notdir');
+    fs.writeFileSync(path.join(dir, DATA_DIR), 'not a directory');
     await expect(auth.writePluginAuthConfig(dir, token)).rejects.toBeInstanceOf(
       auth.UnsafePluginConfigPathError,
     );
   });
 
+  it('writes the pre-2.1 config for old plugins', async () => {
+    const dir = path.join(tmpDir, 'cfg-legacy-write');
+    fs.mkdirSync(dir, { recursive: true });
+    expect(await auth.writeLegacyPluginAuthConfig(dir, token)).toEqual({ changed: true });
+    expect(readJson(legacyFile(dir))).toEqual({ authEnabled: true, authToken: token });
+  });
+
   it.skipIf(noSymlinks)(
-    'refuses a config dir symlinked out of the server dir and writes nothing there',
+    'refuses a data dir symlinked out of the mods dir and writes nothing there',
     async () => {
-      const { dir } = newServer('cfg-link-out');
+      const { dir } = newMods('cfg-link-out');
       const outside = path.join(tmpDir, 'outside-config');
       fs.mkdirSync(outside, { recursive: true });
-      fs.symlinkSync(outside, path.join(dir, 'config'), 'dir');
+      fs.symlinkSync(outside, path.join(dir, DATA_DIR), 'dir');
 
       await expect(auth.writePluginAuthConfig(dir, token)).rejects.toBeInstanceOf(
         auth.UnsafePluginConfigPathError,
@@ -255,27 +306,23 @@ describe('writePluginAuthConfig', () => {
   );
 
   it.skipIf(noSymlinks)(
-    'refuses a symlinked plugin dir even when it stays inside the server dir',
+    'refuses a symlinked data dir even when it stays inside the mods dir',
     async () => {
-      const { dir } = newServer('cfg-link-in');
-      fs.mkdirSync(path.join(dir, 'config', 'elsewhere'), { recursive: true });
-      fs.symlinkSync(
-        path.join(dir, 'config', 'elsewhere'),
-        path.join(dir, 'config', 'kyuubisoft-api'),
-        'dir',
-      );
+      const { dir } = newMods('cfg-link-in');
+      fs.mkdirSync(path.join(dir, 'elsewhere'), { recursive: true });
+      fs.symlinkSync(path.join(dir, 'elsewhere'), path.join(dir, DATA_DIR), 'dir');
 
       await expect(auth.writePluginAuthConfig(dir, token)).rejects.toBeInstanceOf(
         auth.UnsafePluginConfigPathError,
       );
-      expect(fs.readdirSync(path.join(dir, 'config', 'elsewhere'))).toEqual([]);
+      expect(fs.readdirSync(path.join(dir, 'elsewhere'))).toEqual([]);
     },
   );
 
   it.skipIf(noSymlinks)(
     'neither reads nor replaces a secret the config file is linked to',
     async () => {
-      const { dir, file } = newServer('cfg-link-file');
+      const { dir, file } = newMods('cfg-link-file');
       fs.mkdirSync(path.dirname(file), { recursive: true });
       const secret = path.join(tmpDir, 'panel-secret.json');
       fs.writeFileSync(secret, JSON.stringify({ passwordHash: 'x' }));
@@ -291,15 +338,64 @@ describe('writePluginAuthConfig', () => {
 });
 
 describe('ensurePluginAuthConfig', () => {
-  it('writes the default server token into <server>/config/kyuubisoft-api/config.json', async () => {
+  it('writes the default server token into <mods>/KyuubiDDragon_KyuubiSoftAPI/config.json', async () => {
     const result = await auth.ensurePluginAuthConfig();
-    const expectedPath = path.join(serverDir, 'config', 'kyuubisoft-api', 'config.json');
+    const expectedPath = dataDirFile(modsDir);
 
     expect(result).toEqual({ ok: true, changed: true, path: expectedPath });
     expect(readJson(expectedPath).authToken).toBe(await auth.getPluginToken('default'));
+    // No old plugin and no old file: the pre-2.1 path stays untouched.
+    expect(fs.existsSync(legacyFile(serverDir))).toBe(false);
   });
 
-  it('reports instead of throwing when the server dir is not reachable', async () => {
+  it('moves an old config: new file starts from its keys, old file gets the token too', async () => {
+    fs.mkdirSync(path.dirname(legacyFile(legacyServerDir)), { recursive: true });
+    fs.writeFileSync(
+      legacyFile(legacyServerDir),
+      JSON.stringify({ httpPort: 18111, authToken: 'stale', corsAllowedOrigins: ['https://x.y'] }),
+    );
+
+    const result = await auth.ensurePluginAuthConfig('legacy');
+    const token = await auth.getPluginToken('legacy');
+
+    expect(result).toMatchObject({
+      ok: true,
+      changed: true,
+      path: dataDirFile(legacyModsDir),
+      legacyPath: legacyFile(legacyServerDir),
+    });
+    expect(readJson(dataDirFile(legacyModsDir))).toEqual({
+      httpPort: 18111,
+      corsAllowedOrigins: ['https://x.y'],
+      authEnabled: true,
+      authToken: token,
+    });
+    // A 2.0 plugin still reads the old file until it is replaced.
+    expect(readJson(legacyFile(legacyServerDir)).authToken).toBe(token);
+  });
+
+  it('stops writing the old path once the 2.1 plugin has moved it away', async () => {
+    fs.rmSync(path.join(legacyServerDir, 'config'), { recursive: true, force: true });
+    fs.writeFileSync(path.join(legacyModsDir, 'KyuubiSoftAPI-2.1.0.jar'), '');
+
+    const result = await auth.ensurePluginAuthConfig('legacy');
+
+    expect(result.legacyPath).toBeUndefined();
+    expect(fs.existsSync(legacyFile(legacyServerDir))).toBe(false);
+  });
+
+  it('writes the old path for an installed 2.0 jar even before it created its config', async () => {
+    fs.writeFileSync(path.join(oldJarModsDir, 'KyuubiSoftAPI-2.0.0.jar'), '');
+
+    const result = await auth.ensurePluginAuthConfig('oldjar');
+    const token = await auth.getPluginToken('oldjar');
+
+    expect(result).toMatchObject({ ok: true, legacyPath: legacyFile(oldJarServerDir) });
+    expect(readJson(legacyFile(oldJarServerDir)).authToken).toBe(token);
+    expect(readJson(dataDirFile(oldJarModsDir)).authToken).toBe(token);
+  });
+
+  it('reports instead of throwing when the mods dir is not reachable', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await auth.ensurePluginAuthConfig('unmounted');
     expect(result.ok).toBe(false);
@@ -313,7 +409,7 @@ describe('ensurePluginAuthConfig', () => {
       const error = vi.spyOn(console, 'error').mockImplementation(() => {});
       const outside = path.join(tmpDir, 'outside-linked');
       fs.mkdirSync(outside, { recursive: true });
-      fs.symlinkSync(outside, path.join(linkedServerDir, 'config'), 'dir');
+      fs.symlinkSync(outside, path.join(linkedModsDir, DATA_DIR), 'dir');
 
       const result = await auth.ensurePluginAuthConfig('linked');
 
@@ -339,7 +435,7 @@ describe('ensurePluginAuthConfig', () => {
     vi.spyOn(console, 'error').mockImplementation(capture);
 
     // Force a write so the success line is printed, then a failure line.
-    fs.rmSync(path.join(serverDir, 'config'), { recursive: true, force: true });
+    fs.rmSync(path.join(modsDir, DATA_DIR), { recursive: true, force: true });
     await auth.ensurePluginAuthConfig('default');
     await auth.ensurePluginAuthConfig('unmounted');
 

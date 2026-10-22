@@ -231,7 +231,7 @@ export function startPunishmentExpiry(): void {
             : null;
       if (cmd) {
         try {
-          await execCommand(cmd, p.serverId ?? undefined);
+          await execCommand(cmd, p.serverId ?? undefined, { actor: 'punishments' });
         } catch (err) {
           logger.warn(
             `[Punishments] failed to lift ${p.type} for ${p.playerName}: ${err instanceof Error ? err.message : err}`,

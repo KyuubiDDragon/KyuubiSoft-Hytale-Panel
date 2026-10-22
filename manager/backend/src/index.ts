@@ -43,6 +43,7 @@ import settingsRoutes from './routes/settings.js';
 import pushRoutes from './routes/push.js';
 import publicRoutes from './routes/public.js';
 import eventActionsRoutes from './routes/eventActions.js';
+import modPanelRoutes from './routes/modPanel.js';
 import webMapRoutes, { createWebMapProxy, WEBMAP_PROXY_PREFIX } from './routes/webmap.js';
 import { metricsMiddleware } from './services/metrics.js';
 
@@ -70,6 +71,7 @@ import { startCrashCapture } from './services/crashReports.js';
 import { startPerfHistory } from './services/perfHistory.js';
 import { startAutoMod } from './services/autoMod.js';
 import { startRetention } from './services/retention.js';
+import { bindCommandActor } from './services/commandActor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -363,6 +365,10 @@ app.use((req, res, next) => {
   express.json({ limit: '100kb' })(req, res, next);
 });
 
+// Console commands a request sends run as "Panel:<user>" in the server log
+// (services/commandActor.ts). After the body parsers, before every route.
+app.use(bindCommandActor);
+
 // ============================================================
 // Setup Routes - MUST be BEFORE auth middleware and other routes
 // These routes work without authentication during first-run setup
@@ -479,6 +485,7 @@ app.use('/api/wiki', wikiRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/event-actions', eventActionsRoutes);
+app.use('/api/mod-panel', modPanelRoutes);
 // WebMap session minting/revocation (the map proxy is mounted before helmet).
 app.use('/api/webmap', webMapRoutes);
 // Public, unauthenticated status (off unless config.publicStatus.enabled).
@@ -507,6 +514,7 @@ app.use('/api/servers/:serverId/management', serverScopeMiddleware, managementRo
 app.use('/api/servers/:serverId/scheduler', serverScopeMiddleware, schedulerRoutes);
 app.use('/api/servers/:serverId/assets', serverScopeMiddleware, assetsRoutes);
 app.use('/api/servers/:serverId/files', serverScopeMiddleware, filesRoutes);
+app.use('/api/servers/:serverId/mod-panel', serverScopeMiddleware, modPanelRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

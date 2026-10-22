@@ -65,6 +65,21 @@ async function holds(
 }
 
 /**
+ * Does this actor hold a console tier on `serverId` (role and, for an API key,
+ * its scopes)? For features that act with console rights without a command
+ * line, e.g. mod panel actions a mod marks dangerous.
+ */
+export async function holdsCommandTier(
+  actor: CommandActor,
+  permission: CommandTier,
+  serverId?: string,
+): Promise<boolean> {
+  if (!actor.username) return false;
+  if (!scopeAllows(actor.apiKeyScopes, permission)) return false;
+  return holds(actor.username, permission, serverId);
+}
+
+/**
  * May this actor run `command` on `serverId` right now? Omitting serverId
  * checks the global role only, which is also the right answer for entries
  * that apply to every server.

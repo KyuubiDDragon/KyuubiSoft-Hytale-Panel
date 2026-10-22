@@ -15,7 +15,10 @@ import { getPluginAuthHeaders, resolvePluginEndpoint } from './kyuubiApi.js';
 import { addChatMessage, recordDeathPosition } from './chatLog.js';
 import { parsePluginEvent, type PluginEvent } from '../schemas/pluginEvents.js';
 import { eventBus, publish as publishPanelEvent } from './eventBus.js';
+import { forwardLiveEvent } from './pluginLiveEvents.js';
 import { listServers, onServerAdded, onServerDeleted } from './servers.js';
+import { invalidateCommandRegistry } from './commandRegistry.js';
+import { forwardModEvent } from './modEvents.js';
 
 // Reconnection settings
 const RECONNECT_DELAY = 5000; // 5 seconds
@@ -84,35 +87,30 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
       // Also publish to panel-event taxonomy so webhooks / notifications see it.
       break;
 
-    case 'player_death':
+    case 'player_death': {
+      const by = event.killer ? `, killed by ${event.killer}` : '';
       console.log(
-        `[Death:${serverId}] ${event.player} died${event.cause ? ` (${event.cause})` : ''}`,
+        `[Death:${serverId}] ${event.player} died${event.cause ? ` (${event.cause}${by})` : ''}`,
       );
       if (event.world && event.x !== undefined && event.y !== undefined && event.z !== undefined) {
         await recordDeathPosition(event.player, event.world, event.x, event.y, event.z);
       }
-      eventBus.publish('player_death', {
+      const death = {
         player: event.player,
+        uuid: event.uuid,
         cause: event.cause,
+        killer: event.killer,
+        killerUuid: event.killerUuid,
+        killerType: event.killerType,
         world: event.world,
         x: event.x,
         y: event.y,
         z: event.z,
-        serverId,
-      });
-      publishPanelEvent(
-        'player.death',
-        {
-          player: event.player,
-          cause: event.cause,
-          world: event.world,
-          x: event.x,
-          y: event.y,
-          z: event.z,
-        },
-        serverId,
-      );
+      };
+      eventBus.publish('player_death', { ...death, serverId });
+      publishPanelEvent('player.death', death, serverId);
       break;
+    }
 
     case 'player_join':
       console.log(`[Join:${serverId}] ${event.player}`);
@@ -145,7 +143,36 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
       break;
 
     case 'tps_update':
-      eventBus.publish('server_tick', { tps: event.tps, mspt: event.mspt, serverId });
+      // One frame per world every 5 s; consumers (watchdog, perf history)
+      // keep the latest value per world and compare against targetTps.
+      eventBus.publish('server_tick', {
+        tps: event.tps,
+        mspt: event.mspt,
+        world: event.world,
+        targetTps: event.targetTps,
+        windows: event.windows,
+        serverId,
+      });
+      break;
+
+    // Live-data events: game mode, denied joins, worlds, shutdown, plugin state, rights.
+    case 'player_gamemode':
+    case 'player_join_denied':
+    case 'world_added':
+    case 'world_removed':
+    case 'server_shutdown':
+    case 'plugin_state':
+    case 'permission_changed':
+      forwardLiveEvent(serverId, event);
+      break;
+
+    case 'commands_changed':
+      invalidateCommandRegistry(serverId);
+      break;
+
+    // Events KS mods send through the plugin's PanelRegistry.
+    case 'mod_event':
+      forwardModEvent(serverId, event);
       break;
 
     default:
@@ -184,6 +211,8 @@ export async function connect(serverId: string): Promise<void> {
       state.isConnecting = false;
       state.currentReconnectDelay = RECONNECT_DELAY;
       state.lastRefusedStatus = null;
+      // A (re)connect usually means the server restarted: re-check its commands.
+      invalidateCommandRegistry(serverId);
     });
 
     ws.on('message', async (data: WebSocket.Data) => {

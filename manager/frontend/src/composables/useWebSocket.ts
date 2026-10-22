@@ -89,6 +89,20 @@ export function useWebSocket() {
             break
 
           case 'command_response':
+            // Newer backends echo the request id: show the answer as a block
+            // under the command it belongs to.
+            if (
+              typeof data.requestId === 'string' &&
+              consoleStore.setCommandReply(data.requestId, {
+                success: data.success,
+                status: data.status,
+                via: data.via,
+                lines: Array.isArray(data.lines) ? data.lines : [],
+                error: data.success === false ? data.error : undefined,
+              })
+            ) {
+              break
+            }
             if (data.output) {
               consoleStore.addLog({
                 timestamp: new Date().toISOString(),
@@ -131,6 +145,8 @@ export function useWebSocket() {
     ws.value.onclose = () => {
       console.log('WebSocket disconnected')
       consoleStore.setConnected(false)
+      // Answers to commands sent over this socket can no longer arrive.
+      consoleStore.failPendingCommands('console.reply.connectionLost')
 
       // Don't reconnect if manually disconnected
       if (isManualDisconnect) {
@@ -178,19 +194,15 @@ export function useWebSocket() {
   // instead of the command silently vanishing.
   function sendCommand(command: string): boolean {
     if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+      // Log the command first; its answer is attached to it by request id.
+      const requestId = consoleStore.addCommand(command)
       ws.value.send(
         JSON.stringify({
           type: 'command',
           payload: command,
+          requestId,
         }),
       )
-
-      // Add command to logs
-      consoleStore.addLog({
-        timestamp: new Date().toISOString(),
-        level: 'INFO',
-        message: `> ${command}`,
-      })
       return true
     }
 

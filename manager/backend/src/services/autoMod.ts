@@ -124,10 +124,10 @@ async function enforce(
   const { execCommand } = await import('./docker.js');
   try {
     if (cfg.action === 'kick') {
-      await execCommand(`/kick ${player} ${reason}`, serverId);
+      await execCommand(`/kick ${player} ${reason}`, serverId, { actor: 'automod' });
       recordPunishment({ serverId, playerName: player, type: 'kick', reason, byUser: SYSTEM_USER });
     } else if (cfg.action === 'mute') {
-      await execCommand(`/mute ${player}`, serverId);
+      await execCommand(`/mute ${player}`, serverId, { actor: 'automod' });
       const durationMs = cfg.muteDurationSec > 0 ? cfg.muteDurationSec * 1000 : null;
       recordPunishment({
         serverId,
@@ -142,6 +142,7 @@ async function enforce(
       await execCommand(
         `/say [AutoMod] ${player}, please mind the chat rules (${detail}).`,
         serverId,
+        { actor: 'automod' },
       );
       recordPunishment({ serverId, playerName: player, type: 'warn', reason, byUser: SYSTEM_USER });
     }

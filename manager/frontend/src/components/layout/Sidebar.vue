@@ -48,6 +48,7 @@ const navItems = computed<NavItem[]>(() => [
   { name: 'permissions', path: '/permissions', icon: 'permissions', label: t('nav.permissions'), group: 'management', permission: 'players.permissions' },
   { name: 'worlds', path: '/worlds', icon: 'worlds', label: t('nav.worlds'), group: 'management', permission: 'worlds.view' },
   { name: 'mods', path: '/mods', icon: 'mods', label: t('nav.mods'), group: 'management', permission: 'mods.view' },
+  { name: 'modStatus', path: '/mod-status', icon: 'statistics', label: t('nav.modStatus'), group: 'management', permission: 'mods.panel.view' },
   { name: 'assets', path: '/assets', icon: 'assets', label: t('nav.assets'), group: 'management', permission: 'assets.view' },
   { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data', permission: 'backups.view' },
   { name: 'scheduler', path: '/scheduler', icon: 'scheduler', label: t('nav.scheduler'), group: 'data', permission: 'scheduler.view' },

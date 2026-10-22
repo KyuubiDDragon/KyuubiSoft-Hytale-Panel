@@ -8,6 +8,7 @@ import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import { schedulerApi, type SchedulerStatus } from '@/api/scheduler'
 import { modsApi, type ModUpdateStatus } from '@/api/management'
 import StatusCard from '@/components/dashboard/StatusCard.vue'
+import { tpsLevel, tpsPercent } from '@/utils/tps'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 import PluginBanner from '@/components/dashboard/PluginBanner.vue'
 import DashboardBanner from '@/components/dashboard/DashboardBanner.vue'
@@ -16,7 +17,7 @@ import ErrorState from '@/components/ui/ErrorState.vue'
 
 const { t } = useI18n()
 const router = useRouter()
-const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
+const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tps, targetTps, tpsWorld, maxPlayers, serverVersion, patchline, worldCount, uptimeSeconds } = useServerStats()
 
 // Server JVM memory stats
 const serverMemory = ref<ServerMemoryStats | null>(null)
@@ -432,12 +433,21 @@ const tpsValue = computed(() => {
   return tps.value.toFixed(1)
 })
 
-// TPS status color
+// TPS status color, relative to the target rate (Hytale: 30 TPS)
 const tpsStatus = computed((): 'success' | 'warning' | 'error' => {
-  if (!tps.value) return 'info' as 'success'
-  if (tps.value >= 19) return 'success'
-  if (tps.value >= 15) return 'warning'
+  const level = tpsLevel(tps.value, targetTps.value)
+  if (level === 'unknown') return 'info' as 'success'
+  if (level === 'good') return 'success'
+  if (level === 'warn') return 'warning'
   return 'error'
+})
+// "of 30 TPS · 97%", plus the world when it is not the only one
+const tpsSubtitle = computed(() => {
+  const pct = tpsPercent(tps.value, targetTps.value)
+  const base = t('performance.ofTarget', { target: targetTps.value }) + (pct !== null ? ` · ${pct}%` : '')
+  return tpsWorld.value && (worldCount.value ?? 0) > 1
+    ? `${base} · ${t('performance.tpsInWorld', { world: tpsWorld.value })}`
+    : base
 })
 
 // Player count with max players
@@ -764,6 +774,7 @@ async function tickDashboard() {
         v-if="pluginAvailable && tpsValue"
         :title="t('dashboard.tps')"
         :value="tpsValue"
+        :subtitle="tpsSubtitle"
         :status="tpsStatus"
         icon="tps"
       />
