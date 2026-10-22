@@ -46,13 +46,16 @@ services:
       - EXTRA_JAVA_ARGS=${EXTRA_JAVA_ARGS:-}
       - TZ=${TZ:-Europe/Berlin}
       
-      # Backups (built-in backup disabled by default - creates empty files)
-      # Use manager scheduler backups instead
+      # Native server backups always go to /opt/hytale/backups/native (needed
+      # for /backup and the backup before an update); ENABLE_BACKUP adds the
+      # periodic ones every BACKUP_FREQUENCY minutes
       - ENABLE_BACKUP=${ENABLE_BACKUP:-false}
       - BACKUP_FREQUENCY=${BACKUP_FREQUENCY:-30}
       
       # Auth
       - AUTH_MODE=${AUTH_MODE:-}
+      # Key for the saved server login (auth.enc); empty = generated file in the auth volume
+      - HYTALE_AUTH_KEY_FILE=${HYTALE_AUTH_KEY_FILE:-}
       
       # Download URLs (Option 1)
       - SERVER_JAR_URL=${SERVER_JAR_URL:-}
@@ -62,8 +65,16 @@ services:
       - USE_HYTALE_DOWNLOADER=${USE_HYTALE_DOWNLOADER:-false}
       - HYTALE_PATCHLINE=${HYTALE_PATCHLINE:-release}
       
-      # Auto-update on restart
+      # Auto-update on restart (the panel's "Auto-updates" switch wins);
+      # downloader calls are aborted after DOWNLOADER_TIMEOUT seconds
       - AUTO_UPDATE=${AUTO_UPDATE:-false}
+      - DOWNLOADER_TIMEOUT=${DOWNLOADER_TIMEOUT:-3600}
+
+      # Maintenance on start: delete server logs older than N days / beyond the
+      # newest N files (0 = keep), repair file ownership (false = skip, e.g. NFS)
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-14}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-50}
+      - FIX_OWNERSHIP=${FIX_OWNERSHIP:-true}
 
       # EasyWebMap (optional)
       - WEBMAP_PORT=${WEBMAP_PORT:-18081}
@@ -85,11 +96,18 @@ services:
       - ${HOST_DATA_PATH:-/opt/hytale}/prefabs:/opt/hytale/prefabs
       - ${HOST_DATA_PATH:-/opt/hytale}/downloader:/opt/hytale/downloader
       - ${HOST_DATA_PATH:-/opt/hytale}/auth:/opt/hytale/auth
-      - ${HOST_DATA_PATH:-/opt/hytale}/updater:/opt/hytale/server/updater
+      # Native updater: the server stages updates in ../updater/staging (seen
+      # from its working dir /opt/hytale/server) and backs up to ../updater/backup
+      - ${HOST_DATA_PATH:-/opt/hytale}/updater:/opt/hytale/updater
 
-    # Console
+    # Console: the panel writes commands to stdin. No TTY: with one, Ctrl+C in
+    # `docker attach` kills the server (detach with Ctrl+P, Ctrl+Q either way).
     stdin_open: true
-    tty: true
+    tty: false
+
+    # Time to save and shut down after `docker stop` / `docker compose down`
+    # before Docker kills the server (Docker's default is only 10 s).
+    stop_grace_period: 120s
     
     # Logging
     logging:
@@ -103,7 +121,8 @@ services:
       - internal-net
 
     # SECURITY: Resource limits to prevent resource exhaustion
-    # Note: DOCKER_MEMORY_LIMIT should be >= JAVA_MAX_RAM + 1G for overhead
+    # Note: the JVM needs memory beyond the heap: DOCKER_MEMORY_LIMIT must hold
+    # JAVA_MAX_RAM plus a quarter of the limit (at most 1.5G), e.g. 6G heap -> 8G
     deploy:
       resources:
         limits:
@@ -126,7 +145,7 @@ services:
       - CHOWN            # Required for changing file ownership
       - SETUID           # Required for switching to hytale user
       - SETGID           # Required for switching to hytale group
-      - DAC_OVERRIDE     # Required for chmod on bind-mounted volumes
+      - DAC_OVERRIDE     # Lets the root entrypoint read/write volumes owned by uid 9999
 
   # ============================================================
   # Hytale Server Manager - Web UI
@@ -177,9 +196,27 @@ services:
       - ASSETS_PATH=/opt/hytale/assets
       # Manager persistent data path (for users, roles, config, logs)
       - MANAGER_DATA_PATH=/app/data
+      # Largest unpacked size (GB) of a restored backup or an imported world
+      - ARCHIVE_EXTRACT_MAX_GB=${ARCHIVE_EXTRACT_MAX_GB:-50}
+      # Most files and folders such an archive may create
+      - ARCHIVE_MAX_ENTRIES=${ARCHIVE_MAX_ENTRIES:-500000}
 
       # Settings
       - TZ=${TZ:-Europe/Berlin}
+
+      # Stop: how long the server gets to save and exit after /stop before the
+      # panel falls back to `docker stop` (keep stop_grace_period above in line)
+      - SERVER_STOP_TIMEOUT_SECONDS=${SERVER_STOP_TIMEOUT_SECONDS:-120}
+
+      # Watchdog (crash detection + alerts, see .env.example). The defaults
+      # here must stay explicit: an empty value would read as 0.
+      - WATCHDOG_ENABLED=${WATCHDOG_ENABLED:-true}
+      - WATCHDOG_AUTO_RESTART=${WATCHDOG_AUTO_RESTART:-false}
+      - WATCHDOG_MAX_RESTARTS=${WATCHDOG_MAX_RESTARTS:-3}
+      - WATCHDOG_RESTART_WINDOW_MS=${WATCHDOG_RESTART_WINDOW_MS:-600000}
+      - WATCHDOG_MEM_ALERT_PERCENT=${WATCHDOG_MEM_ALERT_PERCENT:-95}
+      - WATCHDOG_TPS_ALERT=${WATCHDOG_TPS_ALERT:-15}
+      - WATCHDOG_DISK_ALERT_MIN_GB=${WATCHDOG_DISK_ALERT_MIN_GB:-2}
 
       # Modtale API (optional)
       - MODTALE_API_KEY=${MODTALE_API_KEY:-}
@@ -220,6 +257,12 @@ services:
       - ${HOST_DATA_PATH:-/opt/hytale}/plugins:/opt/hytale/plugins
       - ${HOST_DATA_PATH:-/opt/hytale}/prefabs:/opt/hytale/prefabs:ro
       - ${HOST_DATA_PATH:-/opt/hytale}/auth:/opt/hytale/auth:ro
+      # Read-only, so the panel can see whether the downloader is logged in
+      - ${HOST_DATA_PATH:-/opt/hytale}/downloader:/opt/hytale/downloader:ro
+      # Update Center status (staged update, previous version backup) and the
+      # rollback source. Writable only so a staged update can be discarded
+      # while the server is stopped (starting it would install the update).
+      - ${HOST_DATA_PATH:-/opt/hytale}/updater:/opt/hytale/updater
 
       # Asset Explorer cache (extracted game assets)
       - ${HOST_DATA_PATH:-/opt/hytale}/assets:/opt/hytale/assets
@@ -299,6 +342,7 @@ services:
   #     - STOP=1
   #     - RESTART=1
   #     - INFO=1              # system-check "Docker Socket" probe (docker.info())
+  #     - EVENTS=1            # watchdog: exit codes of crashed containers
   #     - VERSION=1
   #     - IMAGES=1            # multi-server: create containers from the built image
   #     - NETWORKS=1          # multi-server: attach to the stack network

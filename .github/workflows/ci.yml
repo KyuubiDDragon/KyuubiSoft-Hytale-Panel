@@ -34,6 +34,14 @@ jobs:
         continue-on-error: true
       - name: Vitest (if any)
         run: npx vitest run --passWithNoTests
+      # In the manager container /opt/hytale/data is a bind mount; renaming a
+      # mount point fails with EBUSY, which once broke every restore. Run the
+      # restore against a real bind mount so that can't come back unnoticed.
+      - name: Restore on a bind-mounted data dir
+        run: |
+          mkdir -p "$RUNNER_TEMP/kp-bind-src" "$RUNNER_TEMP/kp-bind-data"
+          sudo mount --bind "$RUNNER_TEMP/kp-bind-src" "$RUNNER_TEMP/kp-bind-data"
+          KP_IT_DATA_MOUNT="$RUNNER_TEMP/kp-bind-data" npx vitest run src/services/backupRestore.bindmount.test.ts
 
   frontend:
     name: Frontend (Vue / Vite)
