@@ -396,6 +396,30 @@ async function runScheduledCommandNow(id: string) {
   }
 }
 
+// Entries the timer skips (saved before creators were recorded, or the creator
+// lost the console permission) run again once an admin approves them.
+function blockedHint(cmd: ScheduledCommand): string {
+  return cmd.blockedReason === 'no_creator'
+    ? t('scheduler.approval.noCreator')
+    : t('scheduler.approval.creatorLacksPermission')
+}
+
+function canApprove(cmd: ScheduledCommand): boolean {
+  return cmd.blockedReason !== 'invalid_command'
+    && authStore.hasPermission('scheduler.edit')
+    && authStore.hasPermission('console.execute.admin')
+}
+
+async function approveScheduledCommand(id: string) {
+  try {
+    await schedulerApi.approveScheduledCommand(id)
+    showToast(t('scheduler.approval.approved'), 'success')
+    await loadData()
+  } catch (e: any) {
+    showToast(e?.response?.data?.error || t('errors.serverError'), 'error')
+  }
+}
+
 function formatRelative(iso: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso).getTime()
@@ -870,6 +894,22 @@ onMounted(() => {
                 </span>
               </div>
               <p class="text-xs text-ink-subtle font-mono truncate">{{ cmd.command }}</p>
+              <div v-if="cmd.enabled && cmd.blockedReason" class="flex flex-wrap items-center gap-2 mt-1">
+                <span
+                  class="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400"
+                  :title="cmd.blockedReason === 'invalid_command' ? undefined : blockedHint(cmd)"
+                >
+                  {{ cmd.blockedReason === 'invalid_command' ? t('scheduler.approval.invalidCommand') : t('scheduler.approval.notRunning') }}
+                </span>
+                <button
+                  v-if="canApprove(cmd)"
+                  @click="approveScheduledCommand(cmd.id)"
+                  class="text-xs px-2 py-0.5 rounded bg-hytale-orange/20 text-hytale-orange hover:bg-hytale-orange/30"
+                  :title="blockedHint(cmd)"
+                >
+                  {{ t('scheduler.approval.approve') }}
+                </button>
+              </div>
               <p v-if="scheduledStatusFor(cmd.id) && cmd.enabled" class="text-xs text-ink-subtle mt-0.5">
                 {{ t('scheduler.nextRun') }}: {{ formatRelative(scheduledStatusFor(cmd.id)!.nextRun) }}
                 <span v-if="scheduledStatusFor(cmd.id)!.lastRun"> · {{ t('scheduler.lastRun') }}: {{ formatRelative(scheduledStatusFor(cmd.id)!.lastRun) }}</span>

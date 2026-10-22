@@ -1600,6 +1600,14 @@
     "commandWhitelistHint": "Nur erlaubte Konsolenbefehle (beginnend mit /) sind zulässig.",
     "commandMustStartWithSlash": "Befehl muss mit / beginnen",
     "needAtLeastOneTime": "Mindestens eine Zeit hinzufügen",
+    "approval": {
+      "notRunning": "Läuft nicht: muss von einem Admin freigegeben werden",
+      "invalidCommand": "Läuft nicht: dieser Befehl ist nicht erlaubt",
+      "noCreator": "Gespeichert, bevor Ersteller erfasst wurden; dieser Befehl braucht eine Admin-Freigabe.",
+      "creatorLacksPermission": "Der Ersteller hat das Konsolenrecht für diesen Befehl nicht mehr.",
+      "approve": "Freigeben",
+      "approved": "Freigegeben, der Befehl läuft wieder"
+    },
     "inMinutes": "in {n} Min",
     "minutesAgo": "vor {n} Min",
     "inHours": "in {n} Std",
@@ -1654,7 +1662,10 @@
     "goToModStore": "Zum Mod Store",
     "access": {
       "noPermission": "Für die Web-Karte brauchst du das Recht „Spielerliste anzeigen“ (players.view).",
-      "sessionFailed": "Die Web-Karte konnte nicht geöffnet werden. Bitte versuche es erneut."
+      "sessionFailed": "Die Web-Karte konnte nicht geöffnet werden. Bitte versuche es erneut.",
+      "sessionExpired": "Kartensitzung abgelaufen",
+      "sessionExpiredDesc": "Die Kartensitzung ist beendet, zum Beispiel nach einem Neustart des Panels. Lade die Karte neu, um weiterzumachen.",
+      "reload": "Karte neu laden"
     }
   },
   "permissionDescriptions": {

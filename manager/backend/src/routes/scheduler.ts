@@ -6,6 +6,8 @@ import * as schedulerService from '../services/scheduler.js';
 import * as dockerService from '../services/docker.js';
 import { stripControlChars } from '../utils/sanitize.js';
 import { actorFromRequest, authorizeCommand } from '../services/commandPolicy.js';
+import { audit } from '../services/audit.js';
+import { asyncRoute } from '../utils/asyncRoute.js';
 import { isDemoMode, getDemoSchedulerTasks } from '../services/demoData.js';
 
 const router = Router();
@@ -44,14 +46,14 @@ router.get(
   '/config',
   authMiddleware,
   requirePermission('scheduler.view'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json(DEMO_SCHEDULER_CONFIG);
       return;
     }
-    const config = schedulerService.getConfig(req.serverId);
-    res.json(config);
-  },
+    // Scheduled commands come with a derived blockedReason for the UI.
+    res.json(await schedulerService.getConfigView(req.serverId));
+  }),
 );
 
 // PUT /api/scheduler/config - Update scheduler configuration
@@ -132,6 +134,34 @@ router.post(
       res.status(result.status ?? 400).json({ success: false, error: result.error });
     }
   },
+);
+
+// POST /api/scheduler/commands/:id/approve - Take over a blocked entry as its
+// creator (only if the requester may run the command; audited)
+router.post(
+  '/commands/:id/approve',
+  authMiddleware,
+  requirePermission('scheduler.edit'),
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    if (isDemoMode()) {
+      res.json({ success: true, message: '[DEMO] Scheduled command approved (simulated)' });
+      return;
+    }
+    const result = await schedulerService.approveScheduledCommand(
+      req.params.id,
+      req.serverId,
+      actorFromRequest(req),
+    );
+    if (!result.success) {
+      res.status(result.status).json({ success: false, error: result.error });
+      return;
+    }
+    audit(req, 'scheduler.command_approved', {
+      target: `scheduled_command:${result.serverId}:${req.params.id}`,
+      metadata: { name: result.command.name, command: result.command.command },
+    });
+    res.json({ success: true, command: { ...result.command, blockedReason: null } });
+  }),
 );
 
 // GET /api/scheduler/status - Get scheduler status

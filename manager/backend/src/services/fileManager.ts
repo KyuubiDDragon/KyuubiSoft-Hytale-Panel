@@ -74,7 +74,10 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
   /(^|\/)panel\.sqlite(-journal)?$/i,
   /(^|\/)HytaleServer\.jar$/i, // server JAR replace = RCE on restart
   /(^|\/)auth\.enc$/i, // encrypted Hytale auth credentials
-  /(^|\/)config\.json$/i, // use the dedicated, schema-validated config editor
+  // Use the dedicated, schema-validated config editor. Also covers .bak /
+  // .tmp-* / .corrupt-* copies: the plugin's config.json holds its API token.
+  /(^|\/)config\.json(\.|$)/i,
+  /(^|\/)config\/kyuubisoft-api(\/|$)/i, // KyuubiSoft API plugin config dir (bearer token)
 ];
 
 // Extension-based denies target secret/credential FILES only. They must NEVER

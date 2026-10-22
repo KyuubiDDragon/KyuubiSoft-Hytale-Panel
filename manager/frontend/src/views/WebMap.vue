@@ -26,6 +26,58 @@ let currentTicket: string | null = null
 interface WebMapSession {
   ticket: string
   path: string
+  /** Hard lifetime of the session. */
+  expiresInSeconds?: number
+}
+
+interface WebMapSessionStatus {
+  valid: boolean
+  reason?: 'expired' | 'forbidden'
+}
+
+// The sandboxed map can't report its own 401s (after a panel restart, the
+// 12 h limit or a revoked right it just goes blank), so this view watches the
+// session itself: a heartbeat (which also keeps the session from idling out
+// while the view is open) plus a renewal shortly before the hard expiry.
+const HEARTBEAT_INTERVAL_MS = 60 * 1000
+const RENEW_BEFORE_EXPIRY_MS = 5 * 60 * 1000
+const sessionEnded = ref<'' | 'expired' | 'forbidden'>('')
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+let renewTimer: ReturnType<typeof setTimeout> | null = null
+
+function stopSessionWatch() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer)
+  if (renewTimer) clearTimeout(renewTimer)
+  heartbeatTimer = null
+  renewTimer = null
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+}
+
+function watchSession(expiresInSeconds?: number) {
+  stopSessionWatch()
+  heartbeatTimer = setInterval(checkSession, HEARTBEAT_INTERVAL_MS)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  if (expiresInSeconds) {
+    const delay = Math.max(expiresInSeconds * 1000 - RENEW_BEFORE_EXPIRY_MS, HEARTBEAT_INTERVAL_MS)
+    renewTimer = setTimeout(loadMap, delay)
+  }
+}
+
+async function checkSession() {
+  const ticket = currentTicket
+  if (!ticket || sessionEnded.value) return
+  try {
+    const { data } = await api.post<WebMapSessionStatus>('/webmap/session/status', { ticket })
+    if (ticket !== currentTicket || data.valid) return
+    sessionEnded.value = data.reason === 'forbidden' ? 'forbidden' : 'expired'
+  } catch {
+    // Panel unreachable (e.g. restarting): try again on the next beat.
+  }
+}
+
+function onVisibilityChange() {
+  // Timers are throttled in background tabs; re-check as soon as it's back.
+  if (document.visibilityState === 'visible') checkSession()
 }
 
 async function createSession(): Promise<WebMapSession> {
@@ -52,6 +104,8 @@ async function loadMap() {
     currentTicket = session.ticket
     mapUrl.value = session.path
     error.value = ''
+    sessionEnded.value = ''
+    watchSession(session.expiresInSeconds)
   } catch (e) {
     error.value = sessionError(e)
   }
@@ -101,6 +155,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopSessionWatch()
   revokeSession(currentTicket)
   currentTicket = null
 })
@@ -137,7 +192,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Content -->
-    <div class="flex-1 bg-surface-raised rounded-xl overflow-hidden min-h-0">
+    <div class="relative flex-1 bg-surface-raised rounded-xl overflow-hidden min-h-0">
       <!-- Loading -->
       <div v-if="loading" class="h-full flex items-center justify-center text-ink-muted">
         <svg class="animate-spin h-8 w-8 mr-3" fill="none" viewBox="0 0 24 24">
@@ -189,6 +244,28 @@ onBeforeUnmount(() => {
         class="w-full h-full border-0"
         :title="t('webmap.title')"
       />
+
+      <!-- Session ended under the map (restart, 12 h limit, revoked right) -->
+      <div
+        v-if="mapUrl && sessionEnded"
+        class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 p-8 text-center bg-surface-raised/90 backdrop-blur-sm"
+        role="alert"
+      >
+        <template v-if="sessionEnded === 'forbidden'">
+          <p class="text-ink">{{ t('webmap.access.noPermission') }}</p>
+        </template>
+        <template v-else>
+          <h3 class="text-lg font-semibold text-ink">{{ t('webmap.access.sessionExpired') }}</h3>
+          <p class="text-ink-muted max-w-md">{{ t('webmap.access.sessionExpiredDesc') }}</p>
+          <p v-if="error" class="text-status-error text-sm">{{ error }}</p>
+          <button
+            @click="refreshMap"
+            class="px-4 py-2 bg-hytale-orange text-dark font-medium rounded-lg hover:bg-hytale-yellow transition-colors"
+          >
+            {{ t('webmap.access.reload') }}
+          </button>
+        </template>
+      </div>
     </div>
   </div>
 </template>

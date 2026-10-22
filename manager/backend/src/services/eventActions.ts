@@ -25,7 +25,9 @@ import {
   authorizeCommand,
   authorizeStoredCommand,
   reportSkippedCommand,
+  storedCommandBlockedReason,
   type CommandActor,
+  type StoredCommandBlock,
 } from './commandPolicy.js';
 import { getServer } from './servers.js';
 
@@ -164,6 +166,45 @@ export function updateEventAction(
 
 export function deleteEventAction(id: string): boolean {
   return getDb().prepare('DELETE FROM event_actions WHERE id = ?').run(id).changes > 0;
+}
+
+export type EventActionView = EventAction & { blockedReason: StoredCommandBlock | null };
+
+/**
+ * Rules as served to clients: command rules carry a derived `blockedReason`
+ * (why they would be skipped right now, e.g. the creator lost the console
+ * tier). Rules for every server are judged by the creator's global role.
+ */
+export async function listEventActionViews(): Promise<EventActionView[]> {
+  return Promise.all(
+    listEventActions().map(async (rule) => ({
+      ...rule,
+      blockedReason:
+        rule.actionType === 'command' && rule.actionPayload.command
+          ? await storedCommandBlockedReason(rule.createdBy, rule.actionPayload.command, rule.serverId ?? undefined)
+          : null,
+    })),
+  );
+}
+
+/**
+ * Explicit approval: the requester becomes the creator of a command rule, but
+ * only if they may run its command on the rule's server themselves.
+ */
+export async function approveEventAction(
+  id: string,
+  actor: CommandActor,
+): Promise<{ ok: true; rule: EventAction } | { ok: false; status: 400 | 403 | 404; error: string }> {
+  const rule = getEventAction(id);
+  if (!rule) return { ok: false, status: 404, error: 'Rule not found' };
+  if (rule.actionType !== 'command' || !rule.actionPayload.command) {
+    return { ok: false, status: 400, error: 'Only command rules need approval' };
+  }
+  const auth = await authorizeCommand(actor, rule.actionPayload.command, rule.serverId ?? undefined);
+  if (!auth.allowed) return { ok: false, status: auth.status, error: auth.error };
+  if (!actor.username) return { ok: false, status: 403, error: 'Authentication required' };
+  const updated = updateEventAction(id, { createdBy: actor.username });
+  return updated ? { ok: true, rule: updated } : { ok: false, status: 404, error: 'Rule not found' };
 }
 
 function patternMatches(pattern: string, name: string): boolean {

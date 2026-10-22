@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger.js';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../middleware/auth.js';
@@ -16,6 +16,8 @@ import { config } from '../config.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoWhitelist } from '../services/demoData.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import type { Permission } from '../types/permissions.js';
+import { asyncRoute } from '../utils/asyncRoute.js';
 import {
   isValidPlayerName,
   isValidGamemode,
@@ -32,67 +34,82 @@ const router = Router();
 // The frontend assembles the selection (Checkbox-Spalte → idle "N selected"
 // bar) and we run the same per-player handlers serially with audit + error
 // capture per item. Permissions are checked per action via requirePermission.
-const BULK_ACTIONS = new Set(['kick', 'ban', 'unban']);
-router.post('/bulk', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const { names, action, reason } = req.body as {
-    names?: string[];
-    action?: string;
-    reason?: string;
-  };
-  if (!Array.isArray(names) || names.length === 0 || !action) {
-    res.status(400).json({ detail: 'names[] and action required' });
-    return;
-  }
-  if (!BULK_ACTIONS.has(action)) {
-    res.status(400).json({ detail: `unsupported action ${action}` });
-    return;
-  }
-  // Permission gate that matches the per-player route's gate.
-  const { getUserPermissions } = await import('../services/roles.js');
-  const perms = await getUserPermissions(req.user!);
-  const required =
-    action === 'kick' ? 'players.kick' : action === 'ban' ? 'players.ban' : 'players.unban';
-  if (!perms.includes('*') && !(perms as string[]).includes(required)) {
-    res.status(403).json({ error: 'Insufficient permissions', required });
-    return;
-  }
+const BULK_PERMISSIONS = new Map<string, Permission>([
+  ['kick', 'players.kick'],
+  ['ban', 'players.ban'],
+  ['unban', 'players.unban'],
+]);
 
-  const results: Array<{ name: string; success: boolean; error?: string }> = [];
-  const safeReason = reason ? sanitizeMessage(reason, 100) : '';
-  for (const rawName of names) {
-    if (!isValidPlayerName(rawName)) {
-      results.push({ name: rawName, success: false, error: 'invalid name' });
-      continue;
-    }
-    let cmd: string;
-    if (action === 'kick') cmd = safeReason ? `/kick ${rawName} ${safeReason}` : `/kick ${rawName}`;
-    else if (action === 'ban')
-      cmd = safeReason ? `/ban ${rawName} ${safeReason}` : `/ban ${rawName}`;
-    else cmd = `/unban ${rawName}`;
-    if (isDemoMode()) {
-      results.push({ name: rawName, success: true });
-      continue;
-    }
-    const r = await dockerService.execCommand(cmd, req.serverId);
-    results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
-    if (action === 'kick' && r.success) playersService.removePlayer(rawName);
+// SECURITY: same gate as the per-player routes, through requirePermission so
+// an API key's scopes and the per-server role count (previously only the
+// owner's global role was checked).
+function requireBulkPermission(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  const action = (req.body as { action?: unknown } | undefined)?.action;
+  const required = typeof action === 'string' ? BULK_PERMISSIONS.get(action) : undefined;
+  if (!required) {
+    res
+      .status(400)
+      .json({
+        detail: action ? `unsupported action ${String(action)}` : 'names[] and action required',
+      });
+    return;
   }
-  const summary = {
-    total: results.length,
-    success: results.filter((r) => r.success).length,
-    failed: results.filter((r) => !r.success).length,
-  };
-  // Reuse the player-scoped activity log target; the action name carries
-  // the "bulk_" prefix to make filtering trivial.
-  await logActivity(
-    req.user || 'system',
-    `bulk_${action}`,
-    'player',
-    summary.failed === 0,
-    `${summary.total} players`,
-  );
-  res.json({ results, summary });
-});
+  void requirePermission(required)(req, res, next);
+}
+
+router.post(
+  '/bulk',
+  authMiddleware,
+  requireBulkPermission,
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const { names, action, reason } = req.body as {
+      names?: string[];
+      action: string;
+      reason?: string;
+    };
+    if (!Array.isArray(names) || names.length === 0) {
+      res.status(400).json({ detail: 'names[] and action required' });
+      return;
+    }
+
+    const results: Array<{ name: string; success: boolean; error?: string }> = [];
+    const safeReason = reason ? sanitizeMessage(reason, 100) : '';
+    for (const rawName of names) {
+      if (!isValidPlayerName(rawName)) {
+        results.push({ name: rawName, success: false, error: 'invalid name' });
+        continue;
+      }
+      let cmd: string;
+      if (action === 'kick')
+        cmd = safeReason ? `/kick ${rawName} ${safeReason}` : `/kick ${rawName}`;
+      else if (action === 'ban')
+        cmd = safeReason ? `/ban ${rawName} ${safeReason}` : `/ban ${rawName}`;
+      else cmd = `/unban ${rawName}`;
+      if (isDemoMode()) {
+        results.push({ name: rawName, success: true });
+        continue;
+      }
+      const r = await dockerService.execCommand(cmd, req.serverId);
+      results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
+      if (action === 'kick' && r.success) playersService.removePlayer(rawName);
+    }
+    const summary = {
+      total: results.length,
+      success: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+    };
+    // Reuse the player-scoped activity log target; the action name carries
+    // the "bulk_" prefix to make filtering trivial.
+    await logActivity(
+      req.user || 'system',
+      `bulk_${action}`,
+      'player',
+      summary.failed === 0,
+      `${summary.total} players`,
+    );
+    res.json({ results, summary });
+  }),
+);
 
 // SECURITY: Validate player name from URL params
 function validatePlayerName(res: Response, name: string): boolean {

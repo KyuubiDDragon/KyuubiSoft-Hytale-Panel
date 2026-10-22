@@ -152,6 +152,93 @@ describe('WebMap session endpoint', () => {
     const session = await mintSession('alice');
     expect(session.ticket).toMatch(/^[a-f0-9]{64}$/);
     expect(session.path).toBe(`${WEBMAP_PROXY_PREFIX}${session.ticket}/`);
+    expect((session as { expiresInSeconds?: number }).expiresInSeconds).toBe(
+      sessions.WEBMAP_SESSION_MAX_TTL_MS / 1000,
+    );
+  });
+});
+
+describe('WebMap session status (heartbeat)', () => {
+  async function status(
+    user: string | null,
+    ticket: unknown,
+  ): Promise<{ code: number; body: Record<string, unknown> | null }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (user) headers.Authorization = `Bearer ${await createAccessToken(user)}`;
+    const res = await fetch(`${panelUrl}/api/webmap/session/status`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ticket }),
+    });
+    const text = await res.text();
+    return { code: res.status, body: text ? (JSON.parse(text) as Record<string, unknown>) : null };
+  }
+
+  it('requires authentication', async () => {
+    permissions.set('kim', ['players.view']);
+    const { ticket } = await mintSession('kim');
+    expect((await status(null, ticket)).code).toBe(401);
+  });
+
+  it('rejects malformed tickets', async () => {
+    permissions.set('kim', ['players.view']);
+    expect((await status('kim', '../../etc')).code).toBe(400);
+  });
+
+  it('reports a live session with its hard expiry', async () => {
+    permissions.set('kim', ['players.view']);
+    const before = Date.now();
+    const { ticket } = await mintSession('kim');
+    const { code, body } = await status('kim', ticket);
+    expect(code).toBe(200);
+    expect(body?.valid).toBe(true);
+    const expiresAt = Date.parse(String(body?.expiresAt));
+    expect(expiresAt).toBeGreaterThanOrEqual(before + sessions.WEBMAP_SESSION_MAX_TTL_MS - 1000);
+    expect(expiresAt).toBeLessThanOrEqual(Date.now() + sessions.WEBMAP_SESSION_MAX_TTL_MS);
+  });
+
+  it("reports another user's session as expired without revealing it", async () => {
+    permissions.set('kim', ['players.view']);
+    permissions.set('mallory', ['players.view']);
+    const { ticket } = await mintSession('kim');
+    expect((await status('mallory', ticket)).body).toEqual({ valid: false, reason: 'expired' });
+  });
+
+  it('reports revoked and unknown sessions as expired', async () => {
+    permissions.set('kim', ['players.view']);
+    const { ticket } = await mintSession('kim');
+    sessions.revokeWebMapSession(ticket, 'kim');
+    expect((await status('kim', ticket)).body).toEqual({ valid: false, reason: 'expired' });
+    expect((await status('kim', 'b'.repeat(64))).body).toEqual({ valid: false, reason: 'expired' });
+  });
+
+  it('reports a lost players.view as forbidden', async () => {
+    permissions.set('kim', ['players.view']);
+    const { ticket } = await mintSession('kim');
+    permissions.set('kim', ['console.view']);
+    expect((await status('kim', ticket)).body).toEqual({ valid: false, reason: 'forbidden' });
+  });
+
+  it('reports a session past its hard maximum as expired', async () => {
+    permissions.set('kim', ['players.view']);
+    const id = await sessions.createWebMapSession('kim');
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + sessions.WEBMAP_SESSION_MAX_TTL_MS + 1000);
+    expect(await sessions.getWebMapSessionStatus(id, 'kim')).toEqual({
+      valid: false,
+      reason: 'expired',
+    });
+  });
+
+  it('keeps the session from idling out while the view polls it', async () => {
+    permissions.set('kim', ['players.view']);
+    const id = await sessions.createWebMapSession('kim');
+    const start = Date.now();
+    const now = vi.spyOn(Date, 'now');
+    // Poll every 10 minutes for 30 minutes: twice the idle timeout.
+    for (const minutes of [10, 20, 30]) {
+      now.mockReturnValue(start + minutes * 60 * 1000);
+      expect((await sessions.getWebMapSessionStatus(id, 'kim')).valid).toBe(true);
+    }
   });
 });
 

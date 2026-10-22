@@ -14,6 +14,7 @@ import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
 import { verifyWsTicket, verifyToken } from './services/auth.js';
 import { hasPermission } from './services/roles.js';
+import { scopeAllows } from './services/commandPolicy.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { logger } from './utils/logger.js';
 
@@ -111,9 +112,13 @@ locationsWss.on('connection', async (socket: import('ws').WebSocket, req: Incomi
     const ticket = url.searchParams.get('ticket');
     const token = url.searchParams.get('token');
     let username: string | null = null;
+    let apiKeyScopes: string[] | undefined;
     if (ticket) {
       const r = verifyWsTicket(ticket);
-      if (r.valid && r.username) username = r.username;
+      if (r.valid && r.username) {
+        username = r.username;
+        apiKeyScopes = r.apiKeyScopes;
+      }
     } else if (token) {
       const r = verifyToken(token, 'access');
       if (r) username = r.username;
@@ -122,7 +127,12 @@ locationsWss.on('connection', async (socket: import('ws').WebSocket, req: Incomi
       socket.close(4001, 'Authentication required');
       return;
     }
-    if (!(await hasPermission(username, 'players.view'))) {
+    // A ticket requested with an API key only opens this stream if the key
+    // itself is scoped for players.view.
+    if (
+      !scopeAllows(apiKeyScopes, 'players.view') ||
+      !(await hasPermission(username, 'players.view'))
+    ) {
       socket.close(4003, 'Permission denied: players.view required');
       return;
     }

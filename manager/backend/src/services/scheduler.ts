@@ -21,7 +21,9 @@ import {
   authorizeCommand,
   authorizeStoredCommand,
   reportSkippedCommand,
+  storedCommandBlockedReason,
   type CommandActor,
+  type StoredCommandBlock,
 } from './commandPolicy.js';
 import {
   ensureLoaded,
@@ -976,6 +978,58 @@ export async function runScheduledCommandNow(
   if (!auth.allowed) return { success: false, error: auth.error, status: auth.status };
   await executeScheduledCommand(cmd, id);
   return { success: true };
+}
+
+export type ScheduledCommandView = ScheduledCommand & { blockedReason: StoredCommandBlock | null };
+
+/**
+ * The config as served to clients. Each scheduled command carries a derived
+ * `blockedReason` (why its timer would skip it right now, e.g. an entry saved
+ * before creators were recorded); it is never persisted, and a client that
+ * sends it back has it dropped by reviewScheduledCommands.
+ */
+export async function getConfigView(
+  serverId?: string,
+): Promise<Omit<ScheduleConfig, 'scheduledCommands'> & { scheduledCommands: ScheduledCommandView[] }> {
+  const cfg = getConfig(serverId);
+  const id = await resolveServerId(serverId);
+  const scheduledCommands = await Promise.all(
+    (cfg.scheduledCommands ?? []).map(async (c) => ({
+      ...c,
+      blockedReason: await storedCommandBlockedReason(c.createdBy, c.command, id),
+    })),
+  );
+  return { ...cfg, scheduledCommands };
+}
+
+/**
+ * Explicit approval: the requesting user takes over a stored entry as its
+ * creator, but only if they may run the command themselves. This is how a
+ * legacy entry (no creator) or one whose creator lost the tier runs again,
+ * without silently adopting entries on an unrelated save.
+ */
+export async function approveScheduledCommand(
+  commandId: string,
+  serverId: string | undefined,
+  actor: CommandActor,
+): Promise<
+  | { success: true; command: ScheduledCommand; serverId: string }
+  | { success: false; status: number; error: string }
+> {
+  const id = await resolveServerId(serverId);
+  const cfg = schedulerConfig[id] ?? (await loadConfig(id));
+  const cmd = (cfg.scheduledCommands ?? []).find((c) => c.id === commandId);
+  if (!cmd) return { success: false, status: 404, error: 'Scheduled command not found' };
+  const auth = await authorizeCommand(actor, cmd.command, id);
+  if (!auth.allowed) return { success: false, status: auth.status, error: auth.error };
+  if (!actor.username) return { success: false, status: 403, error: 'Authentication required' };
+  const approved: ScheduledCommand = { ...cmd, createdBy: actor.username };
+  // New array, so the timers are re-armed from the stamped entry.
+  doSaveSync(
+    { scheduledCommands: cfg.scheduledCommands.map((c) => (c.id === commandId ? approved : c)) },
+    id,
+  );
+  return { success: true, command: approved, serverId: id };
 }
 
 export interface ScheduledCommandStatus {

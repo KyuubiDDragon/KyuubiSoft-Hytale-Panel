@@ -33,13 +33,16 @@ import { createBrotliDecompress, createGunzip, createInflate } from 'zlib';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import { asyncRoute } from '../utils/asyncRoute.js';
 import {
   checkWebMapSession,
   createWebMapSession,
+  getWebMapSessionStatus,
   isWebMapSessionId,
   revokeWebMapSession,
   trackWebMapSocket,
   WEBMAP_SESSION_IDLE_TTL_MS,
+  WEBMAP_SESSION_MAX_TTL_MS,
 } from '../services/webMapSessions.js';
 
 /** Public path prefix of the proxied map; followed by `<session>/`. */
@@ -444,20 +447,49 @@ router.post(
   authMiddleware,
   sessionLimiter,
   requirePermission('players.view'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const ticket = await createWebMapSession(req.user!);
     res.set('Cache-Control', 'no-store').json({
       ticket,
       path: `${WEBMAP_PROXY_PREFIX}${ticket}/`,
       idleTimeoutSeconds: Math.floor(WEBMAP_SESSION_IDLE_TTL_MS / 1000),
+      expiresInSeconds: Math.floor(WEBMAP_SESSION_MAX_TTL_MS / 1000),
     });
-  },
+  }),
+);
+
+// The ticket travels in the body (not the path) so it stays out of request logs.
+function ticketFromBody(req: AuthenticatedRequest): string | null {
+  const ticket = (req.body as { ticket?: unknown } | undefined)?.ticket;
+  return isWebMapSessionId(ticket) ? ticket : null;
+}
+
+// POST /api/webmap/session/status — heartbeat for one of the caller's map
+// sessions: { valid: true, expiresAt } or { valid: false, reason }.
+router.post(
+  '/session/status',
+  authMiddleware,
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const ticket = ticketFromBody(req);
+    if (!ticket) {
+      res.status(400).json({ error: 'Invalid ticket' });
+      return;
+    }
+    const status = await getWebMapSessionStatus(ticket, req.user!);
+    res
+      .set('Cache-Control', 'no-store')
+      .json(
+        status.valid
+          ? { valid: true, expiresAt: new Date(status.expiresAt).toISOString() }
+          : status,
+      );
+  }),
 );
 
 // POST /api/webmap/session/revoke — end one of the caller's map sessions.
 router.post('/session/revoke', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
-  const ticket = (req.body as { ticket?: unknown } | undefined)?.ticket;
-  if (!isWebMapSessionId(ticket)) {
+  const ticket = ticketFromBody(req);
+  if (!ticket) {
     res.status(400).json({ error: 'Invalid ticket' });
     return;
   }

@@ -4,7 +4,8 @@ import { requirePermission } from '../middleware/permissions.js';
 import { audit } from '../services/audit.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import {
-  listEventActions,
+  listEventActionViews,
+  approveEventAction,
   getEventAction,
   createEventAction,
   updateEventAction,
@@ -17,6 +18,7 @@ import {
   type EventActionType,
 } from '../services/eventActions.js';
 import { actorFromRequest } from '../services/commandPolicy.js';
+import { asyncRoute } from '../utils/asyncRoute.js';
 
 const router = Router();
 
@@ -44,9 +46,30 @@ router.get(
   '/',
   authMiddleware,
   requirePermission('scheduler.view'),
-  (_req: Request, res: Response) => {
-    res.json({ rules: listEventActions(), events: availableEvents(), actionTypes: ACTION_TYPES });
-  },
+  asyncRoute(async (_req: Request, res: Response) => {
+    // Command rules come with a derived blockedReason (see approve below).
+    res.json({ rules: await listEventActionViews(), events: availableEvents(), actionTypes: ACTION_TYPES });
+  }),
+);
+
+// POST /api/event-actions/:id/approve — take over a blocked command rule as its
+// creator (only if the requester may run its command; audited)
+router.post(
+  '/:id/approve',
+  authMiddleware,
+  requirePermission('scheduler.edit'),
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const result = await approveEventAction(req.params.id, actorFromRequest(req));
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    audit(req, 'event_action.approved', {
+      target: `event_action:${req.params.id}`,
+      metadata: { command: result.rule.actionPayload.command },
+    });
+    res.json({ rule: { ...result.rule, blockedReason: null } });
+  }),
 );
 
 // POST /api/event-actions

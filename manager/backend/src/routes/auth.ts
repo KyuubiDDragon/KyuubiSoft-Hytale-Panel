@@ -41,6 +41,7 @@ import {
   verifyTotpOrBackup,
 } from '../services/totp.js';
 import { createApiKey, listApiKeys, revokeApiKey } from '../services/apiKeys.js';
+import { scopeAllows } from '../services/commandPolicy.js';
 import { audit } from '../services/audit.js';
 import { publish } from '../services/eventBus.js';
 import { authLogins } from '../services/metrics.js';
@@ -552,19 +553,27 @@ router.post(
         ? (req.body as { serverId?: string }).serverId
         : undefined;
 
-    // A WS ticket only binds the username; the concrete per-socket permission is
+    // A WS ticket binds the username (and API-key scopes); the concrete per-socket permission is
     // re-checked on connect (console.view for the console stream, players.view
     // for the live player-locations stream). Issue a ticket if the caller holds
     // either of those view rights, so a players.view-only user can still open the
     // live map without being granted console access.
-    const canViewConsole = await hasPermission(username, 'console.view', requestedServerId);
-    const canViewPlayers = await hasPermission(username, 'players.view', requestedServerId);
+    // SECURITY: an API key needs the view right in its own scopes too, and its
+    // scopes travel with the ticket so the socket keeps honouring them (e.g. a
+    // key without console.execute.admin can't run /op over the WS console).
+    const keyScopes = req.apiKey?.scopes;
+    const canViewConsole =
+      scopeAllows(keyScopes, 'console.view') &&
+      (await hasPermission(username, 'console.view', requestedServerId));
+    const canViewPlayers =
+      scopeAllows(keyScopes, 'players.view') &&
+      (await hasPermission(username, 'players.view', requestedServerId));
     if (!canViewConsole && !canViewPlayers) {
       res.status(403).json({ error: 'Permission denied: console.view or players.view required' });
       return;
     }
 
-    const ticket = createWsTicket(username, requestedServerId);
+    const ticket = createWsTicket(username, requestedServerId, keyScopes);
     res.json({ ticket, expiresIn: 30, serverId: requestedServerId ?? null });
   }),
 );

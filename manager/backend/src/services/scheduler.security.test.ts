@@ -252,3 +252,55 @@ describe('scheduler: interactive runs', () => {
     expect(keep.ok).toBe(true);
   });
 });
+
+describe('scheduler: blocked entries are reported and can be approved', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  });
+  afterEach(async () => {
+    await saveAndRestart([]);
+    vi.useRealTimers();
+  });
+
+  async function reasons(): Promise<Record<string, string | null>> {
+    const view = await scheduler.getConfigView('default');
+    return Object.fromEntries(view.scheduledCommands.map((c) => [c.id, c.blockedReason]));
+  }
+
+  it('derives blockedReason without changing the stored entries', async () => {
+    await saveAndRestart([
+      entry('legacy-op', '/op add Evil'),
+      entry('legacy-save', '/save'),
+      entry('admin-stop', '/stop', { createdBy: 'admin' }),
+      entry('bad', '/eval x()', { createdBy: 'admin' }),
+    ]);
+    perms.set('admin', ['console.execute']); // demoted after saving /stop
+    expect(await reasons()).toEqual({
+      'legacy-op': 'no_creator',
+      'legacy-save': null,
+      'admin-stop': 'creator_lacks_permission',
+      bad: 'invalid_command',
+    });
+    expect(scheduler.getConfig('default').scheduledCommands.every((c) => !('blockedReason' in c))).toBe(true);
+  });
+
+  it('approve: a non-admin gets 403, an admin is stamped as creator and the entry runs', async () => {
+    await saveAndRestart([entry('legacy-op', '/op add Steve')]);
+
+    const denied = await scheduler.approveScheduledCommand('legacy-op', 'default', operator);
+    expect(denied).toMatchObject({ success: false, status: 403 });
+    expect((await reasons())['legacy-op']).toBe('no_creator');
+
+    const missing = await scheduler.approveScheduledCommand('nope', 'default', admin);
+    expect(missing).toMatchObject({ success: false, status: 404 });
+
+    const approved = await scheduler.approveScheduledCommand('legacy-op', 'default', admin);
+    expect(approved).toMatchObject({ success: true, command: { createdBy: 'admin' } });
+    await new Promise((resolve) => setTimeout(resolve, 150)); // persist + re-arm timers
+    expect((await reasons())['legacy-op']).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(execCommand.mock.calls.map((c) => c[0])).toContain('/op add Steve');
+  });
+});

@@ -1548,6 +1548,14 @@
     "commandWhitelistHint": "Only whitelisted console commands (starting with /) are allowed.",
     "commandMustStartWithSlash": "Command must start with /",
     "needAtLeastOneTime": "Add at least one time",
+    "approval": {
+      "notRunning": "Not running: must be approved by an admin",
+      "invalidCommand": "Not running: this command is not allowed",
+      "noCreator": "Saved before creators were recorded; this command needs an admin's approval.",
+      "creatorLacksPermission": "Its creator no longer holds the console permission for this command.",
+      "approve": "Approve",
+      "approved": "Approved, the command runs again"
+    },
     "inMinutes": "in {n} min",
     "minutesAgo": "{n} min ago",
     "inHours": "in {n} h",
@@ -1602,7 +1610,10 @@
     "goToModStore": "Go to Mod Store",
     "access": {
       "noPermission": "You need the \"View player list\" permission (players.view) to open the web map.",
-      "sessionFailed": "The web map could not be opened. Please try again."
+      "sessionFailed": "The web map could not be opened. Please try again.",
+      "sessionExpired": "Map session expired",
+      "sessionExpiredDesc": "The map session has ended, for example after a panel restart. Reload the map to continue.",
+      "reload": "Reload map"
     }
   },
   "roles": {

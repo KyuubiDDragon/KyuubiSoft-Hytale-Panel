@@ -34,6 +34,15 @@ export function actorFromRequest(req: AuthenticatedRequest): CommandActor {
   return { username: req.user, apiKeyScopes: req.apiKey?.scopes };
 }
 
+/**
+ * Does an API key's scope list cover `permission`? `undefined` means the
+ * caller is not an API key, so only the owner's role applies. This is only
+ * the key half of the check; the owner must hold the permission as well.
+ */
+export function scopeAllows(apiKeyScopes: string[] | undefined, permission: string): boolean {
+  return !apiKeyScopes || apiKeyScopes.includes('*') || apiKeyScopes.includes(permission);
+}
+
 function requiredTier(command: string): CommandTier {
   return getCommandRequiredPermission(command) ?? 'console.execute';
 }
@@ -77,13 +86,7 @@ export async function authorizeCommand(
   };
   if (!actor.username) return denied;
   // An API key never exceeds its declared scopes, even when its owner could.
-  if (
-    actor.apiKeyScopes &&
-    !actor.apiKeyScopes.includes('*') &&
-    !actor.apiKeyScopes.includes(permission)
-  ) {
-    return denied;
-  }
+  if (!scopeAllows(actor.apiKeyScopes, permission)) return denied;
   if (!(await holds(actor.username, permission, serverId))) return denied;
   return { allowed: true, permission };
 }
@@ -120,6 +123,25 @@ export async function authorizeStoredCommand(
     };
   }
   return { allowed: true, permission };
+}
+
+export type StoredCommandBlock = 'invalid_command' | 'no_creator' | 'creator_lacks_permission';
+
+/**
+ * Why a stored command would be skipped if it fired now, or null if it would
+ * run. Same decision as authorizeStoredCommand, without logging or auditing;
+ * meant for list/config responses so the UI can flag entries that need an
+ * explicit approval (POST …/approve) instead of being skipped silently.
+ */
+export async function storedCommandBlockedReason(
+  createdBy: string | null | undefined,
+  command: string,
+  serverId?: string,
+): Promise<StoredCommandBlock | null> {
+  const auth = await authorizeStoredCommand(createdBy, command, serverId);
+  if (auth.allowed) return null;
+  if (auth.status === 400) return 'invalid_command';
+  return createdBy ? 'creator_lacks_permission' : 'no_creator';
 }
 
 // Entry+reason pairs already written to the audit log in this process.

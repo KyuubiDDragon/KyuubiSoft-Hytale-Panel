@@ -104,6 +104,22 @@ describe('fileManager.isDenied', () => {
     expect(isDenied(root, 'plugin-tokens.json')).toBe(true);
     expect(isDenied(root, 'data/plugin-tokens.json.tmp-123-abcd')).toBe(true);
   });
+  it('blocks every copy of a config.json, not just the file itself', () => {
+    // The KyuubiSoft API plugin config holds its bearer token.
+    expect(isDenied(root, 'config/kyuubisoft-api/config.json')).toBe(true);
+    expect(
+      isDenied(root, 'config/kyuubisoft-api/config.json.corrupt-2026-10-22T10-00-00-000Z'),
+    ).toBe(true);
+    expect(isDenied(root, 'config/kyuubisoft-api/config.json.tmp-123-abcd')).toBe(true);
+    expect(isDenied(root, 'config.json.bak')).toBe(true);
+  });
+  it('blocks the whole KyuubiSoft API plugin config directory', () => {
+    expect(isDenied(root, 'config/kyuubisoft-api', true)).toBe(true);
+    expect(isDenied(root, 'config/KyuubiSoft-API/notes.txt')).toBe(true);
+    expect(isDenied(root, 'config', true)).toBe(false);
+    expect(isDenied(root, 'config/other-mod/settings.json')).toBe(false);
+    expect(isDenied(root, 'myconfig.json')).toBe(false);
+  });
   it('allows normal files', () => {
     expect(isDenied(root, 'hello.txt')).toBe(false);
     expect(isDenied(root, 'sub/nested.txt')).toBe(false);
@@ -127,6 +143,14 @@ describe('fileManager.isAbsolutePathAllowed', () => {
   it('blocks the schema-validated config.json and users.json', () => {
     expect(isAbsolutePathAllowed(path.join(server, 'config.json'), 'write')).toBe(false);
     expect(isAbsolutePathAllowed(path.join(data, 'users.json'), 'read')).toBe(false);
+  });
+  it('blocks reading the plugin token through the plugin config or its copies', () => {
+    const pluginDir = path.join(server, 'config', 'kyuubisoft-api');
+    expect(isAbsolutePathAllowed(path.join(pluginDir, 'config.json'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(path.join(pluginDir, 'config.json.corrupt-1'), 'read')).toBe(
+      false,
+    );
+    expect(isAbsolutePathAllowed(path.join(server, 'config.json.bak'), 'read')).toBe(false);
   });
   it('blocks key/pem secret files', () => {
     expect(isAbsolutePathAllowed(path.join(server, 'server.key'), 'read')).toBe(false);

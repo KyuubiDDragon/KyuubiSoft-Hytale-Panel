@@ -79,7 +79,10 @@ export async function createWebMapSession(username: string): Promise<string> {
   // ones (no open map WebSocket) first so a live map keeps working.
   const own = [...sessions.entries()]
     .filter(([, s]) => s.username === username)
-    .sort(([, a], [, b]) => Number(a.openSockets > 0) - Number(b.openSockets > 0) || a.createdAt - b.createdAt);
+    .sort(
+      ([, a], [, b]) =>
+        Number(a.openSockets > 0) - Number(b.openSockets > 0) || a.createdAt - b.createdAt,
+    );
   for (const [id] of own.slice(0, Math.max(0, own.length - MAX_SESSIONS_PER_USER + 1))) {
     sessions.delete(id);
   }
@@ -116,6 +119,27 @@ export async function checkWebMapSession(id: string): Promise<WebMapAccess> {
   if (!current) return INVALID; // revoked while we were checking
   sessions.set(id, { ...current, lastUsedAt: now });
   return { ok: true, username: session.username };
+}
+
+export type WebMapSessionStatus =
+  { valid: true; expiresAt: number } | { valid: false; reason: 'expired' | 'forbidden' };
+
+/**
+ * Heartbeat from the panel view that shows the map. The map itself is
+ * sandboxed and can't report its own 401s, so the (authenticated) parent
+ * polls this instead. A valid check counts as use, so the session doesn't
+ * idle out while the view is open. Other users' sessions read as expired.
+ * `expiresAt` is the hard end of the session (epoch ms).
+ */
+export async function getWebMapSessionStatus(
+  id: string,
+  username: string,
+): Promise<WebMapSessionStatus> {
+  const session = sessions.get(id);
+  if (!session || session.username !== username) return { valid: false, reason: 'expired' };
+  const access = await checkWebMapSession(id);
+  if (!access.ok) return { valid: false, reason: access.status === 403 ? 'forbidden' : 'expired' };
+  return { valid: true, expiresAt: session.createdAt + WEBMAP_SESSION_MAX_TTL_MS };
 }
 
 /** Revoke a session and close its WebSockets; only its owner may do so. */

@@ -1582,6 +1582,14 @@
     "commandWhitelistHint": "Apenas comandos do console permitidos (começando com /) são aceitos.",
     "commandMustStartWithSlash": "O comando deve começar com /",
     "needAtLeastOneTime": "Adicione pelo menos um horário",
+    "approval": {
+      "notRunning": "Não está em execução: precisa ser aprovado por um administrador",
+      "invalidCommand": "Não está em execução: este comando não é permitido",
+      "noCreator": "Salvo antes de os criadores serem registrados; este comando precisa da aprovação de um administrador.",
+      "creatorLacksPermission": "O criador não tem mais a permissão de console para este comando.",
+      "approve": "Aprovar",
+      "approved": "Aprovado, o comando volta a ser executado"
+    },
     "inMinutes": "em {n} min",
     "minutesAgo": "há {n} min",
     "inHours": "em {n} h",
@@ -1636,7 +1644,10 @@
     "goToModStore": "Ir para Loja de Mods",
     "access": {
       "noPermission": "Você precisa da permissão \"Ver lista de jogadores\" (players.view) para abrir o mapa web.",
-      "sessionFailed": "Não foi possível abrir o mapa web. Tente novamente."
+      "sessionFailed": "Não foi possível abrir o mapa web. Tente novamente.",
+      "sessionExpired": "Sessão do mapa expirada",
+      "sessionExpiredDesc": "A sessão do mapa terminou, por exemplo após uma reinicialização do painel. Recarregue o mapa para continuar.",
+      "reload": "Recarregar mapa"
     }
   },
   "roles": {

@@ -194,3 +194,38 @@ describe('event actions: firing', () => {
     expect(execCommand).toHaveBeenCalledWith('/say bye Steve', 'default');
   });
 });
+
+describe('event actions: blocked rules are reported and can be approved', () => {
+  it('derives blockedReason for command rules only', async () => {
+    const opRule = ea.createEventAction({ ...draft({ actionPayload: { command: '/stop' } }), createdBy: 'operator' });
+    const adminRule = ea.createEventAction({ ...draft({ actionPayload: { command: '/kick {player}' } }), createdBy: 'admin' });
+    const announce = ea.createEventAction({
+      ...draft({ actionType: 'announce', actionPayload: { message: 'Hi {player}' } }),
+      createdBy: 'ghost',
+    });
+    const views = new Map((await ea.listEventActionViews()).map((r) => [r.id, r.blockedReason]));
+    expect(views.get(opRule.id)).toBe('creator_lacks_permission');
+    expect(views.get(adminRule.id)).toBeNull();
+    expect(views.get(announce.id)).toBeNull();
+  });
+
+  it('approve: a non-admin gets 403, an admin is stamped as creator and the rule runs', async () => {
+    const rule = ea.createEventAction({ ...draft({ actionPayload: { command: '/kick {player}' } }), createdBy: 'operator' });
+
+    expect(await ea.approveEventAction(rule.id, operator)).toMatchObject({ ok: false, status: 403 });
+    expect(ea.getEventAction(rule.id)?.createdBy).toBe('operator');
+
+    const approved = await ea.approveEventAction(rule.id, admin);
+    expect(approved).toMatchObject({ ok: true, rule: { createdBy: 'admin' } });
+
+    publish('player.joined', { player: 'Steve', uuid: 'u-1' }, 'default');
+    await flush();
+    expect(execCommand).toHaveBeenCalledWith('/kick Steve', 'default');
+  });
+
+  it('approve rejects non-command rules and unknown ids', async () => {
+    const backup = ea.createEventAction({ ...draft({ actionType: 'backup', actionPayload: {} }), createdBy: 'admin' });
+    expect(await ea.approveEventAction(backup.id, admin)).toMatchObject({ ok: false, status: 400 });
+    expect(await ea.approveEventAction('missing', admin)).toMatchObject({ ok: false, status: 404 });
+  });
+});
