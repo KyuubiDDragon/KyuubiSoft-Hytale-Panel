@@ -18,7 +18,7 @@ async function effectivePermissions(req: AuthenticatedRequest): Promise<string[]
     if (!req.user) return [];
     const ownerPerms = await getUserPermissions(req.user);
     if (ownerPerms.includes('*')) return req.apiKey.scopes;
-    return req.apiKey.scopes.filter(s => (ownerPerms as string[]).includes(s));
+    return req.apiKey.scopes.filter((s) => (ownerPerms as string[]).includes(s));
   }
   if (!req.user) return [];
   // Hybrid scope: when a route is mounted under /api/servers/:serverId/...
@@ -52,7 +52,7 @@ export function requirePermission(...permissions: Permission[]) {
 
     // Check if ALL required permissions are present
     const hasAllPermissions = permissions.every((permission) =>
-      userPermissions.includes(permission)
+      userPermissions.includes(permission),
     );
 
     if (!hasAllPermissions) {
@@ -87,9 +87,7 @@ export function requireAnyPermission(...permissions: Permission[]) {
     }
 
     // Check if ANY of the required permissions is present
-    const hasAnyPermission = permissions.some((permission) =>
-      userPermissions.includes(permission)
-    );
+    const hasAnyPermission = permissions.some((permission) => userPermissions.includes(permission));
 
     if (!hasAnyPermission) {
       res.status(403).json({

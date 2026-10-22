@@ -76,9 +76,7 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
       useProductionAcme: true,
     },
     configPath: 'cryptobench_EasyWebMap/config.json', // Relative to modsPath
-    ports: [
-      { name: 'HTTP', default: 18081, env: 'WEBMAP_PORT' },
-    ],
+    ports: [{ name: 'HTTP', default: 18081, env: 'WEBMAP_PORT' }],
   },
 ];
 
@@ -92,37 +90,41 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   return new Promise((resolve) => {
     const protocol = url.startsWith('https') ? https : http;
 
-    protocol.get(url, { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } }, (res) => {
-      // Handle redirects
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        const redirectUrl = res.headers.location;
-        if (redirectUrl) {
-          fetchJson<T>(redirectUrl).then(resolve);
+    protocol
+      .get(url, { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } }, (res) => {
+        // Handle redirects
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          const redirectUrl = res.headers.location;
+          if (redirectUrl) {
+            fetchJson<T>(redirectUrl).then(resolve);
+            return;
+          }
+        }
+
+        if (res.statusCode !== 200) {
+          logger.error(`Fetch failed: ${url} - Status: ${res.statusCode}`);
+          resolve(null);
           return;
         }
-      }
 
-      if (res.statusCode !== 200) {
-        logger.error(`Fetch failed: ${url} - Status: ${res.statusCode}`);
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            logger.error('Failed to parse JSON:', e);
+            resolve(null);
+          }
+        });
+        res.on('error', () => resolve(null));
+      })
+      .on('error', (e) => {
+        logger.error('Request error:', e);
         resolve(null);
-        return;
-      }
-
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (e) {
-          logger.error('Failed to parse JSON:', e);
-          resolve(null);
-        }
       });
-      res.on('error', () => resolve(null));
-    }).on('error', (e) => {
-      logger.error('Request error:', e);
-      resolve(null);
-    });
   });
 }
 
@@ -138,7 +140,9 @@ async function fetchExternalRegistry(): Promise<ModStoreEntry[]> {
   logger.info('Fetching external mod registry from:', EXTERNAL_REGISTRY_URL);
 
   try {
-    const response = await fetchJson<{ mods: ModStoreEntry[] } | ModStoreEntry[]>(EXTERNAL_REGISTRY_URL);
+    const response = await fetchJson<{ mods: ModStoreEntry[] } | ModStoreEntry[]>(
+      EXTERNAL_REGISTRY_URL,
+    );
 
     if (response) {
       // Support both { mods: [...] } and [...] formats
@@ -295,48 +299,59 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
       assertSafeResolvedUrl(currentUrl)
         .then((safeUrl) => {
           const proto = safeUrl.protocol === 'https:' ? https : http;
-          proto.get(safeUrl.toString(), { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } }, (res) => {
-            // Handle redirects (301/302/303/307/308)
-            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-              res.resume(); // drain the socket
-              if (redirectsLeft <= 0) {
-                logger.error('Download failed: too many redirects');
-                resolve(false);
-                return;
-              }
-              // location may be relative — resolve against the current URL.
-              const next = new URL(res.headers.location, safeUrl).toString();
-              fetchWithGuard(next, redirectsLeft - 1).then(resolve);
-              return;
-            }
+          proto
+            .get(
+              safeUrl.toString(),
+              { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } },
+              (res) => {
+                // Handle redirects (301/302/303/307/308)
+                if (
+                  res.statusCode &&
+                  res.statusCode >= 300 &&
+                  res.statusCode < 400 &&
+                  res.headers.location
+                ) {
+                  res.resume(); // drain the socket
+                  if (redirectsLeft <= 0) {
+                    logger.error('Download failed: too many redirects');
+                    resolve(false);
+                    return;
+                  }
+                  // location may be relative — resolve against the current URL.
+                  const next = new URL(res.headers.location, safeUrl).toString();
+                  fetchWithGuard(next, redirectsLeft - 1).then(resolve);
+                  return;
+                }
 
-            if (res.statusCode !== 200) {
-              logger.error(`Download failed: ${res.statusCode}`);
-              res.resume();
-              resolve(false);
-              return;
-            }
+                if (res.statusCode !== 200) {
+                  logger.error(`Download failed: ${res.statusCode}`);
+                  res.resume();
+                  resolve(false);
+                  return;
+                }
 
-            const chunks: Buffer[] = [];
-            res.on('data', (chunk) => chunks.push(chunk));
-            res.on('end', async () => {
-              try {
-                const buffer = Buffer.concat(chunks);
-                await writeFile(destPath, buffer);
-                resolve(true);
-              } catch (e) {
-                logger.error('Failed to write file:', e);
-                resolve(false);
-              }
-            });
-            res.on('error', (e) => {
-              logger.error('Download error:', e);
+                const chunks: Buffer[] = [];
+                res.on('data', (chunk) => chunks.push(chunk));
+                res.on('end', async () => {
+                  try {
+                    const buffer = Buffer.concat(chunks);
+                    await writeFile(destPath, buffer);
+                    resolve(true);
+                  } catch (e) {
+                    logger.error('Failed to write file:', e);
+                    resolve(false);
+                  }
+                });
+                res.on('error', (e) => {
+                  logger.error('Download error:', e);
+                  resolve(false);
+                });
+              },
+            )
+            .on('error', (e) => {
+              logger.error('Request error:', e);
               resolve(false);
             });
-          }).on('error', (e) => {
-            logger.error('Request error:', e);
-            resolve(false);
-          });
         })
         .catch((e) => {
           if (e instanceof UnsafeUrlError) {
@@ -360,7 +375,9 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
 function safeModFilename(rawName: string, fallback: string): string {
   const clean = (name: string): string | null => {
     const base = path.basename((name || '').replace(/\\/g, '/').trim());
-    return base && /^[A-Za-z0-9._+-]+\.(jar|zip)$/i.test(base) && !base.startsWith('.') ? base : null;
+    return base && /^[A-Za-z0-9._+-]+\.(jar|zip)$/i.test(base) && !base.startsWith('.')
+      ? base
+      : null;
   };
   // Sanitize the fallback too: it derives from mod.name which is registry data.
   return clean(rawName) ?? clean(fallback) ?? 'mod.jar';
@@ -372,8 +389,8 @@ function safeModFilename(rawName: string, fallback: string): string {
 function extractVersionFromFilename(filename: string): string | null {
   // Common patterns: Name-v1.0.0.jar, Name-1.0.0.jar, Name_v1.0.0.jar
   const patterns = [
-    /[-_]v?(\d+\.\d+\.\d+)/i,  // v1.0.0 or 1.0.0
-    /[-_]v?(\d+\.\d+)/i,       // v1.0 or 1.0
+    /[-_]v?(\d+\.\d+\.\d+)/i, // v1.0.0 or 1.0.0
+    /[-_]v?(\d+\.\d+)/i, // v1.0 or 1.0
   ];
 
   for (const pattern of patterns) {
@@ -452,8 +469,11 @@ function escapeRegex(str: string): string {
 /**
  * Check if a mod is installed
  */
-export async function isModInstalled(modId: string, registry?: ModStoreEntry[]): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
-  const mods = registry || await getModRegistry();
+export async function isModInstalled(
+  modId: string,
+  registry?: ModStoreEntry[],
+): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
+  const mods = registry || (await getModRegistry());
   const mod = mods.find((m) => m.id === modId);
   if (!mod) {
     return { installed: false };
@@ -493,7 +513,9 @@ export async function installMod(modId: string): Promise<InstallResult> {
   }
 
   // Debug: Log mod details including configTemplate
-  logger.info(`[ModStore] Found mod: ${mod.name}, hasConfigTemplate: ${!!mod.configTemplate}, configPath: ${mod.configPath || 'none'}`);
+  logger.info(
+    `[ModStore] Found mod: ${mod.name}, hasConfigTemplate: ${!!mod.configTemplate}, configPath: ${mod.configPath || 'none'}`,
+  );
   if (mod.configTemplate) {
     logger.info(`[ModStore] configTemplate keys: ${Object.keys(mod.configTemplate).join(', ')}`);
   }
@@ -645,13 +667,21 @@ export async function checkModUpdate(modId: string): Promise<{
   if (mod.github) {
     const release = await getLatestRelease(mod.github);
     if (!release) {
-      return { hasUpdate: false, installedVersion: installed.installedVersion, error: 'Failed to fetch latest release' };
+      return {
+        hasUpdate: false,
+        installedVersion: installed.installedVersion,
+        error: 'Failed to fetch latest release',
+      };
     }
     latestVersion = release.tag_name;
   } else if (mod.version) {
     latestVersion = mod.version;
   } else {
-    return { hasUpdate: false, installedVersion: installed.installedVersion, error: 'No version info available' };
+    return {
+      hasUpdate: false,
+      installedVersion: installed.installedVersion,
+      error: 'No version info available',
+    };
   }
 
   const hasUpdate = compareVersions(installed.installedVersion, latestVersion) < 0;
@@ -712,7 +742,11 @@ export async function updateMod(modId: string): Promise<InstallResult> {
   if (installed.installedVersion) {
     const comparison = compareVersions(installed.installedVersion, latestVersion);
     if (comparison >= 0) {
-      return { success: false, error: 'Already on latest version', version: installed.installedVersion };
+      return {
+        success: false,
+        error: 'Already on latest version',
+        version: installed.installedVersion,
+      };
     }
   }
 
@@ -744,13 +778,15 @@ export async function updateMod(modId: string): Promise<InstallResult> {
 /**
  * Get all available mods with installation status and update info
  */
-export async function getAvailableMods(): Promise<(ModStoreEntry & {
-  installed: boolean;
-  installedFilename?: string;
-  installedVersion?: string;
-  latestVersion?: string;
-  hasUpdate?: boolean;
-})[]> {
+export async function getAvailableMods(): Promise<
+  (ModStoreEntry & {
+    installed: boolean;
+    installedFilename?: string;
+    installedVersion?: string;
+    latestVersion?: string;
+    hasUpdate?: boolean;
+  })[]
+> {
   const registry = await getModRegistry();
   const result = [];
 
@@ -811,11 +847,18 @@ export function getRegistryInfo(): { url: string; cached: boolean; cacheAge?: nu
  * Ensure EasyWebMap config exists and has correct port
  * This can be called after server startup to fix config if mod created default
  */
-export async function ensureEasyWebMapConfig(): Promise<{ success: boolean; created: boolean; updated: boolean; error?: string }> {
+export async function ensureEasyWebMapConfig(): Promise<{
+  success: boolean;
+  created: boolean;
+  updated: boolean;
+  error?: string;
+}> {
   const configPath = path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json');
   const expectedPort = config.webMapPort;
 
-  logger.info(`[ModStore] ensureEasyWebMapConfig: checking ${configPath}, expected port: ${expectedPort}`);
+  logger.info(
+    `[ModStore] ensureEasyWebMapConfig: checking ${configPath}, expected port: ${expectedPort}`,
+  );
 
   try {
     // Check if EasyWebMap is installed
@@ -840,7 +883,9 @@ export async function ensureEasyWebMapConfig(): Promise<{ success: boolean; crea
     try {
       const content = await readFile(configPath, 'utf-8');
       existingConfig = JSON.parse(content);
-      logger.info(`[ModStore] Found existing config, httpPort: ${(existingConfig as { httpPort?: number }).httpPort}`);
+      logger.info(
+        `[ModStore] Found existing config, httpPort: ${(existingConfig as { httpPort?: number }).httpPort}`,
+      );
     } catch {
       // Config doesn't exist
       logger.info('[ModStore] Config file does not exist');
@@ -852,7 +897,12 @@ export async function ensureEasyWebMapConfig(): Promise<{ success: boolean; crea
 
     if (!mod?.configTemplate) {
       logger.error('[ModStore] No config template found for EasyWebMap in registry');
-      return { success: false, created: false, updated: false, error: 'No config template in registry' };
+      return {
+        success: false,
+        created: false,
+        updated: false,
+        error: 'No config template in registry',
+      };
     }
 
     if (!existingConfig) {

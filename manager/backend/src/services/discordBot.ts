@@ -35,8 +35,16 @@ let running = false;
 async function sendToChannel(channelId: string, content: string): Promise<void> {
   if (!client) return;
   try {
-    const ch = await client.channels.fetch(channelId) as { isTextBased?: () => boolean; send?: (c: string) => Promise<unknown> } | null;
-    if (ch && typeof ch.isTextBased === 'function' && ch.isTextBased() && typeof ch.send === 'function') {
+    const ch = (await client.channels.fetch(channelId)) as {
+      isTextBased?: () => boolean;
+      send?: (c: string) => Promise<unknown>;
+    } | null;
+    if (
+      ch &&
+      typeof ch.isTextBased === 'function' &&
+      ch.isTextBased() &&
+      typeof ch.send === 'function'
+    ) {
       await ch.send(content.slice(0, 1900));
     }
   } catch (err) {
@@ -48,10 +56,16 @@ export async function startDiscordBot(): Promise<void> {
   if (running || isDemoMode()) return;
 
   let cfg: Awaited<ReturnType<typeof getConfig>> | null = null;
-  try { cfg = await getConfig(); } catch { /* config not ready */ }
+  try {
+    cfg = await getConfig();
+  } catch {
+    /* config not ready */
+  }
   const d = cfg?.discord;
   if (!d?.enabled || !d.token || !d.channelId) {
-    logger.info('[Discord] bot disabled (set config.discord.enabled + token + channelId to enable)');
+    logger.info(
+      '[Discord] bot disabled (set config.discord.enabled + token + channelId to enable)',
+    );
     return;
   }
 
@@ -80,7 +94,10 @@ export async function startDiscordBot(): Promise<void> {
     try {
       const rest = new REST({ version: '10' }).setToken(d.token);
       const body = [
-        new SlashCommandBuilder().setName('status').setDescription('Show the Hytale server status').toJSON(),
+        new SlashCommandBuilder()
+          .setName('status')
+          .setDescription('Show the Hytale server status')
+          .toJSON(),
         new SlashCommandBuilder().setName('players').setDescription('List online players').toJSON(),
       ];
       if (d.guildId) {
@@ -89,7 +106,9 @@ export async function startDiscordBot(): Promise<void> {
         await rest.put(Routes.applicationCommands(ready.user.id), { body });
       }
     } catch (err) {
-      logger.warn(`[Discord] slash command registration failed: ${err instanceof Error ? err.message : err}`);
+      logger.warn(
+        `[Discord] slash command registration failed: ${err instanceof Error ? err.message : err}`,
+      );
     }
   });
 
@@ -123,26 +142,40 @@ export async function startDiscordBot(): Promise<void> {
           try {
             const kyuubi = await import('./kyuubiApi.js');
             const info = await kyuubi.getServerInfoFromPlugin();
-            const data = info.success ? info.data as { playerCount?: number; version?: string } : undefined;
-            if (data) line += ` — ${data.playerCount ?? 0} players${data.version ? ` · v${data.version}` : ''}`;
-          } catch { /* plugin not available */ }
+            const data = info.success
+              ? (info.data as { playerCount?: number; version?: string })
+              : undefined;
+            if (data)
+              line += ` — ${data.playerCount ?? 0} players${data.version ? ` · v${data.version}` : ''}`;
+          } catch {
+            /* plugin not available */
+          }
         }
         await interaction.reply({ content: line, ephemeral: true });
       } else if (interaction.commandName === 'players') {
         const players = await import('./players.js');
         const list = await players.getOnlinePlayers();
         await interaction.reply({
-          content: list.length ? `Online (${list.length}): ${list.map(p => p.name).join(', ')}` : 'No players online.',
+          content: list.length
+            ? `Online (${list.length}): ${list.map((p) => p.name).join(', ')}`
+            : 'No players online.',
           ephemeral: true,
         });
       }
     } catch (err) {
       logger.warn(`[Discord] interaction failed: ${err instanceof Error ? err.message : err}`);
-      try { if (!interaction.replied) await interaction.reply({ content: 'Error handling command.', ephemeral: true }); } catch { /* ignore */ }
+      try {
+        if (!interaction.replied)
+          await interaction.reply({ content: 'Error handling command.', ephemeral: true });
+      } catch {
+        /* ignore */
+      }
     }
   });
 
-  c.on(Events.Error, (err) => logger.warn(`[Discord] client error: ${err instanceof Error ? err.message : err}`));
+  c.on(Events.Error, (err) =>
+    logger.warn(`[Discord] client error: ${err instanceof Error ? err.message : err}`),
+  );
 
   try {
     await c.login(d.token);
@@ -153,9 +186,16 @@ export async function startDiscordBot(): Promise<void> {
 }
 
 export async function stopDiscordBot(): Promise<void> {
-  if (unsubscribeChat) { unsubscribeChat(); unsubscribeChat = null; }
+  if (unsubscribeChat) {
+    unsubscribeChat();
+    unsubscribeChat = null;
+  }
   if (client) {
-    try { await client.destroy(); } catch { /* ignore */ }
+    try {
+      await client.destroy();
+    } catch {
+      /* ignore */
+    }
     client = null;
   }
   running = false;

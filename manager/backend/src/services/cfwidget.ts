@@ -164,7 +164,7 @@ async function cfwidgetRequest<T>(slug: string): Promise<T | null> {
       method: 'GET',
       headers: {
         'User-Agent': 'KyuubiSoft-HytalePanel/1.0',
-        'Accept': 'application/json',
+        Accept: 'application/json',
       },
     };
 
@@ -305,7 +305,7 @@ export function extractSlugFromUrl(input: string): string | null {
 export async function trackMod(
   filename: string,
   curseforgeInput: string,
-  currentVersion?: string
+  currentVersion?: string,
 ): Promise<{ success: boolean; error?: string; mod?: TrackedMod }> {
   const slug = extractSlugFromUrl(curseforgeInput);
 
@@ -327,7 +327,9 @@ export async function trackMod(
   const actualFilename = isWishlist ? `[wishlist]${slug}` : filename;
 
   // Extract version from filename if not provided (only for installed mods)
-  const installedVersion = isWishlist ? undefined : (currentVersion || extractVersionFromFilename(filename) || undefined);
+  const installedVersion = isWishlist
+    ? undefined
+    : currentVersion || extractVersionFromFilename(filename) || undefined;
 
   const latestFile = modInfo.download;
 
@@ -480,7 +482,7 @@ export async function checkAllUpdates(): Promise<ModUpdateStatus> {
     }
 
     // Small delay to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
   // Reload data after all updates to get the correct state
@@ -504,7 +506,7 @@ export async function getUpdateStatus(): Promise<ModUpdateStatus> {
   const data = await loadTrackedMods();
   const mods = Object.values(data.mods);
 
-  const updatesAvailable = mods.filter(m => m.hasUpdate).length;
+  const updatesAvailable = mods.filter((m) => m.hasUpdate).length;
 
   return {
     totalTracked: mods.length,
@@ -520,7 +522,7 @@ export async function getUpdateStatus(): Promise<ModUpdateStatus> {
 export async function updateInstalledVersion(
   filename: string,
   version: string,
-  fileId?: number
+  fileId?: number,
 ): Promise<boolean> {
   const data = await loadTrackedMods();
   const tracked = data.mods[filename];
@@ -574,10 +576,11 @@ async function downloadFile(url: string, destPath: string, redirectCount = 0): P
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'GET',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': '*/*',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: '*/*',
           'Accept-Encoding': 'identity',
-          'Host': parsedUrl.hostname,
+          Host: parsedUrl.hostname,
         },
       };
 
@@ -585,7 +588,12 @@ async function downloadFile(url: string, destPath: string, redirectCount = 0): P
 
       const request = protocol.request(options, (response) => {
         // Handle redirects
-        if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
+        if (
+          response.statusCode === 301 ||
+          response.statusCode === 302 ||
+          response.statusCode === 307 ||
+          response.statusCode === 308
+        ) {
           let redirectUrl = response.headers.location;
           if (redirectUrl) {
             // Handle relative redirects
@@ -599,7 +607,9 @@ async function downloadFile(url: string, destPath: string, redirectCount = 0): P
         }
 
         if (response.statusCode !== 200) {
-          logger.error(`[CFWidget] Download failed with status: ${response.statusCode} from ${parsedUrl.hostname}${parsedUrl.pathname}`);
+          logger.error(
+            `[CFWidget] Download failed with status: ${response.statusCode} from ${parsedUrl.hostname}${parsedUrl.pathname}`,
+          );
           // Log response headers for debugging
           logger.error(`[CFWidget] Response headers: ${JSON.stringify(response.headers)}`);
           resolve(false);
@@ -668,9 +678,7 @@ export interface CFWidgetInstallResult {
 /**
  * Install or update a tracked mod from CFWidget
  */
-export async function installTrackedMod(
-  trackedFilename: string
-): Promise<CFWidgetInstallResult> {
+export async function installTrackedMod(trackedFilename: string): Promise<CFWidgetInstallResult> {
   const data = await loadTrackedMods();
   const tracked = data.mods[trackedFilename];
 
@@ -749,7 +757,8 @@ export async function installTrackedMod(
   const updatedMod: TrackedMod = {
     filename: safeFilename,
     curseforgeSlug: tracked.curseforgeSlug,
-    installedVersion: extractVersionFromFilename(safeFilename) || latestFile.display || latestFile.version,
+    installedVersion:
+      extractVersionFromFilename(safeFilename) || latestFile.display || latestFile.version,
     installedFileId: latestFile.id,
     latestFileId: latestFile.id,
     latestVersion: latestFile.display || latestFile.name,
@@ -766,7 +775,9 @@ export async function installTrackedMod(
   data.mods[safeFilename] = updatedMod;
   await saveTrackedMods(data);
 
-  logger.info(`[CFWidget] ${isWishlist ? 'Installed' : 'Updated'} ${modInfo.title} (${safeFilename})`);
+  logger.info(
+    `[CFWidget] ${isWishlist ? 'Installed' : 'Updated'} ${modInfo.title} (${safeFilename})`,
+  );
 
   return {
     success: true,
@@ -780,7 +791,7 @@ export async function installTrackedMod(
  * Uninstall a tracked mod (delete file and untrack)
  */
 export async function uninstallTrackedMod(
-  filename: string
+  filename: string,
 ): Promise<{ success: boolean; error?: string }> {
   const data = await loadTrackedMods();
   const tracked = data.mods[filename];

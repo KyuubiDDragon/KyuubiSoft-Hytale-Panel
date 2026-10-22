@@ -251,7 +251,7 @@ export function getAssetStatus(): AssetStatus {
   }
 
   // Assets are extracted if meta exists OR if the directory has files
-  const extracted = (meta !== null) || (assetsExist && totalSize > 0);
+  const extracted = meta !== null || (assetsExist && totalSize > 0);
 
   return {
     extracted: extracted,
@@ -302,7 +302,7 @@ export function extractAssets(): { success: boolean; error?: string; message?: s
 
   return {
     success: true,
-    message: 'Extraction started. Check status for progress.'
+    message: 'Extraction started. Check status for progress.',
   };
 }
 
@@ -346,8 +346,8 @@ async function runExtraction(sourceFile: string): Promise<void> {
         const gb = (n: number) => (n / 1024 ** 3).toFixed(1);
         throw new Error(
           `Not enough disk space to extract assets: need ~${gb(requiredBytes)} GB free, ` +
-          `only ${gb(freeBytes)} GB available on the assets volume (${config.assetsPath}). ` +
-          `Free up space (or set ASSETS_PATH to a larger disk) and retry.`
+            `only ${gb(freeBytes)} GB available on the assets volume (${config.assetsPath}). ` +
+            `Free up space (or set ASSETS_PATH to a larger disk) and retry.`,
         );
       }
     }
@@ -376,9 +376,8 @@ async function runExtraction(sourceFile: string): Promise<void> {
             lastFile = match[1].trim();
             if (extractionProgress) {
               extractionProgress.filesExtracted = fileCount;
-              extractionProgress.currentFile = lastFile.length > 50
-                ? '...' + lastFile.slice(-47)
-                : lastFile;
+              extractionProgress.currentFile =
+                lastFile.length > 50 ? '...' + lastFile.slice(-47) : lastFile;
             }
           }
         }
@@ -401,14 +400,20 @@ async function runExtraction(sourceFile: string): Promise<void> {
           return;
         }
         const detail = stderrTail
-          .split('\n').map((l) => l.trim()).filter(Boolean).slice(-3).join(' | ');
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(-3)
+          .join(' | ');
         if (code === 50) {
-          reject(new Error(
-            `unzip could not write the extracted files (code 50). Usual causes: the assets ` +
-            `volume (${config.assetsPath}) is out of space/quota, or it is not writable by the ` +
-            `manager user (uid 9999) — check that ${config.assetsPath} is owned by 9999.` +
-            (detail ? ` unzip said: ${detail}` : '')
-          ));
+          reject(
+            new Error(
+              `unzip could not write the extracted files (code 50). Usual causes: the assets ` +
+                `volume (${config.assetsPath}) is out of space/quota, or it is not writable by the ` +
+                `manager user (uid 9999) — check that ${config.assetsPath} is owned by 9999.` +
+                (detail ? ` unzip said: ${detail}` : ''),
+            ),
+          );
         } else {
           reject(new Error(`unzip failed (code ${code})` + (detail ? `: ${detail}` : '')));
         }
@@ -419,10 +424,13 @@ async function runExtraction(sourceFile: string): Promise<void> {
       });
 
       // Timeout after 60 minutes
-      setTimeout(() => {
-        unzip.kill();
-        reject(new Error('Extraction timed out after 60 minutes'));
-      }, 60 * 60 * 1000);
+      setTimeout(
+        () => {
+          unzip.kill();
+          reject(new Error('Extraction timed out after 60 minutes'));
+        },
+        60 * 60 * 1000,
+      );
     });
 
     // Count final files
@@ -460,7 +468,9 @@ async function runExtraction(sourceFile: string): Promise<void> {
           fs.rmSync(path.join(config.assetsPath, item), { recursive: true, force: true });
         }
       }
-    } catch { /* best-effort cleanup */ }
+    } catch {
+      /* best-effort cleanup */
+    }
     if (extractionProgress) {
       extractionProgress.status = 'failed';
       extractionProgress.error = error instanceof Error ? error.message : 'Unknown error';
@@ -483,7 +493,7 @@ export function clearAssets(): { success: boolean; error?: string } {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to clear assets'
+      error: error instanceof Error ? error.message : 'Failed to clear assets',
     };
   }
 }
@@ -548,7 +558,10 @@ export function listAssetDirectory(relativePath: string = ''): AssetFileInfo[] |
 /**
  * Get asset directory tree (recursive, with depth limit)
  */
-export function getAssetTree(relativePath: string = '', maxDepth: number = 3): AssetTreeNode | null {
+export function getAssetTree(
+  relativePath: string = '',
+  maxDepth: number = 3,
+): AssetTreeNode | null {
   const targetPath = safePathJoin(config.assetsPath, relativePath);
 
   if (!targetPath || !isPathSafe(targetPath, [config.assetsPath])) {
@@ -639,7 +652,31 @@ export function readAssetFile(relativePath: string): {
 
   // Determine file type
   const ext = path.extname(relativePath).toLowerCase();
-  const textExtensions = ['.json', '.txt', '.xml', '.yml', '.yaml', '.cfg', '.conf', '.properties', '.md', '.lua', '.js', '.ts', '.css', '.html', '.csv', '.ini', '.log', '.ui', '.fbs', '.frag', '.vert', '.glsl', '.shader'];
+  const textExtensions = [
+    '.json',
+    '.txt',
+    '.xml',
+    '.yml',
+    '.yaml',
+    '.cfg',
+    '.conf',
+    '.properties',
+    '.md',
+    '.lua',
+    '.js',
+    '.ts',
+    '.css',
+    '.html',
+    '.csv',
+    '.ini',
+    '.log',
+    '.ui',
+    '.fbs',
+    '.frag',
+    '.vert',
+    '.glsl',
+    '.shader',
+  ];
   const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.svg'];
 
   const isText = textExtensions.includes(ext);
@@ -686,7 +723,12 @@ export function readAssetFile(relativePath: string): {
     } else {
       // Return hex preview for binary files
       const content = fs.readFileSync(targetPath);
-      const hexPreview = content.subarray(0, 1024).toString('hex').match(/.{1,2}/g)?.join(' ') || '';
+      const hexPreview =
+        content
+          .subarray(0, 1024)
+          .toString('hex')
+          .match(/.{1,2}/g)
+          ?.join(' ') || '';
 
       return {
         success: true,
@@ -699,7 +741,7 @@ export function readAssetFile(relativePath: string): {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to read file'
+      error: error instanceof Error ? error.message : 'Failed to read file',
     };
   }
 }
@@ -712,9 +754,9 @@ function globToRegex(pattern: string): RegExp {
   // Escape regex special chars except * and ?
   let regexStr = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '{{GLOBSTAR}}')  // Temporarily replace **
-    .replace(/\*/g, '[^/]*')           // * matches anything except /
-    .replace(/\?/g, '.')               // ? matches single char
+    .replace(/\*\*/g, '{{GLOBSTAR}}') // Temporarily replace **
+    .replace(/\*/g, '[^/]*') // * matches anything except /
+    .replace(/\?/g, '.') // ? matches single char
     .replace(/\{\{GLOBSTAR\}\}/g, '.*'); // ** matches anything including /
 
   return new RegExp(`^${regexStr}$`, 'i');
@@ -810,13 +852,16 @@ function parseRegexPattern(pattern: string): RegExp | null {
  * Search for files in assets
  * Supports: plain text search, glob patterns (*.json, sign*.json), regex (/pattern/flags)
  */
-export function searchAssets(query: string, options?: {
-  searchContent?: boolean;
-  extensions?: string[];
-  maxResults?: number;
-  useRegex?: boolean;
-  useGlob?: boolean;
-}): SearchResult[] {
+export function searchAssets(
+  query: string,
+  options?: {
+    searchContent?: boolean;
+    extensions?: string[];
+    maxResults?: number;
+    useRegex?: boolean;
+    useGlob?: boolean;
+  },
+): SearchResult[] {
   const results: SearchResult[] = [];
   const maxResults = options?.maxResults || 100;
   const searchContent = options?.searchContent || false;
@@ -916,8 +961,24 @@ export function searchAssets(query: string, options?: {
           }
 
           // Search content for text files
-          if (searchContent && stat.isFile() && stat.size < 1024 * 1024) { // Max 1MB for content search
-            const textExtensions = ['.json', '.txt', '.xml', '.yml', '.yaml', '.cfg', '.lua', '.js', '.ui', '.fbs', '.frag', '.vert', '.glsl', '.shader'];
+          if (searchContent && stat.isFile() && stat.size < 1024 * 1024) {
+            // Max 1MB for content search
+            const textExtensions = [
+              '.json',
+              '.txt',
+              '.xml',
+              '.yml',
+              '.yaml',
+              '.cfg',
+              '.lua',
+              '.js',
+              '.ui',
+              '.fbs',
+              '.frag',
+              '.vert',
+              '.glsl',
+              '.shader',
+            ];
             if (textExtensions.includes(ext)) {
               try {
                 const content = fs.readFileSync(entryPath, 'utf-8');
@@ -927,12 +988,13 @@ export function searchAssets(query: string, options?: {
                   // Get preview around match
                   const start = Math.max(0, matchIndex - 50);
                   const end = Math.min(content.length, matchIndex + query.length + 50);
-                  const preview = (start > 0 ? '...' : '') +
-                                  content.substring(start, end) +
-                                  (end < content.length ? '...' : '');
+                  const preview =
+                    (start > 0 ? '...' : '') +
+                    content.substring(start, end) +
+                    (end < content.length ? '...' : '');
 
                   // Avoid duplicate if already matched by filename
-                  if (!results.some(r => r.path === entryRelPath)) {
+                  if (!results.some((r) => r.path === entryRelPath)) {
                     results.push({
                       path: entryRelPath,
                       name: entry,
@@ -989,7 +1051,7 @@ const ITEM_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
   // Return cached list if available and not expired
   const now = Date.now();
-  if (!forceRefresh && itemListCache && (now - itemListCacheTime) < ITEM_CACHE_TTL) {
+  if (!forceRefresh && itemListCache && now - itemListCacheTime < ITEM_CACHE_TTL) {
     return itemListCache;
   }
 
@@ -1050,7 +1112,7 @@ export function getItemList(forceRefresh: boolean = false): ItemInfo[] {
     const displayName = itemName
       .replace(/_/g, ' ')
       .replace(/-/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
+      .replace(/\b\w/g, (c) => c.toUpperCase());
 
     items.push({
       id: itemId,
@@ -1080,9 +1142,9 @@ export function searchItems(query: string, limit: number = 20): ItemInfo[] {
   const queryLower = query.toLowerCase();
 
   return items
-    .filter(item =>
-      item.id.toLowerCase().includes(queryLower) ||
-      item.name.toLowerCase().includes(queryLower)
+    .filter(
+      (item) =>
+        item.id.toLowerCase().includes(queryLower) || item.name.toLowerCase().includes(queryLower),
     )
     .slice(0, limit);
 }

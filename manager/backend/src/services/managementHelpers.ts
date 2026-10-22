@@ -15,9 +15,9 @@ import { config } from '../config.js';
 export const FILE_SIGNATURES: Record<string, number[][] | null> = {
   // ZIP/JAR files (PK\x03\x04 or PK\x05\x06 for empty)
   zip: [
-    [0x50, 0x4B, 0x03, 0x04],
-    [0x50, 0x4B, 0x05, 0x06],
-    [0x50, 0x4B, 0x07, 0x08],
+    [0x50, 0x4b, 0x03, 0x04],
+    [0x50, 0x4b, 0x05, 0x06],
+    [0x50, 0x4b, 0x07, 0x08],
   ],
   // Lua script files start with -- or specific patterns
   lua: null, // Text file, check extension only
@@ -47,9 +47,7 @@ export function verifyFileMagic(filePath: string, expectedType: 'zip' | 'lua' | 
     fs.readSync(fd, buffer, 0, 8, 0);
     fs.closeSync(fd);
 
-    return signatures.some(sig =>
-      sig.every((byte, i) => buffer[i] === byte)
-    );
+    return signatures.some((sig) => sig.every((byte, i) => buffer[i] === byte));
   } catch {
     return false;
   }
@@ -60,8 +58,16 @@ export function verifyFileMagic(filePath: string, expectedType: 'zip' | 'lua' | 
 // extension (text, configs, world data, unknown types) is allowed because this
 // is a general-purpose file manager.
 const UPLOAD_MAGIC: Record<string, number[][]> = {
-  '.zip': [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]],
-  '.jar': [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]],
+  '.zip': [
+    [0x50, 0x4b, 0x03, 0x04],
+    [0x50, 0x4b, 0x05, 0x06],
+    [0x50, 0x4b, 0x07, 0x08],
+  ],
+  '.jar': [
+    [0x50, 0x4b, 0x03, 0x04],
+    [0x50, 0x4b, 0x05, 0x06],
+    [0x50, 0x4b, 0x07, 0x08],
+  ],
   '.gz': [[0x1f, 0x8b]],
   '.tgz': [[0x1f, 0x8b]],
   '.png': [[0x89, 0x50, 0x4e, 0x47]],
@@ -82,12 +88,17 @@ const UPLOAD_MAGIC: Record<string, number[][]> = {
  * to .zip/.jar) from being stored where another tool might mishandle it on
  * extraction. Unknown extensions pass through unchanged.
  */
-export function verifyUploadMagic(buffer: Buffer, filename: string): { ok: boolean; error?: string } {
+export function verifyUploadMagic(
+  buffer: Buffer,
+  filename: string,
+): { ok: boolean; error?: string } {
   const ext = path.extname(filename).toLowerCase();
   const sigs = UPLOAD_MAGIC[ext];
   if (!sigs) return { ok: true };
   const matches = sigs.some((sig) => sig.every((b, i) => buffer[i] === b));
-  return matches ? { ok: true } : { ok: false, error: `File content does not match its ${ext} extension` };
+  return matches
+    ? { ok: true }
+    : { ok: false, error: `File content does not match its ${ext} extension` };
 }
 
 // SECURITY: Generate safe filename with unique prefix
@@ -163,7 +174,7 @@ export const uploadPlugin = multer({
 
 export interface WorldFileInfo {
   name: string;
-  path: string;  // relative path within world (e.g., "config.json" or "resources/Time.json")
+  path: string; // relative path within world (e.g., "config.json" or "resources/Time.json")
   size: number;
   lastModified: string;
 }
@@ -174,15 +185,15 @@ export interface WorldInfo {
   size: number;
   lastModified: string;
   hasConfig: boolean;
-  files: WorldFileInfo[];  // All editable JSON files in this world
+  files: WorldFileInfo[]; // All editable JSON files in this world
 }
 
 // Possible world paths to check - only actual world directories
 export function getWorldsPaths(): string[] {
   return [
-    path.join(config.dataPath, 'worlds'),                    // /opt/hytale/data/worlds
-    path.join(config.serverPath, 'universe', 'worlds'),      // /opt/hytale/server/universe/worlds (symlink)
-    path.join(config.serverPath, 'worlds'),                  // /opt/hytale/server/worlds (fallback)
+    path.join(config.dataPath, 'worlds'), // /opt/hytale/data/worlds
+    path.join(config.serverPath, 'universe', 'worlds'), // /opt/hytale/server/universe/worlds (symlink)
+    path.join(config.serverPath, 'worlds'), // /opt/hytale/server/worlds (fallback)
   ];
 }
 
@@ -239,7 +250,10 @@ export async function scanWorldFiles(worldPath: string): Promise<WorldFileInfo[]
   return files;
 }
 
-export async function scanWorldsInPath(worldsPath: string, seenRealPaths: Set<string>): Promise<WorldInfo[]> {
+export async function scanWorldsInPath(
+  worldsPath: string,
+  seenRealPaths: Set<string>,
+): Promise<WorldInfo[]> {
   const worlds: WorldInfo[] = [];
   try {
     const entries = await readdir(worldsPath, { withFileTypes: true });

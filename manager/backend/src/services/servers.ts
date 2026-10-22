@@ -82,7 +82,9 @@ export function onServerDeleted(hook: (serverId: string) => void | Promise<void>
 
 async function fireAddHooks(server: ServerInstance): Promise<void> {
   for (const h of addHooks) {
-    try { await h(server); } catch (err) {
+    try {
+      await h(server);
+    } catch (err) {
       console.error('[servers] onServerAdded hook threw:', err);
     }
   }
@@ -90,7 +92,9 @@ async function fireAddHooks(server: ServerInstance): Promise<void> {
 
 async function fireDeleteHooks(serverId: string): Promise<void> {
   for (const h of deleteHooks) {
-    try { await h(serverId); } catch (err) {
+    try {
+      await h(serverId);
+    } catch (err) {
       console.error('[servers] onServerDeleted hook threw:', err);
     }
   }
@@ -170,7 +174,7 @@ export async function listServers(): Promise<ServerInstance[]> {
 }
 
 export async function getServer(id: string): Promise<ServerInstance | null> {
-  return (await ensureLoaded()).servers.find(s => s.id === id) ?? null;
+  return (await ensureLoaded()).servers.find((s) => s.id === id) ?? null;
 }
 
 export async function getDefaultId(): Promise<string> {
@@ -179,7 +183,7 @@ export async function getDefaultId(): Promise<string> {
 
 export async function setDefaultId(id: string): Promise<void> {
   const file = await ensureLoaded();
-  if (!file.servers.some(s => s.id === id)) throw new Error('Unknown server id');
+  if (!file.servers.some((s) => s.id === id)) throw new Error('Unknown server id');
   file.defaultId = id;
   await writeFileAtomic(file);
 }
@@ -242,9 +246,12 @@ export async function createServerInstance(input: CreateServerInput): Promise<Se
   return instance;
 }
 
-export async function updateServerInstance(id: string, patch: Partial<Pick<ServerInstance, 'name' | 'status'>>): Promise<ServerInstance | null> {
+export async function updateServerInstance(
+  id: string,
+  patch: Partial<Pick<ServerInstance, 'name' | 'status'>>,
+): Promise<ServerInstance | null> {
   const file = await ensureLoaded();
-  const idx = file.servers.findIndex(s => s.id === id);
+  const idx = file.servers.findIndex((s) => s.id === id);
   if (idx < 0) return null;
   file.servers[idx] = { ...file.servers[idx], ...patch };
   await writeFileAtomic(file);
@@ -255,12 +262,12 @@ export async function deleteServerInstance(id: string): Promise<boolean> {
   const file = await ensureLoaded();
   if (file.defaultId === id && file.servers.length > 1) {
     // Promote the first remaining server as new default
-    const fallback = file.servers.find(s => s.id !== id);
+    const fallback = file.servers.find((s) => s.id !== id);
     if (fallback) file.defaultId = fallback.id;
   }
   if (file.defaultId === id) return false; // can't delete the only server
   const before = file.servers.length;
-  file.servers = file.servers.filter(s => s.id !== id);
+  file.servers = file.servers.filter((s) => s.id !== id);
   if (file.servers.length === before) return false;
   await writeFileAtomic(file);
   await fireDeleteHooks(id);

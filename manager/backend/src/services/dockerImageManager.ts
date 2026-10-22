@@ -39,12 +39,9 @@ export interface DeleteOptions {
 }
 
 export type CreateResult =
-  | { ok: true; containerId: string; started: boolean }
-  | { ok: false; error: string };
+  { ok: true; containerId: string; started: boolean } | { ok: false; error: string };
 
-export type DeleteResult =
-  | { ok: true }
-  | { ok: false; error: string };
+export type DeleteResult = { ok: true } | { ok: false; error: string };
 
 const STACK_NAME = process.env.STACK_NAME || 'hytale';
 const STACK_NETWORK = `${STACK_NAME}-net`;
@@ -113,7 +110,10 @@ function buildExposedPorts(instance: ServerInstance): Record<string, Record<stri
   };
 }
 
-function buildCreateOptions(instance: ServerInstance, image: string): Docker.ContainerCreateOptions {
+function buildCreateOptions(
+  instance: ServerInstance,
+  image: string,
+): Docker.ContainerCreateOptions {
   return {
     name: instance.containerName,
     Image: image,
@@ -195,7 +195,10 @@ export async function createInstanceContainer(
         // Container exists but failed to start — leave status broken so the
         // operator can investigate via `docker logs <name>`.
         await updateServerInstance(instance.id, { status: 'broken' });
-        return { ok: false, error: `Container created but start failed: ${err instanceof Error ? err.message : String(err)}` };
+        return {
+          ok: false,
+          error: `Container created but start failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
       }
     }
 
@@ -227,7 +230,11 @@ export async function deleteInstanceContainer(
   try {
     const container = docker.getContainer(instance.containerName);
     // Best-effort stop. Ignore errors for already-stopped containers.
-    try { await container.stop({ t: 10 }); } catch { /* not running */ }
+    try {
+      await container.stop({ t: 10 });
+    } catch {
+      /* not running */
+    }
     await container.remove({ force: true, v: !!opts.removeData });
     return { ok: true };
   } catch (err) {

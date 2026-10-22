@@ -20,12 +20,7 @@ import fs from 'fs';
 import { logger } from '../utils/logger.js';
 import { publish, eventBus, type PanelEvent } from './eventBus.js';
 import { listServers, type ServerInstance } from './servers.js';
-import {
-  getStatus,
-  getStats,
-  startContainer,
-  wasRecentlyStoppedIntentionally,
-} from './docker.js';
+import { getStatus, getStats, startContainer, wasRecentlyStoppedIntentionally } from './docker.js';
 import { isDemoMode } from './demoData.js';
 
 function envBool(name: string, def: boolean): boolean {
@@ -47,7 +42,7 @@ const INTENTIONAL_GRACE_MS = envInt('WATCHDOG_INTENTIONAL_STOP_GRACE_MS', 60_000
 const MEM_ALERT_PERCENT = envInt('WATCHDOG_MEM_ALERT_PERCENT', 95);
 const MEM_ALERT_COOLDOWN_MS = envInt('WATCHDOG_MEM_ALERT_COOLDOWN_MS', 5 * 60_000);
 // Low-TPS (server lag) alert. TPS arrives from the plugin's server_tick events.
-const TPS_ALERT = envInt('WATCHDOG_TPS_ALERT', 15);          // alert when TPS < this; 0 = off
+const TPS_ALERT = envInt('WATCHDOG_TPS_ALERT', 15); // alert when TPS < this; 0 = off
 const TPS_ALERT_COOLDOWN_MS = envInt('WATCHDOG_TPS_ALERT_COOLDOWN_MS', 5 * 60_000);
 const TPS_STALE_MS = envInt('WATCHDOG_TPS_STALE_MS', 60_000); // ignore TPS readings older than this
 // Low-disk alert on each server's data volume.
@@ -56,7 +51,7 @@ const DISK_ALERT_COOLDOWN_MS = envInt('WATCHDOG_DISK_ALERT_COOLDOWN_MS', 30 * 60
 
 interface WatchState {
   wasRunning: boolean | null; // null until the first observation
-  restartTimes: number[];     // epoch-ms of recent auto-restarts (windowed)
+  restartTimes: number[]; // epoch-ms of recent auto-restarts (windowed)
   lastMemAlertAt: number;
   lastTpsAlertAt: number;
   lastDiskAlertAt: number;
@@ -84,7 +79,13 @@ function subscribeTicks(): void {
 function getState(serverId: string): WatchState {
   let s = state.get(serverId);
   if (!s) {
-    s = { wasRunning: null, restartTimes: [], lastMemAlertAt: 0, lastTpsAlertAt: 0, lastDiskAlertAt: 0 };
+    s = {
+      wasRunning: null,
+      restartTimes: [],
+      lastMemAlertAt: 0,
+      lastTpsAlertAt: 0,
+      lastDiskAlertAt: 0,
+    };
     state.set(serverId, s);
   }
   return s;
@@ -114,24 +115,36 @@ async function tickServer(srv: ServerInstance): Promise<void> {
 
     if (AUTO_RESTART) {
       const now = Date.now();
-      s.restartTimes = s.restartTimes.filter(t => now - t < RESTART_WINDOW_MS);
+      s.restartTimes = s.restartTimes.filter((t) => now - t < RESTART_WINDOW_MS);
       if (s.restartTimes.length < MAX_RESTARTS) {
         s.restartTimes.push(now);
-        logger.warn(`[Watchdog] Auto-restarting ${serverId} (attempt ${s.restartTimes.length}/${MAX_RESTARTS})`);
+        logger.warn(
+          `[Watchdog] Auto-restarting ${serverId} (attempt ${s.restartTimes.length}/${MAX_RESTARTS})`,
+        );
         const r = await startContainer(serverId);
-        publish(r.success ? 'server.restarted' : 'server.alert', {
+        publish(
+          r.success ? 'server.restarted' : 'server.alert',
+          {
+            serverId,
+            reason: r.success ? 'auto_restart' : 'auto_restart_failed',
+            error: r.success ? undefined : r.error,
+            attempt: s.restartTimes.length,
+          },
           serverId,
-          reason: r.success ? 'auto_restart' : 'auto_restart_failed',
-          error: r.success ? undefined : r.error,
-          attempt: s.restartTimes.length,
-        }, serverId);
+        );
       } else {
-        logger.error(`[Watchdog] ${serverId} exceeded ${MAX_RESTARTS} restarts in window — backing off (crash loop)`);
-        publish('server.alert', {
+        logger.error(
+          `[Watchdog] ${serverId} exceeded ${MAX_RESTARTS} restarts in window — backing off (crash loop)`,
+        );
+        publish(
+          'server.alert',
+          {
+            serverId,
+            reason: 'crash_loop',
+            message: `Server crashed ${MAX_RESTARTS}+ times within ${Math.round(RESTART_WINDOW_MS / 60000)} min; auto-restart paused.`,
+          },
           serverId,
-          reason: 'crash_loop',
-          message: `Server crashed ${MAX_RESTARTS}+ times within ${Math.round(RESTART_WINDOW_MS / 60000)} min; auto-restart paused.`,
-        }, serverId);
+        );
       }
     }
   }
@@ -145,12 +158,21 @@ async function tickServer(srv: ServerInstance): Promise<void> {
         const now = Date.now();
         if (now - s.lastMemAlertAt > MEM_ALERT_COOLDOWN_MS) {
           s.lastMemAlertAt = now;
-          publish('server.alert', {
-            serverId, reason: 'high_memory', memoryPercent: pct, threshold: MEM_ALERT_PERCENT,
-          }, serverId);
+          publish(
+            'server.alert',
+            {
+              serverId,
+              reason: 'high_memory',
+              memoryPercent: pct,
+              threshold: MEM_ALERT_PERCENT,
+            },
+            serverId,
+          );
         }
       }
-    } catch { /* stats unavailable — ignore this tick */ }
+    } catch {
+      /* stats unavailable — ignore this tick */
+    }
   }
 
   // Low-TPS (lag) alert, only while running and only on fresh readings.
@@ -160,9 +182,17 @@ async function tickServer(srv: ServerInstance): Promise<void> {
       const now = Date.now();
       if (now - s.lastTpsAlertAt > TPS_ALERT_COOLDOWN_MS) {
         s.lastTpsAlertAt = now;
-        publish('server.alert', {
-          serverId, reason: 'low_tps', tps: tick.tps, mspt: tick.mspt, threshold: TPS_ALERT,
-        }, serverId);
+        publish(
+          'server.alert',
+          {
+            serverId,
+            reason: 'low_tps',
+            tps: tick.tps,
+            mspt: tick.mspt,
+            threshold: TPS_ALERT,
+          },
+          serverId,
+        );
       }
     }
   }
@@ -171,18 +201,27 @@ async function tickServer(srv: ServerInstance): Promise<void> {
   if (DISK_ALERT_MIN_GB > 0) {
     try {
       const st = fs.statfsSync(srv.paths.data);
-      const freeGb = (st.bavail * st.bsize) / (1024 ** 3);
+      const freeGb = (st.bavail * st.bsize) / 1024 ** 3;
       if (freeGb < DISK_ALERT_MIN_GB) {
         const now = Date.now();
         if (now - s.lastDiskAlertAt > DISK_ALERT_COOLDOWN_MS) {
           s.lastDiskAlertAt = now;
-          publish('server.alert', {
-            serverId, reason: 'low_disk',
-            freeGb: Math.round(freeGb * 100) / 100, threshold: DISK_ALERT_MIN_GB, path: srv.paths.data,
-          }, serverId);
+          publish(
+            'server.alert',
+            {
+              serverId,
+              reason: 'low_disk',
+              freeGb: Math.round(freeGb * 100) / 100,
+              threshold: DISK_ALERT_MIN_GB,
+              path: srv.paths.data,
+            },
+            serverId,
+          );
         }
       }
-    } catch { /* statfs unsupported on this fs — skip */ }
+    } catch {
+      /* statfs unsupported on this fs — skip */
+    }
   }
 
   s.wasRunning = running;
@@ -206,8 +245,12 @@ export function startWatchdog(): void {
   }
   if (timer) return;
   subscribeTicks();
-  logger.info(`[Watchdog] started (poll=${POLL_MS}ms, autoRestart=${AUTO_RESTART}, maxRestarts=${MAX_RESTARTS}/${Math.round(RESTART_WINDOW_MS / 60000)}min, memAlert=${MEM_ALERT_PERCENT}%, tpsAlert=${TPS_ALERT}, diskAlert=${DISK_ALERT_MIN_GB}GB)`);
-  timer = setInterval(() => { void tick(); }, POLL_MS);
+  logger.info(
+    `[Watchdog] started (poll=${POLL_MS}ms, autoRestart=${AUTO_RESTART}, maxRestarts=${MAX_RESTARTS}/${Math.round(RESTART_WINDOW_MS / 60000)}min, memAlert=${MEM_ALERT_PERCENT}%, tpsAlert=${TPS_ALERT}, diskAlert=${DISK_ALERT_MIN_GB}GB)`,
+  );
+  timer = setInterval(() => {
+    void tick();
+  }, POLL_MS);
   timer.unref?.();
 }
 

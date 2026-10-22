@@ -46,9 +46,12 @@ export interface TotpStartResult {
   qrDataUrl: string;
 }
 
-export async function startTotpEnrollment(username: string, issuer = 'KyuubiSoft Panel'): Promise<TotpStartResult> {
+export async function startTotpEnrollment(
+  username: string,
+  issuer = 'KyuubiSoft Panel',
+): Promise<TotpStartResult> {
   const data = await readUsersRaw();
-  const user = data.users.find(u => u.username === username);
+  const user = data.users.find((u) => u.username === username);
   if (!user) throw new Error('User not found');
   if (user.totpEnabled) throw new Error('2FA is already enabled');
 
@@ -62,9 +65,12 @@ export async function startTotpEnrollment(username: string, issuer = 'KyuubiSoft
   return { secret, otpauthUrl, qrDataUrl };
 }
 
-export async function verifyAndEnableTotp(username: string, code: string): Promise<{ backupCodes: string[] }> {
+export async function verifyAndEnableTotp(
+  username: string,
+  code: string,
+): Promise<{ backupCodes: string[] }> {
   const data = await readUsersRaw();
-  const user = data.users.find(u => u.username === username);
+  const user = data.users.find((u) => u.username === username);
   if (!user || !user.totpPendingSecret) throw new Error('No pending 2FA enrollment');
 
   const ok = authenticator.verify({ token: code, secret: user.totpPendingSecret });
@@ -75,7 +81,7 @@ export async function verifyAndEnableTotp(username: string, code: string): Promi
   delete user.totpPendingSecret;
 
   const backupCodes = generateBackupCodes();
-  user.backupCodeHashes = await Promise.all(backupCodes.map(c => bcrypt.hash(c, 10)));
+  user.backupCodeHashes = await Promise.all(backupCodes.map((c) => bcrypt.hash(c, 10)));
 
   await writeUsersRaw(data);
   return { backupCodes };
@@ -83,7 +89,7 @@ export async function verifyAndEnableTotp(username: string, code: string): Promi
 
 export async function disableTotp(username: string): Promise<void> {
   const data = await readUsersRaw();
-  const user = data.users.find(u => u.username === username);
+  const user = data.users.find((u) => u.username === username);
   if (!user) throw new Error('User not found');
   delete user.totpSecret;
   delete user.totpPendingSecret;
@@ -94,10 +100,10 @@ export async function disableTotp(username: string): Promise<void> {
 
 export async function regenerateBackupCodes(username: string): Promise<string[]> {
   const data = await readUsersRaw();
-  const user = data.users.find(u => u.username === username);
+  const user = data.users.find((u) => u.username === username);
   if (!user || !user.totpEnabled) throw new Error('2FA is not enabled');
   const backupCodes = generateBackupCodes();
-  user.backupCodeHashes = await Promise.all(backupCodes.map(c => bcrypt.hash(c, 10)));
+  user.backupCodeHashes = await Promise.all(backupCodes.map((c) => bcrypt.hash(c, 10)));
   await writeUsersRaw(data);
   return backupCodes;
 }
@@ -105,7 +111,7 @@ export async function regenerateBackupCodes(username: string): Promise<string[]>
 export async function isTotpEnabled(username: string): Promise<boolean> {
   try {
     const data = await readUsersRaw();
-    const user = data.users.find(u => u.username === username);
+    const user = data.users.find((u) => u.username === username);
     return !!user?.totpEnabled;
   } catch {
     return false;
@@ -119,7 +125,7 @@ export async function isTotpEnabled(username: string): Promise<boolean> {
 export async function verifyTotpOrBackup(username: string, code: string): Promise<boolean> {
   if (!code) return false;
   const data = await readUsersRaw();
-  const user = data.users.find(u => u.username === username);
+  const user = data.users.find((u) => u.username === username);
   if (!user || !user.totpEnabled || !user.totpSecret) return false;
 
   // 6-digit numeric → TOTP, anything else → backup code

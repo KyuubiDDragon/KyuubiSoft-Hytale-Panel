@@ -61,10 +61,7 @@ try {
 }
 
 // Helper to get value from config.json or fall back to env
-function getConfigValue<T>(
-  configJsonValue: T | undefined,
-  envValue: T
-): T {
+function getConfigValue<T>(configJsonValue: T | undefined, envValue: T): T {
   return configJsonValue !== undefined ? configJsonValue : envValue;
 }
 
@@ -93,10 +90,14 @@ if (demoMode) {
   try {
     const usersFile = path.join(path.dirname(CONFIG_FILE_PATH), 'users.json');
     if (fs.existsSync(usersFile)) {
-      console.warn('[Demo Mode] DISABLED: a real users.json exists — demo would bypass authentication. Unset DEMO_MODE or use a clean data volume.');
+      console.warn(
+        '[Demo Mode] DISABLED: a real users.json exists — demo would bypass authentication. Unset DEMO_MODE or use a clean data volume.',
+      );
       demoMode = false;
     }
-  } catch { /* fs error — leave demoMode as configured */ }
+  } catch {
+    /* fs error — leave demoMode as configured */
+  }
 }
 
 // ============================================================
@@ -118,16 +119,13 @@ if (demoMode && !effectiveJwtSecret) {
 // Determine CORS origins: prefer config.json, then env
 const corsFromConfig = configJson?.corsOrigins;
 const corsFromEnv = process.env.CORS_ORIGINS || '';
-const effectiveCors = corsFromConfig
-  ? corsFromConfig.join(',')
-  : corsFromEnv;
+const effectiveCors = corsFromConfig ? corsFromConfig.join(',') : corsFromEnv;
 
 // Determine trust proxy: prefer config.json, then env
 const trustProxyFromConfig = configJson?.network?.trustProxy;
 const trustProxyFromEnv = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
-const effectiveTrustProxy = trustProxyFromConfig !== undefined
-  ? trustProxyFromConfig
-  : trustProxyFromEnv;
+const effectiveTrustProxy =
+  trustProxyFromConfig !== undefined ? trustProxyFromConfig : trustProxyFromEnv;
 
 // Determine modtale API key: prefer config.json, then env
 const modtaleApiKeyFromConfig = configJson?.integrations?.modtaleApiKey;
@@ -147,7 +145,9 @@ const effectiveCurseforgeApiKey = curseforgeApiKeyFromConfig || curseforgeApiKey
 // Determine CurseForge game ID: prefer config.json, then env
 // Default is 70216 (Hytale) - see https://www.curseforge.com/hytale
 const curseforgeGameIdFromConfig = configJson?.integrations?.curseforgeGameId;
-const curseforgeGameIdFromEnv = process.env.CURSEFORGE_GAME_ID ? parseInt(process.env.CURSEFORGE_GAME_ID, 10) : undefined;
+const curseforgeGameIdFromEnv = process.env.CURSEFORGE_GAME_ID
+  ? parseInt(process.env.CURSEFORGE_GAME_ID, 10)
+  : undefined;
 const effectiveCurseforgeGameId = curseforgeGameIdFromConfig || curseforgeGameIdFromEnv || 70216;
 
 export const config = {
@@ -167,7 +167,8 @@ export const config = {
   // Explicit opt-in to wildcard CORS. Required to allow CORS_ORIGINS='*' to
   // bypass CSRF origin validation — otherwise wildcard means "open server",
   // which is dangerous on a panel that controls a game server.
-  corsAllowWildcard: process.env.CORS_ALLOW_WILDCARD === 'true' || process.env.CORS_ALLOW_WILDCARD === '1',
+  corsAllowWildcard:
+    process.env.CORS_ALLOW_WILDCARD === 'true' || process.env.CORS_ALLOW_WILDCARD === '1',
 
   // Reverse Proxy Support - from config.json if available, otherwise from env
   trustProxy: effectiveTrustProxy,
@@ -221,8 +222,8 @@ export const config = {
   // Server port - internal port is always 18080, external port from MANAGER_PORT
   // Internal port is what Express listens on inside the container
   // External port is what users access from the host (for display purposes)
-  port: 18080,  // Always 18080 inside container
-  externalPort: parseInt(process.env.MANAGER_PORT || '18080', 10),  // Host-mapped port
+  port: 18080, // Always 18080 inside container
+  externalPort: parseInt(process.env.MANAGER_PORT || '18080', 10), // Host-mapped port
 
   // Game server port (for display in setup wizard)
   serverPort: parseInt(process.env.SERVER_PORT || '5520', 10),
@@ -279,16 +280,20 @@ export function reloadConfigFromFile(): void {
         (config as { trustProxy: boolean }).trustProxy = newConfigJson.network.trustProxy;
       }
       if (newConfigJson.integrations?.modtaleApiKey !== undefined) {
-        (config as { modtaleApiKey: string }).modtaleApiKey = newConfigJson.integrations.modtaleApiKey;
+        (config as { modtaleApiKey: string }).modtaleApiKey =
+          newConfigJson.integrations.modtaleApiKey;
       }
       if (newConfigJson.integrations?.stackmartApiKey !== undefined) {
-        (config as { stackmartApiKey: string }).stackmartApiKey = newConfigJson.integrations.stackmartApiKey;
+        (config as { stackmartApiKey: string }).stackmartApiKey =
+          newConfigJson.integrations.stackmartApiKey;
       }
       if (newConfigJson.integrations?.curseforgeApiKey !== undefined) {
-        (config as { curseforgeApiKey: string }).curseforgeApiKey = newConfigJson.integrations.curseforgeApiKey;
+        (config as { curseforgeApiKey: string }).curseforgeApiKey =
+          newConfigJson.integrations.curseforgeApiKey;
       }
       if (newConfigJson.integrations?.curseforgeGameId !== undefined) {
-        (config as { curseforgeGameId: number }).curseforgeGameId = newConfigJson.integrations.curseforgeGameId;
+        (config as { curseforgeGameId: number }).curseforgeGameId =
+          newConfigJson.integrations.curseforgeGameId;
       }
       if (newConfigJson.integrations?.webmap !== undefined) {
         (config as { webmapEnabled: boolean }).webmapEnabled = newConfigJson.integrations.webmap;
@@ -391,16 +396,22 @@ export function checkSecurityConfig(): void {
   if (!config.jwtSecret) {
     criticalErrors.push('JWT_SECRET is not set! Generate with: openssl rand -base64 48');
   } else if (INSECURE_DEFAULTS.jwtSecrets.includes(config.jwtSecret)) {
-    criticalErrors.push('JWT_SECRET is using a default value! Generate with: openssl rand -base64 48');
+    criticalErrors.push(
+      'JWT_SECRET is using a default value! Generate with: openssl rand -base64 48',
+    );
   } else if (config.jwtSecret.length < 32) {
     criticalErrors.push('JWT_SECRET must be at least 32 characters!');
   }
 
   // Critical: CORS must be explicitly configured
   if (!config.corsOrigins) {
-    criticalErrors.push('CORS_ORIGINS is not set! Set to specific origins (e.g., "http://your-server-ip:18080" or "https://your-domain.com")');
+    criticalErrors.push(
+      'CORS_ORIGINS is not set! Set to specific origins (e.g., "http://your-server-ip:18080" or "https://your-domain.com")',
+    );
   } else if (config.corsOrigins === '*') {
-    warnings.push('CORS_ORIGINS is set to "*" (allows all origins). Consider restricting in production.');
+    warnings.push(
+      'CORS_ORIGINS is set to "*" (allows all origins). Consider restricting in production.',
+    );
   }
 
   // Display warnings (always shown)

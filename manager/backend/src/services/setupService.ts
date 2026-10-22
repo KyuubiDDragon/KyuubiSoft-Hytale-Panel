@@ -6,7 +6,11 @@ import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile, getConfigFilePath } from '../config.js';
 import { isDemoMode } from './demoData.js';
 import * as dockerService from './docker.js';
-import { runSystemChecks as runSystemChecksFromService, type SystemCheck, type SystemCheckResult } from './systemCheck.js';
+import {
+  runSystemChecks as runSystemChecksFromService,
+  type SystemCheck,
+  type SystemCheckResult,
+} from './systemCheck.js';
 import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
 import { saveConfig as saveSchedulerConfig } from './scheduler.js';
 import { installMod, ensureEasyWebMapConfig } from './modStore.js';
@@ -90,7 +94,6 @@ export interface SetupStatus {
   stepsCompleted: string[];
   config?: Partial<SetupConfig>;
 }
-
 
 // Extraction progress
 export interface ExtractionProgress {
@@ -217,7 +220,9 @@ export async function isSetupComplete(): Promise<boolean> {
     try {
       await access(getConfigFilePath(), constants.F_OK);
     } catch {
-      logger.info('[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.');
+      logger.info(
+        '[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.',
+      );
       await writeSetupConfig({ ...setupConfig, setupComplete: false });
       return false;
     }
@@ -291,7 +296,10 @@ export async function getSetupStatus(): Promise<SetupStatus> {
  * @param stepId - The step identifier
  * @param data - The data for this step
  */
-export async function saveStepData(stepId: string, data: PartialSetupData): Promise<{ success: boolean; nextStep: string; error?: string }> {
+export async function saveStepData(
+  stepId: string,
+  data: PartialSetupData,
+): Promise<{ success: boolean; nextStep: string; error?: string }> {
   try {
     const setupConfig = await readSetupConfig();
 
@@ -310,14 +318,21 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         }
         // Validate username format
         if (!/^[a-zA-Z0-9_-]{3,32}$/.test(data.username as string)) {
-          return { success: false, nextStep: stepId, error: 'Username must be 3-32 characters, alphanumeric with _ or -' };
+          return {
+            success: false,
+            nextStep: stepId,
+            error: 'Username must be 3-32 characters, alphanumeric with _ or -',
+          };
         }
         {
           // Shared policy (length + character classes + username/common
           // sequence checks). Same helper runs in users.createUser /
           // users.updateUser so all entry points are aligned.
           const { validatePasswordPolicy } = await import('./users.js');
-          const policyError = validatePasswordPolicy(data.password as string, data.username as string);
+          const policyError = validatePasswordPolicy(
+            data.password as string,
+            data.username as string,
+          );
           if (policyError) {
             return { success: false, nextStep: stepId, error: policyError };
           }
@@ -332,7 +347,10 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
         break;
 
       case 'download-method':
-        if (!data.method || !['official', 'custom', 'manual', 'existing'].includes(data.method as string)) {
+        if (
+          !data.method ||
+          !['official', 'custom', 'manual', 'existing'].includes(data.method as string)
+        ) {
           return { success: false, nextStep: stepId, error: 'Invalid download method' };
         }
         setupConfig.downloadMethod = data.method as 'official' | 'custom' | 'manual' | 'existing';
@@ -491,16 +509,15 @@ export async function saveStepData(stepId: string, data: PartialSetupData): Prom
 
     // Find next step
     const currentIndex = SETUP_STEPS.indexOf(stepId);
-    const nextStep = currentIndex < SETUP_STEPS.length - 1
-      ? SETUP_STEPS[currentIndex + 1]
-      : 'complete';
+    const nextStep =
+      currentIndex < SETUP_STEPS.length - 1 ? SETUP_STEPS[currentIndex + 1] : 'complete';
 
     return { success: true, nextStep };
   } catch (error) {
     return {
       success: false,
       nextStep: stepId,
-      error: error instanceof Error ? error.message : 'Failed to save step data'
+      error: error instanceof Error ? error.message : 'Failed to save step data',
     };
   }
 }
@@ -563,7 +580,11 @@ function convertAutomationToSchedulerConfig(automation: SetupConfig['automation'
 /**
  * Finalize setup - write final config and create admin user
  */
-export async function finalizeSetup(): Promise<{ success: boolean; error?: string; jwtSecret?: string }> {
+export async function finalizeSetup(): Promise<{
+  success: boolean;
+  error?: string;
+  jwtSecret?: string;
+}> {
   try {
     const setupConfig = await readSetupConfig();
 
@@ -596,7 +617,7 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         // No existing file — start fresh
       }
 
-      const existing = usersData.users.find(u => u.username === setupConfig.admin!.username);
+      const existing = usersData.users.find((u) => u.username === setupConfig.admin!.username);
       if (existing) {
         // Same username as a pre-existing account (typically the .env-created
         // admin): the wizard password becomes the valid one. Bump tokenVersion
@@ -604,7 +625,9 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         existing.passwordHash = adminPasswordHash;
         existing.roleId = 'admin';
         existing.tokenVersion = ((existing.tokenVersion as number) || 0) + 1;
-        logger.info(`[Setup] Updated existing user '${setupConfig.admin.username}' with the wizard password`);
+        logger.info(
+          `[Setup] Updated existing user '${setupConfig.admin.username}' with the wizard password`,
+        );
       } else {
         usersData.users.push({
           username: setupConfig.admin.username,
@@ -613,7 +636,9 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
           createdAt: new Date().toISOString(),
           tokenVersion: 1,
         });
-        logger.info(`[Setup] Created admin user '${setupConfig.admin.username}' (existing accounts kept)`);
+        logger.info(
+          `[Setup] Created admin user '${setupConfig.admin.username}' (existing accounts kept)`,
+        );
       }
       await writeFile(usersFile, JSON.stringify(usersData, null, 2), 'utf-8');
     } catch (error) {
@@ -658,9 +683,10 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         // Helper: write field only if we don't already have a value, or if
         // we're doing a fresh install (no existing config).
         const preserveExisting = isExisting && hadExistingConfig;
-        const setIfMissing = <T,>(key: string, value: T | undefined): void => {
+        const setIfMissing = <T>(key: string, value: T | undefined): void => {
           if (value === undefined) return;
-          if (preserveExisting && serverConfig[key] !== undefined && serverConfig[key] !== '') return;
+          if (preserveExisting && serverConfig[key] !== undefined && serverConfig[key] !== '')
+            return;
           serverConfig[key] = value;
         };
 
@@ -762,9 +788,12 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
         if (webmapResult.success) {
           logger.info('[Setup] EasyWebMap plugin installed successfully:', webmapResult.filename);
           if (webmapResult.configCreated) {
-            logger.info('[Setup] EasyWebMap config created at', path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json'));
+            logger.info(
+              '[Setup] EasyWebMap config created at',
+              path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json'),
+            );
             // Give filesystem time to sync the config file before server restart
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             logger.info('[Setup] EasyWebMap config write confirmed');
           }
         } else {
@@ -815,7 +844,7 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
           // This fixes cases where the mod creates a default config on first startup
           if (setupConfig.integrations?.webmap) {
             logger.info('[Setup] Waiting 10 seconds for mods to initialize...');
-            await new Promise(resolve => setTimeout(resolve, 10000));
+            await new Promise((resolve) => setTimeout(resolve, 10000));
             logger.info('[Setup] Ensuring EasyWebMap config has correct port...');
             const configResult = await ensureEasyWebMapConfig();
             if (configResult.updated) {
@@ -840,11 +869,10 @@ export async function finalizeSetup(): Promise<{ success: boolean; error?: strin
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to finalize setup'
+      error: error instanceof Error ? error.message : 'Failed to finalize setup',
     };
   }
 }
-
 
 /**
  * Get extraction progress
@@ -900,57 +928,59 @@ export async function startAssetsExtraction(): Promise<{ success: boolean; error
     // Run unzip via docker exec (in the game container which has the tools).
     // Paths are escaped even though they are config-derived: keeps the shell
     // command injection-proof if these ever become operator-influenced.
-    dockerService.execInContainer(
-      `unzip -o ${escapeShellArg(assetsZipPath)} -d ${escapeShellArg(extractPath)} 2>&1`
-    ).then(async (result) => {
-      if (result.success) {
-        // Get directory size
-        const sizeResult = await dockerService.execInContainer(
-          `du -sb ${escapeShellArg(extractPath)} | cut -f1`
-        );
-        const sizeBytes = sizeResult.success && sizeResult.output
-          ? parseInt(sizeResult.output.trim(), 10)
-          : 0;
+    dockerService
+      .execInContainer(
+        `unzip -o ${escapeShellArg(assetsZipPath)} -d ${escapeShellArg(extractPath)} 2>&1`,
+      )
+      .then(async (result) => {
+        if (result.success) {
+          // Get directory size
+          const sizeResult = await dockerService.execInContainer(
+            `du -sb ${escapeShellArg(extractPath)} | cut -f1`,
+          );
+          const sizeBytes =
+            sizeResult.success && sizeResult.output ? parseInt(sizeResult.output.trim(), 10) : 0;
 
-        extractionProgress = {
-          status: 'complete',
-          filesTotal: 100,
-          filesDone: 100,
-          bytesTotal: sizeBytes,
-          bytesDone: sizeBytes,
-          currentFile: 'Extraction complete',
-          estimatedSeconds: 0,
-        };
+          extractionProgress = {
+            status: 'complete',
+            filesTotal: 100,
+            filesDone: 100,
+            bytesTotal: sizeBytes,
+            bytesDone: sizeBytes,
+            currentFile: 'Extraction complete',
+            estimatedSeconds: 0,
+          };
 
-        // Update setup config
-        const setupConfig = await readSetupConfig();
-        setupConfig.assets = {
-          extracted: true,
-          extractedAt: new Date().toISOString(),
-          path: extractPath,
-          sizeBytes,
-        };
-        await writeSetupConfig(setupConfig);
-      } else {
+          // Update setup config
+          const setupConfig = await readSetupConfig();
+          setupConfig.assets = {
+            extracted: true,
+            extractedAt: new Date().toISOString(),
+            path: extractPath,
+            sizeBytes,
+          };
+          await writeSetupConfig(setupConfig);
+        } else {
+          extractionProgress = {
+            ...extractionProgress,
+            status: 'error',
+            error: result.error || 'Extraction failed',
+          };
+        }
+      })
+      .catch((error) => {
         extractionProgress = {
           ...extractionProgress,
           status: 'error',
-          error: result.error || 'Extraction failed',
+          error: error instanceof Error ? error.message : 'Extraction failed',
         };
-      }
-    }).catch((error) => {
-      extractionProgress = {
-        ...extractionProgress,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Extraction failed',
-      };
-    });
+      });
 
     return { success: true };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to start extraction'
+      error: error instanceof Error ? error.message : 'Failed to start extraction',
     };
   }
 }
@@ -982,9 +1012,10 @@ export async function getAuthStatusForSetup(): Promise<{
     const logs = await dockerService.getLogs(500);
 
     // Check for downloader authentication
-    const downloaderAuthenticated = logs.includes('Credentials saved') ||
+    const downloaderAuthenticated =
+      logs.includes('Credentials saved') ||
       logs.includes('Download successful') ||
-      logs.includes('AUTHENTICATION REQUIRED') === false && logs.includes('Hytale Server Booted');
+      (logs.includes('AUTHENTICATION REQUIRED') === false && logs.includes('Hytale Server Booted'));
 
     // Check for server authentication
     // Look for specific Hytale server auth success messages
@@ -1003,7 +1034,8 @@ export async function getAuthStatusForSetup(): Promise<{
       logs.includes('credential store to: Encrypted');
 
     // Check for machine ID (usually auto-generated)
-    const machineIdGenerated = logs.includes('Machine ID') ||
+    const machineIdGenerated =
+      logs.includes('Machine ID') ||
       logs.includes('machine-id') ||
       logs.includes('MachineId') ||
       // If server authenticated, machine ID is typically present
@@ -1052,7 +1084,7 @@ export async function resetSetup(): Promise<{ success: boolean; error?: string }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to reset setup'
+      error: error instanceof Error ? error.message : 'Failed to reset setup',
     };
   }
 }

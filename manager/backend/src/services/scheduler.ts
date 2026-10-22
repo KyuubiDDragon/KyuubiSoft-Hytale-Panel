@@ -17,7 +17,14 @@ import { config } from '../config.js';
 import { createBackup, listBackups, deleteBackup } from './backup.js';
 import * as dockerService from './docker.js';
 import { validateCommand } from '../utils/sanitize.js';
-import { ensureLoaded, getDefaultId, getServer, listServers, onServerAdded, onServerDeleted } from './servers.js';
+import {
+  ensureLoaded,
+  getDefaultId,
+  getServer,
+  listServers,
+  onServerAdded,
+  onServerDeleted,
+} from './servers.js';
 
 // Scheduler configuration
 interface ScheduleConfig {
@@ -193,7 +200,9 @@ async function getConfigFilePath(serverId: string): Promise<string> {
     }
     const s = await getServer(serverId);
     if (s) return path.join(s.paths.data, 'manager-config.json');
-  } catch { /* registry not ready */ }
+  } catch {
+    /* registry not ready */
+  }
   return path.join(config.dataPath, 'manager-config.json');
 }
 
@@ -380,7 +389,7 @@ async function executeScheduledRestart(serverId: string): Promise<void> {
 
   await sendAnnouncement(cfg.scheduledRestarts.restartMessage, serverId);
 
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   if (cfg.scheduledRestarts.createBackup) {
     console.log(`[Scheduler:${serverId}] Creating pre-restart backup...`);
@@ -418,7 +427,7 @@ function scheduleRestartWithWarnings(restartTime: Date, timeStr: string, serverI
   timers.restartWarningTimers = [];
 
   for (const warningMinutes of cfg.scheduledRestarts.warningMinutes) {
-    const warningMs = msUntilRestart - (warningMinutes * 60 * 1000);
+    const warningMs = msUntilRestart - warningMinutes * 60 * 1000;
     if (warningMs > 0) {
       const timer = setTimeout(() => {
         sendRestartWarning(warningMinutes, serverId);
@@ -434,7 +443,9 @@ function scheduleRestartWithWarnings(restartTime: Date, timeStr: string, serverI
 
   timers.pendingRestart = { time: timeStr, scheduledAt: restartTime };
 
-  console.log(`[Scheduler:${serverId}] Restart scheduled for ${restartTime.toISOString()} (in ${Math.round(msUntilRestart / 60000)} minutes)`);
+  console.log(
+    `[Scheduler:${serverId}] Restart scheduled for ${restartTime.toISOString()} (in ${Math.round(msUntilRestart / 60000)} minutes)`,
+  );
 }
 
 // Schedule the next restart
@@ -471,7 +482,9 @@ export function cancelPendingRestart(serverId?: string): boolean {
   for (const timer of timers.restartWarningTimers) clearTimeout(timer);
   timers.restartWarningTimers = [];
 
-  console.log(`[Scheduler:${id}] Cancelled pending restart that was scheduled for ${timers.pendingRestart.scheduledAt.toISOString()}`);
+  console.log(
+    `[Scheduler:${id}] Cancelled pending restart that was scheduled for ${timers.pendingRestart.scheduledAt.toISOString()}`,
+  );
   timers.pendingRestart = null;
 
   setTimeout(() => scheduleNextRestart(id), 60000);
@@ -515,14 +528,18 @@ function msUntilNextDailyTime(times: string[]): number | null {
 async function runScheduledCommand(cmd: ScheduledCommand, serverId: string): Promise<void> {
   const check = validateCommand(cmd.command);
   if (!check.valid) {
-    console.error(`[Scheduler:${serverId}] Skipping scheduled command "${cmd.name}": ${check.error}`);
+    console.error(
+      `[Scheduler:${serverId}] Skipping scheduled command "${cmd.name}": ${check.error}`,
+    );
     return;
   }
   try {
     const result = await dockerService.execCommand(cmd.command, serverId);
     const timers = timersByServer[serverId];
     if (timers && result.success) timers.commandLastRun.set(cmd.id, Date.now());
-    console.log(`[Scheduler:${serverId}] Ran scheduled command "${cmd.name}": ${cmd.command} (${result.success ? 'ok' : 'failed'})`);
+    console.log(
+      `[Scheduler:${serverId}] Ran scheduled command "${cmd.name}": ${cmd.command} (${result.success ? 'ok' : 'failed'})`,
+    );
   } catch (err) {
     console.error(`[Scheduler:${serverId}] Scheduled command "${cmd.name}" failed:`, err);
   }
@@ -548,10 +565,14 @@ function scheduleCommandsForServer(serverId: string): void {
 
     if (cmd.mode === 'interval') {
       if (!cmd.intervalMinutes || cmd.intervalMinutes <= 0) continue;
-      const timer = setInterval(() => { void runScheduledCommand(cmd, serverId); }, cmd.intervalMinutes * 60_000);
+      const timer = setInterval(() => {
+        void runScheduledCommand(cmd, serverId);
+      }, cmd.intervalMinutes * 60_000);
       timer.unref?.();
       timers.commandTimers.set(cmd.id, timer);
-      console.log(`[Scheduler:${serverId}] Scheduled command "${cmd.name}" every ${cmd.intervalMinutes} min`);
+      console.log(
+        `[Scheduler:${serverId}] Scheduled command "${cmd.name}" every ${cmd.intervalMinutes} min`,
+      );
     } else {
       // daily mode: arm a one-shot to the next "HH:MM", re-arming after each fire.
       const arm = (): void => {
@@ -565,7 +586,9 @@ function scheduleCommandsForServer(serverId: string): void {
         timers.commandTimers.set(cmd.id, timer);
       };
       arm();
-      console.log(`[Scheduler:${serverId}] Scheduled command "${cmd.name}" daily at ${(cmd.times ?? []).join(', ')}`);
+      console.log(
+        `[Scheduler:${serverId}] Scheduled command "${cmd.name}" daily at ${(cmd.times ?? []).join(', ')}`,
+      );
     }
   }
 }
@@ -605,12 +628,17 @@ function startSchedulersForServer(serverId: string): void {
   if (cfg.announcements.enabled) {
     for (const announcement of cfg.announcements.scheduled) {
       if (announcement.enabled && announcement.intervalMinutes > 0) {
-        const timer = setInterval(() => {
-          sendAnnouncement(announcement.message, serverId);
-        }, announcement.intervalMinutes * 60 * 1000);
+        const timer = setInterval(
+          () => {
+            sendAnnouncement(announcement.message, serverId);
+          },
+          announcement.intervalMinutes * 60 * 1000,
+        );
 
         timers.announcementTimers.set(announcement.id, timer);
-        console.log(`[Scheduler:${serverId}] Announcement "${announcement.id}" scheduled every ${announcement.intervalMinutes} minutes`);
+        console.log(
+          `[Scheduler:${serverId}] Announcement "${announcement.id}" scheduled every ${announcement.intervalMinutes} minutes`,
+        );
       }
     }
   }
@@ -702,7 +730,10 @@ export function getQuickCommands(serverId?: string): QuickCommand[] {
   return schedulerConfig[id]?.quickCommands ?? DEFAULT_CONFIG.quickCommands;
 }
 
-export function addQuickCommand(command: Omit<QuickCommand, 'id'>, serverId?: string): QuickCommand {
+export function addQuickCommand(
+  command: Omit<QuickCommand, 'id'>,
+  serverId?: string,
+): QuickCommand {
   const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
   const cfg = schedulerConfig[id] ?? { ...DEFAULT_CONFIG };
   const newCommand: QuickCommand = { ...command, id: Date.now().toString() };
@@ -712,11 +743,15 @@ export function addQuickCommand(command: Omit<QuickCommand, 'id'>, serverId?: st
   return newCommand;
 }
 
-export function updateQuickCommand(qcId: string, updates: Partial<QuickCommand>, serverId?: string): boolean {
+export function updateQuickCommand(
+  qcId: string,
+  updates: Partial<QuickCommand>,
+  serverId?: string,
+): boolean {
   const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
   const cfg = schedulerConfig[id];
   if (!cfg) return false;
-  const index = cfg.quickCommands.findIndex(c => c.id === qcId);
+  const index = cfg.quickCommands.findIndex((c) => c.id === qcId);
   if (index === -1) return false;
   cfg.quickCommands[index] = { ...cfg.quickCommands[index], ...updates };
   doSaveSync(cfg, id);
@@ -727,7 +762,7 @@ export function deleteQuickCommand(qcId: string, serverId?: string): boolean {
   const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
   const cfg = schedulerConfig[id];
   if (!cfg) return false;
-  const index = cfg.quickCommands.findIndex(c => c.id === qcId);
+  const index = cfg.quickCommands.findIndex((c) => c.id === qcId);
   if (index === -1) return false;
   cfg.quickCommands.splice(index, 1);
   doSaveSync(cfg, id);
@@ -735,10 +770,13 @@ export function deleteQuickCommand(qcId: string, serverId?: string): boolean {
 }
 
 // Run a configured scheduled command immediately (used by the "Run now" button).
-export async function runScheduledCommandNow(commandId: string, serverId?: string): Promise<{ success: boolean; error?: string }> {
+export async function runScheduledCommandNow(
+  commandId: string,
+  serverId?: string,
+): Promise<{ success: boolean; error?: string }> {
   const id = await resolveServerId(serverId);
   const cfg = schedulerConfig[id] ?? (await loadConfig(id));
-  const cmd = (cfg.scheduledCommands ?? []).find(c => c.id === commandId);
+  const cmd = (cfg.scheduledCommands ?? []).find((c) => c.id === commandId);
   if (!cmd) return { success: false, error: 'Scheduled command not found' };
   const check = validateCommand(cmd.command);
   if (!check.valid) return { success: false, error: check.error };
@@ -761,7 +799,7 @@ function getScheduledCommandStatuses(serverId: string): ScheduledCommandStatus[]
   const timers = timersByServer[serverId];
   if (!cfg) return [];
   const now = Date.now();
-  return (cfg.scheduledCommands ?? []).map(cmd => {
+  return (cfg.scheduledCommands ?? []).map((cmd) => {
     let nextRun: string | null = null;
     if (cmd.enabled) {
       if (cmd.mode === 'interval' && cmd.intervalMinutes > 0) {
@@ -789,7 +827,12 @@ function getScheduledCommandStatuses(serverId: string): ScheduledCommandStatus[]
 export async function getSchedulerStatus(serverId?: string): Promise<{
   backups: { enabled: boolean; nextRun: string | null; lastRun: string | null; schedule: string };
   announcements: { enabled: boolean; activeCount: number };
-  scheduledRestarts: { enabled: boolean; nextRestart: string | null; pendingRestart: { time: string; scheduledAt: string } | null; times: string[] };
+  scheduledRestarts: {
+    enabled: boolean;
+    nextRestart: string | null;
+    pendingRestart: { time: string; scheduledAt: string } | null;
+    times: string[];
+  };
   scheduledCommands: ScheduledCommandStatus[];
 }> {
   const id = await resolveServerId(serverId);
@@ -797,7 +840,7 @@ export async function getSchedulerStatus(serverId?: string): Promise<{
   const timers = timersByServer[id] ?? emptyTimers();
   const nextBackup = getNextBackupTime(id);
   const backups = await listBackups(id);
-  const lastAutoBackup = backups.find(b => b.type === 'auto');
+  const lastAutoBackup = backups.find((b) => b.type === 'auto');
   const nextRestart = getNextRestartTime(id);
 
   return {
@@ -829,5 +872,7 @@ void (async () => {
   try {
     const id = await resolveServerId();
     await loadConfig(id);
-  } catch { /* startSchedulers will retry */ }
+  } catch {
+    /* startSchedulers will retry */
+  }
 })();

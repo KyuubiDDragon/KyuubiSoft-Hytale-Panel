@@ -59,7 +59,9 @@ export async function authMiddleware(
   if (result.tokenVersion !== undefined) {
     const currentVersion = await getTokenVersion(result.username);
     if (currentVersion !== result.tokenVersion) {
-      res.status(401).json({ detail: 'Session expired due to account changes', code: 'TOKEN_INVALIDATED' });
+      res
+        .status(401)
+        .json({ detail: 'Session expired due to account changes', code: 'TOKEN_INVALIDATED' });
       return;
     }
   }

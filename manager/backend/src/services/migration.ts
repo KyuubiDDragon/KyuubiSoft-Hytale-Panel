@@ -158,7 +158,9 @@ function readEnvConfig(): EnvConfig {
     trustProxy: process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1',
     modtaleApiKey: process.env.MODTALE_API_KEY,
     enableBackup: process.env.ENABLE_BACKUP === 'true',
-    backupFrequency: process.env.BACKUP_FREQUENCY ? parseInt(process.env.BACKUP_FREQUENCY, 10) : undefined,
+    backupFrequency: process.env.BACKUP_FREQUENCY
+      ? parseInt(process.env.BACKUP_FREQUENCY, 10)
+      : undefined,
     javaMinRam: process.env.JAVA_MIN_RAM,
     javaMaxRam: process.env.JAVA_MAX_RAM,
   };
@@ -299,13 +301,15 @@ export async function runMigration(): Promise<boolean> {
 
       const passwordHash = await bcrypt.hash(envConfig.managerPassword, 10);
       const usersData = {
-        users: [{
-          username: envConfig.managerUsername,
-          passwordHash: passwordHash,
-          roleId: 'admin',
-          createdAt: new Date().toISOString(),
-          tokenVersion: 1,
-        }]
+        users: [
+          {
+            username: envConfig.managerUsername,
+            passwordHash: passwordHash,
+            roleId: 'admin',
+            createdAt: new Date().toISOString(),
+            tokenVersion: 1,
+          },
+        ],
       };
 
       await writeFile(USERS_FILE, JSON.stringify(usersData, null, 2), 'utf-8');
@@ -393,7 +397,9 @@ export async function runMigration(): Promise<boolean> {
     const mainConfig = {
       setupComplete: true,
       jwtSecret: envConfig.jwtSecret || '',
-      corsOrigins: envConfig.corsOrigins ? envConfig.corsOrigins.split(',').map(o => o.trim()) : [],
+      corsOrigins: envConfig.corsOrigins
+        ? envConfig.corsOrigins.split(',').map((o) => o.trim())
+        : [],
       network: {
         trustProxy: envConfig.trustProxy ?? false,
         accessMode: accessMode,
@@ -435,7 +441,19 @@ export async function runMigration(): Promise<boolean> {
 // comparison, so '3.0.0' also matches the '3.0.0-alpha' package version).
 const VERSION_FEATURES: Record<string, string[]> = {
   '2.1.0': ['native_update_system', 'update_config'],
-  '3.0.0': ['two_factor_auth', 'api_keys', 'audit_log', 'webhooks', 'sso', 'file_manager', 'notifications', 'multi_server', 'live_map', 'replay', 'wiki'],
+  '3.0.0': [
+    'two_factor_auth',
+    'api_keys',
+    'audit_log',
+    'webhooks',
+    'sso',
+    'file_manager',
+    'notifications',
+    'multi_server',
+    'live_map',
+    'replay',
+    'wiki',
+  ],
 };
 
 /**
@@ -505,7 +523,10 @@ export async function migrateUpdateConfig(): Promise<{ migrated: boolean; newFea
  * Update panel version and track new features
  * Returns list of new features that were added since last version
  */
-export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: string[]; showBanner: boolean }> {
+export async function checkPanelVersionAndFeatures(): Promise<{
+  newFeatures: string[];
+  showBanner: boolean;
+}> {
   const newFeatures: string[] = [];
   // Real version from package.json; strip any pre-release suffix ('-alpha') so
   // the numeric comparison below stays well-defined.
@@ -528,8 +549,11 @@ export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: str
     // Check if we're on a newer version
     const isNewer =
       currentVersionParts[0] > lastVersionParts[0] ||
-      (currentVersionParts[0] === lastVersionParts[0] && currentVersionParts[1] > lastVersionParts[1]) ||
-      (currentVersionParts[0] === lastVersionParts[0] && currentVersionParts[1] === lastVersionParts[1] && currentVersionParts[2] > lastVersionParts[2]);
+      (currentVersionParts[0] === lastVersionParts[0] &&
+        currentVersionParts[1] > lastVersionParts[1]) ||
+      (currentVersionParts[0] === lastVersionParts[0] &&
+        currentVersionParts[1] === lastVersionParts[1] &&
+        currentVersionParts[2] > lastVersionParts[2]);
 
     if (!isNewer && lastVersion === CURRENT_PANEL_VERSION) {
       return { newFeatures: [], showBanner: false };
@@ -541,7 +565,9 @@ export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: str
       const isVersionNewer =
         versionParts[0] > lastVersionParts[0] ||
         (versionParts[0] === lastVersionParts[0] && versionParts[1] > lastVersionParts[1]) ||
-        (versionParts[0] === lastVersionParts[0] && versionParts[1] === lastVersionParts[1] && versionParts[2] > lastVersionParts[2]);
+        (versionParts[0] === lastVersionParts[0] &&
+          versionParts[1] === lastVersionParts[1] &&
+          versionParts[2] > lastVersionParts[2]);
 
       if (isVersionNewer) {
         newFeatures.push(...features);

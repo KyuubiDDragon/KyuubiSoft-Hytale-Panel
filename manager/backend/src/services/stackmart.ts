@@ -153,7 +153,9 @@ export async function getInstalledStackMartInfo(): Promise<Record<string, Instal
   return data.resources;
 }
 
-export async function isStackMartResourceInstalled(resourceId: string): Promise<InstalledResourceInfo | null> {
+export async function isStackMartResourceInstalled(
+  resourceId: string,
+): Promise<InstalledResourceInfo | null> {
   const data = await loadInstalledResources();
   return data.resources[resourceId] || null;
 }
@@ -237,7 +239,7 @@ async function stackmartRequest<T>(
     body?: unknown;
     requireAuth?: boolean;
     isPublic?: boolean;
-  } = {}
+  } = {},
 ): Promise<T | null> {
   const { method = 'GET', body, requireAuth = false, isPublic = true } = options;
   const apiKey = getApiKey();
@@ -255,7 +257,7 @@ async function stackmartRequest<T>(
 
     const headers: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (compatible; KyuubiSoft-HytalePanel/1.0)',
-      'Accept': 'application/json',
+      Accept: 'application/json',
     };
 
     if (apiKey) {
@@ -306,47 +308,49 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
         },
       };
 
-      proto.get(options, (res) => {
-        // Handle redirects
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            // Handle relative redirects
-            const newUrl = redirectUrl.startsWith('http')
-              ? redirectUrl
-              : new URL(redirectUrl, currentUrl).toString();
-            request(newUrl);
+      proto
+        .get(options, (res) => {
+          // Handle redirects
+          if (res.statusCode === 301 || res.statusCode === 302) {
+            const redirectUrl = res.headers.location;
+            if (redirectUrl) {
+              // Handle relative redirects
+              const newUrl = redirectUrl.startsWith('http')
+                ? redirectUrl
+                : new URL(redirectUrl, currentUrl).toString();
+              request(newUrl);
+              return;
+            }
+          }
+
+          if (res.statusCode !== 200) {
+            logger.error(`Download failed: ${res.statusCode}`);
+            resolve(false);
             return;
           }
-        }
 
-        if (res.statusCode !== 200) {
-          logger.error(`Download failed: ${res.statusCode}`);
-          resolve(false);
-          return;
-        }
+          const chunks: Buffer[] = [];
 
-        const chunks: Buffer[] = [];
-
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', async () => {
-          try {
-            const buffer = Buffer.concat(chunks);
-            await writeFile(destPath, buffer);
-            resolve(true);
-          } catch (e) {
-            logger.error('Failed to write file:', e);
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', async () => {
+            try {
+              const buffer = Buffer.concat(chunks);
+              await writeFile(destPath, buffer);
+              resolve(true);
+            } catch (e) {
+              logger.error('Failed to write file:', e);
+              resolve(false);
+            }
+          });
+          res.on('error', (e) => {
+            logger.error('Download error:', e);
             resolve(false);
-          }
-        });
-        res.on('error', (e) => {
-          logger.error('Download error:', e);
+          });
+        })
+        .on('error', (e) => {
+          logger.error('Request error:', e);
           resolve(false);
         });
-      }).on('error', (e) => {
-        logger.error('Request error:', e);
-        resolve(false);
-      });
     };
 
     request(url);
@@ -358,22 +362,17 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
 /**
  * Search for resources on StackMart
  */
-export async function searchResources(options: {
-  search?: string;
-  page?: number;
-  limit?: number;
-  sort?: StackMartSortOption;
-  category?: StackMartCategory;
-  subcategory?: string;
-} = {}): Promise<StackMartSearchResult | null> {
-  const {
-    search,
-    page = 1,
-    limit = 20,
-    sort = 'popular',
-    category,
-    subcategory,
-  } = options;
+export async function searchResources(
+  options: {
+    search?: string;
+    page?: number;
+    limit?: number;
+    sort?: StackMartSortOption;
+    category?: StackMartCategory;
+    subcategory?: string;
+  } = {},
+): Promise<StackMartSearchResult | null> {
+  const { search, page = 1, limit = 20, sort = 'popular', category, subcategory } = options;
 
   // Build cache key
   const cacheKey = `stackmart:search:${JSON.stringify(options)}`;
@@ -403,7 +402,9 @@ export async function searchResources(options: {
 /**
  * Get resource details by ID or slug
  */
-export async function getResourceDetails(resourceId: string): Promise<{ resource: StackMartResourceDetails } | null> {
+export async function getResourceDetails(
+  resourceId: string,
+): Promise<{ resource: StackMartResourceDetails } | null> {
   // Security: Validate resourceId before using in URL
   if (!isValidResourceId(resourceId)) {
     logger.error(`Invalid resource ID format: ${resourceId}`);
@@ -416,7 +417,9 @@ export async function getResourceDetails(resourceId: string): Promise<{ resource
     return cached;
   }
 
-  const result = await stackmartRequest<{ resource: StackMartResourceDetails }>(`/resources/${encodeURIComponent(resourceId)}`);
+  const result = await stackmartRequest<{ resource: StackMartResourceDetails }>(
+    `/resources/${encodeURIComponent(resourceId)}`,
+  );
 
   if (result) {
     setCache(cacheKey, result);
@@ -450,7 +453,7 @@ export async function getCategories(): Promise<string[]> {
  * Install a resource from StackMart
  */
 export async function installResourceFromStackMart(
-  resourceId: string
+  resourceId: string,
 ): Promise<StackMartInstallResult> {
   // Security: Validate resourceId
   if (!isValidResourceId(resourceId)) {
@@ -592,7 +595,9 @@ export async function installResourceFromStackMart(
 /**
  * Uninstall a StackMart resource
  */
-export async function uninstallStackMart(resourceId: string): Promise<{ success: boolean; error?: string }> {
+export async function uninstallStackMart(
+  resourceId: string,
+): Promise<{ success: boolean; error?: string }> {
   // Security: Validate resourceId
   if (!isValidResourceId(resourceId)) {
     return { success: false, error: 'Invalid resource ID format' };

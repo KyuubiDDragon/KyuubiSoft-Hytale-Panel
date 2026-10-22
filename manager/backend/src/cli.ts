@@ -56,14 +56,16 @@ function validatePasswordPolicy(password: string, username?: string): string | n
   if (typeof password !== 'string' || password.length < 12) {
     return 'Password must be at least 12 characters';
   }
-  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(password)).length;
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter((rx) =>
+    rx.test(password),
+  ).length;
   if (classes < 3) {
     return 'Password must include at least three of: lowercase, uppercase, digit, symbol';
   }
   if (username && password.toLowerCase().includes(username.toLowerCase())) {
     return 'Password must not contain the username';
   }
-  if (COMMON_SEQUENCES.some(c => password.toLowerCase().includes(c))) {
+  if (COMMON_SEQUENCES.some((c) => password.toLowerCase().includes(c))) {
     return 'Password contains a well-known sequence; pick something less guessable';
   }
   return null;
@@ -118,18 +120,32 @@ async function writeUsers(data: { users: CliUser[] }): Promise<void> {
   const tmpFile = `${USERS_FILE}.tmp-${process.pid}`;
   await writeFile(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
   if (prevMode !== null) await chmod(tmpFile, prevMode).catch(() => {});
-  if (prevUid !== null && prevGid !== null && typeof process.getuid === 'function' && process.getuid() === 0) {
+  if (
+    prevUid !== null &&
+    prevGid !== null &&
+    typeof process.getuid === 'function' &&
+    process.getuid() === 0
+  ) {
     await chown(tmpFile, prevUid, prevGid).catch(() => {});
   }
   await rename(tmpFile, USERS_FILE);
 }
 
 function fileExists(p: string): boolean {
-  try { fs.accessSync(p); return true; } catch { return false; }
+  try {
+    fs.accessSync(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readJsonIfExists(p: string): Record<string, unknown> | null {
-  try { return JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { return null; }
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch {
+    return null;
+  }
 }
 
 // ============== Commands ==============
@@ -140,16 +156,25 @@ async function cmdAuthStatus(): Promise<void> {
 
   const setupCfg = readJsonIfExists(SETUP_CONFIG_FILE);
   const mainCfg = readJsonIfExists(CONFIG_FILE);
-  console.log(`setup-config.json:  ${fileExists(SETUP_CONFIG_FILE) ? 'present' : 'missing'}${setupCfg ? ` (setupComplete: ${setupCfg.setupComplete === true})` : ''}`);
-  console.log(`config.json:        ${fileExists(CONFIG_FILE) ? 'present' : 'missing'}${mainCfg ? ` (setupComplete: ${mainCfg.setupComplete === true})` : ''}`);
+  console.log(
+    `setup-config.json:  ${fileExists(SETUP_CONFIG_FILE) ? 'present' : 'missing'}${setupCfg ? ` (setupComplete: ${setupCfg.setupComplete === true})` : ''}`,
+  );
+  console.log(
+    `config.json:        ${fileExists(CONFIG_FILE) ? 'present' : 'missing'}${mainCfg ? ` (setupComplete: ${mainCfg.setupComplete === true})` : ''}`,
+  );
 
-  const jwtFromConfig = typeof mainCfg?.jwtSecret === 'string' && (mainCfg.jwtSecret as string).length > 0;
+  const jwtFromConfig =
+    typeof mainCfg?.jwtSecret === 'string' && (mainCfg.jwtSecret as string).length > 0;
   const jwtFromEnv = !!process.env.JWT_SECRET;
-  console.log(`JWT secret source:  ${jwtFromConfig ? 'config.json' : jwtFromEnv ? 'environment (JWT_SECRET)' : 'NOT CONFIGURED'}`);
+  console.log(
+    `JWT secret source:  ${jwtFromConfig ? 'config.json' : jwtFromEnv ? 'environment (JWT_SECRET)' : 'NOT CONFIGURED'}`,
+  );
 
   const demoMode = process.env.DEMO_MODE === 'true' || process.env.DEMO_MODE === '1';
   if (demoMode) {
-    console.log('DEMO_MODE:          true (logins use demo/demo and admin/admin unless users.json exists)');
+    console.log(
+      'DEMO_MODE:          true (logins use demo/demo and admin/admin unless users.json exists)',
+    );
   }
 
   const usersExist = fileExists(USERS_FILE);
@@ -157,20 +182,28 @@ async function cmdAuthStatus(): Promise<void> {
   const envPwSet = !!process.env.MANAGER_PASSWORD;
   console.log(`users.json:         ${usersExist ? 'present' : 'missing'}`);
   if (usersExist) {
-    console.log('Credential source:  users.json — MANAGER_USERNAME/MANAGER_PASSWORD from .env are IGNORED');
+    console.log(
+      'Credential source:  users.json — MANAGER_USERNAME/MANAGER_PASSWORD from .env are IGNORED',
+    );
     if (envPwSet) {
-      console.log('                    (MANAGER_PASSWORD is set in the environment but has NO effect;');
+      console.log(
+        '                    (MANAGER_PASSWORD is set in the environment but has NO effect;',
+      );
       console.log('                     use "reset-password" below to set a new login password)');
     }
   } else {
-    console.log(`Credential source:  environment — first login bootstraps users.json from MANAGER_USERNAME='${envUser || '<unset>'}' / MANAGER_PASSWORD ${envPwSet ? '(set)' : '(NOT SET)'}`);
+    console.log(
+      `Credential source:  environment — first login bootstraps users.json from MANAGER_USERNAME='${envUser || '<unset>'}' / MANAGER_PASSWORD ${envPwSet ? '(set)' : '(NOT SET)'}`,
+    );
   }
 
   const data = await readUsers();
   console.log(`\nUsers (${data.users.length}):`);
   for (const u of data.users) {
     const twoFa = u.totpEnabled ? 'on' : 'off';
-    console.log(`  - ${u.username}  role=${u.roleId}  2FA=${twoFa}  lastLogin=${u.lastLogin ?? 'never'}  tokenVersion=${u.tokenVersion ?? 1}`);
+    console.log(
+      `  - ${u.username}  role=${u.roleId}  2FA=${twoFa}  lastLogin=${u.lastLogin ?? 'never'}  tokenVersion=${u.tokenVersion ?? 1}`,
+    );
   }
   if (data.users.length === 0) {
     console.log('  (none — use "create-admin <username>" to create one)');
@@ -189,19 +222,27 @@ async function cmdListUsers(): Promise<void> {
     return;
   }
   for (const u of data.users) {
-    console.log(`${u.username}\trole=${u.roleId}\t2FA=${u.totpEnabled ? 'on' : 'off'}\tcreated=${u.createdAt ?? '?'}\tlastLogin=${u.lastLogin ?? 'never'}`);
+    console.log(
+      `${u.username}\trole=${u.roleId}\t2FA=${u.totpEnabled ? 'on' : 'off'}\tcreated=${u.createdAt ?? '?'}\tlastLogin=${u.lastLogin ?? 'never'}`,
+    );
   }
 }
 
-async function cmdResetPassword(username: string | undefined, newPassword: string | undefined, force: boolean): Promise<void> {
+async function cmdResetPassword(
+  username: string | undefined,
+  newPassword: string | undefined,
+  force: boolean,
+): Promise<void> {
   if (!username) {
     console.error('Usage: node dist/cli.js reset-password <username> [newPassword] [--force]');
     process.exit(1);
   }
   const data = await readUsers();
-  const user = data.users.find(u => u.username === username);
+  const user = data.users.find((u) => u.username === username);
   if (!user) {
-    console.error(`User '${username}' not found. Existing users: ${data.users.map(u => u.username).join(', ') || '(none)'}`);
+    console.error(
+      `User '${username}' not found. Existing users: ${data.users.map((u) => u.username).join(', ') || '(none)'}`,
+    );
     console.error(`To create a fresh admin account: node dist/cli.js create-admin ${username}`);
     process.exit(1);
   }
@@ -227,11 +268,16 @@ async function cmdResetPassword(username: string | undefined, newPassword: strin
     console.log('Store it now — it is not shown again. Change it in the panel after login.');
   }
   if (user.totpEnabled) {
-    console.log(`Note: 2FA is still ENABLED for this account. If the authenticator is lost, run: node dist/cli.js disable-2fa ${username}`);
+    console.log(
+      `Note: 2FA is still ENABLED for this account. If the authenticator is lost, run: node dist/cli.js disable-2fa ${username}`,
+    );
   }
 }
 
-async function cmdCreateAdmin(username: string | undefined, password: string | undefined): Promise<void> {
+async function cmdCreateAdmin(
+  username: string | undefined,
+  password: string | undefined,
+): Promise<void> {
   if (!username) {
     console.error('Usage: node dist/cli.js create-admin <username> [password]');
     process.exit(1);
@@ -241,8 +287,10 @@ async function cmdCreateAdmin(username: string | undefined, password: string | u
     process.exit(1);
   }
   const data = await readUsers();
-  if (data.users.some(u => u.username === username)) {
-    console.error(`User '${username}' already exists. Use: node dist/cli.js reset-password ${username}`);
+  if (data.users.some((u) => u.username === username)) {
+    console.error(
+      `User '${username}' already exists. Use: node dist/cli.js reset-password ${username}`,
+    );
     process.exit(1);
   }
 
@@ -276,7 +324,7 @@ async function cmdDisable2fa(username: string | undefined): Promise<void> {
     process.exit(1);
   }
   const data = await readUsers();
-  const user = data.users.find(u => u.username === username);
+  const user = data.users.find((u) => u.username === username);
   if (!user) {
     console.error(`User '${username}' not found.`);
     process.exit(1);
@@ -317,7 +365,7 @@ Password resets invalidate the account's existing sessions.`);
 
 async function main(): Promise<void> {
   const [, , command, ...rest] = process.argv;
-  const args = rest.filter(a => !a.startsWith('--'));
+  const args = rest.filter((a) => !a.startsWith('--'));
   const force = rest.includes('--force');
 
   switch (command) {

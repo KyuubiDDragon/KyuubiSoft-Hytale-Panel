@@ -60,22 +60,42 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
       console.log(`[Chat:${serverId}] ${event.player}: ${event.message}`);
       await addChatMessage(event.player, event.message, event.uuid);
       eventBus.publish('player_chat', {
-        player: event.player, uuid: event.uuid, message: event.message, serverId,
+        player: event.player,
+        uuid: event.uuid,
+        message: event.message,
+        serverId,
       });
       // Also publish to panel-event taxonomy so webhooks / notifications see it.
       break;
 
     case 'player_death':
-      console.log(`[Death:${serverId}] ${event.player} died${event.cause ? ` (${event.cause})` : ''}`);
+      console.log(
+        `[Death:${serverId}] ${event.player} died${event.cause ? ` (${event.cause})` : ''}`,
+      );
       if (event.world && event.x !== undefined && event.y !== undefined && event.z !== undefined) {
         await recordDeathPosition(event.player, event.world, event.x, event.y, event.z);
       }
       eventBus.publish('player_death', {
-        player: event.player, cause: event.cause, world: event.world, x: event.x, y: event.y, z: event.z, serverId,
+        player: event.player,
+        cause: event.cause,
+        world: event.world,
+        x: event.x,
+        y: event.y,
+        z: event.z,
+        serverId,
       });
-      publishPanelEvent('player.death', {
-        player: event.player, cause: event.cause, world: event.world, x: event.x, y: event.y, z: event.z,
-      }, serverId);
+      publishPanelEvent(
+        'player.death',
+        {
+          player: event.player,
+          cause: event.cause,
+          world: event.world,
+          x: event.x,
+          y: event.y,
+          z: event.z,
+        },
+        serverId,
+      );
       break;
 
     case 'player_join':
@@ -123,7 +143,11 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
 export async function connect(serverId: string): Promise<void> {
   const state = getOrCreateState(serverId);
 
-  if (state.isShuttingDown || state.isConnecting || (state.ws && state.ws.readyState === WebSocket.OPEN)) {
+  if (
+    state.isShuttingDown ||
+    state.isConnecting ||
+    (state.ws && state.ws.readyState === WebSocket.OPEN)
+  ) {
     return;
   }
 
@@ -219,7 +243,11 @@ export function disconnect(serverId: string): void {
   }
 
   if (state.ws) {
-    try { state.ws.close(); } catch { /* ignore */ }
+    try {
+      state.ws.close();
+    } catch {
+      /* ignore */
+    }
     state.ws = null;
   }
 

@@ -71,18 +71,54 @@ export interface ModtaleInstallResult {
   projectTitle?: string;
 }
 
-export type ModtaleSortOption = 'relevance' | 'downloads' | 'updated' | 'newest' | 'rating' | 'favorites';
+export type ModtaleSortOption =
+  'relevance' | 'downloads' | 'updated' | 'newest' | 'rating' | 'favorites';
 export type ModtaleClassification = 'PLUGIN' | 'DATA' | 'ART' | 'SAVE' | 'MODPACK';
 
 // Available tags from Modtale
 export const MODTALE_TAGS = [
-  'Adventure', 'RPG', 'Sci-Fi', 'Fantasy', 'Survival', 'Magic', 'Tech',
-  'Exploration', 'Minigame', 'PvP', 'Parkour', 'Hardcore', 'Skyblock',
-  'Puzzle', 'Quests', 'Economy', 'Protection', 'Admin Tools', 'Chat',
-  'Anti-Cheat', 'Performance', 'Library', 'API', 'Mechanics', 'World Gen',
-  'Recipes', 'Loot Tables', 'Functions', 'Decoration', 'Vanilla+',
-  'Kitchen Sink', 'City', 'Landscape', 'Spawn', 'Lobby', 'Medieval',
-  'Modern', 'Futuristic', 'Models', 'Textures', 'Animations', 'Particles'
+  'Adventure',
+  'RPG',
+  'Sci-Fi',
+  'Fantasy',
+  'Survival',
+  'Magic',
+  'Tech',
+  'Exploration',
+  'Minigame',
+  'PvP',
+  'Parkour',
+  'Hardcore',
+  'Skyblock',
+  'Puzzle',
+  'Quests',
+  'Economy',
+  'Protection',
+  'Admin Tools',
+  'Chat',
+  'Anti-Cheat',
+  'Performance',
+  'Library',
+  'API',
+  'Mechanics',
+  'World Gen',
+  'Recipes',
+  'Loot Tables',
+  'Functions',
+  'Decoration',
+  'Vanilla+',
+  'Kitchen Sink',
+  'City',
+  'Landscape',
+  'Spawn',
+  'Lobby',
+  'Medieval',
+  'Modern',
+  'Futuristic',
+  'Models',
+  'Textures',
+  'Animations',
+  'Particles',
 ] as const;
 
 // ============== Cache ==============
@@ -254,7 +290,7 @@ async function modtaleRequest<T>(
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
     body?: unknown;
     requireAuth?: boolean;
-  } = {}
+  } = {},
 ): Promise<T | null> {
   const { method = 'GET', body, requireAuth = false } = options;
   const apiKey = getApiKey();
@@ -269,7 +305,7 @@ async function modtaleRequest<T>(
 
     const headers: Record<string, string> = {
       'User-Agent': 'KyuubiSoft-HytalePanel/1.0',
-      'Accept': 'application/json',
+      Accept: 'application/json',
     };
 
     if (apiKey) {
@@ -342,43 +378,45 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
         },
       };
 
-      proto.get(options, (res) => {
-        // Handle redirects
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            request(redirectUrl);
+      proto
+        .get(options, (res) => {
+          // Handle redirects
+          if (res.statusCode === 301 || res.statusCode === 302) {
+            const redirectUrl = res.headers.location;
+            if (redirectUrl) {
+              request(redirectUrl);
+              return;
+            }
+          }
+
+          if (res.statusCode !== 200) {
+            logger.error(`Download failed: ${res.statusCode}`);
+            resolve(false);
             return;
           }
-        }
 
-        if (res.statusCode !== 200) {
-          logger.error(`Download failed: ${res.statusCode}`);
-          resolve(false);
-          return;
-        }
+          const chunks: Buffer[] = [];
 
-        const chunks: Buffer[] = [];
-
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', async () => {
-          try {
-            const buffer = Buffer.concat(chunks);
-            await writeFile(destPath, buffer);
-            resolve(true);
-          } catch (e) {
-            logger.error('Failed to write file:', e);
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', async () => {
+            try {
+              const buffer = Buffer.concat(chunks);
+              await writeFile(destPath, buffer);
+              resolve(true);
+            } catch (e) {
+              logger.error('Failed to write file:', e);
+              resolve(false);
+            }
+          });
+          res.on('error', (e) => {
+            logger.error('Download error:', e);
             resolve(false);
-          }
-        });
-        res.on('error', (e) => {
-          logger.error('Download error:', e);
+          });
+        })
+        .on('error', (e) => {
+          logger.error('Request error:', e);
           resolve(false);
         });
-      }).on('error', (e) => {
-        logger.error('Request error:', e);
-        resolve(false);
-      });
     };
 
     request(url);
@@ -390,16 +428,18 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
 /**
  * Search for mods on Modtale
  */
-export async function searchMods(options: {
-  search?: string;
-  page?: number;
-  size?: number;
-  sort?: ModtaleSortOption;
-  classification?: ModtaleClassification;
-  tags?: string[];
-  gameVersion?: string;
-  author?: string;
-} = {}): Promise<ModtaleSearchResult | null> {
+export async function searchMods(
+  options: {
+    search?: string;
+    page?: number;
+    size?: number;
+    sort?: ModtaleSortOption;
+    classification?: ModtaleClassification;
+    tags?: string[];
+    gameVersion?: string;
+    author?: string;
+  } = {},
+): Promise<ModtaleSearchResult | null> {
   const {
     search,
     page = 0,
@@ -454,7 +494,9 @@ export async function getModDetails(projectId: string): Promise<ModtaleProjectDe
     return cached;
   }
 
-  const result = await modtaleRequest<ModtaleProjectDetails>(`/api/v1/projects/${encodeURIComponent(projectId)}`);
+  const result = await modtaleRequest<ModtaleProjectDetails>(
+    `/api/v1/projects/${encodeURIComponent(projectId)}`,
+  );
 
   if (result) {
     setCache(cacheKey, result);
@@ -529,7 +571,7 @@ export async function getGameVersions(): Promise<string[]> {
  */
 export async function installModFromModtale(
   projectId: string,
-  versionId?: string
+  versionId?: string,
 ): Promise<ModtaleInstallResult> {
   // Security: Validate projectId
   if (!isValidProjectId(projectId)) {
@@ -713,9 +755,7 @@ export async function checkModtaleStatus(): Promise<{
     configured: true,
     hasApiKey,
     apiAvailable: result !== null && Array.isArray(result.content),
-    rateLimit: hasApiKey
-      ? { tier: 'Standard', limit: 300 }
-      : { tier: 'No Auth', limit: 10 },
+    rateLimit: hasApiKey ? { tier: 'Standard', limit: 300 } : { tier: 'No Auth', limit: 10 },
   };
 }
 
@@ -747,7 +787,9 @@ export async function getRecentMods(limit: number = 10): Promise<ModtaleProject[
 /**
  * Uninstall a Modtale mod
  */
-export async function uninstallModtale(projectId: string): Promise<{ success: boolean; error?: string }> {
+export async function uninstallModtale(
+  projectId: string,
+): Promise<{ success: boolean; error?: string }> {
   // Security: Validate projectId
   if (!isValidProjectId(projectId)) {
     return { success: false, error: 'Invalid project ID format' };

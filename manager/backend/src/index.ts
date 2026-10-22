@@ -56,7 +56,11 @@ import { initializeReplay, shutdownReplay } from './services/replay.js';
 import { initializeRoles } from './services/roles.js';
 import * as playerLocations from './services/playerLocations.js';
 import { isSetupComplete } from './services/setupService.js';
-import { checkAndRunMigration, migrateUpdateConfig, checkPanelVersionAndFeatures } from './services/migration.js';
+import {
+  checkAndRunMigration,
+  migrateUpdateConfig,
+  checkPanelVersionAndFeatures,
+} from './services/migration.js';
 import { startAutoUpdateCheck } from './services/cfwidget.js';
 import { getCurrentVersion } from './services/panelVersionService.js';
 import { startWatchdog } from './services/watchdog.js';
@@ -131,10 +135,15 @@ locationsWss.on('connection', async (socket: import('ws').WebSocket, req: Incomi
   // Authenticated: send initial snapshot, then stream subsequent updates.
   try {
     socket.send(JSON.stringify({ type: 'snapshot', samples: playerLocations.getLatestSnapshot() }));
-  } catch { /* socket may already be closed */ }
+  } catch {
+    /* socket may already be closed */
+  }
   const unsubscribe = playerLocations.addListener((s) => {
-    try { socket.send(JSON.stringify({ type: 'sample', sample: s })); }
-    catch { /* ignore - will be cleaned up by close */ }
+    try {
+      socket.send(JSON.stringify({ type: 'sample', sample: s }));
+    } catch {
+      /* ignore - will be cleaned up by close */
+    }
   });
   socket.on('close', () => unsubscribe());
   socket.on('error', () => unsubscribe());
@@ -148,8 +157,16 @@ console.log(`[WebMap] Proxy configured for: ${webMapTarget}`);
 const createWebMapProxyErrorHandler = () => ({
   error: (err: Error, _req: unknown, res: unknown) => {
     console.error('[WebMap Proxy] Error:', err.message);
-    if (res && typeof res === 'object' && 'writeHead' in res && typeof (res as { writeHead: unknown }).writeHead === 'function') {
-      const httpRes = res as { writeHead: (code: number, headers: Record<string, string>) => void; end: (data: string) => void };
+    if (
+      res &&
+      typeof res === 'object' &&
+      'writeHead' in res &&
+      typeof (res as { writeHead: unknown }).writeHead === 'function'
+    ) {
+      const httpRes = res as {
+        writeHead: (code: number, headers: Record<string, string>) => void;
+        end: (data: string) => void;
+      };
       httpRes.writeHead(502, { 'Content-Type': 'application/json' });
       httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
     }
@@ -198,8 +215,16 @@ const webMapProxy = createProxyMiddleware({
     },
     error: (err: Error, _req: unknown, res: unknown) => {
       console.error('[WebMap Proxy] Error:', err.message);
-      if (res && typeof res === 'object' && 'writeHead' in res && typeof (res as { writeHead: unknown }).writeHead === 'function') {
-        const httpRes = res as { writeHead: (code: number, headers: Record<string, string>) => void; end: (data: string) => void };
+      if (
+        res &&
+        typeof res === 'object' &&
+        'writeHead' in res &&
+        typeof (res as { writeHead: unknown }).writeHead === 'function'
+      ) {
+        const httpRes = res as {
+          writeHead: (code: number, headers: Record<string, string>) => void;
+          end: (data: string) => void;
+        };
         httpRes.writeHead(502, { 'Content-Type': 'application/json' });
         httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
       }
@@ -213,10 +238,14 @@ const webMapProxy = createProxyMiddleware({
       delete proxyRes.headers['x-frame-options'];
 
       const contentType = (proxyRes.headers['content-type'] as string) || '';
-      const contentEncoding = ((proxyRes.headers['content-encoding'] as string) || '').toLowerCase();
+      const contentEncoding = (
+        (proxyRes.headers['content-encoding'] as string) || ''
+      ).toLowerCase();
       const isHtml = contentType.toLowerCase().includes('text/html');
 
-      console.log(`[WebMap Proxy] Content-Type: ${contentType}, Content-Encoding: ${contentEncoding}, isHtml: ${isHtml}`);
+      console.log(
+        `[WebMap Proxy] Content-Type: ${contentType}, Content-Encoding: ${contentEncoding}, isHtml: ${isHtml}`,
+      );
 
       if (isHtml) {
         // Collect response body, decompress if needed, and inject script
@@ -250,10 +279,15 @@ const webMapProxy = createProxyMiddleware({
 
           // Check if decompression worked (body should start with < for HTML)
           if (body.length > 0 && !body.trimStart().startsWith('<') && !decompressionFailed) {
-            console.log('[WebMap Proxy] Warning: Decompressed content does not look like HTML, first bytes:', rawBody.slice(0, 20).toString('hex'));
+            console.log(
+              '[WebMap Proxy] Warning: Decompressed content does not look like HTML, first bytes:',
+              rawBody.slice(0, 20).toString('hex'),
+            );
           }
 
-          console.log(`[WebMap Proxy] Body length: ${body.length}, starts with: ${body.substring(0, 100).replace(/\n/g, '\\n')}`);
+          console.log(
+            `[WebMap Proxy] Body length: ${body.length}, starts with: ${body.substring(0, 100).replace(/\n/g, '\\n')}`,
+          );
           // Strip any <meta http-equiv="Content-Security-Policy"> the map ships
           // with: EasyWebMap's own policy omits 'unsafe-inline', which blocks
           // both its inline scripts and the WS-rewrite <script> we inject below
@@ -303,18 +337,24 @@ app.use('/api/webmap', webMapProxy);
 // These routes don't conflict with our panel routes (auth, server, console, etc.)
 // When using app.use() with a path, Express strips it from req.url, so we need pathRewrite to restore it
 // Handle root path without trailing slash: '/' -> '/api/worlds', '/batch' -> '/api/worlds/batch'
-app.use('/api/worlds', createProxyMiddleware({
-  target: webMapTarget,
-  changeOrigin: true,
-  pathRewrite: (path) => path === '/' || path === '' ? '/api/worlds' : `/api/worlds${path}`,
-  on: createWebMapProxyErrorHandler(),
-}));
-app.use('/api/tiles', createProxyMiddleware({
-  target: webMapTarget,
-  changeOrigin: true,
-  pathRewrite: (path) => path === '/' || path === '' ? '/api/tiles' : `/api/tiles${path}`,
-  on: createWebMapProxyErrorHandler(),
-}));
+app.use(
+  '/api/worlds',
+  createProxyMiddleware({
+    target: webMapTarget,
+    changeOrigin: true,
+    pathRewrite: (path) => (path === '/' || path === '' ? '/api/worlds' : `/api/worlds${path}`),
+    on: createWebMapProxyErrorHandler(),
+  }),
+);
+app.use(
+  '/api/tiles',
+  createProxyMiddleware({
+    target: webMapTarget,
+    changeOrigin: true,
+    pathRewrite: (path) => (path === '/' || path === '' ? '/api/tiles' : `/api/tiles${path}`),
+    on: createWebMapProxyErrorHandler(),
+  }),
+);
 
 // WebMap WebSocket proxy at /api/webmap-ws (under /api/ so reverse proxies forward it)
 // Use http-proxy directly for reliable WebSocket proxying
@@ -375,37 +415,47 @@ server.on('upgrade', (request, socket, head) => {
 
 // Middleware
 // SECURITY: Configure Content-Security-Policy for SPA
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'", "blob:"], // Vue.js needs unsafe-eval; Monaco loads workers from blob:
-      workerSrc: ["'self'", "blob:"], // Monaco editor uses Web Workers via blob URLs
-      childSrc: ["'self'", "blob:"], // Fallback for older browsers that don't honour workerSrc
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Vue/CSS-in-JS + Google Fonts
-      imgSrc: ["'self'", "data:", "blob:", "https://cdn.modtale.net", "https://stackmart.org", "https://hyvatar.io", "https://media.forgecdn.net"], // Allow data URIs, Modtale CDN, StackMart, Hyvatar and CurseForge CDN
-      fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"], // Google Fonts
-      connectSrc: ["'self'", "ws:", "wss:"], // Allow WebSocket connections
-      frameSrc: ["'self'", "https:", "http:"], // Allow embedding web map iframe from external sources
-      objectSrc: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-      frameAncestors: ["'none'"], // Prevent clickjacking
-      // CRITICAL: Disable upgrade-insecure-requests for HTTP deployments
-      // This directive forces browsers to upgrade all HTTP requests to HTTPS
-      // Only enable when behind HTTPS proxy, otherwise causes ERR_SSL_PROTOCOL_ERROR
-      upgradeInsecureRequests: config.trustProxy ? [] : null,
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-eval'", 'blob:'], // Vue.js needs unsafe-eval; Monaco loads workers from blob:
+        workerSrc: ["'self'", 'blob:'], // Monaco editor uses Web Workers via blob URLs
+        childSrc: ["'self'", 'blob:'], // Fallback for older browsers that don't honour workerSrc
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], // Vue/CSS-in-JS + Google Fonts
+        imgSrc: [
+          "'self'",
+          'data:',
+          'blob:',
+          'https://cdn.modtale.net',
+          'https://stackmart.org',
+          'https://hyvatar.io',
+          'https://media.forgecdn.net',
+        ], // Allow data URIs, Modtale CDN, StackMart, Hyvatar and CurseForge CDN
+        fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'], // Google Fonts
+        connectSrc: ["'self'", 'ws:', 'wss:'], // Allow WebSocket connections
+        frameSrc: ["'self'", 'https:', 'http:'], // Allow embedding web map iframe from external sources
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"], // Prevent clickjacking
+        // CRITICAL: Disable upgrade-insecure-requests for HTTP deployments
+        // This directive forces browsers to upgrade all HTTP requests to HTTPS
+        // Only enable when behind HTTPS proxy, otherwise causes ERR_SSL_PROTOCOL_ERROR
+        upgradeInsecureRequests: config.trustProxy ? [] : null,
+      },
     },
-  },
-  // HSTS: Only enable when behind a reverse proxy with HTTPS (TRUST_PROXY=true)
-  // Without this, browsers over HTTP will cache the HSTS header and force-upgrade
-  // all subsequent requests to HTTPS, causing ERR_SSL_PROTOCOL_ERROR (white page)
-  hsts: config.trustProxy ? { maxAge: 31536000, includeSubDomains: true } : false,
-  // Additional security headers
-  crossOriginEmbedderPolicy: false, // Disable for compatibility with external resources
-  crossOriginOpenerPolicy: false, // Disable for HTTP compatibility
-  crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow loading cross-origin resources
-}));
+    // HSTS: Only enable when behind a reverse proxy with HTTPS (TRUST_PROXY=true)
+    // Without this, browsers over HTTP will cache the HSTS header and force-upgrade
+    // all subsequent requests to HTTPS, causing ERR_SSL_PROTOCOL_ERROR (white page)
+    hsts: config.trustProxy ? { maxAge: 31536000, includeSubDomains: true } : false,
+    // Additional security headers
+    crossOriginEmbedderPolicy: false, // Disable for compatibility with external resources
+    crossOriginOpenerPolicy: false, // Disable for HTTP compatibility
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow loading cross-origin resources
+  }),
+);
 app.use(compression());
 // Structured request logging with correlation IDs. Mount BEFORE any router
 // so every log line in a handler carries req.id automatically. Health
@@ -419,15 +469,19 @@ app.use(cookieParser());
 
 // CORS configuration - must be explicitly set
 const corsOrigins = config.corsOrigins
-  ? (config.corsOrigins === '*' ? '*' : config.corsOrigins.split(',').map(o => o.trim()))
+  ? config.corsOrigins === '*'
+    ? '*'
+    : config.corsOrigins.split(',').map((o) => o.trim())
   : false; // Disable CORS if not configured (same-origin only)
 
-app.use(cors({
-  origin: corsOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-}));
+app.use(
+  cors({
+    origin: corsOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  }),
+);
 
 // CSRF Protection via Origin/Referer validation for state-changing requests.
 // Modern browsers always send Origin on POST/PUT/PATCH/DELETE, so missing
@@ -445,7 +499,11 @@ app.use((req, res, next) => {
   }
 
   // Skip for WebMap proxy routes (these are proxied to the game server, not our API)
-  if (req.path.startsWith('/api/webmap') || req.path.startsWith('/api/worlds') || req.path.startsWith('/api/tiles')) {
+  if (
+    req.path.startsWith('/api/webmap') ||
+    req.path.startsWith('/api/worlds') ||
+    req.path.startsWith('/api/tiles')
+  ) {
     return next();
   }
 
@@ -453,8 +511,15 @@ app.use((req, res, next) => {
   // has explicitly opted in. Otherwise treat '*' as misconfiguration.
   if (config.corsOrigins === '*') {
     if (!config.corsAllowWildcard) {
-      console.warn(`[CSRF] Blocking ${req.method} ${req.path}: CORS_ORIGINS=* without CORS_ALLOW_WILDCARD=true`);
-      res.status(403).json({ error: 'CSRF validation failed', detail: 'Wildcard CORS requires CORS_ALLOW_WILDCARD=true' });
+      console.warn(
+        `[CSRF] Blocking ${req.method} ${req.path}: CORS_ORIGINS=* without CORS_ALLOW_WILDCARD=true`,
+      );
+      res
+        .status(403)
+        .json({
+          error: 'CSRF validation failed',
+          detail: 'Wildcard CORS requires CORS_ALLOW_WILDCARD=true',
+        });
       return;
     }
     return next();
@@ -475,11 +540,16 @@ app.use((req, res, next) => {
 
   if (!requestOrigin) {
     console.warn(`[CSRF] Blocked ${req.method} ${req.path}: missing Origin and Referer headers`);
-    res.status(403).json({ error: 'CSRF validation failed', detail: 'Origin or Referer header required' });
+    res
+      .status(403)
+      .json({ error: 'CSRF validation failed', detail: 'Origin or Referer header required' });
     return;
   }
 
-  const allowedOrigins = (config.corsOrigins || '').split(',').map(o => o.trim()).filter(Boolean);
+  const allowedOrigins = (config.corsOrigins || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   // Also allow requests from the server's own origin (same-origin).
   // Derive the protocol from req.secure only — Express already resolves it from
@@ -561,13 +631,23 @@ app.use(async (req, res, next) => {
   }
 
   // Skip for WebMap proxy routes
-  if (req.path.startsWith('/api/webmap') || req.path.startsWith('/api/worlds') || req.path.startsWith('/api/tiles')) {
+  if (
+    req.path.startsWith('/api/webmap') ||
+    req.path.startsWith('/api/worlds') ||
+    req.path.startsWith('/api/tiles')
+  ) {
     return next();
   }
 
   // Skip for static assets
-  if (req.path.startsWith('/assets') || req.path.endsWith('.js') || req.path.endsWith('.css') ||
-      req.path.endsWith('.png') || req.path.endsWith('.svg') || req.path.endsWith('.ico')) {
+  if (
+    req.path.startsWith('/assets') ||
+    req.path.endsWith('.js') ||
+    req.path.endsWith('.css') ||
+    req.path.endsWith('.png') ||
+    req.path.endsWith('.svg') ||
+    req.path.endsWith('.ico')
+  ) {
     return next();
   }
 
@@ -579,7 +659,8 @@ app.use(async (req, res, next) => {
       if (req.path.startsWith('/api/')) {
         res.status(503).json({
           error: 'Setup required',
-          message: 'The panel setup has not been completed. Please complete the setup wizard first.',
+          message:
+            'The panel setup has not been completed. Please complete the setup wizard first.',
           setupRequired: true,
           redirectUrl: '/setup',
         });
@@ -640,14 +721,14 @@ app.use('/api/public', publicRoutes);
 app.use('/api/servers', serversRoutes);
 
 import { serverScopeMiddleware } from './middleware/serverScope.js';
-app.use('/api/servers/:serverId/server',     serverScopeMiddleware, serverRoutes);
-app.use('/api/servers/:serverId/console',    serverScopeMiddleware, consoleRoutes);
-app.use('/api/servers/:serverId/backups',    serverScopeMiddleware, backupRoutes);
-app.use('/api/servers/:serverId/players',    serverScopeMiddleware, playersRoutes);
+app.use('/api/servers/:serverId/server', serverScopeMiddleware, serverRoutes);
+app.use('/api/servers/:serverId/console', serverScopeMiddleware, consoleRoutes);
+app.use('/api/servers/:serverId/backups', serverScopeMiddleware, backupRoutes);
+app.use('/api/servers/:serverId/players', serverScopeMiddleware, playersRoutes);
 app.use('/api/servers/:serverId/management', serverScopeMiddleware, managementRoutes);
-app.use('/api/servers/:serverId/scheduler',  serverScopeMiddleware, schedulerRoutes);
-app.use('/api/servers/:serverId/assets',     serverScopeMiddleware, assetsRoutes);
-app.use('/api/servers/:serverId/files',      serverScopeMiddleware, filesRoutes);
+app.use('/api/servers/:serverId/scheduler', serverScopeMiddleware, schedulerRoutes);
+app.use('/api/servers/:serverId/assets', serverScopeMiddleware, assetsRoutes);
+app.use('/api/servers/:serverId/files', serverScopeMiddleware, filesRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -717,7 +798,7 @@ app.get('/api/health/permissions', async (_req, res) => {
 
   const response: PermissionHealthResponse = {
     ok: !hasIssues,
-    issues: results.filter(r => !r.readable || !r.writable),
+    issues: results.filter((r) => !r.readable || !r.writable),
   };
 
   if (hasIssues) {
@@ -770,7 +851,9 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   }
 
   if (err.name === 'ValidationError') {
-    res.status(400).json({ error: 'Validation failed', detail: isDev ? err.message : 'Invalid input' });
+    res
+      .status(400)
+      .json({ error: 'Validation failed', detail: isDev ? err.message : 'Invalid input' });
     return;
   }
 
@@ -834,12 +917,12 @@ server.listen(config.port, '0.0.0.0', async () => {
   // is active (users.json vs MANAGER_USERNAME/MANAGER_PASSWORD) instead of
   // operators discovering it at the first failed login.
   const { initializeUsers } = await import('./services/users.js');
-  await initializeUsers().catch(err => {
+  await initializeUsers().catch((err) => {
     console.error('Failed to initialize users:', err);
   });
 
   // Initialize player tracking (load persisted data)
-  initializePlayerTracking().catch(err => {
+  initializePlayerTracking().catch((err) => {
     console.error('Failed to initialize player tracking:', err);
   });
 
@@ -854,7 +937,7 @@ server.listen(config.port, '0.0.0.0', async () => {
   initializeReplay().catch((err) => console.error('[replay] init failed:', err));
 
   // Start schedulers
-  startSchedulers().catch(err => console.error('[Startup] Scheduler init failed:', err));
+  startSchedulers().catch((err) => console.error('[Startup] Scheduler init failed:', err));
 
   // Start CFWidget mod update checker (checks hourly for CurseForge mod updates)
   startAutoUpdateCheck();

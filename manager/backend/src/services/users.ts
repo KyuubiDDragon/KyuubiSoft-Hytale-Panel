@@ -12,14 +12,16 @@ export function validatePasswordPolicy(password: string, username?: string): str
   if (typeof password !== 'string' || password.length < 12) {
     return 'Password must be at least 12 characters';
   }
-  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(password)).length;
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter((rx) =>
+    rx.test(password),
+  ).length;
   if (classes < 3) {
     return 'Password must include at least three of: lowercase, uppercase, digit, symbol';
   }
   if (username && password.toLowerCase().includes(username.toLowerCase())) {
     return 'Password must not contain the username';
   }
-  if (COMMON_SEQUENCES.some(c => password.toLowerCase().includes(c))) {
+  if (COMMON_SEQUENCES.some((c) => password.toLowerCase().includes(c))) {
     return 'Password contains a well-known sequence; pick something less guessable';
   }
   return null;
@@ -102,7 +104,7 @@ async function readUsers(): Promise<UsersData> {
     if (!config.managerUsername || !config.managerPassword) {
       console.error(
         '[Users] users.json is missing and MANAGER_USERNAME/MANAGER_PASSWORD are not set — ' +
-        'no login is possible. Recover with: docker exec -it <manager-container> node dist/cli.js reset-password <username>'
+          'no login is possible. Recover with: docker exec -it <manager-container> node dist/cli.js reset-password <username>',
       );
       return { users: [] };
     }
@@ -117,7 +119,9 @@ async function readUsers(): Promise<UsersData> {
     };
     const data: UsersData = { users: [defaultAdmin] };
     await writeUsers(data);
-    console.log(`[Users] Created users.json with admin '${config.managerUsername}' from MANAGER_USERNAME/MANAGER_PASSWORD`);
+    console.log(
+      `[Users] Created users.json with admin '${config.managerUsername}' from MANAGER_USERNAME/MANAGER_PASSWORD`,
+    );
     return data;
   }
 }
@@ -159,7 +163,7 @@ export async function getUser(username: string): Promise<User | null> {
   // Demo mode: return demo user data
   if (isDemoMode()) {
     const demoUsers: Record<string, User> = {
-      'demo': {
+      demo: {
         username: 'demo',
         passwordHash: '',
         roleId: 'viewer',
@@ -167,7 +171,7 @@ export async function getUser(username: string): Promise<User | null> {
         lastLogin: new Date().toISOString(),
         tokenVersion: 1,
       },
-      'admin': {
+      admin: {
         username: 'admin',
         passwordHash: '',
         roleId: 'admin',
@@ -180,17 +184,20 @@ export async function getUser(username: string): Promise<User | null> {
   }
 
   const data = await readUsers();
-  return data.users.find(u => u.username === username) || null;
+  return data.users.find((u) => u.username === username) || null;
 }
 
 // Verify user credentials
 // SECURITY: Use async bcrypt to prevent blocking the event loop
-export async function verifyUserCredentials(username: string, password: string): Promise<User | null> {
+export async function verifyUserCredentials(
+  username: string,
+  password: string,
+): Promise<User | null> {
   // Demo mode: use hardcoded demo credentials
   if (isDemoMode()) {
     const demoCredentials: Record<string, { password: string; roleId: string }> = {
-      'demo': { password: 'demo', roleId: 'viewer' },
-      'admin': { password: 'admin', roleId: 'admin' },
+      demo: { password: 'demo', roleId: 'viewer' },
+      admin: { password: 'admin', roleId: 'admin' },
     };
 
     const cred = demoCredentials[username.toLowerCase()];
@@ -224,12 +231,12 @@ export async function verifyUserCredentials(username: string, password: string):
 export async function createUser(
   username: string,
   password: string,
-  roleId: string = 'viewer'
+  roleId: string = 'viewer',
 ): Promise<Omit<User, 'passwordHash'>> {
   const data = await readUsers();
 
   // Check if username already exists
-  if (data.users.some(u => u.username === username)) {
+  if (data.users.some((u) => u.username === username)) {
     throw new Error('Username already exists');
   }
 
@@ -267,10 +274,10 @@ export async function createUser(
 // Update user
 export async function updateUser(
   username: string,
-  updates: { password?: string; roleId?: string }
+  updates: { password?: string; roleId?: string },
 ): Promise<Omit<User, 'passwordHash'>> {
   const data = await readUsers();
-  const userIndex = data.users.findIndex(u => u.username === username);
+  const userIndex = data.users.findIndex((u) => u.username === username);
 
   if (userIndex === -1) {
     throw new Error('User not found');
@@ -309,8 +316,8 @@ export async function deleteUser(username: string): Promise<void> {
   const data = await readUsers();
 
   // Prevent deleting the last admin
-  const adminCount = data.users.filter(u => u.roleId === 'admin').length;
-  const userToDelete = data.users.find(u => u.username === username);
+  const adminCount = data.users.filter((u) => u.roleId === 'admin').length;
+  const userToDelete = data.users.find((u) => u.username === username);
 
   if (!userToDelete) {
     throw new Error('User not found');
@@ -323,7 +330,7 @@ export async function deleteUser(username: string): Promise<void> {
   // Add to invalidation list before deleting
   invalidatedUsers.add(username);
 
-  data.users = data.users.filter(u => u.username !== username);
+  data.users = data.users.filter((u) => u.username !== username);
   await writeUsers(data);
 }
 
@@ -335,7 +342,7 @@ export async function updateLastLogin(username: string): Promise<void> {
   }
 
   const data = await readUsers();
-  const userIndex = data.users.findIndex(u => u.username === username);
+  const userIndex = data.users.findIndex((u) => u.username === username);
 
   if (userIndex !== -1) {
     data.users[userIndex].lastLogin = new Date().toISOString();
@@ -346,7 +353,7 @@ export async function updateLastLogin(username: string): Promise<void> {
 // Invalidate all tokens for a user by incrementing tokenVersion
 export async function invalidateUserTokens(username: string): Promise<void> {
   const data = await readUsers();
-  const userIndex = data.users.findIndex(u => u.username === username);
+  const userIndex = data.users.findIndex((u) => u.username === username);
 
   if (userIndex !== -1) {
     data.users[userIndex].tokenVersion = (data.users[userIndex].tokenVersion || 0) + 1;
@@ -386,8 +393,8 @@ export async function initializeUsers(): Promise<void> {
   if (usersFileExists && config.managerPassword) {
     console.log(
       '[Users] users.json exists — logins are validated against it. ' +
-      'MANAGER_USERNAME/MANAGER_PASSWORD from the environment are IGNORED. ' +
-      'To reset a password run: docker exec -it <manager-container> node dist/cli.js reset-password <username>'
+        'MANAGER_USERNAME/MANAGER_PASSWORD from the environment are IGNORED. ' +
+        'To reset a password run: docker exec -it <manager-container> node dist/cli.js reset-password <username>',
     );
   }
 

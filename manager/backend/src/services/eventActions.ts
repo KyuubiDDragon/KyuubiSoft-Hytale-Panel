@@ -43,7 +43,11 @@ interface EventActionRow {
 
 function rowToAction(r: EventActionRow): EventAction {
   let payload: { command?: string; message?: string } = {};
-  try { payload = r.action_payload ? JSON.parse(r.action_payload) : {}; } catch { /* ignore */ }
+  try {
+    payload = r.action_payload ? JSON.parse(r.action_payload) : {};
+  } catch {
+    /* ignore */
+  }
   return {
     id: r.id,
     name: r.name,
@@ -63,12 +67,15 @@ export function availableEvents(): readonly string[] {
 }
 
 export function listEventActions(): EventAction[] {
-  const rows = getDb().prepare('SELECT * FROM event_actions ORDER BY created_at DESC').all() as EventActionRow[];
+  const rows = getDb()
+    .prepare('SELECT * FROM event_actions ORDER BY created_at DESC')
+    .all() as EventActionRow[];
   return rows.map(rowToAction);
 }
 
 export function getEventAction(id: string): EventAction | null {
-  const row = getDb().prepare('SELECT * FROM event_actions WHERE id = ?').get(id) as EventActionRow | undefined;
+  const row = getDb().prepare('SELECT * FROM event_actions WHERE id = ?').get(id) as
+    EventActionRow | undefined;
   return row ? rowToAction(row) : null;
 }
 
@@ -80,23 +87,57 @@ export function createEventAction(input: {
   actionPayload: { command?: string; message?: string };
   createdBy: string;
 }): EventAction {
-  const id = (globalThis.crypto?.randomUUID?.() ?? `ea_${Date.now()}_${Math.round(Math.random() * 1e6)}`);
+  const id =
+    globalThis.crypto?.randomUUID?.() ?? `ea_${Date.now()}_${Math.round(Math.random() * 1e6)}`;
   const now = new Date().toISOString();
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO event_actions (id, name, server_id, event_pattern, action_type, action_payload, enabled, created_by, created_at)
     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-  `).run(id, input.name, input.serverId ?? null, input.eventPattern, input.actionType, JSON.stringify(input.actionPayload ?? {}), input.createdBy, now);
+  `,
+    )
+    .run(
+      id,
+      input.name,
+      input.serverId ?? null,
+      input.eventPattern,
+      input.actionType,
+      JSON.stringify(input.actionPayload ?? {}),
+      input.createdBy,
+      now,
+    );
   return getEventAction(id)!;
 }
 
-export function updateEventAction(id: string, updates: Partial<Pick<EventAction, 'name' | 'serverId' | 'eventPattern' | 'actionType' | 'actionPayload' | 'enabled'>>): EventAction | null {
+export function updateEventAction(
+  id: string,
+  updates: Partial<
+    Pick<
+      EventAction,
+      'name' | 'serverId' | 'eventPattern' | 'actionType' | 'actionPayload' | 'enabled'
+    >
+  >,
+): EventAction | null {
   const existing = getEventAction(id);
   if (!existing) return null;
   const merged = { ...existing, ...updates };
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     UPDATE event_actions SET name = ?, server_id = ?, event_pattern = ?, action_type = ?, action_payload = ?, enabled = ?
     WHERE id = ?
-  `).run(merged.name, merged.serverId ?? null, merged.eventPattern, merged.actionType, JSON.stringify(merged.actionPayload ?? {}), merged.enabled ? 1 : 0, id);
+  `,
+    )
+    .run(
+      merged.name,
+      merged.serverId ?? null,
+      merged.eventPattern,
+      merged.actionType,
+      JSON.stringify(merged.actionPayload ?? {}),
+      merged.enabled ? 1 : 0,
+      id,
+    );
   return getEventAction(id);
 }
 
@@ -135,7 +176,9 @@ async function runAction(rule: EventAction, evt: PanelEvent): Promise<void> {
     }
     logger.info(`[EventAction] "${rule.name}" ran for ${evt.name}`);
   } catch (err) {
-    logger.warn(`[EventAction] "${rule.name}" failed for ${evt.name}: ${err instanceof Error ? err.message : err}`);
+    logger.warn(
+      `[EventAction] "${rule.name}" failed for ${evt.name}: ${err instanceof Error ? err.message : err}`,
+    );
   }
 }
 

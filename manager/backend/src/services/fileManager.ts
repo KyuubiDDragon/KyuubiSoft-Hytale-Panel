@@ -1,10 +1,5 @@
 import path from 'path';
-import {
-  promises as fsp,
-  createReadStream,
-  lstatSync,
-  type Stats,
-} from 'fs';
+import { promises as fsp, createReadStream, lstatSync, type Stats } from 'fs';
 import type { ReadStream } from 'fs';
 import { config } from '../config.js';
 
@@ -23,11 +18,11 @@ export interface FileManagerRoot {
 
 export interface DirEntry {
   name: string;
-  path: string;          // relative to root
+  path: string; // relative to root
   type: 'file' | 'directory';
   size: number;
-  mtime: string;         // ISO timestamp
-  mtimeMs: number;       // ms epoch for ETag/conflict checks
+  mtime: string; // ISO timestamp
+  mtimeMs: number; // ms epoch for ETag/conflict checks
   isReadOnly: boolean;
 }
 
@@ -62,7 +57,7 @@ export class FileManagerError extends Error {
 // Limits
 // ============================================================
 
-export const MAX_READ_BYTES = 5 * 1024 * 1024;   // 5 MB
+export const MAX_READ_BYTES = 5 * 1024 * 1024; // 5 MB
 export const MAX_WRITE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 // Default deny patterns applied to ALL roots in addition to per-root deny list.
@@ -75,9 +70,9 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
   /(^|\/)users\.json$/i,
   /(^|\/)audit\.sqlite(-journal)?$/i,
   /(^|\/)panel\.sqlite(-journal)?$/i,
-  /(^|\/)HytaleServer\.jar$/i,   // server JAR replace = RCE on restart
-  /(^|\/)auth\.enc$/i,           // encrypted Hytale auth credentials
-  /(^|\/)config\.json$/i,        // use the dedicated, schema-validated config editor
+  /(^|\/)HytaleServer\.jar$/i, // server JAR replace = RCE on restart
+  /(^|\/)auth\.enc$/i, // encrypted Hytale auth credentials
+  /(^|\/)config\.json$/i, // use the dedicated, schema-validated config editor
 ];
 
 // Extension-based denies target secret/credential FILES only. They must NEVER
@@ -86,7 +81,7 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
 const EXTENSION_DENY_PATTERNS: RegExp[] = [
   /\.key$/i,
   /\.pem$/i,
-  /\.aot$/i,                     // AOT cache file (paired with the JAR)
+  /\.aot$/i, // AOT cache file (paired with the JAR)
 ];
 
 // ============================================================
@@ -150,11 +145,7 @@ export function resolveSafe(root: FileManagerRoot, relPath: string): string {
   const raw = relPath || '';
 
   // Reject obvious absolute paths or Windows-drive paths before normalisation
-  if (
-    raw.startsWith('/') ||
-    raw.startsWith('\\') ||
-    /^[a-zA-Z]:[\\/]/.test(raw)
-  ) {
+  if (raw.startsWith('/') || raw.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(raw)) {
     throw new FileManagerError('Absolute paths not allowed', 403, 'PATH_FORBIDDEN');
   }
 
@@ -277,11 +268,40 @@ export function isAbsolutePathAllowed(absPath: string, mode: 'read' | 'write'): 
 // ============================================================
 
 const BINARY_EXTS = new Set([
-  '.jar', '.zip', '.gz', '.tar', '.7z', '.rar',
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico',
-  '.mp3', '.wav', '.ogg', '.flac', '.mp4', '.mkv', '.avi',
-  '.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.db',
-  '.sqlite', '.sqlite3', '.pdf', '.woff', '.woff2', '.ttf', '.otf',
+  '.jar',
+  '.zip',
+  '.gz',
+  '.tar',
+  '.7z',
+  '.rar',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.bmp',
+  '.ico',
+  '.mp3',
+  '.wav',
+  '.ogg',
+  '.flac',
+  '.mp4',
+  '.mkv',
+  '.avi',
+  '.exe',
+  '.dll',
+  '.so',
+  '.dylib',
+  '.bin',
+  '.dat',
+  '.db',
+  '.sqlite',
+  '.sqlite3',
+  '.pdf',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
 ]);
 
 function isLikelyBinary(filePath: string, sample?: Buffer): boolean {
@@ -299,7 +319,10 @@ function isLikelyBinary(filePath: string, sample?: Buffer): boolean {
 // Operations
 // ============================================================
 
-export async function listDir(rootId: string, relPath: string): Promise<{
+export async function listDir(
+  rootId: string,
+  relPath: string,
+): Promise<{
   root: { id: string; path: string; rw: boolean };
   path: string;
   entries: DirEntry[];
@@ -330,9 +353,7 @@ export async function listDir(rootId: string, relPath: string): Promise<{
     // Skip symlinks for safety
     if (s.isSymbolicLink()) continue;
 
-    const relForFile = path
-      .relative(path.resolve(root.path), full)
-      .replace(/\\/g, '/');
+    const relForFile = path.relative(path.resolve(root.path), full).replace(/\\/g, '/');
 
     // Honour deny list for listing too. Extension denies (.key/.pem/.aot)
     // apply to files only, so legitimate directories stay visible.
@@ -453,18 +474,13 @@ export async function writeFile(
   if (existing && ifMatchMtime !== undefined) {
     // Allow ~1 ms drift due to FS precision
     if (Math.abs(existing.mtimeMs - ifMatchMtime) > 1) {
-      throw new FileManagerError(
-        'File changed on disk since last read',
-        409,
-        'CONFLICT',
-      );
+      throw new FileManagerError('File changed on disk since last read', 409, 'CONFLICT');
     }
   }
 
   // Size check
-  const buf = encoding === 'base64'
-    ? Buffer.from(content, 'base64')
-    : Buffer.from(content, 'utf-8');
+  const buf =
+    encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf-8');
 
   if (buf.length > MAX_WRITE_BYTES) {
     throw new FileManagerError(
@@ -509,7 +525,11 @@ async function assertNoSymlinkOnPath(rootDir: string, target: string): Promise<v
     try {
       const st = await fsp.lstat(current);
       if (st.isSymbolicLink()) {
-        throw new FileManagerError(`Refusing to traverse symlink ${path.relative(rootDir, current)}`, 400, 'PATH_SYMLINK');
+        throw new FileManagerError(
+          `Refusing to traverse symlink ${path.relative(rootDir, current)}`,
+          400,
+          'PATH_SYMLINK',
+        );
       }
     } catch (err) {
       // Last segment may not exist yet (we're about to create it). Earlier
@@ -550,11 +570,7 @@ export async function deleteFile(rootId: string, relPath: string): Promise<void>
   }
 }
 
-export async function moveFile(
-  rootId: string,
-  from: string,
-  to: string,
-): Promise<void> {
+export async function moveFile(rootId: string, from: string, to: string): Promise<void> {
   const root = getRoot(rootId);
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');

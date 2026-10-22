@@ -47,7 +47,12 @@ function capsRatio(text: string): number {
 }
 
 /** Evaluate a message against the rules. Returns the first violation, if any. */
-function evaluate(cfg: AutoModConfig, player: string, message: string, now: number): Violation | null {
+function evaluate(
+  cfg: AutoModConfig,
+  player: string,
+  message: string,
+  now: number,
+): Violation | null {
   const text = message.trim();
   if (!text) return null;
 
@@ -76,7 +81,10 @@ function evaluate(cfg: AutoModConfig, player: string, message: string, now: numb
   }
 
   if (cfg.maxMessageLength > 0 && text.length > cfg.maxMessageLength) {
-    return { rule: 'length', detail: `message length ${text.length} (limit ${cfg.maxMessageLength})` };
+    return {
+      rule: 'length',
+      detail: `message length ${text.length} (limit ${cfg.maxMessageLength})`,
+    };
   }
 
   if (cfg.floodCount > 0 && cfg.floodWindowSec > 0) {
@@ -96,7 +104,12 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function enforce(cfg: AutoModConfig, player: string, serverId: string | undefined, v: Violation): Promise<void> {
+async function enforce(
+  cfg: AutoModConfig,
+  player: string,
+  serverId: string | undefined,
+  v: Violation,
+): Promise<void> {
   const reason = `AutoMod: ${v.detail}`;
   const { execCommand } = await import('./docker.js');
   try {
@@ -107,19 +120,27 @@ async function enforce(cfg: AutoModConfig, player: string, serverId: string | un
       await execCommand(`/mute ${player}`, serverId);
       const durationMs = cfg.muteDurationSec > 0 ? cfg.muteDurationSec * 1000 : null;
       recordPunishment({
-        serverId, playerName: player,
+        serverId,
+        playerName: player,
         type: durationMs ? 'tempmute' : 'mute',
-        reason, byUser: SYSTEM_USER, durationMs,
+        reason,
+        byUser: SYSTEM_USER,
+        durationMs,
       });
     } else {
       // warn — public reminder + recorded warning, no kick/mute.
-      await execCommand(`/say [AutoMod] ${player}, please mind the chat rules (${v.detail}).`, serverId);
+      await execCommand(
+        `/say [AutoMod] ${player}, please mind the chat rules (${v.detail}).`,
+        serverId,
+      );
       recordPunishment({ serverId, playerName: player, type: 'warn', reason, byUser: SYSTEM_USER });
     }
     await logActivity(SYSTEM_USER, `automod_${cfg.action}`, 'player', true, player, v.detail);
     logger.info(`[AutoMod] ${cfg.action} ${player} — ${v.detail}`);
   } catch (err) {
-    logger.warn(`[AutoMod] enforcement failed for ${player}: ${err instanceof Error ? err.message : err}`);
+    logger.warn(
+      `[AutoMod] enforcement failed for ${player}: ${err instanceof Error ? err.message : err}`,
+    );
   }
 }
 
@@ -146,6 +167,9 @@ async function handleChat(evt: PanelEvent): Promise<void> {
 }
 
 export function stopAutoMod(): void {
-  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+  }
   recentByPlayer.clear();
 }

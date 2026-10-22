@@ -99,7 +99,7 @@ export function sanitizeFileName(fileName: string): string | null {
 export function safePathJoin(baseDir: string, ...parts: string[]): string | null {
   try {
     // Sanitize each part
-    const sanitizedParts = parts.map(part => {
+    const sanitizedParts = parts.map((part) => {
       // Remove any leading slashes and path traversal attempts
       return part.replace(/^[/\\]+/, '').replace(/\.\./g, '');
     });

@@ -120,7 +120,9 @@ describe('fileManager.isAbsolutePathAllowed', () => {
   });
   it('blocks paths outside every managed root', () => {
     expect(isAbsolutePathAllowed('/etc/passwd', 'read')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(server, '..', '..', 'etc', 'shadow'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(path.join(server, '..', '..', 'etc', 'shadow'), 'read')).toBe(
+      false,
+    );
   });
   it('blocks writes under the read-only data root', () => {
     expect(isAbsolutePathAllowed(path.join(data, 'whatever.json'), 'write')).toBe(false);

@@ -14,8 +14,13 @@ export interface ServerInstance {
     pluginPort: number
   }
   paths: {
-    server: string; data: string; backups: string;
-    mods: string; plugins: string; assets: string; auth: string;
+    server: string
+    data: string
+    backups: string
+    mods: string
+    plugins: string
+    assets: string
+    auth: string
   }
   createdAt: string
   createdBy: string
@@ -36,13 +41,13 @@ export const useServersStore = defineStore('servers', () => {
   const servers = ref<ServerInstance[]>([])
   const defaultId = ref<string | null>(null)
   const activeId = ref<string | null>(
-    typeof localStorage !== 'undefined' ? localStorage.getItem(ACTIVE_KEY) : null
+    typeof localStorage !== 'undefined' ? localStorage.getItem(ACTIVE_KEY) : null,
   )
   const loaded = ref(false)
   const loading = ref(false)
 
-  const activeServer = computed<ServerInstance | null>(() =>
-    servers.value.find(s => s.id === (activeId.value ?? defaultId.value)) ?? null
+  const activeServer = computed<ServerInstance | null>(
+    () => servers.value.find((s) => s.id === (activeId.value ?? defaultId.value)) ?? null,
   )
 
   async function refresh(): Promise<void> {
@@ -52,7 +57,7 @@ export const useServersStore = defineStore('servers', () => {
       servers.value = data.servers
       defaultId.value = data.defaultId
       // Stale active id (server got deleted) → fall back to default.
-      if (!servers.value.some(s => s.id === activeId.value)) {
+      if (!servers.value.some((s) => s.id === activeId.value)) {
         activeId.value = defaultId.value
         if (typeof localStorage !== 'undefined' && activeId.value) {
           localStorage.setItem(ACTIVE_KEY, activeId.value)
@@ -65,12 +70,17 @@ export const useServersStore = defineStore('servers', () => {
   }
 
   function setActive(id: string): void {
-    if (!servers.value.some(s => s.id === id)) return
+    if (!servers.value.some((s) => s.id === id)) return
     activeId.value = id
     if (typeof localStorage !== 'undefined') localStorage.setItem(ACTIVE_KEY, id)
   }
 
-  async function create(input: { name: string; serverPort?: number; webMapPort?: number; pluginPort?: number }): Promise<ServerInstance> {
+  async function create(input: {
+    name: string
+    serverPort?: number
+    webMapPort?: number
+    pluginPort?: number
+  }): Promise<ServerInstance> {
     const { data } = await api.post<{ server: ServerInstance }>('/servers', input)
     await refresh()
     return data.server
@@ -87,8 +97,16 @@ export const useServersStore = defineStore('servers', () => {
   }
 
   return {
-    servers, defaultId, activeId, loaded, loading,
+    servers,
+    defaultId,
+    activeId,
+    loaded,
+    loading,
     activeServer,
-    refresh, setActive, create, remove, setDefault,
+    refresh,
+    setActive,
+    create,
+    remove,
+    setDefault,
   }
 })

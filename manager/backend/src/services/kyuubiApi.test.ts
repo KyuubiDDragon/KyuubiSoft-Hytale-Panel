@@ -28,8 +28,13 @@ describe('kyuubiApi per-server endpoint resolution', () => {
           status: 'ready',
           network: { serverPort: 5520, webMapPort: 18081, webMapWsPort: 18082, pluginPort: 18085 },
           paths: {
-            server: '/tmp/srv', data: '/tmp/data', backups: '/tmp/bk', mods: '/tmp/mods',
-            plugins: '/tmp/pl', assets: '/tmp/as', auth: '/tmp/au',
+            server: '/tmp/srv',
+            data: '/tmp/data',
+            backups: '/tmp/bk',
+            mods: '/tmp/mods',
+            plugins: '/tmp/pl',
+            assets: '/tmp/as',
+            auth: '/tmp/au',
           },
           createdAt: new Date().toISOString(),
           createdBy: 'system',
@@ -49,10 +54,14 @@ describe('kyuubiApi per-server endpoint resolution', () => {
     expect(ep.port).toBe(18085);
   });
 
-  it('reads the explicit server\'s pluginPort from the registry', async () => {
+  it("reads the explicit server's pluginPort from the registry", async () => {
     const created = await createServerInstance({
-      name: 'second', containerName: 'hytale-second',
-      serverPort: 5521, webMapPort: 18083, webMapWsPort: 18084, pluginPort: 18090,
+      name: 'second',
+      containerName: 'hytale-second',
+      serverPort: 5521,
+      webMapPort: 18083,
+      webMapWsPort: 18084,
+      pluginPort: 18090,
       createdBy: 'tester',
     });
     const ep = await resolvePluginEndpoint(created.id);

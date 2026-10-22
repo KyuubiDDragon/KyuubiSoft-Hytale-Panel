@@ -133,7 +133,9 @@ describe('createInstanceContainer', () => {
     expect(startSpy).not.toHaveBeenCalled();
     expect(createContainer).toHaveBeenCalledOnce();
 
-    const passed = createContainer.mock.calls[0][0] as { HostConfig?: { PortBindings?: Record<string, unknown> } };
+    const passed = createContainer.mock.calls[0][0] as {
+      HostConfig?: { PortBindings?: Record<string, unknown> };
+    };
     expect(passed.HostConfig?.PortBindings).toMatchObject({
       '5521/udp': [{ HostPort: '5521' }],
       '18091/tcp': [{ HostPort: '18091' }],

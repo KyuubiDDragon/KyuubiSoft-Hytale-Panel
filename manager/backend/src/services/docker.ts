@@ -38,7 +38,11 @@ class DockerTimeoutError extends Error {
   }
 }
 
-function withTimeout<T>(op: string, promise: Promise<T>, ms: number = DOCKER_OP_TIMEOUT_MS): Promise<T> {
+function withTimeout<T>(
+  op: string,
+  promise: Promise<T>,
+  ms: number = DOCKER_OP_TIMEOUT_MS,
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new DockerTimeoutError(op, ms)), ms);
@@ -90,7 +94,11 @@ export async function getStatus(serverId?: string): Promise<ServerStatus> {
       started_at: info.State.StartedAt,
     };
   } catch (error) {
-    return { status: 'error', running: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    return {
+      status: 'error',
+      running: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 
@@ -102,7 +110,8 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { error: 'Container not running' };
     const stats = await withTimeout('stats', container.stats({ stream: false }));
-    const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+    const cpuDelta =
+      stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
     const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
     const cpuCount = stats.cpu_stats.online_cpus || 1;
     const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
@@ -114,8 +123,8 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
       memory_bytes: memoryUsage,
       memory_limit_bytes: memoryLimit,
       memory_percent: Math.round(memoryPercent * 100) / 100,
-      memory_mb: Math.round(memoryUsage / (1024 * 1024) * 10) / 10,
-      memory_limit_mb: Math.round(memoryLimit / (1024 * 1024) * 10) / 10,
+      memory_mb: Math.round((memoryUsage / (1024 * 1024)) * 10) / 10,
+      memory_limit_mb: Math.round((memoryLimit / (1024 * 1024)) * 10) / 10,
     };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Unknown error' };
@@ -129,7 +138,10 @@ const intentionalStops = new Map<string, number>();
 export function noteIntentionalStop(serverId?: string): void {
   intentionalStops.set(serverId ?? '__default__', Date.now());
 }
-export function wasRecentlyStoppedIntentionally(serverId: string | undefined, withinMs: number): boolean {
+export function wasRecentlyStoppedIntentionally(
+  serverId: string | undefined,
+  withinMs: number,
+): boolean {
   const ts = intentionalStops.get(serverId ?? '__default__');
   return ts !== undefined && Date.now() - ts < withinMs;
 }
@@ -179,7 +191,10 @@ export async function getLogs(tail: number = 100, serverId?: string): Promise<st
   try {
     const container = await getContainer(serverId);
     if (!container) return '';
-    const logs = await withTimeout('logs', container.logs({ stdout: true, stderr: true, tail, timestamps: true }) as Promise<Buffer>);
+    const logs = await withTimeout(
+      'logs',
+      container.logs({ stdout: true, stderr: true, tail, timestamps: true }) as Promise<Buffer>,
+    );
     return logs.toString('utf-8');
   } catch {
     return '';
@@ -199,7 +214,13 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
     if (!container) return { ok: false, key };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { ok: false, key };
-    const stream = await container.attach({ stream: true, stdin: true, stdout: false, stderr: false, hijack: true });
+    const stream = await container.attach({
+      stream: true,
+      stdin: true,
+      stdout: false,
+      stderr: false,
+      hijack: true,
+    });
     stdinStreams.set(key, stream);
     stream.on('error', () => stdinStreams.delete(key));
     stream.on('close', () => stdinStreams.delete(key));
@@ -219,7 +240,9 @@ export async function execCommand(command: string, serverId?: string): Promise<A
   try {
     const validation = validateCommand(command);
     if (!validation.valid) {
-      console.warn(`[SECURITY] Blocked command: ${command.substring(0, 50)}... Reason: ${validation.error}`);
+      console.warn(
+        `[SECURITY] Blocked command: ${command.substring(0, 50)}... Reason: ${validation.error}`,
+      );
       return { success: false, error: validation.error || 'Invalid command' };
     }
     const container = await getContainer(serverId);
@@ -239,8 +262,13 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     }
 
     const escapedCommand = escapeShellArg(command);
-    const exec = await withTimeout('exec', container.exec({
-      Cmd: ['sh', '-c', `
+    const exec = await withTimeout(
+      'exec',
+      container.exec({
+        Cmd: [
+          'sh',
+          '-c',
+          `
         if command -v screen > /dev/null && screen -list | grep -q hytale; then
           screen -S hytale -p 0 -X stuff ${escapedCommand}$'\n'
         elif [ -p /tmp/server_input ]; then
@@ -248,10 +276,12 @@ export async function execCommand(command: string, serverId?: string): Promise<A
         else
           echo ${escapedCommand} >> /proc/1/fd/0
         fi
-      `],
-      AttachStdout: true,
-      AttachStderr: true,
-    }));
+      `,
+        ],
+        AttachStdout: true,
+        AttachStderr: true,
+      }),
+    );
     const execStream = await exec.start({});
     return new Promise((resolve) => {
       execStream.on('end', () => resolve({ success: true, message: `Command sent: ${command}` }));
@@ -263,7 +293,10 @@ export async function execCommand(command: string, serverId?: string): Promise<A
   }
 }
 
-export async function execInContainer(command: string, serverId?: string): Promise<ActionResponse & { output?: string }> {
+export async function execInContainer(
+  command: string,
+  serverId?: string,
+): Promise<ActionResponse & { output?: string }> {
   if (isDemoMode()) {
     if (command.includes('stats memory')) {
       const { getDemoMemoryStats } = await import('./demoData.js');
@@ -276,14 +309,24 @@ export async function execInContainer(command: string, serverId?: string): Promi
     if (!container) return { success: false, error: 'Container not found' };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
-    const exec = await withTimeout('exec', container.exec({ Cmd: ['sh', '-c', command], AttachStdout: true, AttachStderr: true }));
+    const exec = await withTimeout(
+      'exec',
+      container.exec({ Cmd: ['sh', '-c', command], AttachStdout: true, AttachStderr: true }),
+    );
     const stream = await exec.start({});
     return new Promise((resolve) => {
       let output = '';
-      stream.on('data', (chunk: Buffer) => { output += chunk.toString('utf8'); });
-      stream.on('end', () => resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }));
+      stream.on('data', (chunk: Buffer) => {
+        output += chunk.toString('utf8');
+      });
+      stream.on('end', () =>
+        resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }),
+      );
       stream.on('error', (err: Error) => resolve({ success: false, error: err.message }));
-      setTimeout(() => resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }), 5000);
+      setTimeout(
+        () => resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }),
+        5000,
+      );
     });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
