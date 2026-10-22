@@ -727,12 +727,13 @@ export async function updateMod(modId: string): Promise<InstallResult> {
     }
 
     downloadUrl = jarAsset.browser_download_url;
-    filename = jarAsset.name;
+    // Same reduction as installMod: the asset name is untrusted release metadata.
+    filename = safeModFilename(jarAsset.name, `${mod.name}.jar`);
     latestVersion = release.tag_name;
   } else if (mod.downloadUrl) {
     downloadUrl = mod.downloadUrl;
     const urlParts = mod.downloadUrl.split('/');
-    filename = urlParts[urlParts.length - 1] || `${mod.name}.jar`;
+    filename = safeModFilename(urlParts[urlParts.length - 1], `${mod.name}.jar`);
     latestVersion = mod.version || 'unknown';
   } else {
     return { success: false, error: 'No download source available' };

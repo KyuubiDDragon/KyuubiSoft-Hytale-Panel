@@ -154,6 +154,9 @@ services:
       # Demo mode (disables real server, uses mock data)
       - DEMO_MODE=${DEMO_MODE:-false}
 
+      # Multiserver (experimental, off by default - see .env.example)
+      - MULTISERVER_ENABLED=${MULTISERVER_ENABLED:-false}
+
       # Target container
       - GAME_CONTAINER_NAME=${STACK_NAME:-hytale}
 

@@ -1,21 +1,61 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { AxiosError } from 'axios'
+import api from '@/api/client'
 import { modStoreApi } from '@/api/management'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const loading = ref(true)
 const error = ref('')
 const webMapInstalled = ref(false)
 const webMapHttpPort = ref(18081)
 
-const mapUrl = computed(() => {
-  // Use the panel's built-in proxy for WebMap access
-  // This avoids HTTPS/mixed-content issues by routing through /api/webmap/
-  // The backend proxies to http://hytale:18081 internally
-  return '/api/webmap/'
-})
+const canViewMap = computed(() => authStore.hasPermission('players.view'))
+
+// The map is third-party code from the EasyWebMap mod. The backend proxies it
+// under a per-session path (/api/webmap/t/<ticket>/) and forces it into a
+// sandbox with an opaque origin, so it can't read this page's tokens or call
+// the panel API as the current user.
+const mapUrl = ref('')
+let currentTicket: string | null = null
+
+interface WebMapSession {
+  ticket: string
+  path: string
+}
+
+async function createSession(): Promise<WebMapSession> {
+  const { data } = await api.post<WebMapSession>('/webmap/session')
+  return data
+}
+
+function revokeSession(ticket: string | null) {
+  if (!ticket) return
+  // Best effort: an unrevoked session still expires on its own.
+  api.post('/webmap/session/revoke', { ticket }).catch(() => {})
+}
+
+function sessionError(e: unknown): string {
+  return (e as AxiosError)?.response?.status === 403
+    ? t('webmap.access.noPermission')
+    : t('webmap.access.sessionFailed')
+}
+
+async function loadMap() {
+  try {
+    const session = await createSession()
+    revokeSession(currentTicket)
+    currentTicket = session.ticket
+    mapUrl.value = session.path
+    error.value = ''
+  } catch (e) {
+    error.value = sessionError(e)
+  }
+}
 
 async function checkWebMapStatus() {
   try {
@@ -26,6 +66,7 @@ async function checkWebMapStatus() {
       if (webMap.ports && webMap.ports.length > 0) {
         webMapHttpPort.value = webMap.ports[0].default
       }
+      if (canViewMap.value) await loadMap()
     }
   } catch (e) {
     error.value = t('errors.serverError')
@@ -34,20 +75,34 @@ async function checkWebMapStatus() {
   }
 }
 
-function openInNewTab() {
-  // Open WebMap via proxy in new tab (works with HTTPS)
-  window.open('/api/webmap/', '_blank')
+async function openInNewTab() {
+  // Open the tab synchronously so popup blockers allow it, cut the opener link
+  // (the map must not be able to navigate this tab), then point it at a
+  // session of its own. The backend sandboxes the page there as well.
+  const tab = window.open('', '_blank')
+  if (!tab) return
+  tab.opener = null
+  try {
+    const session = await createSession()
+    tab.location.href = session.path
+  } catch (e) {
+    tab.close()
+    error.value = sessionError(e)
+  }
 }
 
 function refreshMap() {
-  const iframe = document.getElementById('webmap-frame') as HTMLIFrameElement
-  if (iframe) {
-    iframe.src = iframe.src
-  }
+  // A fresh session also recovers a map whose session has expired.
+  loadMap()
 }
 
 onMounted(() => {
   checkWebMapStatus()
+})
+
+onBeforeUnmount(() => {
+  revokeSession(currentTicket)
+  currentTicket = null
 })
 </script>
 
@@ -59,7 +114,7 @@ onMounted(() => {
         <h1 class="text-2xl font-bold text-ink">{{ t('webmap.title') }}</h1>
         <p class="text-ink-muted text-sm mt-1">{{ t('webmap.subtitle') }}</p>
       </div>
-      <div v-if="webMapInstalled" class="flex items-center gap-2">
+      <div v-if="webMapInstalled && canViewMap" class="flex items-center gap-2">
         <button
           @click="refreshMap"
           class="px-3 py-1.5 bg-surface-overlay text-ink-muted rounded-lg hover:bg-surface-overlay transition-colors text-sm flex items-center gap-2"
@@ -107,11 +162,30 @@ onMounted(() => {
         </router-link>
       </div>
 
-      <!-- Map iframe -->
+      <!-- No players.view: the backend would refuse the map session anyway -->
+      <div v-else-if="!canViewMap" class="h-full flex items-center justify-center text-ink-muted p-8 text-center">
+        {{ t('webmap.access.noPermission') }}
+      </div>
+
+      <!-- Session could not be created -->
+      <div v-else-if="error && !mapUrl" class="h-full flex flex-col items-center justify-center text-ink-muted p-8 text-center gap-4">
+        <p>{{ error }}</p>
+        <button
+          @click="refreshMap"
+          class="px-4 py-2 bg-surface-overlay text-ink rounded-lg hover:bg-surface-overlay transition-colors text-sm"
+        >
+          {{ t('common.refresh') }}
+        </button>
+      </div>
+
+      <!-- Map iframe: sandboxed without allow-same-origin (opaque origin) -->
       <iframe
-        v-else
+        v-else-if="mapUrl"
         id="webmap-frame"
+        :key="mapUrl"
         :src="mapUrl"
+        sandbox="allow-scripts"
+        referrerpolicy="no-referrer"
         class="w-full h-full border-0"
         :title="t('webmap.title')"
       />

@@ -219,6 +219,9 @@ export interface PluginStatus {
   version: string | null
   port: number
   error?: string
+  // Plugin refused the panel token (token_rejected) or has none (token_missing);
+  // both clear after a server restart through the panel.
+  authError?: 'token_rejected' | 'token_missing'
 }
 
 export interface PluginUpdateCheck {
@@ -838,9 +841,7 @@ export const serverApi = {
     return response.data
   },
 
-  async rollbackJar(
-    snapshotId: string,
-  ): Promise<{
+  async rollbackJar(snapshotId: string): Promise<{
     success: boolean
     message?: string
     restoredVersion?: string | null

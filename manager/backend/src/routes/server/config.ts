@@ -8,6 +8,7 @@ import { requirePermission } from '../../middleware/permissions.js';
 import * as dockerService from '../../services/docker.js';
 import { config } from '../../config.js';
 import { escapeShellArg } from '../../utils/sanitize.js';
+import { resolveRealPathWithin } from '../../utils/pathSecurity.js';
 import {
   isDemoMode,
   getDemoQuickSettings,
@@ -462,12 +463,10 @@ router.get(
         },
       });
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          error: 'Failed to read JVM settings',
-          message: error instanceof Error ? error.message : 'Unknown error',
-        });
+      res.status(500).json({
+        error: 'Failed to read JVM settings',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   },
 );
@@ -533,12 +532,10 @@ router.put(
           : 'Settings unchanged.',
       });
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          error: 'Failed to save JVM settings',
-          message: error instanceof Error ? error.message : 'Unknown error',
-        });
+      res.status(500).json({
+        error: 'Failed to save JVM settings',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   },
 );
@@ -594,6 +591,13 @@ router.get(
   },
 );
 
+// Resolve a top-level server config file and make sure it REALLY lives in the
+// server dir: a config file that is a symlink to a panel file (users.json, the
+// JWT secret) must be neither readable nor writable through these routes.
+function resolveServerConfigFile(filename: string): string | null {
+  return resolveRealPathWithin(path.join(config.serverPath, filename), [config.serverPath]);
+}
+
 // GET /api/server/config/:filename - Read config file
 router.get(
   '/config/:filename',
@@ -621,7 +625,12 @@ router.get(
     }
 
     try {
-      const filePath = path.join(config.serverPath, filename);
+      const filePath = resolveServerConfigFile(filename);
+      if (!filePath) {
+        console.warn(`[SECURITY] Blocked server config read via symlink: ${filename}`);
+        res.status(403).json({ error: 'Access denied - invalid path' });
+        return;
+      }
       const content = await readFile(filePath, 'utf-8');
       res.json({ filename, content });
     } catch (error) {
@@ -666,7 +675,12 @@ router.put(
     }
 
     try {
-      const filePath = path.join(config.serverPath, filename);
+      const filePath = resolveServerConfigFile(filename);
+      if (!filePath) {
+        console.warn(`[SECURITY] Blocked server config write via symlink: ${filename}`);
+        res.status(403).json({ error: 'Access denied - invalid path' });
+        return;
+      }
       await writeFile(filePath, content, 'utf-8');
       res.json({ success: true, message: 'Config saved' });
     } catch (error) {

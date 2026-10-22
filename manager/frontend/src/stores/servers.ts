@@ -24,6 +24,8 @@ export interface ServerInstance {
   }
   createdAt: string
   createdBy: string
+  /** 'compose' = the stack's own game container; never deletable. */
+  kind?: 'compose' | 'managed'
 }
 
 const ACTIVE_KEY = 'kp-active-server-id'
@@ -36,6 +38,10 @@ const ACTIVE_KEY = 'kp-active-server-id'
  * existing single-server views read the active id from this store; once the
  * backend per-server routing lands, requests will be retargeted via the
  * shared api client.
+ *
+ * Multiserver sits behind the backend's MULTISERVER_ENABLED flag. While it is
+ * off (the default, and also until the flag has loaded) the active server is
+ * pinned to the default server and the header picker stays hidden.
  */
 export const useServersStore = defineStore('servers', () => {
   const servers = ref<ServerInstance[]>([])
@@ -43,25 +49,36 @@ export const useServersStore = defineStore('servers', () => {
   const activeId = ref<string | null>(
     typeof localStorage !== 'undefined' ? localStorage.getItem(ACTIVE_KEY) : null,
   )
+  const multiserverEnabled = ref(false)
   const loaded = ref(false)
   const loading = ref(false)
 
-  const activeServer = computed<ServerInstance | null>(
-    () => servers.value.find((s) => s.id === (activeId.value ?? defaultId.value)) ?? null,
-  )
+  const activeServer = computed<ServerInstance | null>(() => {
+    const id = multiserverEnabled.value ? (activeId.value ?? defaultId.value) : defaultId.value
+    return servers.value.find((s) => s.id === id) ?? null
+  })
+
+  function persistActive(): void {
+    if (typeof localStorage !== 'undefined' && activeId.value) {
+      localStorage.setItem(ACTIVE_KEY, activeId.value)
+    }
+  }
 
   async function refresh(): Promise<void> {
     loading.value = true
     try {
-      const { data } = await api.get<{ servers: ServerInstance[]; defaultId: string }>('/servers')
+      const { data } = await api.get<{
+        servers: ServerInstance[]
+        defaultId: string
+        multiserverEnabled?: boolean
+      }>('/servers')
       servers.value = data.servers
       defaultId.value = data.defaultId
-      // Stale active id (server got deleted) → fall back to default.
-      if (!servers.value.some((s) => s.id === activeId.value)) {
+      multiserverEnabled.value = data.multiserverEnabled === true
+      // Stale active id (server got deleted), or multiserver off → default.
+      if (!multiserverEnabled.value || !servers.value.some((s) => s.id === activeId.value)) {
         activeId.value = defaultId.value
-        if (typeof localStorage !== 'undefined' && activeId.value) {
-          localStorage.setItem(ACTIVE_KEY, activeId.value)
-        }
+        persistActive()
       }
     } finally {
       loading.value = false
@@ -69,8 +86,14 @@ export const useServersStore = defineStore('servers', () => {
     }
   }
 
+  /** Whether the backend would accept a delete (compose, default and last server never are). */
+  function isDeletable(s: ServerInstance): boolean {
+    return s.kind !== 'compose' && s.id !== defaultId.value && servers.value.length > 1
+  }
+
   function setActive(id: string): void {
     if (!servers.value.some((s) => s.id === id)) return
+    if (!multiserverEnabled.value && id !== defaultId.value) return
     activeId.value = id
     if (typeof localStorage !== 'undefined') localStorage.setItem(ACTIVE_KEY, id)
   }
@@ -100,11 +123,13 @@ export const useServersStore = defineStore('servers', () => {
     servers,
     defaultId,
     activeId,
+    multiserverEnabled,
     loaded,
     loading,
     activeServer,
     refresh,
     setActive,
+    isDeletable,
     create,
     remove,
     setDefault,

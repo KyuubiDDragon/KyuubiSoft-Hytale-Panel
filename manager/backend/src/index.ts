@@ -3,15 +3,12 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { createGunzip, createInflate } from 'zlib';
+import { createServer, IncomingMessage } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { access, constants, writeFile as fsWriteFile, unlink } from 'fs/promises';
 import { randomBytes } from 'crypto';
-import { createProxyMiddleware } from 'http-proxy-middleware';
-import httpProxy from 'http-proxy';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
@@ -45,12 +42,14 @@ import settingsRoutes from './routes/settings.js';
 import pushRoutes from './routes/push.js';
 import publicRoutes from './routes/public.js';
 import eventActionsRoutes from './routes/eventActions.js';
+import webMapRoutes, { createWebMapProxy, WEBMAP_PROXY_PREFIX } from './routes/webmap.js';
 import { metricsMiddleware } from './services/metrics.js';
 
 // Services
 import { startSchedulers } from './services/scheduler.js';
 import { initializePlayerTracking } from './services/players.js';
 import { initializePluginEvents, disconnectFromPluginWebSocket } from './services/pluginEvents.js';
+import { initializePluginAuth } from './services/pluginAuth.js';
 import { initializePlayerLocations } from './services/playerLocations.js';
 import { initializeReplay, shutdownReplay } from './services/replay.js';
 import { initializeRoles } from './services/roles.js';
@@ -149,233 +148,23 @@ locationsWss.on('connection', async (socket: import('ws').WebSocket, req: Incomi
   socket.on('error', () => unsubscribe());
 });
 
-// WebMap Proxy - MUST be mounted BEFORE helmet so our CSP doesn't affect WebMap content
-// The WebMap loads Leaflet from unpkg.com CDN which would be blocked by our CSP
+// WebMap proxy - MUST be mounted BEFORE helmet: the third-party map page gets
+// its own sandboxing CSP (routes/webmap.ts) instead of the panel's strict one.
+// It is only reachable under /api/webmap/t/<session>/ with a session minted via
+// POST /api/webmap/session (players.view), and always runs with an opaque
+// origin, so its scripts can't use the panel's token, cookies or API.
 const webMapTarget = `http://${config.gameContainerName}:${config.webMapPort}`;
 console.log(`[WebMap] Proxy configured for: ${webMapTarget}`);
-
-const createWebMapProxyErrorHandler = () => ({
-  error: (err: Error, _req: unknown, res: unknown) => {
-    console.error('[WebMap Proxy] Error:', err.message);
-    if (
-      res &&
-      typeof res === 'object' &&
-      'writeHead' in res &&
-      typeof (res as { writeHead: unknown }).writeHead === 'function'
-    ) {
-      const httpRes = res as {
-        writeHead: (code: number, headers: Record<string, string>) => void;
-        end: (data: string) => void;
-      };
-      httpRes.writeHead(502, { 'Content-Type': 'application/json' });
-      httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
-    }
-  },
-  // Remove restrictive headers from WebMap response
-  proxyRes: (proxyRes: { headers: Record<string, unknown> }) => {
-    delete proxyRes.headers['content-security-policy'];
-    delete proxyRes.headers['x-frame-options'];
-  },
-});
-
-// Script to inject into WebMap HTML to rewrite WebSocket URLs from /ws to /api/webmap-ws
-const webMapWsRewriteScript = `
-<script>
-(function() {
-  var OriginalWebSocket = window.WebSocket;
-  window.WebSocket = function(url, protocols) {
-    // Rewrite /ws to /api/webmap-ws for WebMap's live updates
-    if (url && (url.endsWith('/ws') || url.includes('/ws?'))) {
-      url = url.replace(/\\/ws(\\?|$)/, '/api/webmap-ws$1');
-    }
-    return protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
-  };
-  window.WebSocket.prototype = OriginalWebSocket.prototype;
-  window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
-  window.WebSocket.OPEN = OriginalWebSocket.OPEN;
-  window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
-  window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
-})();
-</script>
-`;
-
-// Main WebMap proxy (for iframe content - strips /api/webmap prefix)
-// Injects script to rewrite WebSocket URLs from /ws to /api/webmap-ws
-const webMapProxy = createProxyMiddleware({
-  target: webMapTarget,
-  changeOrigin: true,
-  selfHandleResponse: true, // We'll handle the response to inject script
-  pathRewrite: {
-    '^/api/webmap': '', // Remove /api/webmap prefix when forwarding
-  },
-  on: {
-    // Request the uncompressed version to simplify HTML injection
-    proxyReq: (proxyReq) => {
-      proxyReq.setHeader('Accept-Encoding', 'identity');
-    },
-    error: (err: Error, _req: unknown, res: unknown) => {
-      console.error('[WebMap Proxy] Error:', err.message);
-      if (
-        res &&
-        typeof res === 'object' &&
-        'writeHead' in res &&
-        typeof (res as { writeHead: unknown }).writeHead === 'function'
-      ) {
-        const httpRes = res as {
-          writeHead: (code: number, headers: Record<string, string>) => void;
-          end: (data: string) => void;
-        };
-        httpRes.writeHead(502, { 'Content-Type': 'application/json' });
-        httpRes.end(JSON.stringify({ error: 'WebMap unavailable', detail: err.message }));
-      }
-    },
-    proxyRes: (proxyResRaw, _req, resRaw) => {
-      const proxyRes = proxyResRaw as IncomingMessage;
-      const res = resRaw as ServerResponse;
-
-      // Remove restrictive headers
-      delete proxyRes.headers['content-security-policy'];
-      delete proxyRes.headers['x-frame-options'];
-
-      const contentType = (proxyRes.headers['content-type'] as string) || '';
-      const contentEncoding = (
-        (proxyRes.headers['content-encoding'] as string) || ''
-      ).toLowerCase();
-      const isHtml = contentType.toLowerCase().includes('text/html');
-
-      console.log(
-        `[WebMap Proxy] Content-Type: ${contentType}, Content-Encoding: ${contentEncoding}, isHtml: ${isHtml}`,
-      );
-
-      if (isHtml) {
-        // Collect response body, decompress if needed, and inject script
-        const chunks: Buffer[] = [];
-        let decompressionFailed = false;
-
-        // Create decompression stream if content is compressed
-        let stream: NodeJS.ReadableStream = proxyRes;
-        if (contentEncoding === 'gzip') {
-          console.log('[WebMap Proxy] Decompressing gzip content');
-          const gunzip = createGunzip();
-          gunzip.on('error', (err) => {
-            console.error('[WebMap Proxy] Gunzip stream error:', err.message);
-            decompressionFailed = true;
-          });
-          stream = proxyRes.pipe(gunzip);
-        } else if (contentEncoding === 'deflate') {
-          console.log('[WebMap Proxy] Decompressing deflate content');
-          const inflate = createInflate();
-          inflate.on('error', (err) => {
-            console.error('[WebMap Proxy] Inflate stream error:', err.message);
-            decompressionFailed = true;
-          });
-          stream = proxyRes.pipe(inflate);
-        }
-
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
-        stream.on('end', () => {
-          const rawBody = Buffer.concat(chunks);
-          let body = rawBody.toString('utf-8');
-
-          // Check if decompression worked (body should start with < for HTML)
-          if (body.length > 0 && !body.trimStart().startsWith('<') && !decompressionFailed) {
-            console.log(
-              '[WebMap Proxy] Warning: Decompressed content does not look like HTML, first bytes:',
-              rawBody.slice(0, 20).toString('hex'),
-            );
-          }
-
-          console.log(
-            `[WebMap Proxy] Body length: ${body.length}, starts with: ${body.substring(0, 100).replace(/\n/g, '\\n')}`,
-          );
-          // Strip any <meta http-equiv="Content-Security-Policy"> the map ships
-          // with: EasyWebMap's own policy omits 'unsafe-inline', which blocks
-          // both its inline scripts and the WS-rewrite <script> we inject below
-          // (this is the "Executing inline script violates CSP" error).
-          body = body.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
-
-          // Inject our WebSocket rewrite script after <head>
-          body = body.replace(/<head>/i, '<head>' + webMapWsRewriteScript);
-
-          // Update headers - remove encoding since we send uncompressed
-          const newHeaders = { ...proxyRes.headers };
-          delete newHeaders['content-length'];
-          delete newHeaders['content-encoding'];
-          delete newHeaders['transfer-encoding'];
-          // This proxied map is a trusted local mod page rendered in an isolated
-          // iframe; give that document a permissive CSP so its (and our injected)
-          // inline scripts run AND it can pull its own deps (e.g. Leaflet) from
-          // external CDNs like unpkg.com. Scoped to /api/webmap only — the panel
-          // shell keeps its strict helmet CSP.
-          newHeaders['content-security-policy'] =
-            "default-src 'self' https: http: data: blob: 'unsafe-inline' 'unsafe-eval'; " +
-            "script-src 'self' https: http: data: blob: 'unsafe-inline' 'unsafe-eval'; " +
-            "style-src 'self' https: http: 'unsafe-inline'; " +
-            "img-src 'self' https: http: data: blob:; " +
-            "font-src 'self' https: http: data:; " +
-            "connect-src 'self' https: http: ws: wss:;";
-
-          res.writeHead(proxyRes.statusCode || 200, newHeaders);
-          res.end(body);
-        });
-        stream.on('error', (err) => {
-          console.error('[WebMap Proxy] Stream error:', err.message);
-          res.writeHead(502, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'WebMap proxy error', detail: err.message }));
-        });
-      } else {
-        // For non-HTML, just pipe through
-        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
-        proxyRes.pipe(res);
-      }
-    },
-  },
-});
-app.use('/api/webmap', webMapProxy);
-
-// WebMap API proxies - The WebMap JavaScript uses absolute paths for its API calls
-// These routes don't conflict with our panel routes (auth, server, console, etc.)
-// When using app.use() with a path, Express strips it from req.url, so we need pathRewrite to restore it
-// Handle root path without trailing slash: '/' -> '/api/worlds', '/batch' -> '/api/worlds/batch'
-app.use(
-  '/api/worlds',
-  createProxyMiddleware({
-    target: webMapTarget,
-    changeOrigin: true,
-    pathRewrite: (path) => (path === '/' || path === '' ? '/api/worlds' : `/api/worlds${path}`),
-    on: createWebMapProxyErrorHandler(),
-  }),
-);
-app.use(
-  '/api/tiles',
-  createProxyMiddleware({
-    target: webMapTarget,
-    changeOrigin: true,
-    pathRewrite: (path) => (path === '/' || path === '' ? '/api/tiles' : `/api/tiles${path}`),
-    on: createWebMapProxyErrorHandler(),
-  }),
-);
-
-// WebMap WebSocket proxy at /api/webmap-ws (under /api/ so reverse proxies forward it)
-// Use http-proxy directly for reliable WebSocket proxying
-const webMapWsProxy = httpProxy.createProxyServer({
-  target: webMapTarget,
-  ws: true,
-  changeOrigin: true,
-});
-
-webMapWsProxy.on('error', (err, _req, res) => {
-  console.error('[WebMap WS Proxy] Error:', err.message);
-  if (res && 'writeHead' in res && typeof res.writeHead === 'function') {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'WebMap WebSocket unavailable', detail: err.message }));
-  }
-});
+const webMapProxy = createWebMapProxy(webMapTarget);
+app.use('/api/webmap', webMapProxy.middleware);
 
 // Handle ALL WebSocket upgrades manually (noServer mode)
 server.on('upgrade', (request, socket, head) => {
   const pathname = request.url || '';
-  console.log(`[WebSocket Upgrade] Path: ${pathname}`);
+  // Keep WebMap session ids out of the log.
+  console.log(
+    `[WebSocket Upgrade] Path: ${pathname.replace(/^\/api\/webmap\/t\/[^/?]+/, '/api/webmap/t/<session>')}`,
+  );
 
   // Handle /api/console/ws - our panel's console WebSocket (legacy, default server)
   // and /api/servers/:serverId/console/ws (per-server console stream).
@@ -399,12 +188,9 @@ server.on('upgrade', (request, socket, head) => {
     return;
   }
 
-  // Handle /api/webmap-ws - proxy to WebMap's /ws endpoint
-  if (pathname === '/api/webmap-ws' || pathname.startsWith('/api/webmap-ws?')) {
-    console.log(`[WebMap WS] Proxying WebSocket upgrade to /ws`);
-    // Rewrite the URL to /ws for the WebMap server
-    request.url = pathname.replace('/api/webmap-ws', '/ws');
-    webMapWsProxy.ws(request, socket, head);
+  // Handle /api/webmap/t/<session>/ws - session-checked proxy to the map's /ws
+  if (pathname.startsWith(WEBMAP_PROXY_PREFIX)) {
+    void webMapProxy.handleUpgrade(request, socket, head);
     return;
   }
 
@@ -498,15 +284,6 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // Skip for WebMap proxy routes (these are proxied to the game server, not our API)
-  if (
-    req.path.startsWith('/api/webmap') ||
-    req.path.startsWith('/api/worlds') ||
-    req.path.startsWith('/api/tiles')
-  ) {
-    return next();
-  }
-
   // Wildcard CORS disables CSRF protection — only honor it when the operator
   // has explicitly opted in. Otherwise treat '*' as misconfiguration.
   if (config.corsOrigins === '*') {
@@ -514,12 +291,10 @@ app.use((req, res, next) => {
       console.warn(
         `[CSRF] Blocking ${req.method} ${req.path}: CORS_ORIGINS=* without CORS_ALLOW_WILDCARD=true`,
       );
-      res
-        .status(403)
-        .json({
-          error: 'CSRF validation failed',
-          detail: 'Wildcard CORS requires CORS_ALLOW_WILDCARD=true',
-        });
+      res.status(403).json({
+        error: 'CSRF validation failed',
+        detail: 'Wildcard CORS requires CORS_ALLOW_WILDCARD=true',
+      });
       return;
     }
     return next();
@@ -630,15 +405,6 @@ app.use(async (req, res, next) => {
     return next();
   }
 
-  // Skip for WebMap proxy routes
-  if (
-    req.path.startsWith('/api/webmap') ||
-    req.path.startsWith('/api/worlds') ||
-    req.path.startsWith('/api/tiles')
-  ) {
-    return next();
-  }
-
   // Skip for static assets
   if (
     req.path.startsWith('/assets') ||
@@ -703,6 +469,8 @@ app.use('/api/wiki', wikiRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/event-actions', eventActionsRoutes);
+// WebMap session minting/revocation (the map proxy is mounted before helmet).
+app.use('/api/webmap', webMapRoutes);
 // Public, unauthenticated status (off unless config.publicStatus.enabled).
 app.use('/api/public', publicRoutes);
 
@@ -925,6 +693,9 @@ server.listen(config.port, '0.0.0.0', async () => {
   initializePlayerTracking().catch((err) => {
     console.error('Failed to initialize player tracking:', err);
   });
+
+  // Keep each installed plugin's config on the panel's token (plugin 2.0 requires it)
+  initializePluginAuth();
 
   // Initialize plugin events connection (chat, deaths)
   initializePluginEvents();

@@ -4,7 +4,8 @@ import { requirePermission } from '../middleware/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import * as schedulerService from '../services/scheduler.js';
 import * as dockerService from '../services/docker.js';
-import { validateCommand } from '../utils/sanitize.js';
+import { stripControlChars } from '../utils/sanitize.js';
+import { actorFromRequest, authorizeCommand } from '../services/commandPolicy.js';
 import { isDemoMode, getDemoSchedulerTasks } from '../services/demoData.js';
 
 const router = Router();
@@ -64,26 +65,44 @@ router.put(
       return;
     }
 
-    // Reject scheduled commands that aren't on the console whitelist up front,
-    // so the operator gets a clear error instead of the command being silently
-    // skipped when its timer fires.
-    const incoming = req.body as { scheduledCommands?: Array<{ name?: string; command?: string }> };
-    if (Array.isArray(incoming?.scheduledCommands)) {
-      for (const cmd of incoming.scheduledCommands) {
-        const check = validateCommand(cmd?.command ?? '');
-        if (!check.valid) {
-          res
-            .status(400)
-            .json({
-              success: false,
-              error: `Scheduled command "${cmd?.name || cmd?.command || ''}": ${check.error}`,
-            });
-          return;
-        }
-      }
+    const incoming = req.body as Record<string, unknown> | undefined;
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+      res.status(400).json({ success: false, error: 'Configuration object required' });
+      return;
     }
 
-    const success = schedulerService.saveConfig(req.body, req.serverId);
+    // SECURITY: stored commands get the same check as the console (whitelist +
+    // console.execute / console.execute.admin) against the user saving them, so
+    // scheduler.edit alone can't plan /op, /stop or /ban. Rejected up front so
+    // the user gets a clear error instead of a silently skipped timer.
+    const update: Record<string, unknown> = { ...incoming };
+    const actor = actorFromRequest(req);
+    if ('scheduledCommands' in incoming) {
+      const review = await schedulerService.reviewScheduledCommands(
+        incoming.scheduledCommands,
+        actor,
+        req.serverId,
+      );
+      if (!review.ok) {
+        res.status(review.status).json({ success: false, error: review.error });
+        return;
+      }
+      update.scheduledCommands = review.value;
+    }
+    if ('quickCommands' in incoming) {
+      const review = await schedulerService.reviewQuickCommands(
+        incoming.quickCommands,
+        actor,
+        req.serverId,
+      );
+      if (!review.ok) {
+        res.status(review.status).json({ success: false, error: review.error });
+        return;
+      }
+      update.quickCommands = review.value;
+    }
+
+    const success = schedulerService.saveConfig(update, req.serverId);
     if (success) {
       res.json({ success: true, message: 'Configuration saved' });
     } else {
@@ -102,11 +121,15 @@ router.post(
       res.json({ success: true, message: '[DEMO] Scheduled command executed (simulated)' });
       return;
     }
-    const result = await schedulerService.runScheduledCommandNow(req.params.id, req.serverId);
+    const result = await schedulerService.runScheduledCommandNow(
+      req.params.id,
+      req.serverId,
+      actorFromRequest(req),
+    );
     if (result.success) {
       res.json({ success: true });
     } else {
-      res.status(400).json(result);
+      res.status(result.status ?? 400).json({ success: false, error: result.error });
     }
   },
 );
@@ -194,8 +217,15 @@ router.post(
     }
 
     const { name, command, icon, category } = req.body;
-    if (!name || !command) {
+    if (!name || !command || typeof name !== 'string' || typeof command !== 'string') {
       res.status(400).json({ error: 'Name and command are required' });
+      return;
+    }
+
+    // SECURITY: a quick command may only hold what its author could run in the console.
+    const auth = await authorizeCommand(actorFromRequest(req), command, req.serverId);
+    if (!auth.allowed) {
+      res.status(auth.status).json({ error: auth.error });
       return;
     }
 
@@ -223,7 +253,27 @@ router.put(
       res.json({ success: true, message: '[DEMO] Command updated (simulated)' });
       return;
     }
-    const success = schedulerService.updateQuickCommand(req.params.id, req.body, req.serverId);
+    const existing = schedulerService
+      .getQuickCommands(req.serverId)
+      .find((c) => c.id === req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Command not found' });
+      return;
+    }
+    // Only the editable fields; the id stays fixed.
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const updates: { name?: string; command?: string; icon?: string; category?: string } = {};
+    for (const key of ['name', 'command', 'icon', 'category'] as const) {
+      if (typeof body[key] === 'string') updates[key] = body[key] as string;
+    }
+    if (updates.command !== undefined && updates.command !== existing.command) {
+      const auth = await authorizeCommand(actorFromRequest(req), updates.command, req.serverId);
+      if (!auth.allowed) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+    }
+    const success = schedulerService.updateQuickCommand(req.params.id, updates, req.serverId);
     if (success) {
       res.json({ success: true });
     } else {
@@ -273,6 +323,14 @@ router.post(
       return;
     }
 
+    // SECURITY: clicking a quick command is a console command by the clicking
+    // user, so it needs the same whitelist + tier check as typing it.
+    const auth = await authorizeCommand(actorFromRequest(req), command.command, req.serverId);
+    if (!auth.allowed) {
+      res.status(auth.status).json({ success: false, error: auth.error });
+      return;
+    }
+
     const result = await dockerService.execCommand(command.command, req.serverId);
     res.json(result);
   },
@@ -290,12 +348,14 @@ router.post(
     }
 
     const { message } = req.body;
-    if (!message) {
+    // One console line: line breaks and other control characters become spaces.
+    const text = typeof message === 'string' ? stripControlChars(message).trim() : '';
+    if (!text) {
       res.status(400).json({ error: 'Message is required' });
       return;
     }
 
-    const result = await dockerService.execCommand(`/broadcast ${message}`, req.serverId);
+    const result = await dockerService.execCommand(`/broadcast ${text}`, req.serverId);
     res.json(result);
   },
 );

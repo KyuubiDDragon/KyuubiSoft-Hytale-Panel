@@ -235,8 +235,9 @@ async function saveCommand() {
     }
     showCommandForm.value = false
     await loadData()
-  } catch (e) {
-    error.value = t('errors.serverError')
+  } catch (e: any) {
+    // e.g. 403 when the command needs console.execute.admin
+    error.value = e?.response?.data?.error || t('errors.serverError')
   } finally {
     saving.value = false
   }
@@ -258,8 +259,8 @@ async function executeCommand(id: string) {
       successMessage.value = t('scheduler.commandExecuted')
       setTimeout(() => { successMessage.value = null }, 3000)
     }
-  } catch (e) {
-    error.value = t('errors.serverError')
+  } catch (e: any) {
+    error.value = e?.response?.data?.error || t('errors.serverError')
   }
 }
 
@@ -366,9 +367,9 @@ async function toggleScheduledCommand(cmd: ScheduledCommand) {
   cmd.enabled = !cmd.enabled
   try {
     await persistScheduledCommands()
-  } catch {
+  } catch (e: any) {
     cmd.enabled = !cmd.enabled
-    showToast(t('errors.serverError'), 'error')
+    showToast(e?.response?.data?.error || t('errors.serverError'), 'error')
   }
 }
 

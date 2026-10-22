@@ -8,6 +8,8 @@ import {
   createWsTicket,
 } from '../services/auth.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { asyncRoute } from '../utils/asyncRoute.js';
+import { JsonFileCorruptError } from '../utils/jsonStore.js';
 import { requirePermission } from '../middleware/permissions.js';
 import {
   getAllUsers,
@@ -152,137 +154,144 @@ function clearTotpFailures(username: string): void {
 }
 
 // POST /api/auth/login
-router.post('/login', loginLimiter, async (req: Request, res: Response) => {
-  const { username, password } = req.body as LoginRequest;
+router.post(
+  '/login',
+  loginLimiter,
+  asyncRoute(async (req: Request, res: Response) => {
+    const { username, password } = req.body as LoginRequest;
 
-  if (!username || !password) {
-    res.status(400).json({ detail: 'Username and password required' });
-    return;
-  }
-
-  // Demo mode: Accept demo credentials
-  if (isDemoMode()) {
-    const isAdmin = username === DEMO_ADMIN_USERNAME && password === DEMO_ADMIN_PASSWORD;
-    const isDemo = username === DEMO_USERNAME && password === DEMO_PASSWORD;
-
-    if (!isAdmin && !isDemo) {
-      res
-        .status(401)
-        .json({ detail: 'Invalid credentials. Use demo/demo or admin/admin in demo mode.' });
+    if (!username || !password) {
+      res.status(400).json({ detail: 'Username and password required' });
       return;
     }
 
-    const role = isAdmin ? 'admin' : 'viewer';
-    const permissions = isAdmin
-      ? ['*']
-      : [
-          'server.view_status',
-          'players.view',
-          'console.view',
-          'performance.view',
-          'backups.view',
-          'scheduler.view',
-          'mods.view',
-          'plugins.view',
-          'worlds.view',
-          'chat.view',
-          'activity.view',
-        ];
+    // Demo mode: Accept demo credentials
+    if (isDemoMode()) {
+      const isAdmin = username === DEMO_ADMIN_USERNAME && password === DEMO_ADMIN_PASSWORD;
+      const isDemo = username === DEMO_USERNAME && password === DEMO_PASSWORD;
 
-    // Create tokens even in demo mode for consistent behavior
-    const accessToken = await createAccessToken(username);
-    const refreshToken = await createRefreshToken(username);
+      if (!isAdmin && !isDemo) {
+        res
+          .status(401)
+          .json({ detail: 'Invalid credentials. Use demo/demo or admin/admin in demo mode.' });
+        return;
+      }
 
-    setRefreshCookie(res, refreshToken, req);
-    res.json({
-      access_token: accessToken,
-      refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
-      token_type: 'bearer',
-      role,
-      permissions,
-      demo: true,
-    });
-    return;
-  }
+      const role = isAdmin ? 'admin' : 'viewer';
+      const permissions = isAdmin
+        ? ['*']
+        : [
+            'server.view_status',
+            'players.view',
+            'console.view',
+            'performance.view',
+            'backups.view',
+            'scheduler.view',
+            'mods.view',
+            'plugins.view',
+            'worlds.view',
+            'chat.view',
+            'activity.view',
+          ];
 
-  const result = await verifyCredentials(username, password);
+      // Create tokens even in demo mode for consistent behavior
+      const accessToken = await createAccessToken(username);
+      const refreshToken = await createRefreshToken(username);
 
-  if (!result.valid) {
-    audit(req, 'auth.login_failed', { actor: username, success: false });
-    publish('auth.login_failed', { username, reason: 'invalid_credentials' });
-    authLogins.inc({ result: 'failed' });
-    res.status(401).json({ detail: 'Invalid credentials' });
-    return;
-  }
+      setRefreshCookie(res, refreshToken, req);
+      res.json({
+        access_token: accessToken,
+        refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
+        token_type: 'bearer',
+        role,
+        permissions,
+        demo: true,
+      });
+      return;
+    }
 
-  // 2FA gate. If the user has TOTP enabled we require a valid code (TOTP
-  // or a single-use backup code) BEFORE issuing any tokens. Browsers will
-  // typically submit a second login request with the code field populated.
-  if (await isTotpEnabled(username)) {
-    // Per-account lockout on top of the IP-based loginLimiter.
-    const lock = totpLockState(username);
-    if (lock.locked) {
-      audit(req, 'auth.2fa_locked', { actor: username, success: false });
-      res
-        .status(429)
-        .json({
+    const result = await verifyCredentials(username, password);
+
+    if (!result.valid) {
+      audit(req, 'auth.login_failed', { actor: username, success: false });
+      publish('auth.login_failed', { username, reason: 'invalid_credentials' });
+      authLogins.inc({ result: 'failed' });
+      res.status(401).json({ detail: 'Invalid credentials' });
+      return;
+    }
+
+    // 2FA gate. If the user has TOTP enabled we require a valid code (TOTP
+    // or a single-use backup code) BEFORE issuing any tokens. Browsers will
+    // typically submit a second login request with the code field populated.
+    if (await isTotpEnabled(username)) {
+      // Per-account lockout on top of the IP-based loginLimiter.
+      const lock = totpLockState(username);
+      if (lock.locked) {
+        audit(req, 'auth.2fa_locked', { actor: username, success: false });
+        res.status(429).json({
           detail: 'Too many 2FA failures, account temporarily locked',
           code: '2FA_LOCKED',
           retryAfter: lock.retryInSec,
         });
-      return;
+        return;
+      }
+      const totpCode = (req.body as { totpCode?: string }).totpCode;
+      if (!totpCode) {
+        res.status(401).json({ detail: '2FA code required', code: '2FA_REQUIRED' });
+        return;
+      }
+      const ok = await verifyTotpOrBackup(username, totpCode);
+      if (!ok) {
+        recordTotpFailure(username);
+        audit(req, 'auth.2fa_failed', { actor: username, success: false });
+        publish('auth.2fa_failed', { username });
+        authLogins.inc({ result: '2fa_failed' });
+        res.status(401).json({ detail: 'Invalid 2FA code', code: '2FA_INVALID' });
+        return;
+      }
+      clearTotpFailures(username);
     }
-    const totpCode = (req.body as { totpCode?: string }).totpCode;
-    if (!totpCode) {
-      res.status(401).json({ detail: '2FA code required', code: '2FA_REQUIRED' });
-      return;
-    }
-    const ok = await verifyTotpOrBackup(username, totpCode);
-    if (!ok) {
-      recordTotpFailure(username);
-      audit(req, 'auth.2fa_failed', { actor: username, success: false });
-      publish('auth.2fa_failed', { username });
-      authLogins.inc({ result: '2fa_failed' });
-      res.status(401).json({ detail: 'Invalid 2FA code', code: '2FA_INVALID' });
-      return;
-    }
-    clearTotpFailures(username);
-  }
 
-  const accessToken = await createAccessToken(username);
-  const refreshToken = await createRefreshToken(username);
-  const permissions = await getUserPermissions(username);
+    const accessToken = await createAccessToken(username);
+    const refreshToken = await createRefreshToken(username);
+    const permissions = await getUserPermissions(username);
 
-  setRefreshCookie(res, refreshToken, req);
-  audit(req, 'auth.login_success', { actor: username });
-  publish('auth.login_success', { username });
-  authLogins.inc({ result: 'success' });
-  res.json({
-    access_token: accessToken,
-    refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
-    token_type: 'bearer',
-    role: result.role,
-    permissions,
-  });
-});
+    setRefreshCookie(res, refreshToken, req);
+    audit(req, 'auth.login_success', { actor: username });
+    publish('auth.login_success', { username });
+    authLogins.inc({ result: 'success' });
+    res.json({
+      access_token: accessToken,
+      refresh_token: refreshToken, // kept in body for back-compat; cookie is the new path
+      token_type: 'bearer',
+      role: result.role,
+      permissions,
+    });
+  }),
+);
 
 // ============== 2FA / TOTP ==============
 
-router.post('/2fa/setup', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const result = await startTotpEnrollment(req.user!);
-    res.json(result);
-  } catch (err) {
-    res
-      .status(400)
-      .json({ detail: err instanceof Error ? err.message : 'Failed to start 2FA setup' });
-  }
-});
+router.post(
+  '/2fa/setup',
+  authMiddleware,
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const result = await startTotpEnrollment(req.user!);
+      res.json(result);
+    } catch (err) {
+      if (err instanceof JsonFileCorruptError) throw err;
+      res
+        .status(400)
+        .json({ detail: err instanceof Error ? err.message : 'Failed to start 2FA setup' });
+    }
+  }),
+);
 
 router.post(
   '/2fa/verify-enable',
   authMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const { code } = req.body as { code?: string };
     if (!code) {
       res.status(400).json({ detail: 'Code required' });
@@ -293,35 +302,40 @@ router.post(
       audit(req, 'auth.2fa_enabled');
       res.json(result);
     } catch (err) {
+      if (err instanceof JsonFileCorruptError) throw err;
       res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed to enable 2FA' });
     }
-  },
+  }),
 );
 
-router.post('/2fa/disable', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const { password, code } = req.body as { password?: string; code?: string };
-  if (!password || !code) {
-    res.status(400).json({ detail: 'Password and 2FA code required' });
-    return;
-  }
-  const creds = await verifyCredentials(req.user!, password);
-  if (!creds.valid) {
-    res.status(401).json({ detail: 'Invalid password' });
-    return;
-  }
-  if (!(await verifyTotpOrBackup(req.user!, code))) {
-    res.status(401).json({ detail: 'Invalid 2FA code' });
-    return;
-  }
-  await disableTotp(req.user!);
-  audit(req, 'auth.2fa_disabled');
-  res.json({ success: true });
-});
+router.post(
+  '/2fa/disable',
+  authMiddleware,
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const { password, code } = req.body as { password?: string; code?: string };
+    if (!password || !code) {
+      res.status(400).json({ detail: 'Password and 2FA code required' });
+      return;
+    }
+    const creds = await verifyCredentials(req.user!, password);
+    if (!creds.valid) {
+      res.status(401).json({ detail: 'Invalid password' });
+      return;
+    }
+    if (!(await verifyTotpOrBackup(req.user!, code))) {
+      res.status(401).json({ detail: 'Invalid 2FA code' });
+      return;
+    }
+    await disableTotp(req.user!);
+    audit(req, 'auth.2fa_disabled');
+    res.json({ success: true });
+  }),
+);
 
 router.post(
   '/2fa/regenerate-backup-codes',
   authMiddleware,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const { password } = req.body as { password?: string };
     if (!password) {
       res.status(400).json({ detail: 'Password required' });
@@ -339,12 +353,16 @@ router.post(
     } catch (err) {
       res.status(400).json({ detail: err instanceof Error ? err.message : 'Failed' });
     }
-  },
+  }),
 );
 
-router.get('/2fa/status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  res.json({ enabled: await isTotpEnabled(req.user!) });
-});
+router.get(
+  '/2fa/status',
+  authMiddleware,
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    res.json({ enabled: await isTotpEnabled(req.user!) });
+  }),
+);
 
 // ============== REST API KEYS ==============
 
@@ -361,7 +379,7 @@ router.post(
   '/api-keys',
   authMiddleware,
   requirePermission('apikeys.manage'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const { name, scopes, expiresAt } = req.body as {
       name?: string;
       scopes?: string[];
@@ -390,7 +408,7 @@ router.post(
     audit(req, 'apikey.created', { target: `apikey:${key.id}`, metadata: { name, scopes } });
     publish('user.created', { kind: 'api_key', name, scopes, owner: req.user });
     res.json({ key, token });
-  },
+  }),
 );
 
 router.delete(
@@ -409,73 +427,77 @@ router.delete(
 );
 
 // POST /api/auth/refresh
-router.post('/refresh', refreshLimiter, async (req: Request, res: Response) => {
-  const refresh_token = readRefreshToken(req);
+router.post(
+  '/refresh',
+  refreshLimiter,
+  asyncRoute(async (req: Request, res: Response) => {
+    const refresh_token = readRefreshToken(req);
 
-  if (!refresh_token) {
-    res.status(400).json({ detail: 'Refresh token required' });
-    return;
-  }
-
-  const result = verifyToken(refresh_token, 'refresh');
-
-  if (!result) {
-    res.status(401).json({ detail: 'Invalid or expired refresh token' });
-    return;
-  }
-
-  // Verify the refresh token wasn't invalidated by a password or role change.
-  if (!isDemoMode()) {
-    const currentVersion = await getTokenVersion(result.username);
-    if (result.tokenVersion !== undefined && result.tokenVersion !== currentVersion) {
-      res.status(401).json({ detail: 'Refresh token invalidated', code: 'TOKEN_INVALIDATED' });
+    if (!refresh_token) {
+      res.status(400).json({ detail: 'Refresh token required' });
       return;
     }
-  }
 
-  // Demo mode: Create new tokens for demo users
-  if (isDemoMode()) {
-    const isAdmin = result.username === DEMO_ADMIN_USERNAME;
+    const result = verifyToken(refresh_token, 'refresh');
+
+    if (!result) {
+      res.status(401).json({ detail: 'Invalid or expired refresh token' });
+      return;
+    }
+
+    // Verify the refresh token wasn't invalidated by a password or role change.
+    if (!isDemoMode()) {
+      const currentVersion = await getTokenVersion(result.username);
+      if (result.tokenVersion !== undefined && result.tokenVersion !== currentVersion) {
+        res.status(401).json({ detail: 'Refresh token invalidated', code: 'TOKEN_INVALIDATED' });
+        return;
+      }
+    }
+
+    // Demo mode: Create new tokens for demo users
+    if (isDemoMode()) {
+      const isAdmin = result.username === DEMO_ADMIN_USERNAME;
+      const accessToken = await createAccessToken(result.username);
+      const newRefreshToken = await createRefreshToken(result.username);
+      const permissions = isAdmin
+        ? ['*']
+        : [
+            'server.view_status',
+            'players.view',
+            'console.view',
+            'performance.view',
+            'backups.view',
+            'scheduler.view',
+            'mods.view',
+            'plugins.view',
+            'worlds.view',
+            'chat.view',
+            'activity.view',
+          ];
+
+      setRefreshCookie(res, newRefreshToken, req);
+      res.json({
+        access_token: accessToken,
+        refresh_token: newRefreshToken,
+        token_type: 'bearer',
+        role: isAdmin ? 'admin' : 'viewer',
+        permissions,
+        demo: true,
+      });
+      return;
+    }
+
     const accessToken = await createAccessToken(result.username);
     const newRefreshToken = await createRefreshToken(result.username);
-    const permissions = isAdmin
-      ? ['*']
-      : [
-          'server.view_status',
-          'players.view',
-          'console.view',
-          'performance.view',
-          'backups.view',
-          'scheduler.view',
-          'mods.view',
-          'plugins.view',
-          'worlds.view',
-          'chat.view',
-          'activity.view',
-        ];
 
     setRefreshCookie(res, newRefreshToken, req);
     res.json({
       access_token: accessToken,
       refresh_token: newRefreshToken,
       token_type: 'bearer',
-      role: isAdmin ? 'admin' : 'viewer',
-      permissions,
-      demo: true,
     });
-    return;
-  }
-
-  const accessToken = await createAccessToken(result.username);
-  const newRefreshToken = await createRefreshToken(result.username);
-
-  setRefreshCookie(res, newRefreshToken, req);
-  res.json({
-    access_token: accessToken,
-    refresh_token: newRefreshToken,
-    token_type: 'bearer',
-  });
-});
+  }),
+);
 
 // POST /api/auth/logout
 // Clears the refresh cookie ALWAYS — even when the access token is already
@@ -517,7 +539,7 @@ router.post(
   '/ws-ticket',
   authMiddleware,
   wsTicketLimiter,
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const username = req.user!;
     // Optional server scope. Callers can request a scoped ticket for a
     // specific Hytale instance; the ticket then only opens the matching
@@ -544,48 +566,52 @@ router.post(
 
     const ticket = createWsTicket(username, requestedServerId);
     res.json({ ticket, expiresIn: 30, serverId: requestedServerId ?? null });
-  },
+  }),
 );
 
 // GET /api/auth/me
-router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const username = req.user!; // authMiddleware guarantees this is set
+router.get(
+  '/me',
+  authMiddleware,
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const username = req.user!; // authMiddleware guarantees this is set
 
-  // Demo mode: return demo user info
-  if (isDemoMode()) {
-    const isAdmin = username === DEMO_ADMIN_USERNAME;
-    const role = isAdmin ? 'admin' : 'viewer';
-    const permissions = isAdmin
-      ? ['*']
-      : [
-          'server.view_status',
-          'players.view',
-          'console.view',
-          'performance.view',
-          'backups.view',
-          'scheduler.view',
-          'mods.view',
-          'plugins.view',
-          'worlds.view',
-          'chat.view',
-          'activity.view',
-        ];
-    res.json({ username, role, permissions, demo: true });
-    return;
-  }
+    // Demo mode: return demo user info
+    if (isDemoMode()) {
+      const isAdmin = username === DEMO_ADMIN_USERNAME;
+      const role = isAdmin ? 'admin' : 'viewer';
+      const permissions = isAdmin
+        ? ['*']
+        : [
+            'server.view_status',
+            'players.view',
+            'console.view',
+            'performance.view',
+            'backups.view',
+            'scheduler.view',
+            'mods.view',
+            'plugins.view',
+            'worlds.view',
+            'chat.view',
+            'activity.view',
+          ];
+      res.json({ username, role, permissions, demo: true });
+      return;
+    }
 
-  const user = await getUser(username);
-  const permissions = await getUserPermissions(username);
-  if (!user) {
-    // Validly-signed token for a username with no users.json record (the
-    // env-bootstrap admin before the file is written). It claims the admin
-    // role, so return admin permissions to match — otherwise the client would
-    // render a full admin as a permission-less "viewer".
-    res.json({ username, role: 'admin', permissions: ['*'] });
-    return;
-  }
-  res.json({ username, role: user.roleId, permissions });
-});
+    const user = await getUser(username);
+    const permissions = await getUserPermissions(username);
+    if (!user) {
+      // Validly-signed token for a username with no users.json record (the
+      // env-bootstrap admin before the file is written). It claims the admin
+      // role, so return admin permissions to match — otherwise the client would
+      // render a full admin as a permission-less "viewer".
+      res.json({ username, role: 'admin', permissions: ['*'] });
+      return;
+    }
+    res.json({ username, role: user.roleId, permissions });
+  }),
+);
 
 // ============== USER MANAGEMENT ==============
 

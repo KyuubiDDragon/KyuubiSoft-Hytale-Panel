@@ -16,7 +16,13 @@ import path from 'path';
 import { config } from '../config.js';
 import { createBackup, listBackups, deleteBackup } from './backup.js';
 import * as dockerService from './docker.js';
-import { validateCommand } from '../utils/sanitize.js';
+import { validateCommand, isValidPlayerName, stripControlChars } from '../utils/sanitize.js';
+import {
+  authorizeCommand,
+  authorizeStoredCommand,
+  reportSkippedCommand,
+  type CommandActor,
+} from './commandPolicy.js';
 import {
   ensureLoaded,
   getDefaultId,
@@ -64,6 +70,10 @@ interface ScheduledAnnouncement {
  * a persisted config can't be used to smuggle an arbitrary shell command.
  *   - mode 'daily'    → runs at each "HH:MM" in `times` every day
  *   - mode 'interval' → runs every `intervalMinutes` minutes
+ *
+ * `createdBy` is the panel user who last authorized the entry. Every run is
+ * re-checked against that user's current console tier (see commandPolicy);
+ * entries saved before it was recorded only run commands without admin tier.
  */
 interface ScheduledCommand {
   id: string;
@@ -73,6 +83,7 @@ interface ScheduledCommand {
   mode: 'daily' | 'interval';
   times: string[];
   intervalMinutes: number;
+  createdBy?: string;
 }
 
 interface QuickCommand {
@@ -335,11 +346,13 @@ async function cleanOldBackups(serverId: string): Promise<void> {
 
 // Send announcement to a specific server
 async function sendAnnouncement(message: string, serverId: string): Promise<void> {
-  if (!message) return;
+  // A multi-line announcement becomes one line instead of extra console commands.
+  const text = stripControlChars(message).trim();
+  if (!text) return;
 
   try {
-    await dockerService.execCommand(`/broadcast ${message}`, serverId);
-    console.log(`[Scheduler:${serverId}] Sent announcement: ${message}`);
+    await dockerService.execCommand(`/broadcast ${text}`, serverId);
+    console.log(`[Scheduler:${serverId}] Sent announcement: ${text}`);
   } catch (error) {
     console.error(`[Scheduler:${serverId}] Failed to send announcement:`, error);
   }
@@ -524,15 +537,27 @@ function msUntilNextDailyTime(times: string[]): number | null {
   return best;
 }
 
-// Run a scheduled command after re-validating it against the console whitelist.
+// Timer-fired run: acts on behalf of whoever saved the entry, re-checked against
+// the whitelist and that user's current console tier on this server.
 async function runScheduledCommand(cmd: ScheduledCommand, serverId: string): Promise<void> {
-  const check = validateCommand(cmd.command);
-  if (!check.valid) {
-    console.error(
-      `[Scheduler:${serverId}] Skipping scheduled command "${cmd.name}": ${check.error}`,
+  const auth = await authorizeStoredCommand(cmd.createdBy, cmd.command, serverId);
+  if (!auth.allowed) {
+    reportSkippedCommand(
+      'scheduler',
+      `scheduled_command:${serverId}:${cmd.id}`,
+      cmd.createdBy,
+      auth.error,
+      {
+        name: cmd.name,
+        serverId,
+      },
     );
     return;
   }
+  await executeScheduledCommand(cmd, serverId);
+}
+
+async function executeScheduledCommand(cmd: ScheduledCommand, serverId: string): Promise<void> {
   try {
     const result = await dockerService.execCommand(cmd.command, serverId);
     const timers = timersByServer[serverId];
@@ -720,7 +745,15 @@ export async function sendWelcomeMessage(playerName: string, serverId?: string):
   const id = await resolveServerId(serverId);
   const cfg = schedulerConfig[id] ?? (await loadConfig(id));
   if (!cfg.announcements.enabled || !cfg.announcements.welcome) return;
-  const message = cfg.announcements.welcome.replace('{player}', playerName);
+  if (!isValidPlayerName(playerName)) {
+    console.warn(
+      `[Scheduler:${id}] Skipping welcome message: invalid player name ${JSON.stringify(String(playerName).slice(0, 40))}`,
+    );
+    return;
+  }
+  const message = stripControlChars(
+    cfg.announcements.welcome.replace('{player}', playerName),
+  ).trim();
   await dockerService.execCommand(`/msg ${playerName} ${message}`, id);
 }
 
@@ -769,18 +802,179 @@ export function deleteQuickCommand(qcId: string, serverId?: string): boolean {
   return true;
 }
 
+// ============================================================
+// Save-time review of stored commands
+// ============================================================
+
+export type CommandReview<T> =
+  { ok: true; value: T } | { ok: false; status: 400 | 403; error: string };
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function normalizeScheduledCommand(raw: Partial<ScheduledCommand>): ScheduledCommand {
+  return {
+    id: asString(raw.id),
+    name: asString(raw.name),
+    command: asString(raw.command),
+    enabled: Boolean(raw.enabled),
+    mode: raw.mode === 'interval' ? 'interval' : 'daily',
+    times: Array.isArray(raw.times)
+      ? raw.times.filter((t): t is string => typeof t === 'string')
+      : [],
+    intervalMinutes: Number(raw.intervalMinutes) || 0,
+  };
+}
+
+// Renaming or disabling an entry is harmless. Anything that changes what runs,
+// or when, is re-authorized against the user saving it.
+function changesExecution(prev: ScheduledCommand, next: ScheduledCommand): boolean {
+  return (
+    prev.command !== next.command ||
+    (next.enabled && !prev.enabled) ||
+    prev.mode !== next.mode ||
+    prev.intervalMinutes !== next.intervalMinutes ||
+    JSON.stringify(prev.times) !== JSON.stringify(next.times)
+  );
+}
+
+const MAX_INTERVAL_MINUTES = 7 * 24 * 60;
+const DAILY_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// A fractional or huge interval would turn an allowed command into a flood
+// (Node clamps delays above 2^31 ms to 1 ms).
+function scheduleError(cmd: ScheduledCommand): string | null {
+  if (cmd.mode === 'interval') {
+    const ok =
+      Number.isInteger(cmd.intervalMinutes) &&
+      cmd.intervalMinutes >= 1 &&
+      cmd.intervalMinutes <= MAX_INTERVAL_MINUTES;
+    return ok
+      ? null
+      : `intervalMinutes must be a whole number between 1 and ${MAX_INTERVAL_MINUTES}`;
+  }
+  return cmd.times.every((t) => DAILY_TIME.test(t)) ? null : 'times must be "HH:MM" values';
+}
+
+/**
+ * Validate an incoming `scheduledCommands` array before it replaces the stored
+ * one. New or execution-relevant changes must pass the console check for the
+ * saving actor and are stamped with them as creator; untouched entries keep
+ * their stored creator (a client-sent `createdBy` is never trusted).
+ */
+export async function reviewScheduledCommands(
+  incoming: unknown,
+  actor: CommandActor,
+  serverId?: string,
+): Promise<CommandReview<ScheduledCommand[]>> {
+  if (!Array.isArray(incoming)) {
+    return { ok: false, status: 400, error: 'scheduledCommands must be an array' };
+  }
+  const stored = new Map(
+    (getConfig(serverId).scheduledCommands ?? []).map((c) => [c.id, c] as const),
+  );
+  const seen = new Set<string>();
+  const reviewed: ScheduledCommand[] = [];
+  for (const raw of incoming) {
+    const next = normalizeScheduledCommand((raw ?? {}) as Partial<ScheduledCommand>);
+    const label = next.name || next.command;
+    if (!next.id || seen.has(next.id)) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Scheduled command "${label}": missing or duplicate id`,
+      };
+    }
+    seen.add(next.id);
+    const check = validateCommand(next.command);
+    if (!check.valid) {
+      return { ok: false, status: 400, error: `Scheduled command "${label}": ${check.error}` };
+    }
+    const prevRaw = stored.get(next.id);
+    if (prevRaw && !changesExecution(normalizeScheduledCommand(prevRaw), next)) {
+      reviewed.push(prevRaw.createdBy ? { ...next, createdBy: prevRaw.createdBy } : next);
+      continue;
+    }
+    const invalidSchedule = scheduleError(next);
+    if (invalidSchedule) {
+      return { ok: false, status: 400, error: `Scheduled command "${label}": ${invalidSchedule}` };
+    }
+    const auth = await authorizeCommand(actor, next.command, serverId);
+    if (!auth.allowed) {
+      return {
+        ok: false,
+        status: auth.status,
+        error: `Scheduled command "${label}": ${auth.error}`,
+      };
+    }
+    reviewed.push({ ...next, createdBy: actor.username ?? undefined });
+  }
+  return { ok: true, value: reviewed };
+}
+
+function normalizeQuickCommand(raw: Partial<QuickCommand>): QuickCommand {
+  return {
+    id: asString(raw.id),
+    name: asString(raw.name),
+    command: asString(raw.command),
+    icon: asString(raw.icon, 'terminal') || 'terminal',
+    category: asString(raw.category, 'custom') || 'custom',
+  };
+}
+
+/**
+ * Validate an incoming `quickCommands` array (PUT /config). Quick commands are
+ * always re-checked against the user who clicks them, so only new or changed
+ * commands need the saver's console tier; untouched entries pass as stored.
+ */
+export async function reviewQuickCommands(
+  incoming: unknown,
+  actor: CommandActor,
+  serverId?: string,
+): Promise<CommandReview<QuickCommand[]>> {
+  if (!Array.isArray(incoming)) {
+    return { ok: false, status: 400, error: 'quickCommands must be an array' };
+  }
+  const stored = new Map(getQuickCommands(serverId).map((c) => [c.id, c] as const));
+  const seen = new Set<string>();
+  const reviewed: QuickCommand[] = [];
+  for (const raw of incoming) {
+    const next = normalizeQuickCommand((raw ?? {}) as Partial<QuickCommand>);
+    const label = next.name || next.command;
+    if (!next.id || seen.has(next.id) || !next.name) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Quick command "${label}": name and a unique id are required`,
+      };
+    }
+    seen.add(next.id);
+    if (stored.get(next.id)?.command !== next.command) {
+      const auth = await authorizeCommand(actor, next.command, serverId);
+      if (!auth.allowed) {
+        return { ok: false, status: auth.status, error: `Quick command "${label}": ${auth.error}` };
+      }
+    }
+    reviewed.push(next);
+  }
+  return { ok: true, value: reviewed };
+}
+
 // Run a configured scheduled command immediately (used by the "Run now" button).
+// "Run now" acts on behalf of the requesting user, exactly like the console.
 export async function runScheduledCommandNow(
   commandId: string,
-  serverId?: string,
-): Promise<{ success: boolean; error?: string }> {
+  serverId: string | undefined,
+  actor: CommandActor,
+): Promise<{ success: boolean; error?: string; status?: number }> {
   const id = await resolveServerId(serverId);
   const cfg = schedulerConfig[id] ?? (await loadConfig(id));
   const cmd = (cfg.scheduledCommands ?? []).find((c) => c.id === commandId);
-  if (!cmd) return { success: false, error: 'Scheduled command not found' };
-  const check = validateCommand(cmd.command);
-  if (!check.valid) return { success: false, error: check.error };
-  await runScheduledCommand(cmd, id);
+  if (!cmd) return { success: false, error: 'Scheduled command not found', status: 404 };
+  const auth = await authorizeCommand(actor, cmd.command, id);
+  if (!auth.allowed) return { success: false, error: auth.error, status: auth.status };
+  await executeScheduledCommand(cmd, id);
   return { success: true };
 }
 

@@ -161,7 +161,8 @@ export function getDefaultConfig(): PanelConfig {
       gameMode: 'Adventure',
       password: '',
       whitelist: false,
-      allowOp: true,
+      // --allow-op lets any player grant themselves admin via `/op self`.
+      allowOp: false,
     },
     publicStatus: { enabled: false },
     discord: { enabled: false, token: '', channelId: '' },

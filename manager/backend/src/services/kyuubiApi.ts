@@ -9,6 +9,9 @@
  * The plugin host (container name) and port are pulled from the registry
  * entry, falling back to legacy env-var config if the registry isn't ready
  * yet on fresh boot.
+ *
+ * Every request and WebSocket carries the server's plugin token
+ * (services/pluginAuth.ts). Plugin 2.0.0 requires it; 1.4.x ignores it.
  */
 
 import { config } from '../config.js';
@@ -23,7 +26,8 @@ import {
   getDemoPlayerDetails,
   getDemoPlayerInventory,
 } from './demoData.js';
-import { getDefaultId, getServer } from './servers.js';
+import { getDefaultId, getServer, resolveServerId } from './servers.js';
+import { ensurePluginAuthConfig, getPluginToken } from './pluginAuth.js';
 
 // Get directory name in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -31,7 +35,7 @@ const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version in
 // manager/backend/assets/plugins/ and plugins/kyuubisoft-api/build.gradle).
-export const PLUGIN_VERSION = '1.4.3';
+export const PLUGIN_VERSION = '2.0.0';
 // Legacy default plugin port. Kept exported for back-compat with callers
 // that read this constant directly (e.g. configService snapshots, status
 // fallbacks). Per-server callers should use `resolvePluginEndpoint(serverId)`
@@ -39,18 +43,67 @@ export const PLUGIN_VERSION = '1.4.3';
 export const PLUGIN_PORT = 18085;
 export const PLUGIN_JAR_NAME = `KyuubiSoftAPI-${PLUGIN_VERSION}.jar`;
 
+/**
+ * Why the plugin refused the panel. Both clear on the next server start,
+ * because the panel writes the token into the plugin config before it.
+ *  - token_rejected: 401, the plugin runs with a different (older) token
+ *  - token_missing:  503 auth_not_configured, the plugin has no token at all
+ */
+export type PluginAuthError = 'token_rejected' | 'token_missing';
+
+const AUTH_ERROR_MESSAGES: Record<PluginAuthError, string> = {
+  token_rejected:
+    'Plugin rejected the panel token. Restart the server so the plugin loads the current token.',
+  token_missing:
+    'Plugin has no auth token configured. Restart the server from the panel so it writes the token.',
+};
+
 export interface PluginStatus {
   installed: boolean;
   running: boolean;
   version: string | null;
   port: number;
   error?: string;
+  authError?: PluginAuthError;
 }
 
 export interface PluginApiResponse {
   success: boolean;
   data?: unknown;
   error?: string;
+  authError?: PluginAuthError;
+}
+
+/**
+ * `Authorization` header for the server's plugin. Empty when the token store
+ * cannot be read; the plugin then answers 401/503 and the status says so.
+ */
+export async function getPluginAuthHeaders(serverId?: string): Promise<Record<string, string>> {
+  try {
+    const token = await getPluginToken(await resolveServerId(serverId));
+    return { Authorization: `Bearer ${token}` };
+  } catch (error) {
+    console.warn(
+      '[KyuubiAPI] Plugin token unavailable:',
+      error instanceof Error ? error.message : error,
+    );
+    return {};
+  }
+}
+
+/** Map a failed plugin response to an auth error, if it is one. */
+async function classifyAuthFailure(response: Response): Promise<PluginAuthError | undefined> {
+  if (response.status === 401) return 'token_rejected';
+  if (response.status !== 503) return undefined;
+  const body = (await response
+    .clone()
+    .json()
+    .catch(() => null)) as { code?: unknown } | null;
+  return body?.code === 'auth_not_configured' ? 'token_missing' : undefined;
+}
+
+function authFailure<T>(authError: PluginAuthError): PluginApiResponse & { data?: T } {
+  return { success: false, error: AUTH_ERROR_MESSAGES[authError], authError };
 }
 
 /**
@@ -143,28 +196,42 @@ export async function getInstalledVersion(serverId?: string): Promise<string | n
 }
 
 /**
- * Check if the KyuubiSoft API plugin is running and responding
+ * Probe the plugin. A plugin that refuses the panel's token counts as not
+ * running (callers fall back to logs) but reports why.
  */
-export async function isPluginRunning(serverId?: string): Promise<boolean> {
+async function probePlugin(
+  serverId?: string,
+): Promise<{ running: boolean; authError?: PluginAuthError }> {
   // Demo mode: always report plugin as running
   if (isDemoMode()) {
-    return true;
+    return { running: true };
   }
 
   try {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const headers = await getPluginAuthHeaders(serverId);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const { host, port } = await resolvePluginEndpoint(serverId);
     const response = await fetch(`http://${host}:${port}/api/server/info`, {
+      headers,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
-    return response.ok;
+    if (response.ok) return { running: true };
+    const authError = await classifyAuthFailure(response);
+    return authError ? { running: false, authError } : { running: false };
   } catch {
-    return false;
+    return { running: false };
   }
+}
+
+/**
+ * Check if the KyuubiSoft API plugin is running and responding
+ */
+export async function isPluginRunning(serverId?: string): Promise<boolean> {
+  return (await probePlugin(serverId)).running;
 }
 
 /**
@@ -184,13 +251,14 @@ export async function getPluginStatus(serverId?: string): Promise<PluginStatus> 
     };
   }
 
-  const running = await isPluginRunning(serverId);
+  const { running, authError } = await probePlugin(serverId);
 
   return {
     installed: true,
     running,
     version,
     port,
+    ...(authError ? { authError } : {}),
   };
 }
 
@@ -207,18 +275,23 @@ export async function fetchFromPlugin<T>(
   }
 
   try {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const headers = await getPluginAuthHeaders(serverId);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const { host, port } = await resolvePluginEndpoint(serverId);
     const response = await fetch(`http://${host}:${port}${endpoint}`, {
+      headers,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` };
+      const authError = await classifyAuthFailure(response);
+      return authError
+        ? authFailure(authError)
+        : { success: false, error: `HTTP ${response.status}` };
     }
 
     const data = (await response.json()) as T;
@@ -318,18 +391,23 @@ export async function postToPlugin<T>(
   }
 
   try {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const headers: Record<string, string> = await getPluginAuthHeaders(serverId);
+    if (body) headers['Content-Type'] = 'application/json';
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const { host, port } = await resolvePluginEndpoint(serverId);
     const response = await fetch(`http://${host}:${port}${endpoint}`, {
       method: 'POST',
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
+
+    const authError = response.ok ? undefined : await classifyAuthFailure(response);
+    if (authError) return authFailure(authError);
 
     const data = (await response.json()) as Record<string, unknown>;
     // The plugin replies HTTP 200 with a JSON body {success, message|data, error}.
@@ -409,18 +487,23 @@ jvm_threads_current ${jvm.threads}
   }
 
   try {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const headers = await getPluginAuthHeaders(serverId);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const { host, port } = await resolvePluginEndpoint(serverId);
     const response = await fetch(`http://${host}:${port}/metrics`, {
+      headers,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` };
+      const authError = await classifyAuthFailure(response);
+      return authError
+        ? { success: false, error: AUTH_ERROR_MESSAGES[authError] }
+        : { success: false, error: `HTTP ${response.status}` };
     }
 
     const data = await response.text();
@@ -620,6 +703,10 @@ export async function installPlugin(
 
     // Copy new version
     fs.copyFileSync(bundledPath, targetPath);
+
+    // Plugin 2.0 stays locked without the panel's token; write it now so the
+    // next start loads it, even when that start does not go through the panel.
+    await ensurePluginAuthConfig(serverId);
 
     return { success: true };
   } catch (error) {

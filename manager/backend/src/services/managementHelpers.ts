@@ -10,6 +10,7 @@ import path from 'path';
 import crypto from 'crypto';
 import multer from 'multer';
 import { config } from '../config.js';
+import { resolveRealPathWithin } from '../utils/pathSecurity.js';
 
 // SECURITY: Magic bytes for file type verification
 export const FILE_SIGNATURES: Record<string, number[][] | null> = {
@@ -195,6 +196,34 @@ export function getWorldsPaths(): string[] {
     path.join(config.serverPath, 'universe', 'worlds'), // /opt/hytale/server/universe/worlds (symlink)
     path.join(config.serverPath, 'worlds'), // /opt/hytale/server/worlds (fallback)
   ];
+}
+
+/**
+ * Locate `<worldsRoot>/<worldName>/<relFile>` across the known worlds roots
+ * and return its REAL path (symlinks resolved), or null. A candidate that
+ * resolves outside its worlds root - e.g. a world folder or config.json that
+ * is a link to a panel file - is ignored, so world config reads/writes can't
+ * be redirected at secrets. Callers still validate worldName/relFile.
+ */
+export async function findWorldFile(worldName: string, relFile: string): Promise<string | null> {
+  for (const worldsPath of getWorldsPaths()) {
+    const candidate = path.join(worldsPath, worldName, relFile);
+    const real = resolveRealPathWithin(candidate, [worldsPath]);
+    if (!real) {
+      if (fs.existsSync(candidate)) {
+        console.warn(
+          `[SECURITY] Ignoring world file that resolves outside ${worldsPath}: ${candidate}`,
+        );
+      }
+      continue;
+    }
+    try {
+      if ((await stat(real)).isFile()) return real;
+    } catch {
+      // Not in this root - try the next one
+    }
+  }
+  return null;
 }
 
 export async function scanWorldFiles(worldPath: string): Promise<WorldFileInfo[]> {

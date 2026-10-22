@@ -1,13 +1,14 @@
 // Per-world configuration endpoints (config.json reads + writes, plus the
 // generic /worlds/:worldName/files/* read/write that exposes resources/*.json).
 import { Router, Request, Response } from 'express';
-import { readFile, writeFile, stat } from 'fs/promises';
-import path from 'path';
+import { readFile, writeFile } from 'fs/promises';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import { logActivity } from '../../services/activityLog.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
-import { getWorldsPaths } from '../../services/managementHelpers.js';
+// findWorldFile resolves symlinks and ignores files that point outside the
+// worlds root, so an imported world can't redirect these reads/writes.
+import { findWorldFile } from '../../services/managementHelpers.js';
 
 const router = Router();
 
@@ -32,19 +33,8 @@ router.get(
       }
 
       // Try multiple possible paths for world config
-      const possiblePaths = getWorldsPaths().map((wp) => path.join(wp, worldName, 'config.json'));
-      let configPath: string | null = null;
-      let content: string | null = null;
-
-      for (const tryPath of possiblePaths) {
-        try {
-          content = await readFile(tryPath, 'utf-8');
-          configPath = tryPath;
-          break;
-        } catch {
-          // Try next path
-        }
-      }
+      const configPath = await findWorldFile(worldName, 'config.json');
+      const content = configPath ? await readFile(configPath, 'utf-8') : null;
 
       if (!configPath || !content) {
         res.status(404).json({ error: 'World config not found' });
@@ -123,19 +113,8 @@ router.put(
       }
 
       // Try multiple possible paths for world config
-      const possiblePaths = getWorldsPaths().map((wp) => path.join(wp, worldName, 'config.json'));
-      let configPath: string | null = null;
-      let content: string | null = null;
-
-      for (const tryPath of possiblePaths) {
-        try {
-          content = await readFile(tryPath, 'utf-8');
-          configPath = tryPath;
-          break;
-        } catch {
-          // Try next path
-        }
-      }
+      const configPath = await findWorldFile(worldName, 'config.json');
+      const content = configPath ? await readFile(configPath, 'utf-8') : null;
 
       if (!configPath || !content) {
         res.status(404).json({ error: 'World config not found' });
@@ -280,17 +259,8 @@ router.get(
       }
 
       // Try multiple possible paths for the file
-      const possiblePaths = getWorldsPaths().map((wp) => path.join(wp, worldName, filePath));
-      let content: string | null = null;
-
-      for (const tryPath of possiblePaths) {
-        try {
-          content = await readFile(tryPath, 'utf-8');
-          break;
-        } catch {
-          // Try next path
-        }
-      }
+      const sourcePath = await findWorldFile(worldName, filePath);
+      const content = sourcePath ? await readFile(sourcePath, 'utf-8') : null;
 
       if (!content) {
         res.status(404).json({ error: 'File not found' });
@@ -366,20 +336,8 @@ router.put(
         jsonContent = JSON.stringify(content, null, 2);
       }
 
-      // Try multiple possible paths for the file
-      const possiblePaths = getWorldsPaths().map((wp) => path.join(wp, worldName, filePath));
-      let targetPath: string | null = null;
-
-      // Find existing file
-      for (const tryPath of possiblePaths) {
-        try {
-          await stat(tryPath);
-          targetPath = tryPath;
-          break;
-        } catch {
-          // Try next path
-        }
-      }
+      // Find existing file across the possible worlds roots
+      const targetPath = await findWorldFile(worldName, filePath);
 
       if (!targetPath) {
         res.status(404).json({ error: 'File not found' });

@@ -246,6 +246,16 @@ export const config = {
   demoMode,
 
   // ============================================================
+  // Feature flags
+  // ============================================================
+
+  // Multiserver (additional server instances) is experimental and OFF by
+  // default: most panel actions still target the default server only.
+  // While off, creating servers is refused and the UI hides the picker.
+  multiserverEnabled:
+    process.env.MULTISERVER_ENABLED === 'true' || process.env.MULTISERVER_ENABLED === '1',
+
+  // ============================================================
   // Setup state
   // ============================================================
 

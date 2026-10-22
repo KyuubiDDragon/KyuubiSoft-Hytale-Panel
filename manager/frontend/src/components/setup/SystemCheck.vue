@@ -13,25 +13,25 @@ const emit = defineEmits<{
 
 const isChecking = ref(false)
 
-// Icons for different check statuses
-const statusIcons: Record<string, { svg: string; class: string; bg: string }> = {
+// Icons for different check statuses (SVG path data, bound via :d — no v-html)
+const statusIcons: Record<string, { path: string; class: string; bg: string }> = {
   pass: {
-    svg: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />`,
+    path: 'M5 13l4 4L19 7',
     class: 'text-status-success',
     bg: 'bg-status-success/20',
   },
   fail: {
-    svg: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />`,
+    path: 'M6 18L18 6M6 6l12 12',
     class: 'text-status-error',
     bg: 'bg-status-error/20',
   },
   warning: {
-    svg: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />`,
+    path: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
     class: 'text-status-warning',
     bg: 'bg-status-warning/20',
   },
   checking: {
-    svg: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />`,
+    path: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
     class: 'text-ink-muted animate-spin',
     bg: 'bg-gray-500/20',
   },
@@ -129,8 +129,9 @@ onMounted(() => {
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
-                v-html="getStatusIcon(check.status).svg"
-              />
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="getStatusIcon(check.status).path" />
+              </svg>
             </div>
 
             <!-- Check Info -->

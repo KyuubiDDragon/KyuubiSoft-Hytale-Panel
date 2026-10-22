@@ -102,4 +102,13 @@ describe('requirePermission', () => {
     expect(getUserPermissionsForServer).toHaveBeenCalledWith('op', 'srv-1');
     expect(next).toHaveBeenCalledOnce();
   });
+
+  it('forwards a user-store failure to the error handler instead of hanging', async () => {
+    // e.g. a corrupt users.json: Express 4 would otherwise leave the request open.
+    const failure = new Error('users.json is corrupt');
+    getUserPermissions.mockRejectedValue(failure);
+    const { status, next } = await run('backups.create', { user: 'alice' });
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(status()).toBeUndefined();
+  });
 });

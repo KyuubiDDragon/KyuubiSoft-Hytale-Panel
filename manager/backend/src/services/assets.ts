@@ -10,7 +10,12 @@ import path from 'path';
 import { spawn } from 'child_process';
 import crypto from 'crypto';
 import { config } from '../config.js';
-import { isPathSafe, safePathJoin } from '../utils/pathSecurity.js';
+import { isPathSafe, safePathJoin, resolveRealPathWithin } from '../utils/pathSecurity.js';
+import {
+  assertSafeArchive,
+  assertSafeExtractedTree,
+  mergeExtractedTree,
+} from '../utils/archiveSafety.js';
 
 // Asset metadata file to track extraction state
 const ASSET_META_FILE = '.asset-meta.json';
@@ -310,7 +315,18 @@ export function extractAssets(): { success: boolean; error?: string; message?: s
  * Internal async extraction function
  */
 async function runExtraction(sourceFile: string): Promise<void> {
+  let archiveChecked = false;
   try {
+    // The zip sits in the (file-manager writable) server dir, so check its
+    // member list before anything is cleared or extracted: symlinks, special
+    // files, absolute paths or ".." would let the asset browser read outside
+    // the assets dir. A rejected archive leaves the current assets in place.
+    if (extractionProgress) {
+      extractionProgress.currentFile = 'Checking archive...';
+    }
+    await assertSafeArchive(sourceFile, 'zip');
+    archiveChecked = true;
+
     // Create assets directory if it doesn't exist
     if (!fs.existsSync(config.assetsPath)) {
       fs.mkdirSync(config.assetsPath, { recursive: true });
@@ -357,9 +373,15 @@ async function runExtraction(sourceFile: string): Promise<void> {
       extractionProgress.currentFile = 'Extracting...';
     }
 
+    // Extract into a private staging dir on the assets volume first and verify
+    // the result before anything becomes visible to the asset browser - the
+    // zip could have been swapped after the check above. (Dot-prefixed, so
+    // browsing and counting skip it; a failure below clears it with the rest.)
+    const staging = fs.mkdtempSync(path.join(config.assetsPath, '.kp-extract-'));
+
     await new Promise<void>((resolve, reject) => {
       // Use unzip with verbose mode to track files
-      const unzip = spawn('unzip', ['-o', sourceFile, '-d', config.assetsPath], {
+      const unzip = spawn('unzip', ['-o', sourceFile, '-d', staging], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -438,6 +460,10 @@ async function runExtraction(sourceFile: string): Promise<void> {
       extractionProgress.currentFile = 'Finalizing...';
     }
 
+    await assertSafeExtractedTree(staging);
+    await mergeExtractedTree(staging, config.assetsPath);
+    fs.rmSync(staging, { recursive: true, force: true });
+
     const fileCount = countFiles(config.assetsPath);
 
     // Calculate hash and save metadata
@@ -462,7 +488,7 @@ async function runExtraction(sourceFile: string): Promise<void> {
     // leave junk occupying the volume. The old assets were already cleared
     // before extraction started, so there's nothing useful to keep. Best-effort.
     try {
-      if (fs.existsSync(config.assetsPath)) {
+      if (archiveChecked && fs.existsSync(config.assetsPath)) {
         for (const item of fs.readdirSync(config.assetsPath)) {
           if (item === ASSET_META_FILE) continue;
           fs.rmSync(path.join(config.assetsPath, item), { recursive: true, force: true });
@@ -504,7 +530,12 @@ export function clearAssets(): { success: boolean; error?: string } {
 export function listAssetDirectory(relativePath: string = ''): AssetFileInfo[] | null {
   const targetPath = safePathJoin(config.assetsPath, relativePath);
 
-  if (!targetPath || !isPathSafe(targetPath, [config.assetsPath])) {
+  // Lexical check plus the real location, so a symlink can't lead outside.
+  if (
+    !targetPath ||
+    !isPathSafe(targetPath, [config.assetsPath]) ||
+    !resolveRealPathWithin(targetPath, [config.assetsPath])
+  ) {
     return null;
   }
 
@@ -527,7 +558,8 @@ export function listAssetDirectory(relativePath: string = ''): AssetFileInfo[] |
     const entryRelPath = relativePath ? `${relativePath}/${entry}` : entry;
 
     try {
-      const entryStat = fs.statSync(entryPath);
+      const entryStat = fs.lstatSync(entryPath);
+      if (entryStat.isSymbolicLink()) continue; // never follow links out of the assets dir
       const isDir = entryStat.isDirectory();
 
       items.push({
@@ -564,7 +596,12 @@ export function getAssetTree(
 ): AssetTreeNode | null {
   const targetPath = safePathJoin(config.assetsPath, relativePath);
 
-  if (!targetPath || !isPathSafe(targetPath, [config.assetsPath])) {
+  // Lexical check plus the real location, so a symlink can't lead outside.
+  if (
+    !targetPath ||
+    !isPathSafe(targetPath, [config.assetsPath]) ||
+    !resolveRealPathWithin(targetPath, [config.assetsPath])
+  ) {
     return null;
   }
 
@@ -602,6 +639,7 @@ export function getAssetTree(
 
           const entryPath = path.join(dirPath, entry);
           const entryRelPath = relPath ? `${relPath}/${entry}` : entry;
+          if (fs.lstatSync(entryPath).isSymbolicLink()) continue; // never follow links
 
           node.children!.push(buildTree(entryPath, entryRelPath, depth + 1));
         }
@@ -637,7 +675,12 @@ export function readAssetFile(relativePath: string): {
 } {
   const targetPath = safePathJoin(config.assetsPath, relativePath);
 
-  if (!targetPath || !isPathSafe(targetPath, [config.assetsPath])) {
+  // Lexical check plus the real location, so a symlink can't lead outside.
+  if (
+    !targetPath ||
+    !isPathSafe(targetPath, [config.assetsPath]) ||
+    !resolveRealPathWithin(targetPath, [config.assetsPath])
+  ) {
     return { success: false, error: 'Invalid path' };
   }
 
@@ -940,7 +983,8 @@ export function searchAssets(
         const entryRelPath = relativePath ? `${relativePath}/${entry}` : entry;
 
         try {
-          const stat = fs.statSync(entryPath);
+          const stat = fs.lstatSync(entryPath);
+          if (stat.isSymbolicLink()) continue; // never read through links
           const ext = path.extname(entry).toLowerCase();
 
           // Filter by extension if specified

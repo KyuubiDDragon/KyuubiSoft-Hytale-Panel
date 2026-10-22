@@ -14,6 +14,9 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     '@typescript-eslint/no-explicit-any': 'warn',
     'vue/multi-word-component-names': 'off',
-    'vue/no-v-html': 'off',
+    // v-html is an XSS sink. Every remaining use must be sanitized (see
+    // utils/safeHtml.ts) and opted in locally with a justified
+    // `eslint-disable-next-line vue/no-v-html -- <reason>` comment.
+    'vue/no-v-html': 'error',
   },
 };

@@ -31,6 +31,20 @@ async function effectivePermissions(req: AuthenticatedRequest): Promise<string[]
   return getUserPermissions(req.user);
 }
 
+// effectivePermissions() reads users.json; if that fails (corrupt file) the
+// error goes to the global handler (500) instead of hanging the request.
+async function effectivePermissionsOrForward(
+  req: AuthenticatedRequest,
+  next: NextFunction,
+): Promise<string[] | null> {
+  try {
+    return await effectivePermissions(req);
+  } catch (err) {
+    next(err);
+    return null;
+  }
+}
+
 /**
  * Middleware factory that requires ALL specified permissions (AND logic).
  * If the user has the '*' permission (admin wildcard), all permissions are granted.
@@ -42,7 +56,8 @@ export function requirePermission(...permissions: Permission[]) {
       return;
     }
 
-    const userPermissions = await effectivePermissions(req);
+    const userPermissions = await effectivePermissionsOrForward(req, next);
+    if (!userPermissions) return;
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {
@@ -78,7 +93,8 @@ export function requireAnyPermission(...permissions: Permission[]) {
       return;
     }
 
-    const userPermissions = await effectivePermissions(req);
+    const userPermissions = await effectivePermissionsOrForward(req, next);
+    if (!userPermissions) return;
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {

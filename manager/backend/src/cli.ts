@@ -22,12 +22,17 @@
  *    otherwise the panel could no longer update the file after a CLI call.
  *  - No import of config.ts / service modules: keeps the CLI free of startup
  *    side effects (dotenv, demo-mode checks, banner logs).
+ *  - Writes are atomic, but not locked against the running panel (the lock is
+ *    in-process). A login in the same instant can overwrite a CLI change;
+ *    `list-users` shows whether it stuck.
+ *  - A corrupt users.json is refused, never replaced: restore or repair it
+ *    first (the panel keeps a users.json.corrupt-* copy for that).
  */
-import { readFile, writeFile, rename, stat, chown, chmod } from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import { readJsonFile, writeJsonAtomic } from './utils/jsonStore.js';
 
 const DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -80,55 +85,23 @@ function generatePassword(): string {
   }
 }
 
+// A missing file is an empty store; a corrupt one aborts the command instead
+// of being overwritten with only the account this command touches.
 async function readUsers(): Promise<{ users: CliUser[] }> {
-  try {
-    const data = JSON.parse(await readFile(USERS_FILE, 'utf-8'));
-    if (!Array.isArray(data.users)) return { users: [] };
-    return data;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { users: [] };
-    throw err;
-  }
+  const data = await readJsonFile<{ users: CliUser[] }>(USERS_FILE, {
+    isValid: (value) => Array.isArray((value as { users?: unknown } | null)?.users),
+  });
+  return data ?? { users: [] };
 }
 
 /**
- * Atomic write that preserves the previous owner and mode. `docker exec`
- * defaults to root; a root-owned users.json would lock the panel (UID 9999)
- * out of its own user store on the next lastLogin/tokenVersion update.
+ * Atomic write (tmp → fsync → rename) that preserves the previous owner and
+ * mode. `docker exec` defaults to root; a root-owned users.json would lock the
+ * panel (UID 9999) out of its own user store on the next lastLogin/tokenVersion
+ * update.
  */
 async function writeUsers(data: { users: CliUser[] }): Promise<void> {
-  let prevUid: number | null = null;
-  let prevGid: number | null = null;
-  let prevMode: number | null = null;
-  try {
-    const st = await stat(USERS_FILE);
-    prevUid = st.uid;
-    prevGid = st.gid;
-    prevMode = st.mode & 0o777;
-  } catch {
-    // New file: fall back to the data dir's owner (the panel user).
-    try {
-      const st = await stat(DATA_DIR);
-      prevUid = st.uid;
-      prevGid = st.gid;
-      prevMode = 0o600;
-    } catch {
-      // Data dir missing — surface that to the caller via writeFile below.
-    }
-  }
-
-  const tmpFile = `${USERS_FILE}.tmp-${process.pid}`;
-  await writeFile(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
-  if (prevMode !== null) await chmod(tmpFile, prevMode).catch(() => {});
-  if (
-    prevUid !== null &&
-    prevGid !== null &&
-    typeof process.getuid === 'function' &&
-    process.getuid() === 0
-  ) {
-    await chown(tmpFile, prevUid, prevGid).catch(() => {});
-  }
-  await rename(tmpFile, USERS_FILE);
+  await writeJsonAtomic(USERS_FILE, data);
 }
 
 function fileExists(p: string): boolean {

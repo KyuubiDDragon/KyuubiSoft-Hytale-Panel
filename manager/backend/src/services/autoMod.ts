@@ -18,6 +18,7 @@ import { isDemoMode } from './demoData.js';
 import { logActivity } from './activityLog.js';
 import { recordPunishment } from './punishments.js';
 import { logger } from '../utils/logger.js';
+import { isValidPlayerName, stripControlChars } from '../utils/sanitize.js';
 
 const SYSTEM_USER = 'AutoMod';
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|gg|me|tv|co|xyz|dev)\b/i;
@@ -110,7 +111,16 @@ async function enforce(
   serverId: string | undefined,
   v: Violation,
 ): Promise<void> {
-  const reason = `AutoMod: ${v.detail}`;
+  // The name goes into /kick and /mute as-is; anything but a plain player name
+  // is refused instead of being written to the console.
+  if (!isValidPlayerName(player)) {
+    logger.warn(
+      `[AutoMod] not enforcing: invalid player name ${JSON.stringify(String(player).slice(0, 40))}`,
+    );
+    return;
+  }
+  const detail = stripControlChars(v.detail).trim();
+  const reason = `AutoMod: ${detail}`;
   const { execCommand } = await import('./docker.js');
   try {
     if (cfg.action === 'kick') {
@@ -130,7 +140,7 @@ async function enforce(
     } else {
       // warn — public reminder + recorded warning, no kick/mute.
       await execCommand(
-        `/say [AutoMod] ${player}, please mind the chat rules (${v.detail}).`,
+        `/say [AutoMod] ${player}, please mind the chat rules (${detail}).`,
         serverId,
       );
       recordPunishment({ serverId, playerName: player, type: 'warn', reason, byUser: SYSTEM_USER });

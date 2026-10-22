@@ -12,6 +12,7 @@
  * so installs that never use it don't pay the startup cost.
  */
 import { logger } from '../utils/logger.js';
+import { stripControlChars } from '../utils/sanitize.js';
 import { eventBus, type PanelEvent } from './eventBus.js';
 import { getConfig } from './configService.js';
 import { isDemoMode } from './demoData.js';
@@ -123,8 +124,10 @@ export async function startDiscordBot(): Promise<void> {
     try {
       if (msg.author.bot || msg.channelId !== d.channelId || !msg.content) return;
       const { execCommand } = await import('./docker.js');
-      const safe = msg.content.replace(/[\r\n]+/g, ' ').slice(0, 200);
-      await execCommand(`/say [Discord] ${msg.author.username}: ${safe}`);
+      // One console line: every control character (not just \r\n) becomes a space.
+      const safe = stripControlChars(msg.content).slice(0, 200);
+      const author = stripControlChars(msg.author.username).slice(0, 32);
+      await execCommand(`/say [Discord] ${author}: ${safe}`);
     } catch (err) {
       logger.warn(`[Discord] relay-to-game failed: ${err instanceof Error ? err.message : err}`);
     }

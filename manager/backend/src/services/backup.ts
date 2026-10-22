@@ -4,7 +4,7 @@ import { execSync, spawn } from 'child_process';
 import { config } from '../config.js';
 import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js';
 import { isValidBackupName } from '../utils/sanitize.js';
-import { isPathSafe } from '../utils/pathSecurity.js';
+import { isPathSafe, resolveRealPathWithin } from '../utils/pathSecurity.js';
 import { getDefaultId, getServer, listServers } from './servers.js';
 import { publish } from './eventBus.js';
 import { uploadBackupAsync } from './offsiteBackup.js';
@@ -262,7 +262,9 @@ export async function getBackupPath(backupId: string, serverId?: string): Promis
     }
 
     if (fs.existsSync(filePath)) {
-      return filePath;
+      // A "backup" that is a symlink out of the backups dir is refused, so
+      // download/restore/delete can't be pointed at panel files.
+      return resolveRealPathWithin(filePath, [paths.backups]) ? filePath : null;
     }
   }
 

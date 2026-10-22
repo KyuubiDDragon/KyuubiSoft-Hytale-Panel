@@ -12,6 +12,10 @@
  * wrong. World names are additionally validated against the real on-disk
  * world list, so only an existing directory inside a known worlds root can be
  * targeted (no traversal).
+ *
+ * Imports and restores go through extractArchiveSafely(): archives containing
+ * links, special files, absolute paths or ".." are refused before anything is
+ * written, and extraction happens in a staging directory first.
  */
 import fs from 'fs';
 import path from 'path';
@@ -22,11 +26,19 @@ import { getServer, getDefaultId } from './servers.js';
 import { getWorldsPaths } from './managementHelpers.js';
 import * as dockerService from './docker.js';
 import { logger } from '../utils/logger.js';
+import { archiveFormatFromName, extractArchiveSafely } from '../utils/archiveSafety.js';
 import { publish } from './eventBus.js';
 
 const execFileAsync = promisify(execFile);
 
 const WORLD_BACKUP_PREFIX = 'world_';
+
+// A worlds dir that was replaced by a link elsewhere (e.g. into the panel's
+// own data) must not receive an import: the real target has to stay inside
+// the game data or server directory.
+function worldExtractRoots(): string[] {
+  return [config.dataPath, config.serverPath];
+}
 
 export interface WorldBackup {
   id: string; // the tar.gz filename
@@ -230,10 +242,9 @@ export async function restoreWorld(
   // Restore into the primary worlds dir (first existing root, else the default).
   const roots = getWorldsPaths();
   const target = roots.find((r) => fs.existsSync(r)) ?? roots[0];
-  fs.mkdirSync(target, { recursive: true });
 
   try {
-    await execFileAsync('tar', ['-xzf', file, '-C', target], { maxBuffer: 1024 * 1024 * 10 });
+    await extractArchiveSafely(file, 'tar.gz', target, worldExtractRoots());
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'World restore failed' };
@@ -267,21 +278,13 @@ export async function importWorldArchive(
 ): Promise<{ success: boolean; error?: string }> {
   const roots = getWorldsPaths();
   const target = roots.find((r) => fs.existsSync(r)) ?? roots[0];
-  fs.mkdirSync(target, { recursive: true });
 
-  const lower = originalName.toLowerCase();
+  const format = archiveFormatFromName(originalName);
   try {
-    if (lower.endsWith('.zip')) {
-      await execFileAsync('unzip', ['-o', archivePath, '-d', target], {
-        maxBuffer: 1024 * 1024 * 10,
-      });
-    } else if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
-      await execFileAsync('tar', ['-xzf', archivePath, '-C', target], {
-        maxBuffer: 1024 * 1024 * 10,
-      });
-    } else {
+    if (!format) {
       return { success: false, error: 'Unsupported archive type (use .zip, .tar.gz or .tgz)' };
     }
+    await extractArchiveSafely(archivePath, format, target, worldExtractRoots());
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'World import failed' };

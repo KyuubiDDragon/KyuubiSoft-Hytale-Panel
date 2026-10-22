@@ -17,8 +17,9 @@ import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.j
 import { validateCommand, escapeShellArg } from '../utils/sanitize.js';
 import { clearOnlinePlayers } from './players.js';
 import { isDemoMode, getDemoStatus, getDemoStats, getDemoLogs } from './demoData.js';
-import { ensureLoaded, getDefaultId, getServer } from './servers.js';
+import { ensureLoaded, getDefaultId, getServer, resolveServerId } from './servers.js';
 import { createDockerClient } from './dockerClient.js';
+import { ensurePluginAuthConfig } from './pluginAuth.js';
 
 const docker = createDockerClient();
 
@@ -134,16 +135,24 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
 // Records the last time the panel itself stopped/restarted a server, so the
 // watchdog can tell a deliberate stop from a crash and not "restart" something
 // an operator just stopped (or fight a restart already in progress).
+// Keyed by the concrete registry id: legacy callers pass no id, the watchdog
+// always passes the real one, so both sides go through resolveServerId().
 const intentionalStops = new Map<string, number>();
-export function noteIntentionalStop(serverId?: string): void {
-  intentionalStops.set(serverId ?? '__default__', Date.now());
+export async function noteIntentionalStop(serverId?: string): Promise<void> {
+  intentionalStops.set(await resolveServerId(serverId), Date.now());
 }
-export function wasRecentlyStoppedIntentionally(
+export async function wasRecentlyStoppedIntentionally(
   serverId: string | undefined,
   withinMs: number,
-): boolean {
-  const ts = intentionalStops.get(serverId ?? '__default__');
+): Promise<boolean> {
+  const ts = intentionalStops.get(await resolveServerId(serverId));
   return ts !== undefined && Date.now() - ts < withinMs;
+}
+
+// Hytale 0.7 registers `stop` with the alias `shutdown`; `--crash` makes it
+// shut down as a crash, which the watchdog should still report as one.
+function isStopCommand(command: string): boolean {
+  return /^\/?(stop|shutdown)\b/i.test(command.trim()) && !/--crash\b/i.test(command);
 }
 
 export async function startContainer(serverId?: string): Promise<ActionResponse> {
@@ -151,6 +160,9 @@ export async function startContainer(serverId?: string): Promise<ActionResponse>
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
+    // The KyuubiSoft API plugin only accepts the panel's token; write it before
+    // the server process starts. Never throws, so it cannot block the start.
+    await ensurePluginAuthConfig(serverId);
     await withTimeout('start', container.start());
     return { success: true, message: 'Container started' };
   } catch (error) {
@@ -163,7 +175,7 @@ export async function stopContainer(serverId?: string): Promise<ActionResponse> 
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
-    noteIntentionalStop(serverId); // tell the watchdog this stop was deliberate
+    await noteIntentionalStop(serverId); // tell the watchdog this stop was deliberate
     await withTimeout('stop', container.stop({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
     clearOnlinePlayers();
     return { success: true, message: 'Container stopped' };
@@ -177,7 +189,8 @@ export async function restartContainer(serverId?: string): Promise<ActionRespons
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
-    noteIntentionalStop(serverId); // restart cycles through "stopped"; don't treat as a crash
+    await noteIntentionalStop(serverId); // restart cycles through "stopped"; don't treat as a crash
+    await ensurePluginAuthConfig(serverId); // picked up by the restarted process, see startContainer
     await withTimeout('restart', container.restart({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
     clearOnlinePlayers();
     return { success: true, message: 'Container restarted' };
@@ -206,7 +219,9 @@ export async function getLogs(tail: number = 100, serverId?: string): Promise<st
 const stdinStreams = new Map<string, NodeJS.WritableStream>();
 
 async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; key: string }> {
-  const key = serverId ?? '__default__';
+  // Same key for legacy and scoped callers, otherwise one container gets two
+  // concurrent stdin attaches.
+  const key = await resolveServerId(serverId);
   const existing = stdinStreams.get(key);
   if (existing) return { ok: true, key };
   try {
@@ -232,23 +247,29 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
 }
 
 export async function execCommand(command: string, serverId?: string): Promise<ActionResponse> {
+  // SECURITY: single gate for everything written to the game console. It runs
+  // after every caller has filled in its placeholders, so an embedded line
+  // break (a second, unchecked console command) or a TTY control byte (Ctrl-C
+  // shuts the server down) is rejected here no matter which path built it.
+  const validation = validateCommand(command);
+  if (!validation.valid) {
+    // JSON.stringify keeps a smuggled line break from forging log lines.
+    console.warn(
+      `[SECURITY] Blocked command: ${JSON.stringify(String(command).slice(0, 80))} Reason: ${validation.error}`,
+    );
+    return { success: false, error: validation.error || 'Invalid command' };
+  }
   if (isDemoMode()) {
-    const validation = validateCommand(command);
-    if (!validation.valid) return { success: false, error: validation.error || 'Invalid command' };
     return { success: true, message: `[DEMO] Command executed: ${command}` };
   }
   try {
-    const validation = validateCommand(command);
-    if (!validation.valid) {
-      console.warn(
-        `[SECURITY] Blocked command: ${command.substring(0, 50)}... Reason: ${validation.error}`,
-      );
-      return { success: false, error: validation.error || 'Invalid command' };
-    }
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
+
+    // A console stop exits the container just like a UI stop does.
+    if (isStopCommand(command)) await noteIntentionalStop(serverId);
 
     const attached = await ensureStdinAttached(serverId);
     const stream = attached.ok ? stdinStreams.get(attached.key) : undefined;

@@ -11,6 +11,7 @@ import path from 'path';
 import https from 'https';
 import http from 'http';
 import { config } from '../config.js';
+import { resolveFileInDir, resolveRealPathWithin } from '../utils/pathSecurity.js';
 
 // CFWidget API Configuration
 const CFWIDGET_API_BASE = 'api.cfwidget.com';
@@ -127,18 +128,63 @@ interface TrackedModsData {
   lastGlobalCheck: string | null;
 }
 
+// Tracked filenames become unlink() targets on update/uninstall, so they must
+// be plain mod file names inside the mods folder - never a path.
+const MOD_FILE_PATTERN = /\.(jar|zip)(\.disabled)?$/i;
+const DOWNLOAD_FILE_PATTERN = /\.(jar|zip)$/i;
+const SLUG_PATTERN = /^[a-z0-9_-]+$/i;
+const WISHLIST_PREFIX = '[wishlist]';
+
+/**
+ * Resolve a tracked/requested mod filename to its path in the mods folder, or
+ * null if it isn't a bare .jar/.zip file name ("../users.json", "/etc/x",
+ * "..\\x.jar" and friends are all refused).
+ */
+export function resolveTrackedModFile(filename: unknown): string | null {
+  if (typeof filename !== 'string' || !MOD_FILE_PATTERN.test(filename)) return null;
+  return resolveFileInDir(config.modsPath, filename);
+}
+
+function isValidTrackedKey(key: string): boolean {
+  if (key.startsWith(WISHLIST_PREFIX)) return SLUG_PATTERN.test(key.slice(WISHLIST_PREFIX.length));
+  return resolveTrackedModFile(key) !== null;
+}
+
 function getTrackedModsPath(): string {
   return path.join(config.dataPath, TRACKED_MODS_FILE);
 }
 
 async function loadTrackedMods(): Promise<TrackedModsData> {
+  let parsed: Partial<TrackedModsData>;
   try {
     const filePath = getTrackedModsPath();
     const data = await readFile(filePath, 'utf-8');
-    return JSON.parse(data);
+    parsed = JSON.parse(data);
   } catch {
-    return { mods: {}, lastGlobalCheck: null };
+    return { mods: Object.create(null), lastGlobalCheck: null };
   }
+
+  // The file lives in the shared data dir and older panels stored the request
+  // filename unchecked. Drop every entry whose key or filename isn't a plain
+  // mod file name before anything can turn it into a delete path.
+  // Prototype-less map: route keys such as "__proto__" must look up nothing.
+  const mods: Record<string, TrackedMod> = Object.create(null);
+  const stored = parsed?.mods && typeof parsed.mods === 'object' ? parsed.mods : {};
+  for (const [key, mod] of Object.entries(stored)) {
+    if (
+      mod &&
+      typeof mod === 'object' &&
+      isValidTrackedKey(key) &&
+      isValidTrackedKey(String(mod.filename))
+    ) {
+      mods[key] = mod;
+    } else {
+      logger.warn(
+        `[CFWidget] Dropping invalid tracked mod entry ${JSON.stringify(key).slice(0, 200)}`,
+      );
+    }
+  }
+  return { mods, lastGlobalCheck: parsed?.lastGlobalCheck ?? null };
 }
 
 async function saveTrackedMods(data: TrackedModsData): Promise<void> {
@@ -289,7 +335,8 @@ export function extractSlugFromUrl(input: string): string | null {
 
     // Expected format: ['hytale', 'mods', 'slug'] or similar
     if (pathParts.length >= 3 && pathParts[1] === 'mods') {
-      return pathParts[2];
+      // The slug ends up in storage keys - same character set as a direct slug.
+      return SLUG_PATTERN.test(pathParts[2]) ? pathParts[2] : null;
     }
 
     return null;
@@ -313,15 +360,24 @@ export async function trackMod(
     return { success: false, error: 'Invalid CurseForge URL or slug' };
   }
 
+  // Check if this is a wishlist item (no filename = not installed yet)
+  const isWishlist = !filename || (typeof filename === 'string' && filename.trim() === '');
+
+  // The filename is later used to delete the old file on update/uninstall:
+  // only a bare .jar/.zip name in the mods folder is accepted.
+  if (!isWishlist && !resolveTrackedModFile(filename)) {
+    return {
+      success: false,
+      error: 'Invalid mod filename (expected a .jar or .zip file name from the mods folder)',
+    };
+  }
+
   // Fetch mod info to validate and get current version
   const modInfo = await getModInfo(slug);
 
   if (!modInfo) {
     return { success: false, error: 'Mod not found on CurseForge' };
   }
-
-  // Check if this is a wishlist item (no filename = not installed yet)
-  const isWishlist = !filename || filename.trim() === '';
 
   // For wishlist items, use a placeholder filename based on slug
   const actualFilename = isWishlist ? `[wishlist]${slug}` : filename;
@@ -699,8 +755,11 @@ export async function installTrackedMod(trackedFilename: string): Promise<CFWidg
 
   // Sanitize filename
   const safeFilename = sanitizeFilename(latestFile.name);
-  if (!safeFilename) {
-    return { success: false, error: 'Invalid filename' };
+  if (!safeFilename || !DOWNLOAD_FILE_PATTERN.test(safeFilename)) {
+    return {
+      success: false,
+      error: 'Invalid filename (only .jar or .zip downloads are installed)',
+    };
   }
 
   // Ensure mods directory exists
@@ -715,8 +774,12 @@ export async function installTrackedMod(trackedFilename: string): Promise<CFWidg
   const resolvedDest = path.resolve(destPath);
   const resolvedTarget = path.resolve(config.modsPath);
 
-  // Security: Prevent path traversal
-  if (!resolvedDest.startsWith(resolvedTarget + path.sep)) {
+  // Security: Prevent path traversal (also via a symlink already sitting at
+  // the destination - the download stream would follow it)
+  if (
+    !resolvedDest.startsWith(resolvedTarget + path.sep) ||
+    !resolveRealPathWithin(destPath, [config.modsPath])
+  ) {
     logger.error('[CFWidget] Path traversal attempt detected');
     return { success: false, error: 'Invalid destination path' };
   }
@@ -739,13 +802,19 @@ export async function installTrackedMod(trackedFilename: string): Promise<CFWidg
   const isUpdate = tracked.installed && tracked.filename !== safeFilename;
 
   // Delete old file if updating to new version
-  if (isUpdate && tracked.filename && !tracked.filename.startsWith('[wishlist]')) {
-    try {
-      const oldPath = path.join(config.modsPath, tracked.filename);
-      await unlink(oldPath);
-      logger.info(`[CFWidget] Deleted old version: ${tracked.filename}`);
-    } catch {
-      // Old file might not exist, that's OK
+  if (isUpdate && tracked.filename && !tracked.filename.startsWith(WISHLIST_PREFIX)) {
+    const oldPath = resolveTrackedModFile(tracked.filename);
+    if (!oldPath) {
+      logger.warn(
+        `[CFWidget] Not deleting old version with invalid filename: ${JSON.stringify(tracked.filename)}`,
+      );
+    } else {
+      try {
+        await unlink(oldPath);
+        logger.info(`[CFWidget] Deleted old version: ${tracked.filename}`);
+      } catch {
+        // Old file might not exist, that's OK
+      }
     }
   }
 
@@ -801,9 +870,12 @@ export async function uninstallTrackedMod(
   }
 
   // Only delete file if it's installed (not a wishlist item)
-  if (tracked.installed && !filename.startsWith('[wishlist]')) {
+  if (tracked.installed && !filename.startsWith(WISHLIST_PREFIX)) {
+    const filePath = resolveTrackedModFile(filename);
+    if (!filePath) {
+      return { success: false, error: 'Invalid mod filename' };
+    }
     try {
-      const filePath = path.join(config.modsPath, filename);
       await unlink(filePath);
       logger.info(`[CFWidget] Deleted mod file: ${filename}`);
     } catch (err) {

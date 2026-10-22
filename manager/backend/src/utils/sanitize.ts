@@ -6,6 +6,16 @@
 // Dangerous shell characters that could be used for command injection
 const SHELL_METACHARACTERS = /[;&|`$(){}[\]<>\\!#*?~^\n\r]/g;
 
+// C0 controls (incl. \t \n \r), DEL, C1 controls and the Unicode line/paragraph
+// separators. The game console executes every stdin line with full console
+// rights, and because the container runs with a TTY, control bytes act as key
+// presses (Ctrl-C shuts the server down, ESC sequences recall history). None of
+// them may ever reach the console as part of a command.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTER_RUNS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g;
+
 // Valid patterns for different input types
 const PATTERNS = {
   // Player names: alphanumeric, underscore, hyphen (Minecraft/Hytale standard)
@@ -49,6 +59,25 @@ export function escapeShellArg(input: string): string {
   }
   // Replace single quotes with escaped version and wrap in single quotes
   return "'" + input.replace(/'/g, "'\\''") + "'";
+}
+
+/**
+ * True when the string contains a control character or a Unicode line/paragraph
+ * separator (see CONTROL_CHARACTERS).
+ */
+export function containsControlChars(input: string): boolean {
+  return typeof input === 'string' && CONTROL_CHARACTERS.test(input);
+}
+
+/**
+ * Replace every run of control characters with a single space. For free text
+ * (reasons, chat relays, announcements) that is embedded into a command.
+ */
+export function stripControlChars(input: string): string {
+  if (typeof input !== 'string') {
+    return '';
+  }
+  return input.replace(CONTROL_CHARACTER_RUNS, ' ');
 }
 
 /**
@@ -143,11 +172,10 @@ export function sanitizeMessage(message: string, maxLength: number = 256): strin
   if (typeof message !== 'string') {
     return '';
   }
-  // Remove shell metacharacters but keep basic punctuation and spaces
-  return message
+  // Remove shell metacharacters but keep basic punctuation and spaces. Control
+  // characters become a space so a reason can never start a second console line.
+  return stripControlChars(message)
     .replace(/[;&|`$(){}[\]<>\\!#*~^]/g, '')
-    .replace(/\n/g, ' ')
-    .replace(/\r/g, '')
     .trim()
     .substring(0, maxLength);
 }
@@ -160,6 +188,7 @@ export function isCommandSafe(command: string): boolean {
 
   // Check for common injection patterns
   const dangerousPatterns = [
+    CONTROL_CHARACTERS, // Second console line, TTY key presses (Ctrl-C, ESC, …)
     /[;&|`]/, // Command chaining
     /\$\(/, // Command substitution
     /\$\{/, // Variable expansion
@@ -257,19 +286,28 @@ const ADMIN_COMMAND_PREFIXES = new Set([
   '/kill',
   '/whitelist',
   '/update',
+  // Every /auth subcommand: logout/select/persistence take the server's Hytale
+  // sign-in away. Classified by base name, so this covers all of them.
+  '/auth',
+  // Turning saving off silently risks losing world data.
+  '/save-off',
 ]);
 
 /**
  * Returns the permission name required to run a given command. Returns null
- * if the command isn't on the whitelist (caller should reject regardless).
+ * if the command isn't on the whitelist or contains control characters
+ * (caller should reject regardless).
  */
 export function getCommandRequiredPermission(
   command: string,
 ): 'console.execute' | 'console.execute.admin' | null {
   if (typeof command !== 'string') return null;
+  if (containsControlChars(command)) return null;
   const trimmed = command.trim();
   if (!trimmed.startsWith('/')) return null;
-  const cmdName = trimmed.split(/\s+/)[0].toLowerCase();
+  // The whitelist also accepts "/name:suffix"; classify by the base name so a
+  // suffixed admin command can never fall into the plain tier.
+  const cmdName = trimmed.split(/\s+/)[0].toLowerCase().split(':')[0];
   if (!isCommandAllowed(trimmed)) return null;
   return ADMIN_COMMAND_PREFIXES.has(cmdName) ? 'console.execute.admin' : 'console.execute';
 }
@@ -303,6 +341,12 @@ export function isCommandAllowed(command: string): boolean {
 export function validateCommand(command: string): { valid: boolean; error?: string } {
   if (typeof command !== 'string' || !command.trim()) {
     return { valid: false, error: 'Command is required' };
+  }
+
+  // Checked on the raw string, before trim() can hide a trailing line break:
+  // the console runs every line it receives, so a command must be one line.
+  if (containsControlChars(command)) {
+    return { valid: false, error: 'Command must be a single line without control characters' };
   }
 
   const trimmed = command.trim();
@@ -357,6 +401,8 @@ export function buildSafeCommand(
 export default {
   sanitizeString,
   escapeShellArg,
+  containsControlChars,
+  stripControlChars,
   isValidPlayerName,
   sanitizePlayerName,
   isValidItemId,

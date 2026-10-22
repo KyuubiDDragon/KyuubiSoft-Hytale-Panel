@@ -17,7 +17,10 @@ const emit = defineEmits<{
 const serverPassword = ref('')
 const showPassword = ref(false)
 const whitelistEnabled = ref(true)
-const allowOperator = ref(true)
+// Off by default: --allow-op lets ANY player take full admin rights via
+// `/op self`. Admins are made from the console with `/op add`, which works
+// without the flag.
+const allowOperator = ref(false)
 
 // Validation state
 const passwordError = ref('')
@@ -193,14 +196,25 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Warning when enabled -->
-        <div v-if="allowOperator" class="mt-3 p-3 bg-status-warning/10 rounded-lg border border-status-warning/20">
+        <!-- Warning: shown always, the risk must be clear before enabling -->
+        <div
+          class="mt-3 p-3 rounded-lg border"
+          :class="allowOperator ? 'bg-status-error/10 border-status-error/30' : 'bg-status-warning/10 border-status-warning/20'"
+          role="note"
+        >
           <div class="flex items-start gap-2">
-            <svg class="w-4 h-4 text-status-warning mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg
+              class="w-4 h-4 mt-0.5 flex-shrink-0"
+              :class="allowOperator ? 'text-status-error' : 'text-status-warning'"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <p class="text-xs text-status-warning">
-              {{ t('setup.allowOperatorWarning') }}
+            <p class="text-xs" :class="allowOperator ? 'text-status-error' : 'text-status-warning'">
+              {{ t('allowOpSecurity.warning') }} {{ t('allowOpSecurity.safeAlternative') }}
             </p>
           </div>
         </div>

@@ -118,10 +118,13 @@ if [ "$DISABLE_SENTRY" = "true" ]; then
     SERVER_ARGS+=("--disable-sentry")
 fi
 
-# Add --allow-op if enabled in panel config
+# Add --allow-op if enabled in panel config. Off unless explicitly chosen:
+# the flag unlocks `/op self`, which gives full admin rights to ANY player who
+# types it. Admins are made from the console with `/op add <name>` instead.
 ALLOW_OP=$(get_panel_config_bool "allowOp" "false")
 if [ "$ALLOW_OP" = "true" ]; then
-    echo "[INFO] OP commands allowed"
+    echo "[WARN] --allow-op is enabled: any player can grant themselves full admin rights with /op self."
+    echo "[WARN] Disable it in the panel settings and make admins from the console with /op add <name>."
     SERVER_ARGS+=("--allow-op")
 fi
 

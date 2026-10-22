@@ -14,6 +14,7 @@ import { getInstalledCurseForgeInfo, checkForUpdates as checkCurseForgeUpdates, 
 import { getInstalledModtaleInfo, getModDetails as getModtaleDetails } from './modtale.js';
 import { getInstalledStackMartInfo, getResourceDetails as getStackMartDetails } from './stackmart.js';
 import { getModRegistry, isModInstalled, getLatestRelease } from './modStore.js';
+import { sanitizeExternalHtml } from '../utils/htmlSanitizer.js';
 
 /**
  * Normalize version string for comparison (remove 'v' prefix and trim)
@@ -43,7 +44,8 @@ export interface UnifiedModUpdate {
   // Source-specific IDs
   sourceId?: string;
   modId?: number;
-  // Changelog for the latest version
+  // Changelog for the latest version. Author-controlled, so it is always
+  // passed through sanitizeExternalHtml() before it leaves the backend.
   changelog?: string;
 }
 
@@ -102,9 +104,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       if (hasUpdate && updateInfo?.latestFileId) {
         try {
           const changelogText = await getCurseForgeChangelog(info.modId, updateInfo.latestFileId);
-          if (changelogText) {
-            changelog = changelogText;
-          }
+          changelog = sanitizeExternalHtml(changelogText);
         } catch {
           // Failed to get changelog
         }
@@ -147,8 +147,8 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
           // Use normalized version comparison to handle 'v' prefix differences
           hasUpdate = !versionsAreEqual(info.version, latestVersion);
           // Get changelog from latest version
-          if (hasUpdate && latestVer.changelog) {
-            changelog = latestVer.changelog;
+          if (hasUpdate) {
+            changelog = sanitizeExternalHtml(latestVer.changelog);
           }
         }
       } catch {
@@ -231,8 +231,8 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
             // Use normalized version comparison to handle 'v' prefix differences
             hasUpdate = !versionsAreEqual(installed.installedVersion || '', release.tag_name);
             // Get changelog from GitHub release body
-            if (hasUpdate && release.body) {
-              changelog = release.body;
+            if (hasUpdate) {
+              changelog = sanitizeExternalHtml(release.body);
             }
           }
         } catch {

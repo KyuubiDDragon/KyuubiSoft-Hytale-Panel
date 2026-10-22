@@ -76,7 +76,7 @@ const configSummary = computed(() => {
     language: data.language?.language || 'en',
     plugin: {
       installed: pluginData?.installPlugin ?? true,
-      version: (pluginData?.version as string) || '1.1.6',
+      version: (pluginData?.version as string) || '2.0.0',
     },
     integrations: {
       modtale: !!integrationsData?.modtaleApiKey,

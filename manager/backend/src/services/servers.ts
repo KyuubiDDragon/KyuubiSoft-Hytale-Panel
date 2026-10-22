@@ -118,10 +118,14 @@ async function writeFileAtomic(data: ServersFile): Promise<void> {
   await rename(tmp, SERVERS_FILE);
 }
 
+// Id of the registry entry synthesised from the legacy single-server env
+// config. That entry is the compose-stack's `hytale` service.
+const LEGACY_DEFAULT_ID = 'default';
+
 function buildDefaultEntryFromLegacyConfig(): ServerInstance {
   const containerName = config.gameContainerName;
   return {
-    id: 'default',
+    id: LEGACY_DEFAULT_ID,
     name: 'Primary Server',
     containerName,
     status: 'ready',
@@ -181,6 +185,32 @@ export async function getDefaultId(): Promise<string> {
   return (await ensureLoaded()).defaultId;
 }
 
+/**
+ * Normalise an optional server id to a concrete registry id. Legacy callers
+ * (every /api/server/* route) pass `undefined`; anything keyed per server —
+ * intentional-stop markers, stdin streams, … — must use the same id the
+ * watchdog and the scoped routes use, never a placeholder key.
+ */
+export async function resolveServerId(serverId?: string): Promise<string> {
+  if (serverId) return serverId;
+  try {
+    return await getDefaultId();
+  } catch {
+    // Registry not readable yet (very early boot): the legacy entry's id.
+    return LEGACY_DEFAULT_ID;
+  }
+}
+
+/**
+ * True for the entry backing the compose-stack's own game container, which
+ * is never deletable. Matched by id only: an extra entry that merely reuses
+ * that container's name stays removable (registry-only), while the container
+ * itself is still protected by the ownership-label check on delete.
+ */
+export function isComposeServer(server: ServerInstance): boolean {
+  return server.id === LEGACY_DEFAULT_ID;
+}
+
 export async function setDefaultId(id: string): Promise<void> {
   const file = await ensureLoaded();
   if (!file.servers.some((s) => s.id === id)) throw new Error('Unknown server id');
@@ -190,7 +220,6 @@ export async function setDefaultId(id: string): Promise<void> {
 
 export interface CreateServerInput {
   name: string;
-  containerName?: string;
   serverPort?: number;
   webMapPort?: number;
   webMapWsPort?: number;
@@ -220,7 +249,9 @@ export async function createServerInstance(input: CreateServerInput): Promise<Se
   const webMapPort = input.webMapPort ?? findFreePort(used, 18081);
   const webMapWsPort = input.webMapWsPort ?? findFreePort(used, 18082);
   const pluginPort = input.pluginPort ?? findFreePort(used, 18085);
-  const containerName = input.containerName ?? `hytale-srv-${id}`;
+  // Always generated: a caller-chosen name could point the instance (and a
+  // later delete) at an unrelated container such as the manager itself.
+  const containerName = `hytale-srv-${id}`;
   const root = `/opt/hytale-instances/${id}`;
   const instance: ServerInstance = {
     id,
@@ -258,17 +289,27 @@ export async function updateServerInstance(
   return file.servers[idx];
 }
 
-export async function deleteServerInstance(id: string): Promise<boolean> {
+export type DeleteBlockReason = 'not_found' | 'compose' | 'default' | 'last';
+
+/**
+ * Why a registry entry may not be deleted, or null when it may. Callers must
+ * check this BEFORE touching the backing container: the compose server, the
+ * current default and the last remaining server are never deletable.
+ */
+export async function getDeleteBlockReason(id: string): Promise<DeleteBlockReason | null> {
   const file = await ensureLoaded();
-  if (file.defaultId === id && file.servers.length > 1) {
-    // Promote the first remaining server as new default
-    const fallback = file.servers.find((s) => s.id !== id);
-    if (fallback) file.defaultId = fallback.id;
-  }
-  if (file.defaultId === id) return false; // can't delete the only server
-  const before = file.servers.length;
+  const server = file.servers.find((s) => s.id === id);
+  if (!server) return 'not_found';
+  if (isComposeServer(server)) return 'compose';
+  if (file.defaultId === id) return 'default';
+  if (file.servers.length <= 1) return 'last';
+  return null;
+}
+
+export async function deleteServerInstance(id: string): Promise<boolean> {
+  if (await getDeleteBlockReason(id)) return false;
+  const file = await ensureLoaded();
   file.servers = file.servers.filter((s) => s.id !== id);
-  if (file.servers.length === before) return false;
   await writeFileAtomic(file);
   await fireDeleteHooks(id);
   return true;

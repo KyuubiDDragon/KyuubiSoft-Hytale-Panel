@@ -16,6 +16,7 @@ import {
 } from '../../services/activityLog.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 import { isPathSafe, sanitizeFileName } from '../../utils/pathSecurity.js';
+import { isValidPlayerName, isValidUUID, sanitizeMessage } from '../../utils/sanitize.js';
 import {
   isDemoMode,
   getDemoMods,
@@ -368,11 +369,15 @@ router.post(
     }
 
     try {
-      const { player, reason } = req.body;
-      if (!player || typeof player !== 'string') {
-        res.status(400).json({ error: 'player name required' });
+      const { player } = req.body;
+      // SECURITY: both values end up in console commands; a name must be a plain
+      // player name and the reason a single line.
+      if (!player || typeof player !== 'string' || !isValidPlayerName(player)) {
+        res.status(400).json({ error: 'Valid player name required' });
         return;
       }
+      const reason =
+        typeof req.body.reason === 'string' ? sanitizeMessage(req.body.reason, 100) : '';
 
       // Import docker service to execute ban command
       const { execCommand } = await import('../../services/docker.js');
@@ -438,6 +443,11 @@ router.delete(
 
     try {
       const { player } = req.params;
+      // SECURITY: the value is placed into /unban; only a player name or UUID.
+      if (!isValidPlayerName(player) && !isValidUUID(player)) {
+        res.status(400).json({ error: 'Valid player name or UUID required' });
+        return;
+      }
 
       // Import docker service to check status and execute commands
       const { execCommand, getStatus } = await import('../../services/docker.js');

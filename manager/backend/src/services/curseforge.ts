@@ -9,7 +9,7 @@ import { writeFile, mkdir, access, readFile, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
-import { sanitizeFileName } from '../utils/pathSecurity.js';
+import { sanitizeFileName, resolveFileInDir } from '../utils/pathSecurity.js';
 import { untrackMod as cfwidgetUntrackMod } from './cfwidget.js';
 
 // Security: Regex pattern for validating mod IDs (CurseForge uses numeric IDs)
@@ -773,8 +773,10 @@ export async function installModFromCurseForge(
   // Check if this mod is already installed (for updates) and remove old file
   const existingInstall = await isCurseForgeModInstalled(modId);
   if (existingInstall && existingInstall.filename) {
-    const oldFilePath = path.join(config.modsPath, existingInstall.filename);
+    // The stored filename is untrusted (shared data dir): only a bare name in the mods folder.
+    const oldFilePath = resolveFileInDir(config.modsPath, existingInstall.filename);
     try {
+      if (!oldFilePath) throw new Error('invalid stored filename');
       await unlink(oldFilePath);
       logger.info(`[CurseForge] Removed old mod file: ${existingInstall.filename}`);
     } catch (e) {
@@ -1032,12 +1034,10 @@ export async function uninstallCurseForge(
   }
 
   const basePath = config.modsPath;
-  const filePath = path.join(basePath, installed.filename);
-  const resolvedPath = path.resolve(filePath);
-  const resolvedBase = path.resolve(basePath);
-
-  // Security: Verify path is within allowed directory
-  if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
+  // Security: the stored filename (shared data dir) must be a bare name in the base folder -
+  // "sub/x.jar" through a symlinked sub folder would pass a plain prefix check.
+  const filePath = resolveFileInDir(basePath, installed.filename);
+  if (!filePath) {
     return { success: false, error: 'Invalid file path' };
   }
 

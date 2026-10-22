@@ -24,6 +24,7 @@ import path from 'path';
 import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile } from '../config.js';
 import { getCurrentVersion } from './panelVersionService.js';
+import { readJsonFile, updateJsonFile } from '../utils/jsonStore.js';
 
 // Paths
 const DATA_DIR = config.dataPath;
@@ -190,16 +191,28 @@ async function readPanelConfig(): Promise<PanelConfig | null> {
   }
 }
 
+const hasUsersArray = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  Array.isArray((value as { users?: unknown }).users);
+
 /**
- * Check if users.json already has an admin user
+ * Check if users.json already has an admin user. An existing but unreadable
+ * file counts as "has admin": migration must never replace it with a single
+ * env admin, which would wipe every other account and its 2FA.
  */
 async function hasExistingAdmin(): Promise<boolean> {
   try {
-    const content = await readFile(USERS_FILE, 'utf-8');
-    const usersData = JSON.parse(content);
-    return usersData.users && usersData.users.length > 0;
-  } catch {
-    return false;
+    const usersData = await readJsonFile<{ users: unknown[] }>(USERS_FILE, {
+      isValid: hasUsersArray,
+    });
+    return !!usersData && usersData.users.length > 0;
+  } catch (error) {
+    logger.error(
+      `[Migration] ${USERS_FILE} exists but is unreadable — leaving it untouched:`,
+      error,
+    );
+    return true;
   }
 }
 
@@ -312,7 +325,13 @@ export async function runMigration(): Promise<boolean> {
         ],
       };
 
-      await writeFile(USERS_FILE, JSON.stringify(usersData, null, 2), 'utf-8');
+      // Re-checked under the file lock: never replaces accounts that appeared
+      // since hasExistingAdmin() ran.
+      await updateJsonFile<{ users: unknown[] }>(
+        USERS_FILE,
+        (current) => (current && current.users.length > 0 ? undefined : usersData),
+        { isValid: hasUsersArray },
+      );
       logger.info('[Migration] Admin user created:', envConfig.managerUsername);
     } else if (hasAdmin) {
       logger.info('[Migration] Admin user already exists, skipping user creation');
@@ -323,7 +342,9 @@ export async function runMigration(): Promise<boolean> {
       patchline: existingPanelConfig?.patchline || envConfig.patchline || 'release',
       acceptEarlyPlugins: existingPanelConfig?.acceptEarlyPlugins ?? false,
       disableSentry: existingPanelConfig?.disableSentry ?? false,
-      allowOp: existingPanelConfig?.allowOp ?? serverConfig?.AllowOp ?? true,
+      // An explicit earlier choice is kept; otherwise off, which matches what
+      // start-server.sh did without a panel-config.json (no --allow-op).
+      allowOp: existingPanelConfig?.allowOp ?? serverConfig?.AllowOp ?? false,
     };
 
     await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
@@ -349,7 +370,7 @@ export async function runMigration(): Promise<boolean> {
         gameMode: serverConfig?.Defaults?.GameMode || 'Adventure',
         password: serverConfig?.Password || '',
         whitelist: serverConfig?.Whitelist ?? false,
-        allowOp: serverConfig?.AllowOp ?? true,
+        allowOp: panelConfig.allowOp,
       },
       performance: {
         minRam: envConfig.javaMinRam || '3G',

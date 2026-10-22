@@ -160,25 +160,77 @@ describe('createInstanceContainer', () => {
 describe('deleteInstanceContainer', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('stops and removes the container by name', async () => {
+  // One fake container answering both the by-name inspect and the by-id
+  // stop/remove that follows it.
+  function fakeDockerWith(inspectResult: unknown) {
+    const inspect =
+      typeof inspectResult === 'function'
+        ? vi.fn(inspectResult as () => Promise<unknown>)
+        : vi.fn().mockResolvedValue(inspectResult);
     const stop = vi.fn().mockResolvedValue(undefined);
     const remove = vi.fn().mockResolvedValue(undefined);
-    const getContainer = vi.fn().mockReturnValue({ stop, remove });
-    const fakeDocker = { getContainer } as never;
+    const getContainer = vi.fn().mockReturnValue({ inspect, stop, remove });
+    return { docker: { getContainer } as never, getContainer, inspect, stop, remove };
+  }
 
-    const result = await deleteInstanceContainer(makeInstance(), {}, fakeDocker);
+  const ownLabels = {
+    'kyuubisoft.panel.managed': 'true',
+    'kyuubisoft.panel.server-id': 'abc12345',
+  };
+
+  it('stops and removes a container carrying the panel labels for this server', async () => {
+    const f = fakeDockerWith({ Id: 'c0ffee000001', Config: { Labels: ownLabels } });
+
+    const result = await deleteInstanceContainer(makeInstance(), {}, f.docker);
     expect(result.ok).toBe(true);
-    expect(getContainer).toHaveBeenCalledWith('hytale-srv-abc12345');
-    expect(remove).toHaveBeenCalledWith({ force: true, v: false });
+    expect(f.getContainer).toHaveBeenNthCalledWith(1, 'hytale-srv-abc12345');
+    // The removal targets the inspected container id, not the name again.
+    expect(f.getContainer).toHaveBeenNthCalledWith(2, 'c0ffee000001');
+    expect(f.remove).toHaveBeenCalledWith({ force: true, v: false });
   });
 
-  it('treats already-removed container as success', async () => {
-    const stop = vi.fn().mockRejectedValue(new Error('not running'));
-    const remove = vi.fn().mockRejectedValue(new Error('No such container: hytale-srv-abc12345'));
-    const getContainer = vi.fn().mockReturnValue({ stop, remove });
-    const fakeDocker = { getContainer } as never;
+  it('refuses a container without the panel labels and leaves it untouched', async () => {
+    const f = fakeDockerWith({
+      Id: 'f0e1gn000001',
+      Config: { Labels: { 'com.docker.compose.service': 'manager' } },
+    });
 
-    const result = await deleteInstanceContainer(makeInstance(), {}, fakeDocker);
+    const result = await deleteInstanceContainer(makeInstance(), {}, f.docker);
+    expect(result).toMatchObject({ ok: false, code: 'not_managed' });
+    expect(f.stop).not.toHaveBeenCalled();
+    expect(f.remove).not.toHaveBeenCalled();
+  });
+
+  it('refuses a panel-managed container that belongs to another server id', async () => {
+    const f = fakeDockerWith({
+      Id: 'other0000001',
+      Config: {
+        Labels: { 'kyuubisoft.panel.managed': 'true', 'kyuubisoft.panel.server-id': 'zzz99999' },
+      },
+    });
+
+    const result = await deleteInstanceContainer(makeInstance(), {}, f.docker);
+    expect(result).toMatchObject({ ok: false, code: 'not_managed' });
+    expect(f.remove).not.toHaveBeenCalled();
+  });
+
+  it('treats an already-removed container as success', async () => {
+    const f = fakeDockerWith(() =>
+      Promise.reject(new Error('No such container: hytale-srv-abc12345')),
+    );
+
+    const result = await deleteInstanceContainer(makeInstance(), {}, f.docker);
     expect(result.ok).toBe(true);
+    expect(f.remove).not.toHaveBeenCalled();
+  });
+
+  it('reports a docker error without removing anything', async () => {
+    const f = fakeDockerWith(() =>
+      Promise.reject(new Error('connect ECONNREFUSED /var/run/docker.sock')),
+    );
+
+    const result = await deleteInstanceContainer(makeInstance(), {}, f.docker);
+    expect(result).toMatchObject({ ok: false, code: 'docker_error' });
+    expect(f.remove).not.toHaveBeenCalled();
   });
 });

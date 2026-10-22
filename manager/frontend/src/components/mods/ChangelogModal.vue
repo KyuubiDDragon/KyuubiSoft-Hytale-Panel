@@ -2,17 +2,22 @@
 // Self-contained modal that renders a mod's changelog HTML.
 // Extracted from views/Mods.vue as part of the components/mods/* split.
 // Open/close state is owned by the parent via v-model:visible.
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { sanitizeHtml } from '@/utils/safeHtml'
 
 const { t } = useI18n()
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
   title: string
-  // The changelog is rendered with v-html and is assumed to be sanitized
-  // by the caller (the mod registries already return HTML/markdown).
+  // Raw changelog from a mod registry (CurseForge/Modtale/GitHub). It is
+  // author-controlled, so it is always sanitized here before v-html — the
+  // backend cleans it too, but this component must not rely on that.
   content: string
 }>()
+
+const safeContent = computed(() => sanitizeHtml(props.content))
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
@@ -42,10 +47,8 @@ function close(): void {
 
       <!-- Modal Content -->
       <div class="flex-1 overflow-y-auto p-4">
-        <div
-          class="prose prose-invert prose-sm max-w-none text-gray-300"
-          v-html="content"
-        />
+        <!-- eslint-disable-next-line vue/no-v-html -- safeContent is DOMPurify-sanitized (utils/safeHtml.ts) -->
+        <div v-html="safeContent" class="prose prose-invert prose-sm max-w-none text-gray-300" />
       </div>
 
       <!-- Modal Footer -->

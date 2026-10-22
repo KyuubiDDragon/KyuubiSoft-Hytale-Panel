@@ -15,6 +15,7 @@ import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
 import { saveConfig as saveSchedulerConfig } from './scheduler.js';
 import { installMod, ensureEasyWebMapConfig } from './modStore.js';
 import { escapeShellArg } from '../utils/sanitize.js';
+import { updateJsonFile } from '../utils/jsonStore.js';
 
 // Re-export system check types and function
 export type { SystemCheck, SystemCheckResult };
@@ -482,7 +483,9 @@ export async function saveStepData(
             gameMode: 'Adventure',
             password: '',
             whitelist: false,
-            allowOp: true,
+            // Off unless explicitly chosen: --allow-op lets ANY player run
+            // `/op self` and take full admin rights (Hytale 0.7).
+            allowOp: false,
           };
         }
         // Apply security settings from frontend
@@ -607,40 +610,41 @@ export async function finalizeSetup(): Promise<{
     // a previous installation with additional accounts). Overwriting it wiped
     // those accounts and silently invalidated the .env password, which left
     // operators unable to tell which credentials were still valid.
+    // Only a missing file starts fresh; a corrupt one aborts (and is kept)
+    // instead of being replaced by a file with just the wizard admin.
     try {
       const usersFile = path.join(DATA_DIR, 'users.json');
-      let usersData: { users: Array<Record<string, unknown>> } = { users: [] };
-      try {
-        usersData = JSON.parse(await readFile(usersFile, 'utf-8'));
-        if (!Array.isArray(usersData.users)) usersData.users = [];
-      } catch {
-        // No existing file — start fresh
-      }
-
-      const existing = usersData.users.find((u) => u.username === setupConfig.admin!.username);
-      if (existing) {
-        // Same username as a pre-existing account (typically the .env-created
-        // admin): the wizard password becomes the valid one. Bump tokenVersion
-        // so any tokens issued under the old password die immediately.
-        existing.passwordHash = adminPasswordHash;
-        existing.roleId = 'admin';
-        existing.tokenVersion = ((existing.tokenVersion as number) || 0) + 1;
-        logger.info(
-          `[Setup] Updated existing user '${setupConfig.admin.username}' with the wizard password`,
-        );
-      } else {
-        usersData.users.push({
-          username: setupConfig.admin.username,
-          passwordHash: adminPasswordHash,
-          roleId: 'admin',
-          createdAt: new Date().toISOString(),
-          tokenVersion: 1,
-        });
-        logger.info(
-          `[Setup] Created admin user '${setupConfig.admin.username}' (existing accounts kept)`,
-        );
-      }
-      await writeFile(usersFile, JSON.stringify(usersData, null, 2), 'utf-8');
+      const adminUsername = setupConfig.admin.username;
+      await ensureDataDir();
+      await updateJsonFile<{ users: Array<Record<string, unknown>> }>(
+        usersFile,
+        (current) => {
+          const usersData = current ?? { users: [] };
+          const existing = usersData.users.find((u) => u.username === adminUsername);
+          if (existing) {
+            // Same username as a pre-existing account (typically the .env-created
+            // admin): the wizard password becomes the valid one. Bump tokenVersion
+            // so any tokens issued under the old password die immediately.
+            existing.passwordHash = adminPasswordHash;
+            existing.roleId = 'admin';
+            existing.tokenVersion = ((existing.tokenVersion as number) || 0) + 1;
+            logger.info(
+              `[Setup] Updated existing user '${adminUsername}' with the wizard password`,
+            );
+          } else {
+            usersData.users.push({
+              username: adminUsername,
+              passwordHash: adminPasswordHash,
+              roleId: 'admin',
+              createdAt: new Date().toISOString(),
+              tokenVersion: 1,
+            });
+            logger.info(`[Setup] Created admin user '${adminUsername}' (existing accounts kept)`);
+          }
+          return usersData;
+        },
+        { isValid: (value) => Array.isArray((value as { users?: unknown } | null)?.users) },
+      );
     } catch (error) {
       logger.error('[Setup] Failed to write admin user:', error);
       return { success: false, error: 'Failed to create admin account' };
@@ -702,7 +706,7 @@ export async function finalizeSetup(): Promise<{
           serverConfig.Password = '';
         }
         setIfMissing('Whitelist', setupConfig.server.whitelist ?? false);
-        setIfMissing('AllowOp', setupConfig.server.allowOp ?? true);
+        setIfMissing('AllowOp', setupConfig.server.allowOp ?? false);
         if (!serverConfig.Defaults) serverConfig.Defaults = {};
         if (!(preserveExisting && serverConfig.Defaults.GameMode)) {
           serverConfig.Defaults.GameMode = setupConfig.server.gameMode;

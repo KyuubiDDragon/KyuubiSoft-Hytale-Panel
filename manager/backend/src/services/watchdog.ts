@@ -104,7 +104,7 @@ async function tickServer(srv: ServerInstance): Promise<void> {
 
   // Crash detection: a running→stopped transition we didn't cause.
   if (s.wasRunning === true && !running) {
-    if (wasRecentlyStoppedIntentionally(serverId, INTENTIONAL_GRACE_MS)) {
+    if (await wasRecentlyStoppedIntentionally(serverId, INTENTIONAL_GRACE_MS)) {
       // Deliberate stop/restart — not a crash.
       s.wasRunning = running;
       return;
@@ -260,3 +260,8 @@ export function stopWatchdog(): void {
     timer = null;
   }
 }
+
+// Exposed for unit tests so they can drive a poll cycle without the timer.
+export const __test__ = {
+  tick,
+};

@@ -61,6 +61,13 @@
     "permissionIssueDesc": "O gerenciador não consegue escrever em alguns diretórios de dados. Isso geralmente acontece após atualizar para v2.0.0, que roda como usuário não-root (UID 1001) por segurança.",
     "fixCommand": "Execute este comando no host para corrigir as permissões"
   },
+  "allowOpSecurity": {
+    "warning": "Com esta opção, qualquer jogador no servidor pode se dar direitos totais de administrador com /op self.",
+    "safeAlternative": "Para tornar alguém administrador com segurança, use o console: /op add <nome>.",
+    "bannerTitle": "A autoatribuição de OP está ativa neste servidor",
+    "bannerText": "O servidor é iniciado com --allow-op.",
+    "openSettings": "Abrir configurações"
+  },
   "auth": {
     "login": "Entrar",
     "logout": "Sair",
@@ -375,7 +382,13 @@
       "update": "Atualizar Plugin",
       "updating": "Atualizando...",
       "updateSuccess": "Plugin atualizado com sucesso. Reinicie o servidor para ativar.",
-      "updateFailed": "Falha na atualização"
+      "updateFailed": "Falha na atualização",
+      "auth": {
+        "tokenRejectedTitle": "O token do plugin não confere",
+        "tokenRejectedHint": "O plugin KyuubiSoft API rejeitou o token do painel, provavelmente porque o servidor ainda roda com um token antigo. Reinicie o servidor pelo painel para que o plugin carregue o token atual.",
+        "tokenMissingTitle": "Plugin bloqueado: nenhum token configurado",
+        "tokenMissingHint": "O plugin KyuubiSoft API ainda não tem um token de acesso e bloqueia todas as requisições. Reinicie o servidor pelo painel; o painel grava o token antes de cada inicialização."
+      }
     },
     "downloaderAuthExpired": "Autenticação do Downloader Hytale Expirada",
     "downloaderAuthExpiredDesc": "A autenticação do downloader expirou ou está faltando. Atualizações automáticas do servidor não podem ser realizadas até você autenticar novamente.",
@@ -1189,9 +1202,9 @@
     "disableSentryRestartRequired": "Reinicialização Necessária",
     "disableSentryRestartRequiredDesc": "A configuração foi alterada. O servidor deve ser reiniciado agora para aplicar a alteração.",
     "disableSentryRestarting": "O servidor está reiniciando para aplicar a nova configuração...",
-    "allowOpTitle": "Permitir Comandos OP",
-    "allowOpDesc": "Ative esta opção para permitir comandos OP (operador) no servidor. Jogadores OP têm permissões elevadas.",
-    "allowOpLabel": "Permitir Comandos OP",
+    "allowOpTitle": "Permitir /op self (--allow-op)",
+    "allowOpDesc": "Inicia o servidor com --allow-op, o que libera o comando /op self para os jogadores. Nomear administradores pelo console com /op add funciona sem esta opção.",
+    "allowOpLabel": "Permitir /op self",
     "allowOpHint": "Adiciona a flag --allow-op ao iniciar o servidor",
     "allowOpRestartNote": "Após alterar esta configuração, o servidor deve ser reiniciado para que a alteração tenha efeito.",
     "allowOpRestartRequired": "Reinicialização Necessária",
@@ -1331,7 +1344,19 @@
     "deleteConfirm": "Excluir servidor \"{name}\"? O contêiner será parado.",
     "ready": "pronto",
     "creating": "criando",
-    "broken": "com erro"
+    "broken": "com erro",
+    "guard": {
+      "disabledTitle": "Multiservidor está desativado",
+      "disabledHint": "O multiservidor está em desenvolvimento e atualmente desativado. Todas as ações do painel se aplicam ao servidor padrão. Servidores adicionais já existentes continuam listados aqui para que você possa removê-los.",
+      "experimentalTitle": "Multiservidor é experimental",
+      "experimentalHint": "Muitas ações do painel ainda se aplicam apenas ao servidor padrão, independentemente do servidor selecionado no cabeçalho. Use servidores adicionais somente para testes.",
+      "experimentalBadge": "experimental",
+      "composeBadge": "Compose",
+      "notManagedTitle": "Contêiner não gerenciado pelo painel",
+      "notManagedMessage": "O contêiner \"{container}\" não foi criado pelo painel para este servidor, por isso não será parado nem removido. Remover apenas a entrada do registro e manter o contêiner intacto?",
+      "removeEntryOnly": "Remover apenas a entrada",
+      "entryRemoved": "Entrada do registro de \"{name}\" removida; o contêiner não foi alterado"
+    }
   },
   "webhooks": {
     "title": "Webhooks",
@@ -1608,7 +1633,11 @@
     "openNewTab": "Abrir em Nova Aba",
     "notInstalled": "EasyWebMap Não Instalado",
     "notInstalledDesc": "O mod EasyWebMap não está instalado. Instale-o na Loja de Mods para ativar o recurso de mapa web ao vivo.",
-    "goToModStore": "Ir para Loja de Mods"
+    "goToModStore": "Ir para Loja de Mods",
+    "access": {
+      "noPermission": "Você precisa da permissão \"Ver lista de jogadores\" (players.view) para abrir o mapa web.",
+      "sessionFailed": "Não foi possível abrir o mapa web. Tente novamente."
+    }
   },
   "roles": {
     "title": "Gerenciamento de Funções",
@@ -2036,9 +2065,8 @@
     "whitelistEnabled": "Ativar Whitelist",
     "whitelistDescription": "Apenas jogadores na whitelist podem entrar no servidor. Voce pode gerenciar a whitelist apos a configuracao.",
     "recommended": "Recomendado",
-    "allowOperator": "Permitir Comandos de Operador (/op)",
-    "allowOperatorDescription": "Permitir que jogadores confiaveis recebam permissoes elevadas via comando /op.",
-    "allowOperatorWarning": "Operadores tem controle total do servidor. Apenas conceda status de OP para jogadores em quem voce confia totalmente.",
+    "allowOperator": "Permitir /op self (--allow-op)",
+    "allowOperatorDescription": "Libera o comando /op self para os jogadores. Não é necessário para nomear administradores: /op add funciona pelo console sem isso. Deixe esta opção desativada.",
     "securityTipsTitle": "Melhores Praticas de Seguranca",
     "securityTip1": "Use uma senha de servidor forte se seu servidor for publico",
     "securityTip2": "Ative a whitelist para controlar quem pode entrar",

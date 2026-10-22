@@ -239,6 +239,7 @@ onMounted(async () => {
       <div class="bg-surface-raised rounded-xl p-6 overflow-auto">
         <div v-if="!selected" class="text-ink-subtle text-sm">{{ t('wiki.selectEntry') }}</div>
         <div v-else>
+          <!-- eslint-disable-next-line vue/no-v-html -- renderMarkdown() HTML-escapes every input string before adding its fixed tags -->
           <div class="prose-wiki" v-html="renderMarkdown(selected.markdown)"></div>
         </div>
       </div>

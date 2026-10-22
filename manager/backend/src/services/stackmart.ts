@@ -9,7 +9,7 @@ import { writeFile, mkdir, access, readFile, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
-import { sanitizeFileName } from '../utils/pathSecurity.js';
+import { sanitizeFileName, resolveFileInDir } from '../utils/pathSecurity.js';
 
 // Security: Regex pattern for validating resource IDs (MongoDB ObjectId or slug)
 const RESOURCE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -540,8 +540,10 @@ export async function installResourceFromStackMart(
       default:
         oldBasePath = config.dataPath;
     }
-    const oldFilePath = path.join(oldBasePath, existingInstall.filename);
+    // The stored filename is untrusted (shared data dir): only a bare name in the base folder.
+    const oldFilePath = resolveFileInDir(oldBasePath, existingInstall.filename);
     try {
+      if (!oldFilePath) throw new Error('invalid stored filename');
       await unlink(oldFilePath);
       logger.info(`[StackMart] Removed old resource file: ${existingInstall.filename}`);
     } catch (e) {
@@ -621,12 +623,10 @@ export async function uninstallStackMart(
       basePath = config.dataPath;
   }
 
-  const filePath = path.join(basePath, installed.filename);
-  const resolvedPath = path.resolve(filePath);
-  const resolvedBase = path.resolve(basePath);
-
-  // Security: Verify path is within allowed directory
-  if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
+  // Security: the stored filename (shared data dir) must be a bare name in the base folder -
+  // "sub/x.jar" through a symlinked sub folder would pass a plain prefix check.
+  const filePath = resolveFileInDir(basePath, installed.filename);
+  if (!filePath) {
     return { success: false, error: 'Invalid file path' };
   }
 
