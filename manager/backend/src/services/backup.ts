@@ -1,73 +1,189 @@
+/**
+ * Panel backups: tar.gz snapshots of a server's data directory. Restores of
+ * these and of the server's native zips live in services/backupRestore.ts,
+ * the native backups themselves in services/nativeBackups.ts.
+ *
+ *  - Consistency: tar can only read what is on disk. A stopped server is
+ *    archived as is; for a running one the panel first asks it to write all
+ *    worlds (`/world save --all --confirm`) and waits for the confirmation.
+ *    The server's native /backup additionally holds saving while it packs and
+ *    is the better choice for a running server.
+ *  - Every external tool runs through spawn with an argv array: no shell and
+ *    no blocking of the event loop.
+ *  - Naming: `manual_[<name>_]<ts>` for backups an operator asked for,
+ *    `auto_<label>_<ts>` for scheduled and rule-driven ones. Only the latter
+ *    are subject to retention (isAutomaticBackupId).
+ */
 import fs from 'fs';
 import path from 'path';
-import { execSync, spawn } from 'child_process';
-import { config } from '../config.js';
+import { spawn } from 'child_process';
 import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js';
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe, resolveRealPathWithin } from '../utils/pathSecurity.js';
-import { getDefaultId, getServer, listServers } from './servers.js';
+import { config } from '../config.js';
+import { listServers } from './servers.js';
 import { publish } from './eventBus.js';
 import { uploadBackupAsync } from './offsiteBackup.js';
 import { getDb } from '../db/index.js';
+import * as dockerService from './docker.js';
+import { waitForConsoleLine } from './serverConsoleOutput.js';
+import {
+  freeBytes,
+  freeTimestampedPath,
+  resolveBackupPaths,
+  runBackupHookAsync,
+} from './backupCommon.js';
+import {
+  hasInterruptedRestore,
+  isInternalDataEntry,
+  recoverInterruptedRestore,
+} from './restoreSwap.js';
+import { ensurePanelBackupDir } from './panelBackups.js';
 
 // The manager's own data (panel.sqlite + config/users/servers JSON) lives here.
 const MANAGER_DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
-// How many panel self-backups to keep in the _panel subdir.
+// How many panel self-backups to keep (see services/panelBackups.ts).
 const PANEL_BACKUP_KEEP = 14;
 
-/** Free bytes on the filesystem holding `dir`, or null if statfs is unsupported. */
-function freeBytes(dir: string): number | null {
-  try {
-    const st = fs.statfsSync(dir);
-    return st.bavail * st.bsize;
-  } catch {
-    return null;
-  }
+const MANUAL_PREFIX = 'manual_';
+const AUTO_PREFIX = 'auto_';
+// YYYY-MM-DD_HHMMSS, or YYYY-MM-DD_HHMM for names written before seconds were added.
+const TIMESTAMP = String.raw`\d{4}-\d{2}-\d{2}_\d{4}(?:\d{2})?`;
+const AUTO_BACKUP_ID = new RegExp(`^${AUTO_PREFIX}[A-Za-z0-9_-]+_${TIMESTAMP}$`);
+// Names the scheduler used before automatic backups got their own prefix.
+const LEGACY_AUTO_LABELS: ReadonlySet<string> = new Set(['auto', 'scheduled_restart']);
+const LEGACY_AUTO_BACKUP_ID = new RegExp(
+  `^${MANUAL_PREFIX}(${[...LEGACY_AUTO_LABELS].join('|')})_${TIMESTAMP}$`,
+);
+
+const TAR_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const TAR_STDERR_MAX = 64 * 1024;
+// Hytale 0.7: `world save` requires --confirm; --all saves every loaded world.
+const WORLD_SAVE_COMMAND = '/world save --all --confirm';
+const WORLD_SAVE_DONE = /Finished saving all worlds/i;
+const WORLD_SAVE_TIMEOUT_MS = 60_000;
+// Give the region files a moment after the confirmation before tar reads them.
+const WORLD_SAVE_SETTLE_MS = 2000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export type BackupKind = 'manual' | 'auto';
+
+export interface CreateBackupOptions {
+  kind?: BackupKind;
+  /** Free-form part of the name (letters, digits, `_`, `-`). */
+  label?: string;
 }
 
 /**
- * Resolve the backup/data paths for a specific server id. Falls back to the
- * default server (or the legacy env-var config if the registry isn't loaded
- * yet on fresh boot). Multi-server callers pass an explicit id; legacy
- * callers omit it.
+ * YYYY-MM-DD_HHMMSS (UTC), the timestamp part of every backup name. Seconds
+ * keep two backups taken within the same minute from overwriting each other.
  */
-async function resolvePaths(serverId?: string): Promise<{ backups: string; data: string }> {
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const s = await getServer(id);
-    if (s) return { backups: s.paths.backups, data: s.paths.data };
-  } catch {
-    /* registry not ready */
-  }
-  return { backups: config.backupsPath, data: config.dataPath };
+export function backupTimestamp(date: Date = new Date()): string {
+  return date.toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 17);
 }
 
-// Path to the off-host backup hook **inside the manager container**.
-// createBackup() runs tar itself (execSync), so the resulting tarball is
-// already visible to the manager process — invoking a sibling container's
-// /opt/hytale/backup-hook.sh would require a `docker exec`, which we don't
-// want to take a dependency on. The hook ships from manager/backup-hook.sh
-// (kept in sync with scripts/backup-hook.sh) at /app/backup-hook.sh.
-const BACKUP_HOOK_PATH = process.env.BACKUP_HOOK_PATH || '/app/backup-hook.sh';
+/** Name of the copy a restore takes of the state it replaces (kept until deleted by hand). */
+export function safetyBackupName(ts: string): string {
+  return `${MANUAL_PREFIX}pre_restore_${ts}`;
+}
 
-function runBackupHookAsync(absolutePath: string): void {
-  if (!fs.existsSync(BACKUP_HOOK_PATH)) return;
-  try {
-    const child = spawn(BACKUP_HOOK_PATH, [absolutePath], {
-      detached: true,
-      stdio: 'ignore',
+/**
+ * True for backups the panel created automatically (scheduler, event rules,
+ * scheduled restarts). Retention only ever deletes these; a manual backup
+ * whose name merely contains "auto" is not one of them.
+ */
+export function isAutomaticBackupId(id: string): boolean {
+  return AUTO_BACKUP_ID.test(id) || LEGACY_AUTO_BACKUP_ID.test(id);
+}
+
+function backupType(id: string): BackupInfo['type'] {
+  // backup_* is what older server builds wrote into the backups folder.
+  return isAutomaticBackupId(id) || id.startsWith('backup_') ? 'auto' : 'manual';
+}
+
+// ============================================================
+// External tools
+// ============================================================
+
+/** Run tar with an argv array; rejects with tar's stderr on a non-zero exit. */
+function runTar(args: string[], timeoutMs = TAR_TIMEOUT_MS): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('tar', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderr.length < TAR_STDERR_MAX) stderr += chunk.toString('utf8');
     });
-    child.unref();
-  } catch (err) {
-    console.warn('[Backup] Failed to spawn backup-hook:', err instanceof Error ? err.message : err);
-  }
+    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+    timer.unref?.();
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0) return resolve();
+      const detail = stderr.trim().slice(-500) || (signal ? `killed by ${signal}` : `exit ${code}`);
+      reject(new Error(`tar failed: ${detail}`));
+    });
+  });
 }
+
+/**
+ * First symbolic link below `dir` (relative path), or null. tar stores links
+ * as links, and a restore refuses any archive that contains one, so the
+ * operator should learn about it when the backup is made, not when it's needed.
+ */
+async function findSymlink(dir: string, rel = ''): Promise<string | null> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(path.join(dir, rel), { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (!rel && isInternalDataEntry(entry.name)) continue;
+    const child = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isSymbolicLink()) return child;
+    if (entry.isDirectory()) {
+      const found = await findSymlink(dir, child);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Archive the game data of `dataDir` into `outFile`. The panel's own working
+ * directories (restore/extract staging) are left out; each top-level entry is
+ * passed as "./<name>" so a name starting with "-" can't become an option.
+ * Returns false when there is nothing to archive.
+ */
+export async function archiveDataDir(dataDir: string, outFile: string): Promise<boolean> {
+  const entries = (await fs.promises.readdir(dataDir)).filter((n) => !isInternalDataEntry(n));
+  if (entries.length === 0) return false;
+  try {
+    await runTar(['-c', '-z', '-f', outFile, '-C', dataDir, ...entries.map((n) => `./${n}`)]);
+  } catch (err) {
+    await fs.promises.rm(outFile, { force: true }).catch(() => undefined);
+    throw err;
+  }
+  return true;
+}
+
+// ============================================================
+// Panel self-backup
+// ============================================================
+
+// Not "panel-config_" as on the backups volume before: the move of those old
+// copies (panelBackups.ts) must never find a name of its own here.
+const PANEL_BACKUP_PREFIX = 'panel-backup_';
 
 function prunePanelBackups(panelDir: string): void {
   try {
     const files = fs
       .readdirSync(panelDir)
-      .filter((f) => f.startsWith('panel-config_') && f.endsWith('.tar.gz'))
+      .filter((f) => f.startsWith(PANEL_BACKUP_PREFIX) && f.endsWith('.tar.gz'))
       .map((f) => ({ f, t: fs.statSync(path.join(panelDir, f)).mtimeMs }))
       .sort((a, b) => b.t - a.t);
     for (const { f } of files.slice(PANEL_BACKUP_KEEP)) {
@@ -81,19 +197,21 @@ function prunePanelBackups(panelDir: string): void {
 /**
  * Snapshot the panel's OWN state — a consistent online copy of panel.sqlite
  * (audit log, API keys, webhooks, punishments, …) plus the config/users/servers
- * JSON — into `<backupsDir>/_panel/panel-config_<ts>.tar.gz`. Kept in a subdir
- * so it never appears in (or is restored as) a game-data backup. Without this a
- * manager-volume loss is unrecoverable.
+ * JSON — into `<manager data>/panel-backups/panel-backup_<ts>.tar.gz`. It holds
+ * password hashes and secrets, so it stays in the manager's own volume, never
+ * on the backups volume the game server can read. Against the loss of that
+ * volume only the off-site upload (when configured) helps.
  */
-export async function backupPanelData(
-  backupsDir: string,
-): Promise<{ success: boolean; file?: string; error?: string }> {
+export async function backupPanelData(): Promise<{
+  success: boolean;
+  file?: string;
+  error?: string;
+}> {
   try {
-    const panelDir = path.join(backupsDir, '_panel');
-    fs.mkdirSync(panelDir, { recursive: true });
-    const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
+    const panelDir = await ensurePanelBackupDir();
+    const ts = backupTimestamp();
     const stage = path.join(panelDir, `.stage_${ts}`);
-    fs.mkdirSync(stage, { recursive: true });
+    fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
     try {
       // Online snapshot — safe to take while the DB is in use (WAL).
       await getDb().backup(path.join(stage, 'panel.sqlite'));
@@ -101,11 +219,9 @@ export async function backupPanelData(
         const src = path.join(MANAGER_DATA_DIR, name);
         if (fs.existsSync(src)) fs.copyFileSync(src, path.join(stage, name));
       }
-      const outFile = path.join(panelDir, `panel-config_${ts}.tar.gz`);
-      execSync(`tar -czf '${outFile}' -C '${stage}' .`, {
-        timeout: 300000,
-        maxBuffer: 1024 * 1024 * 10,
-      });
+      const outFile = path.join(panelDir, `${PANEL_BACKUP_PREFIX}${ts}.tar.gz`);
+      await runTar(['-c', '-z', '-f', outFile, '-C', stage, '.'], 5 * 60 * 1000);
+      fs.chmodSync(outFile, 0o600);
       prunePanelBackups(panelDir);
       return { success: true, file: outFile };
     } finally {
@@ -116,56 +232,99 @@ export async function backupPanelData(
   }
 }
 
+// ============================================================
+// Boot recovery
+// ============================================================
+
 /**
- * Remove leftover restore staging dirs (`_restore_temp_*`, `_restore_old_*`)
- * next to each server's data dir — these only linger after a restore that
- * crashed mid-swap. Best-effort; runs on boot.
+ * Run on boot: remove the staging dirs older panel versions left NEXT TO the
+ * data dir (`_restore_temp_*`, `_restore_old_*`), and finish or roll back a
+ * restore that was interrupted inside a data dir. The latter only happens
+ * while the server is stopped; otherwise it waits for the next restore.
+ *
+ * Runs under the backup lock: a restore started right after boot swaps (and
+ * recovers its own journal) under that lock, so the two never move the same
+ * entries at once.
  */
-export async function sweepOrphanedRestoreDirs(): Promise<void> {
-  const parents = new Set<string>();
+export function sweepOrphanedRestoreDirs(): Promise<void> {
+  return withBackupLock(sweepRestoreLeftovers);
+}
+
+async function sweepRestoreLeftovers(): Promise<void> {
+  const servers: Array<{ id?: string; data: string }> = [{ data: config.dataPath }];
   try {
-    parents.add(path.dirname(config.dataPath));
-    for (const s of await listServers()) parents.add(path.dirname(s.paths.data));
+    for (const s of await listServers()) servers.push({ id: s.id, data: s.paths.data });
   } catch {
     /* registry not ready — fall back to the default path already added */
   }
-  for (const parent of parents) {
+  const seen = new Set<string>();
+  for (const { id, data } of servers) {
+    if (seen.has(data)) continue;
+    seen.add(data);
+    const parent = path.dirname(data);
     try {
-      if (!fs.existsSync(parent)) continue;
-      for (const entry of fs.readdirSync(parent)) {
-        if (/^_restore_(temp|old)_/.test(entry)) {
-          fs.rmSync(path.join(parent, entry), { recursive: true, force: true });
-          console.log(`[Backup] swept orphaned restore dir: ${path.join(parent, entry)}`);
+      if (fs.existsSync(parent)) {
+        for (const entry of fs.readdirSync(parent)) {
+          if (/^_restore_(temp|old)_/.test(entry)) {
+            fs.rmSync(path.join(parent, entry), { recursive: true, force: true });
+            console.log(`[Backup] swept orphaned restore dir: ${path.join(parent, entry)}`);
+          }
         }
       }
-    } catch {
-      /* ignore per-parent failures */
+      if (!fs.existsSync(data)) continue;
+      if (await hasInterruptedRestore(data)) {
+        const status = await dockerService.getStatus(id);
+        if (status.running) {
+          console.error(
+            `[Backup] ${data} holds an interrupted restore, but the server is running; ` +
+              'it is rolled back before the next restore (or stop the server and restart the panel).',
+          );
+          continue;
+        }
+      }
+      // Only what an earlier process left behind: this sweep runs unawaited
+      // at boot, and a restore started meanwhile must not be touched.
+      const bootedAt = Date.now() - process.uptime() * 1000;
+      const outcome = await recoverInterruptedRestore(data, { startedBefore: bootedAt });
+      if (outcome !== 'none') console.warn(`[Backup] interrupted restore in ${data}: ${outcome}`);
+    } catch (err) {
+      console.error(
+        `[Backup] restore recovery for ${data} failed:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 }
+
+// ============================================================
+// Lock
+// ============================================================
 
 // In-process lock to prevent concurrent backup/restore operations.
 // Two parallel HTTP requests can otherwise corrupt each other's tarball or
-// race the retention cleanup.
-let backupOperationLock: Promise<unknown> | null = null;
+// race the retention cleanup. Not re-entrant. Code that also needs the server
+// stopped takes the lifecycle lock (withServerStopped) first, then this one.
+// A promise chain: each operation starts after the previous one settled (FIFO).
+// (The earlier "while (lock) await lock" version compared the lock with the
+// wrong promise, never released it, and the second operation then spun in a
+// microtask loop that froze the whole manager.)
+let backupLockTail: Promise<void> = Promise.resolve();
 
-async function withBackupLock<T>(fn: () => T | Promise<T>): Promise<T> {
-  while (backupOperationLock) {
-    try {
-      await backupOperationLock;
-    } catch {
-      /* prior op failed, that's fine */
-    }
-  }
-  const op = (async () => fn())();
-  backupOperationLock = op.finally(() => {
-    if (backupOperationLock === op) backupOperationLock = null;
-  });
+export function withBackupLock<T>(fn: () => T | Promise<T>): Promise<T> {
+  const op = backupLockTail.then(() => fn());
+  backupLockTail = op.then(
+    () => undefined,
+    () => undefined, // a failed operation releases the lock, too
+  );
   return op;
 }
 
+// ============================================================
+// Listing
+// ============================================================
+
 // SECURITY: Validate backup ID to prevent path traversal
-function validateBackupId(backupId: string): boolean {
+export function isValidBackupId(backupId: string): boolean {
   if (!backupId || typeof backupId !== 'string') return false;
   // Only allow alphanumeric, underscore, hyphen, and dot
   const safePattern = /^[a-zA-Z0-9_.-]+$/;
@@ -174,7 +333,7 @@ function validateBackupId(backupId: string): boolean {
 
 export async function listBackups(serverId?: string): Promise<BackupInfo[]> {
   const backups: BackupInfo[] = [];
-  const paths = await resolvePaths(serverId);
+  const paths = await resolveBackupPaths(serverId);
 
   if (!fs.existsSync(paths.backups)) {
     return backups;
@@ -215,17 +374,13 @@ export async function listBackups(serverId?: string): Promise<BackupInfo[]> {
       const sizeMb = stat.size / (1024 * 1024);
       const displaySizeMb = stat.size > 0 ? Math.max(0.01, Math.round(sizeMb * 100) / 100) : 0;
 
-      // Determine type: auto if includes 'auto', 'scheduled', or created by Hytale server
-      const isAuto =
-        file.includes('auto') || file.includes('scheduled') || file.startsWith('backup_'); // Hytale server format
-
       backups.push({
         id,
         filename: file,
         size_bytes: stat.size,
         size_mb: displaySizeMb,
         created_at: stat.mtime.toISOString(),
-        type: isAuto ? 'auto' : 'manual',
+        type: backupType(id),
       });
     } catch (err) {
       // Skip files that can't be read (permission issues, etc.)
@@ -247,10 +402,10 @@ export async function getBackup(backupId: string, serverId?: string): Promise<Ba
 
 export async function getBackupPath(backupId: string, serverId?: string): Promise<string | null> {
   // SECURITY: Validate backup ID
-  if (!validateBackupId(backupId)) {
+  if (!isValidBackupId(backupId)) {
     return null;
   }
-  const paths = await resolvePaths(serverId);
+  const paths = await resolveBackupPaths(serverId);
   const extensions = ['.tar.gz', '.tar', '.zip'];
 
   for (const ext of extensions) {
@@ -271,22 +426,67 @@ export async function getBackupPath(backupId: string, serverId?: string): Promis
   return null;
 }
 
-export function createBackup(
-  name?: string,
+// ============================================================
+// Create / delete
+// ============================================================
+
+/**
+ * Make the on-disk state of a running server as complete as possible before
+ * tar reads it: `/world save --all --confirm`, then wait for the server's
+ * confirmation (bounded) and a short settle time. A stopped server needs
+ * nothing. Never throws; the returned note explains a missing confirmation.
+ */
+export async function flushWorldsIfRunning(
   serverId?: string,
-): Promise<ActionResponse & { backup?: BackupInfo }> {
+): Promise<{ running: boolean; note?: string }> {
+  const status = await dockerService.getStatus(serverId);
+  if (!status.running) return { running: false };
+  const since = Date.now();
+  // Not on the operator whitelist (/world has destructive subcommands); the
+  // panel sends this exact command through the lifecycle channel.
+  const sent = await dockerService.sendLifecycleCommand(WORLD_SAVE_COMMAND, serverId);
+  if (!sent.success) return { running: true, note: `world save not sent: ${sent.error}` };
+  const reply = await waitForConsoleLine(
+    since,
+    { success: [WORLD_SAVE_DONE] },
+    { timeoutMs: WORLD_SAVE_TIMEOUT_MS, serverId },
+  );
+  await sleep(WORLD_SAVE_SETTLE_MS);
+  return reply.outcome === 'matched'
+    ? { running: true }
+    : { running: true, note: 'the server did not confirm the world save in time' };
+}
+
+/**
+ * Create a panel backup. A string argument is the legacy form: a manual
+ * backup with that name. Automatic callers pass `{ kind: 'auto', label }`.
+ */
+export function createBackup(
+  options: string | CreateBackupOptions = {},
+  serverId?: string,
+): Promise<ActionResponse & { backup?: BackupInfo; warning?: string }> {
+  const opts: CreateBackupOptions = typeof options === 'string' ? { label: options } : options;
+  const kind: BackupKind = opts.kind ?? 'manual';
   return withBackupLock(async () => {
-    const paths = await resolvePaths(serverId);
+    const paths = await resolveBackupPaths(serverId);
     if (!fs.existsSync(paths.data)) {
       return { success: false, error: 'Data directory not found' };
     }
 
     // SECURITY: Validate name if provided
-    if (name && !isValidBackupName(name)) {
+    if (opts.label && !isValidBackupName(opts.label)) {
       return {
         success: false,
         error: 'Invalid backup name. Use only letters, numbers, underscores and hyphens.',
       };
+    }
+    if (kind === 'auto' && !opts.label) {
+      return { success: false, error: 'Automatic backups need a label' };
+    }
+    // manual_auto_<ts> / manual_scheduled_restart_<ts> are the old names of
+    // automatic backups; a manual one named like that would be pruned.
+    if (kind === 'manual' && opts.label && LEGACY_AUTO_LABELS.has(opts.label.toLowerCase())) {
+      return { success: false, error: `"${opts.label}" is reserved; choose another backup name.` };
     }
 
     // Ensure backups directory exists
@@ -294,14 +494,17 @@ export function createBackup(
       fs.mkdirSync(paths.backups, { recursive: true });
     }
 
-    // Generate backup name
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, '')
-      .replace('T', '_')
-      .substring(0, 15);
-    const backupName = name ? `manual_${name}_${timestamp}` : `manual_${timestamp}`;
-    const backupFile = path.join(paths.backups, `${backupName}.tar.gz`);
+    const nameAt = (at: Date): string => {
+      const timestamp = backupTimestamp(at);
+      if (kind === 'auto') return `${AUTO_PREFIX}${opts.label}_${timestamp}`;
+      return opts.label
+        ? `${MANUAL_PREFIX}${opts.label}_${timestamp}`
+        : `${MANUAL_PREFIX}${timestamp}`;
+    };
+    const backupFile = freeTimestampedPath((at) =>
+      path.join(paths.backups, `${nameAt(at)}.tar.gz`),
+    );
+    const backupName = path.basename(backupFile, '.tar.gz');
 
     // SECURITY: Double-check path is safe
     if (!isPathSafe(backupFile, [paths.backups])) {
@@ -310,12 +513,18 @@ export function createBackup(
 
     publish('backup.started', { name: backupName, file: backupFile }, serverId);
     try {
-      // Create tarball using tar command (paths are validated, using single quotes for safety)
-      // Timeout increased to 30 minutes for large backups (1GB+)
-      execSync(`tar -czf '${backupFile}' -C '${paths.data}' .`, {
-        timeout: 1800000, // 30 minutes
-        maxBuffer: 1024 * 1024 * 10, // 10MB buffer for command output
-      });
+      const flush = await flushWorldsIfRunning(serverId);
+      if (flush.note) console.warn(`[Backup] ${backupName}: ${flush.note}`);
+      if (!(await archiveDataDir(paths.data, backupFile))) {
+        throw new Error('The data directory is empty; nothing to back up.');
+      }
+      const link = await findSymlink(paths.data);
+      const linkNote = link
+        ? `it contains the symbolic link "${link}"; a restore refuses archives with links, ` +
+          'so replace the link with the real folder'
+        : undefined;
+      const warning = [flush.note, linkNote].filter(Boolean).join('; ') || undefined;
+      if (linkNote) console.warn(`[Backup] ${backupName}: ${linkNote}`);
 
       const stat = fs.statSync(backupFile);
 
@@ -329,7 +538,7 @@ export function createBackup(
 
       // Snapshot the panel's own DB/config too so a manager-volume loss is
       // recoverable, and push that off-site as well. Best-effort.
-      void backupPanelData(paths.backups).then((r) => {
+      void backupPanelData().then((r) => {
         if (r.success && r.file) uploadBackupAsync(r.file);
         else if (!r.success) console.warn('[Backup] panel self-backup failed:', r.error);
       });
@@ -340,18 +549,22 @@ export function createBackup(
           name: backupName,
           file: backupFile,
           sizeMb: Math.round((stat.size / (1024 * 1024)) * 100) / 100,
+          serverRunning: flush.running,
         },
         serverId,
       );
       return {
         success: true,
+        message: 'Backup created',
+        // e.g. the running server did not confirm the world save in time
+        warning,
         backup: {
           id: backupName,
           filename: `${backupName}.tar.gz`,
           size_bytes: stat.size,
           size_mb: Math.round((stat.size / (1024 * 1024)) * 100) / 100,
           created_at: new Date().toISOString(),
-          type: 'manual',
+          type: kind,
         },
       };
     } catch (error) {
@@ -374,11 +587,11 @@ export function createBackup(
 export function deleteBackup(backupId: string, serverId?: string): Promise<ActionResponse> {
   return withBackupLock(async () => {
     // SECURITY: Validate backup ID first
-    if (!validateBackupId(backupId)) {
+    if (!isValidBackupId(backupId)) {
       return { success: false, error: 'Invalid backup ID' };
     }
 
-    const paths = await resolvePaths(serverId);
+    const paths = await resolveBackupPaths(serverId);
     const filePath = await getBackupPath(backupId, serverId);
 
     if (!filePath) {
@@ -399,181 +612,23 @@ export function deleteBackup(backupId: string, serverId?: string): Promise<Actio
   });
 }
 
-export function restoreBackup(backupId: string, serverId?: string): Promise<ActionResponse> {
-  return withBackupLock(async () => {
-    // SECURITY: Validate backup ID first
-    if (!validateBackupId(backupId)) {
-      return { success: false, error: 'Invalid backup ID' };
-    }
-
-    const paths = await resolvePaths(serverId);
-    const filePath = await getBackupPath(backupId, serverId);
-
-    if (!filePath) {
-      return { success: false, error: 'Backup not found' };
-    }
-
-    // SECURITY: Verify path is safe
-    if (!isPathSafe(filePath, [paths.backups])) {
-      return { success: false, error: 'Invalid backup path' };
-    }
-
-    const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '_').substring(0, 15);
-    // Stage temp + sidelined dirs NEXT TO paths.data so the final swap is an
-    // atomic same-filesystem rename. (The old code staged under paths.backups,
-    // which is often a different mount → cross-device rename.) safeMove falls
-    // back to copy+remove on EXDEV regardless.
-    const dataParent = path.dirname(paths.data);
-    const tempDir = path.join(dataParent, `_restore_temp_${ts}`);
-    const oldDir = path.join(dataParent, `_restore_old_${ts}`);
-
-    // Integrity gate: confirm the archive is a readable gzip tar BEFORE we take
-    // the pre-restore backup or touch live data. A corrupt/truncated archive
-    // fails here with nothing changed, instead of silently swapping in garbage.
-    try {
-      execSync(`tar -tzf '${filePath}' > /dev/null`, {
-        timeout: 300000,
-        maxBuffer: 1024 * 1024 * 10,
-      });
-    } catch {
-      return {
-        success: false,
-        error: 'Backup archive is unreadable or corrupted; restore aborted (no data changed).',
-      };
-    }
-
-    // Disk preflight: the pre-restore backup (~data size) plus the extraction
-    // (~uncompressed backup) both need space. Require a margin of 4× the
-    // compressed archive on the data volume. Skipped if statfs is unavailable.
-    try {
-      const archiveSize = fs.statSync(filePath).size;
-      const free = freeBytes(dataParent);
-      if (free !== null && free < archiveSize * 4) {
-        const mb = (n: number) => Math.round(n / (1024 * 1024));
-        return {
-          success: false,
-          error: `Not enough disk space to restore safely: need ~${mb(archiveSize * 4)} MB free, only ${mb(free)} MB available. Restore aborted (no data changed).`,
-        };
-      }
-    } catch {
-      /* stat/statfs issue — proceed; the operation will surface real errors */
-    }
-
-    // Move src→dst atomically when possible, else copy across devices.
-    const safeMove = (src: string, dst: string): void => {
-      try {
-        fs.renameSync(src, dst);
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'EXDEV') {
-          fs.cpSync(src, dst, { recursive: true });
-          fs.rmSync(src, { recursive: true, force: true });
-        } else {
-          throw err;
-        }
-      }
-    };
-
-    try {
-      // MANDATORY pre-restore backup. We can't call createBackup() here (it would
-      // deadlock on the lock we already hold) so inline the tar. If this fails we
-      // ABORT — proceeding would risk leaving no way back if the restore breaks.
-      const preFile = path.join(paths.backups, `manual_pre_restore_${ts}.tar.gz`);
-      if (!isPathSafe(preFile, [paths.backups])) {
-        return { success: false, error: 'Could not compute a safe pre-restore backup path' };
-      }
-      try {
-        execSync(`tar -czf '${preFile}' -C '${paths.data}' .`, {
-          timeout: 1800000,
-          maxBuffer: 1024 * 1024 * 10,
-        });
-      } catch (preErr) {
-        return {
-          success: false,
-          error: `Aborted: pre-restore safety backup failed (${preErr instanceof Error ? preErr.message : 'unknown'}). No data was changed.`,
-        };
-      }
-
-      // Extract the backup into a temp dir.
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
-      fs.mkdirSync(tempDir, { recursive: true });
-      execSync(`tar -xzf '${filePath}' -C '${tempDir}'`, {
-        timeout: 1800000,
-        maxBuffer: 1024 * 1024 * 10,
-      });
-
-      // Sanity: a valid backup extracts to a non-empty tree. An empty result
-      // means a bad/empty archive — abort before swapping out live data.
-      if (fs.readdirSync(tempDir).length === 0) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        return {
-          success: false,
-          error: 'Backup extracted to an empty directory; restore aborted (no data changed).',
-        };
-      }
-
-      // Swap WITHOUT a destructive delete first: move current data aside, move
-      // the restored data in, and only then drop the sidelined copy. If the
-      // swap fails midway the original data is rolled back into place.
-      let movedAside = false;
-      if (fs.existsSync(paths.data)) {
-        safeMove(paths.data, oldDir);
-        movedAside = true;
-      }
-      try {
-        safeMove(tempDir, paths.data);
-      } catch (swapErr) {
-        // Roll back: restore the original data so a failed swap isn't data loss.
-        if (movedAside && !fs.existsSync(paths.data)) {
-          try {
-            safeMove(oldDir, paths.data);
-          } catch {
-            /* leave oldDir for manual recovery */
-          }
-        }
-        return {
-          success: false,
-          error: `Restore failed during swap; original data preserved (${swapErr instanceof Error ? swapErr.message : 'unknown'}).`,
-        };
-      }
-
-      // Success — discard the sidelined original.
-      if (movedAside) {
-        try {
-          fs.rmSync(oldDir, { recursive: true, force: true });
-        } catch {
-          /* non-fatal leftover */
-        }
-      }
-
-      return {
-        success: true,
-        message: `Restored from backup ${backupId}. Server restart required.`,
-      };
-    } catch (error) {
-      // Best-effort cleanup of the temp dir on any failure before the swap.
-      try {
-        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch {
-        /* ignore */
-      }
-      return { success: false, error: error instanceof Error ? error.message : 'Restore failed' };
-    }
-  });
-}
-
 export async function getStorageInfo(serverId?: string): Promise<StorageInfo> {
   let totalSize = 0;
   let count = 0;
-  const paths = await resolvePaths(serverId);
+  const paths = await resolveBackupPaths(serverId);
 
   if (fs.existsSync(paths.backups)) {
     const files = fs.readdirSync(paths.backups);
     for (const file of files) {
       const filePath = path.join(paths.backups, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isFile()) {
-        totalSize += stat.size;
-        count++;
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.isFile()) {
+          totalSize += stat.size;
+          count++;
+        }
+      } catch {
+        /* vanished or unreadable */
       }
     }
   }

@@ -13,10 +13,35 @@ import {
   getDemoPluginUpdateStatus,
 } from '../../services/demoData.js';
 import { parsePrometheusMetrics, parseTpsMetrics } from './shared.js';
-import { publish } from '../../services/eventBus.js';
 import { audit } from '../../services/audit.js';
+import {
+  restartServerGracefully,
+  startServer,
+  stopServerGracefully,
+  type LifecycleResult,
+} from '../../services/serverLifecycle.js';
+import type { ActionResponse } from '../../types/index.js';
 
 const router = Router();
+
+// The lifecycle service publishes the server.* events itself; the routes keep
+// the established { success, message | error } response shape.
+function toActionResponse(
+  result: LifecycleResult,
+  done: 'started' | 'stopped' | 'restarted',
+): ActionResponse & { method: LifecycleResult['method'] } {
+  if (!result.ok) return { success: false, error: result.error, method: result.method };
+  const messages: Partial<Record<LifecycleResult['method'], string>> = {
+    already_running: 'Server is already running',
+    already_stopped: done === 'restarted' ? 'Server started' : 'Server is already stopped',
+    docker: done === 'started' ? 'Server started' : `Server ${done} (forced via Docker)`,
+  };
+  return {
+    success: true,
+    message: messages[result.method] ?? `Server ${done}`,
+    method: result.method,
+  };
+}
 
 // GET /api/server/status
 router.get(
@@ -129,19 +154,17 @@ router.post(
     }
 
     const serverId = (req as { serverId?: string }).serverId;
-    publish('server.starting', { initiator: (req as { user?: string }).user }, serverId);
-    const result = await dockerService.startContainer(serverId);
-    if (!result.success) {
+    const result = await startServer(serverId, { reason: 'user', actor: req.user });
+    if (!result.ok) {
       audit(req, 'server.start_failed', {
         target: `server:${serverId ?? 'default'}`,
         success: false,
       });
-      res.status(500).json(result);
+      res.status(500).json(toActionResponse(result, 'started'));
       return;
     }
     audit(req, 'server.started', { target: `server:${serverId ?? 'default'}` });
-    publish('server.started', { initiator: (req as { user?: string }).user }, serverId);
-    res.json(result);
+    res.json(toActionResponse(result, 'started'));
   },
 );
 
@@ -161,19 +184,21 @@ router.post(
     }
 
     const serverId = (req as { serverId?: string }).serverId;
-    publish('server.stopping', { initiator: (req as { user?: string }).user }, serverId);
-    const result = await dockerService.stopContainer(serverId);
-    if (!result.success) {
+    // /stop first so the server saves; Docker only as the fallback.
+    const result = await stopServerGracefully(serverId, { reason: 'user', actor: req.user });
+    if (!result.ok) {
       audit(req, 'server.stop_failed', {
         target: `server:${serverId ?? 'default'}`,
         success: false,
       });
-      res.status(500).json(result);
+      res.status(500).json(toActionResponse(result, 'stopped'));
       return;
     }
-    audit(req, 'server.stopped', { target: `server:${serverId ?? 'default'}` });
-    publish('server.stopped', { initiator: (req as { user?: string }).user }, serverId);
-    res.json(result);
+    audit(req, 'server.stopped', {
+      target: `server:${serverId ?? 'default'}`,
+      metadata: { method: result.method },
+    });
+    res.json(toActionResponse(result, 'stopped'));
   },
 );
 
@@ -193,27 +218,20 @@ router.post(
     }
 
     const serverId = (req as { serverId?: string }).serverId;
-    publish(
-      'server.stopping',
-      { initiator: (req as { user?: string }).user, reason: 'restart' },
-      serverId,
-    );
-    const result = await dockerService.restartContainer(serverId);
-    if (!result.success) {
+    const result = await restartServerGracefully(serverId, { reason: 'restart', actor: req.user });
+    if (!result.ok) {
       audit(req, 'server.restart_failed', {
         target: `server:${serverId ?? 'default'}`,
         success: false,
       });
-      res.status(500).json(result);
+      res.status(500).json(toActionResponse(result, 'restarted'));
       return;
     }
-    audit(req, 'server.restarted', { target: `server:${serverId ?? 'default'}` });
-    publish(
-      'server.started',
-      { initiator: (req as { user?: string }).user, reason: 'restart' },
-      serverId,
-    );
-    res.json(result);
+    audit(req, 'server.restarted', {
+      target: `server:${serverId ?? 'default'}`,
+      metadata: { method: result.method },
+    });
+    res.json(toActionResponse(result, 'restarted'));
   },
 );
 

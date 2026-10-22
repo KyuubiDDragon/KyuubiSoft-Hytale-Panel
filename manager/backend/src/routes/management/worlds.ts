@@ -15,13 +15,15 @@ import {
   getWorldDetails,
   backupWorld,
   listWorldBackups,
-  restoreWorld,
+  startWorldRestore,
   deleteWorldBackup,
   importWorldArchive,
   startPregen,
   getPregenStatus,
   cancelPregen,
 } from '../../services/worldManager.js';
+import { getBackupJob } from '../../services/backupJobs.js';
+import { audit } from '../../services/audit.js';
 
 const router = Router();
 
@@ -187,8 +189,30 @@ router.post(
       res.status(400).json({ success: false, error: 'backupId required' });
       return;
     }
-    const result = await restoreWorld(backupId, req.serverId);
-    res.status(result.success ? 200 : 400).json(result);
+    // Runs as a job (stops and restarts the server); the client polls
+    // GET /worlds/jobs/:jobId.
+    const started = await startWorldRestore(backupId, req.serverId, req.user);
+    if (!started.ok) {
+      res.status(started.status).json({ success: false, error: started.error });
+      return;
+    }
+    audit(req, 'world.restore', { target: backupId, metadata: { jobId: started.job.id } });
+    res.status(202).json({ success: true, message: 'World restore started', job: started.job });
+  },
+);
+
+// GET /api/management/worlds/jobs/:jobId - status of a world restore of this server scope
+router.get(
+  '/worlds/jobs/:jobId',
+  authMiddleware,
+  requirePermission('worlds.view'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const job = getBackupJob(req.params.jobId);
+    if (!job || job.type !== 'world-restore' || job.serverId !== (req.serverId ?? null)) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    res.json(job);
   },
 );
 

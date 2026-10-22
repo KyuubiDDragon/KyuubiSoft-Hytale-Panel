@@ -25,6 +25,7 @@ import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile } from '../config.js';
 import { getCurrentVersion } from './panelVersionService.js';
 import { readJsonFile, updateJsonFile } from '../utils/jsonStore.js';
+import { migrateLegacyUpdateBlock } from './updateSettings.js';
 
 // Paths
 const DATA_DIR = config.dataPath;
@@ -347,7 +348,13 @@ export async function runMigration(): Promise<boolean> {
       allowOp: existingPanelConfig?.allowOp ?? serverConfig?.AllowOp ?? false,
     };
 
-    await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
+    // Keep settings this migration does not know about (JVM tuning, boot
+    // commands, autoUpdate, ...) instead of dropping them.
+    await writeFile(
+      PANEL_CONFIG_FILE,
+      JSON.stringify({ ...(existingPanelConfig ?? {}), ...panelConfig }, null, 2),
+      'utf-8',
+    );
     logger.info('[Migration] Panel config created:', panelConfig);
 
     // 3. Create setup-config.json
@@ -478,62 +485,53 @@ const VERSION_FEATURES: Record<string, string[]> = {
 };
 
 /**
- * Migrate UpdateConfig for the native update system (Hytale 24.01.2026+)
- * This ensures existing installations have the new update settings
+ * Moves the camelCase `updateConfig` block that earlier panel versions wrote
+ * into the `Update` block Hytale 0.7 actually reads (PascalCase keys). Values
+ * that already exist in `Update` win. Nothing is added when there is no legacy
+ * block: the server's own defaults apply then.
+ *
+ * Only while the game server is stopped (`isServerRunning`): it keeps its
+ * config in memory and writes it back when something changes, which would
+ * drop the moved settings again. Otherwise (and when its state is unknown)
+ * the file is left alone; the block is moved at a later panel start with the
+ * server stopped, or when the update settings are saved in the Update Center.
  */
-export async function migrateUpdateConfig(): Promise<{ migrated: boolean; newFeatures: string[] }> {
-  const newFeatures: string[] = [];
-
+export async function migrateUpdateConfig({
+  isServerRunning,
+}: { isServerRunning?: () => Promise<boolean> } = {}): Promise<{
+  migrated: boolean;
+  deferred?: boolean;
+  newFeatures: string[];
+}> {
   try {
-    // Check if server config.json exists and has updateConfig
-    let serverConfig: Record<string, unknown> = {};
-    try {
-      await access(SERVER_CONFIG_FILE, constants.R_OK);
-      serverConfig = JSON.parse(await readFile(SERVER_CONFIG_FILE, 'utf-8'));
-    } catch {
-      // Server config doesn't exist, that's OK
-      return { migrated: false, newFeatures: [] };
-    }
-
-    // If updateConfig already exists, no migration needed
-    if (serverConfig.updateConfig) {
-      logger.info('[Migration] UpdateConfig already exists, no migration needed');
-      return { migrated: false, newFeatures: [] };
-    }
-
-    // Create default updateConfig
-    logger.info('[Migration] Adding UpdateConfig to server config...');
-
-    // Read panel-config to get current patchline setting
-    let patchline: 'release' | 'pre-release' = 'release';
-    try {
-      const panelConfig = await readPanelConfig();
-      if (panelConfig?.patchline) {
-        patchline = panelConfig.patchline as 'release' | 'pre-release';
+    if (isServerRunning) {
+      const current = await readJsonFile<Record<string, unknown>>(SERVER_CONFIG_FILE);
+      if (!current || !migrateLegacyUpdateBlock(current)) {
+        return { migrated: false, newFeatures: [] };
       }
-    } catch {
-      // Use default
+      const running = await isServerRunning().catch(() => true);
+      if (running) {
+        logger.info(
+          '[Migration] config.json still has update settings in the old updateConfig block. ' +
+            'They are moved while the server is stopped (next panel start, or save the update settings).',
+        );
+        return { migrated: false, deferred: true, newFeatures: [] };
+      }
     }
-
-    // Check if AUTO_UPDATE was set in env
-    const autoUpdate = process.env.AUTO_UPDATE === 'true';
-
-    serverConfig.updateConfig = {
-      enabled: true,
-      checkIntervalSeconds: 3600,
-      notifyPlayersOnAvailable: true,
-      patchline: patchline,
-      runBackupBeforeUpdate: true,
-      backupConfigBeforeUpdate: true,
-      autoApplyMode: autoUpdate ? 'WHEN_EMPTY' : 'DISABLED',
-      autoApplyDelayMinutes: 5,
-    };
-
-    await writeFile(SERVER_CONFIG_FILE, JSON.stringify(serverConfig, null, 2), 'utf-8');
-    logger.info('[Migration] UpdateConfig added successfully');
-
-    newFeatures.push('native_update_system');
-    return { migrated: true, newFeatures };
+    let migrated = false;
+    await updateJsonFile<Record<string, unknown>>(SERVER_CONFIG_FILE, (current) => {
+      // No config.json yet: nothing to migrate, never create one here.
+      const next = current ? migrateLegacyUpdateBlock(current) : null;
+      if (!next) return undefined;
+      migrated = true;
+      return next;
+    });
+    if (!migrated) return { migrated: false, newFeatures: [] };
+    logger.info(
+      '[Migration] Moved the legacy updateConfig block to the server-readable Update block. ' +
+        'These update settings take effect when the server starts.',
+    );
+    return { migrated: true, newFeatures: ['native_update_system'] };
   } catch (error) {
     logger.error('[Migration] Failed to migrate UpdateConfig:', error);
     return { migrated: false, newFeatures: [] };

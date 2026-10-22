@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import api from '@/api/client'
+import { LIFECYCLE_TIMEOUT_MS } from '@/api/server'
 
 interface Command {
   id: string
@@ -58,13 +59,13 @@ const actionCommands = computed<Command[]>(() => {
   if (authStore.hasPermission('server.stop')) {
     c.push({
       id: 'action:stop', title: t('cmd.stopServer', 'Stop server'),
-      group: 'Action', run: () => api.post('/server/stop'),
+      group: 'Action', run: () => api.post('/server/stop', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
     })
   }
   if (authStore.hasPermission('server.restart')) {
     c.push({
       id: 'action:restart', title: t('cmd.restartServer', 'Restart server'),
-      group: 'Action', run: () => api.post('/server/restart'),
+      group: 'Action', run: () => api.post('/server/restart', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
     })
   }
   if (authStore.hasPermission('backups.create')) {

@@ -1,4 +1,5 @@
 import api from './client'
+import type { BackupJob } from './backup'
 
 // ============== WHITELIST ==============
 
@@ -258,8 +259,18 @@ export const worldsApi = {
     return response.data
   },
 
-  async restoreBackup(backupId: string): Promise<{ success: boolean; error?: string }> {
+  /** Starts a world restore job (stops and restarts the server); poll it with getRestoreJob(). */
+  async restoreBackup(
+    backupId: string,
+  ): Promise<{ success: boolean; error?: string; job?: BackupJob }> {
     const response = await api.post('/management/worlds/restore', { backupId })
+    return response.data
+  },
+
+  async getRestoreJob(jobId: string): Promise<BackupJob> {
+    const response = await api.get<BackupJob>(
+      `/management/worlds/jobs/${encodeURIComponent(jobId)}`,
+    )
     return response.data
   },
 
@@ -1375,9 +1386,7 @@ export const modupdatesApi = {
   },
 
   /** Install or update a tracked mod */
-  async install(
-    filename: string,
-  ): Promise<{
+  async install(filename: string): Promise<{
     success: boolean
     error?: string
     filename?: string

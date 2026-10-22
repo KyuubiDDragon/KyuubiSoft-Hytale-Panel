@@ -13,9 +13,12 @@ import {
 } from './systemCheck.js';
 import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
 import { saveConfig as saveSchedulerConfig } from './scheduler.js';
+import { restartServerGracefully } from './serverLifecycle.js';
 import { installMod, ensureEasyWebMapConfig } from './modStore.js';
 import { escapeShellArg } from '../utils/sanitize.js';
 import { updateJsonFile } from '../utils/jsonStore.js';
+import { applyUpdateSettings } from './updateSettings.js';
+import { writePanelConfig } from '../routes/server/shared.js';
 
 // Re-export system check types and function
 export type { SystemCheck, SystemCheckResult };
@@ -127,7 +130,6 @@ export interface DownloadProgress {
 // Paths
 const DATA_DIR = config.dataPath;
 const SETUP_CONFIG_FILE = path.join(DATA_DIR, 'setup-config.json');
-const PANEL_CONFIG_FILE = path.join(DATA_DIR, 'panel-config.json');
 
 // Step definitions
 const SETUP_STEPS = [
@@ -656,8 +658,13 @@ export async function finalizeSetup(): Promise<{
       acceptEarlyPlugins: setupConfig.acceptEarlyPlugins ?? false,
       disableSentry: setupConfig.disableSentry ?? false,
       allowOp: setupConfig.server?.allowOp ?? false,
+      // Read by the game container's entrypoint (overrides AUTO_UPDATE): check
+      // for a new version with the downloader on every container start.
+      autoUpdate: setupConfig.autoUpdate === true,
     };
-    await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
+    // Merged into the file, atomically: keeps the JVM settings and boot
+    // commands, and the start scripts never read a half-written file.
+    await writePanelConfig(panelConfig);
     logger.info('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
 
     // Write server config.json if server path exists.
@@ -717,20 +724,17 @@ export async function finalizeSetup(): Promise<{
           setIfMissing('ViewRadius', setupConfig.performance.viewRadius);
         }
 
-        // Add UpdateConfig for native update system (Hytale 24.01.2026+)
-        serverConfig.updateConfig = {
+        // Native update system: the server reads the PascalCase `Update` block.
+        // The wizard's "Auto-updates" switch lets the server download updates
+        // and apply them while nobody is online; the patchline stays with the
+        // panel setting (see updateSettings.ts).
+        serverConfig = applyUpdateSettings(serverConfig, {
           enabled: true,
-          checkIntervalSeconds: 3600,
-          notifyPlayersOnAvailable: true,
-          patchline: setupConfig.patchline ?? 'release',
-          runBackupBeforeUpdate: true,
-          backupConfigBeforeUpdate: true,
           autoApplyMode: setupConfig.autoUpdate ? 'WHEN_EMPTY' : 'DISABLED',
-          autoApplyDelayMinutes: 5,
-        };
+        });
 
         await writeFile(serverConfigPath, JSON.stringify(serverConfig, null, 2), 'utf-8');
-        logger.info('[Setup] Wrote server config.json with all settings including UpdateConfig');
+        logger.info('[Setup] Wrote server config.json with all settings including Update');
       } catch {
         // Server directory might not exist yet, skip
         logger.info('Note: Server config not written (server directory not ready)');
@@ -840,8 +844,8 @@ export async function finalizeSetup(): Promise<{
     setTimeout(async () => {
       try {
         logger.info('[Setup] Restarting server container now...');
-        const restartResult = await dockerService.restartContainer();
-        if (restartResult.success) {
+        const restartResult = await restartServerGracefully(undefined, { reason: 'setup' });
+        if (restartResult.ok) {
           logger.info('[Setup] Server restart completed successfully');
 
           // Wait for server to start, then ensure EasyWebMap config has correct port

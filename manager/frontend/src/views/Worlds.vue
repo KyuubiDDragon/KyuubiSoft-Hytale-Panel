@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { worldsApi, type WorldInfo, type WorldConfig, type WorldBackup, type PregenStatus } from '@/api/management'
+import { waitForBackupJob } from '@/api/backup'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
@@ -22,6 +23,8 @@ const pregen = ref<PregenStatus>({ state: 'idle', world: null, radius: null, per
 const pregenWorld = ref('')
 const pregenRadius = ref(8)
 let pregenTimer: ReturnType<typeof setInterval> | null = null
+// Ends a world restore poll when the view is left.
+let unmounted = false
 
 function fmtBytes(b: number): string {
   if (b < 1024) return `${b} B`
@@ -68,12 +71,35 @@ async function restoreWorldBackup(b: WorldBackup) {
   worldToolsBusy.value = true
   try {
     const r = await worldsApi.restoreBackup(b.id)
-    if (r.success) {
+    if (!r.success) {
+      addToast(r.error || t('errors.serverError'), 'error')
+      return
+    }
+    if (!r.job) {
+      // demo mode answers right away
       addToast(t('worlds.tools.restored'), 'success')
       await loadWorlds()
-    } else {
-      addToast(r.error || t('errors.serverError'), 'error')
+      return
     }
+    // The server is stopped for the swap and started again; follow the job.
+    addToast(t('worlds.tools.restoreStarted'), 'info')
+    const job = await waitForBackupJob(r.job, {
+      fetchJob: worldsApi.getRestoreJob,
+      shouldStop: () => unmounted,
+    })
+    if (unmounted) return
+    if (job.state === 'succeeded') {
+      addToast(job.message || t('worlds.tools.restored'), 'success')
+      await Promise.all([loadWorlds(), loadWorldBackups()])
+    } else if (job.state === 'failed') {
+      addToast(job.error || t('errors.serverError'), 'error')
+    } else {
+      // Still running as far as we know (e.g. the panel restarted meanwhile).
+      addToast(t('worlds.tools.restoreLost'), 'warning', 8000)
+    }
+  } catch (e: unknown) {
+    const data = (e as { response?: { data?: { error?: string } } }).response?.data
+    addToast(data?.error || t('errors.serverError'), 'error')
   } finally {
     worldToolsBusy.value = false
   }
@@ -362,6 +388,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  unmounted = true
   if (pregenTimer) clearInterval(pregenTimer)
 })
 </script>

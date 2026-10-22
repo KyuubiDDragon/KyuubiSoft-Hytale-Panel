@@ -68,7 +68,17 @@ const jvmData = ref<JvmSettings | null>(null)
 const jvmLoading = ref(false)
 const jvmSaving = ref(false)
 const jvmNeedsRestart = ref(false)
-const jvmForm = ref({ javaMinRam: '', javaMaxRam: '', extraJavaArgs: '', extraServerArgs: '' })
+const jvmForm = ref({
+  javaMinRam: '',
+  javaMaxRam: '',
+  extraJavaArgs: '',
+  extraServerArgs: '',
+  // One boot command per line
+  bootCommandsText: '',
+  aotCache: false,
+  nativeBackupMaxCount: 5,
+  nativeBackupArchiveMaxCount: 5,
+})
 
 // Integration API keys (CurseForge / Modtale / StackMart)
 const canEditIntegrations = computed(() => authStore.hasPermission('settings.edit'))
@@ -646,6 +656,10 @@ async function loadJvm() {
     jvmForm.value.javaMaxRam = data.javaMaxRam
     jvmForm.value.extraJavaArgs = data.extraJavaArgs
     jvmForm.value.extraServerArgs = data.extraServerArgs
+    jvmForm.value.bootCommandsText = (data.bootCommands ?? []).join('\n')
+    jvmForm.value.aotCache = data.aotCache ?? false
+    jvmForm.value.nativeBackupMaxCount = data.nativeBackupMaxCount ?? 5
+    jvmForm.value.nativeBackupArchiveMaxCount = data.nativeBackupArchiveMaxCount ?? 5
   } catch {
     // settings unavailable
   } finally {
@@ -661,6 +675,13 @@ async function saveJvm() {
       javaMaxRam: jvmForm.value.javaMaxRam.trim(),
       extraJavaArgs: jvmForm.value.extraJavaArgs.trim(),
       extraServerArgs: jvmForm.value.extraServerArgs.trim(),
+      bootCommands: jvmForm.value.bootCommandsText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+      aotCache: jvmForm.value.aotCache,
+      nativeBackupMaxCount: Number(jvmForm.value.nativeBackupMaxCount),
+      nativeBackupArchiveMaxCount: Number(jvmForm.value.nativeBackupArchiveMaxCount),
     })
     if (result.changed) jvmNeedsRestart.value = true
     toast.success(result.message || t('settings.jvm.saved'))
@@ -1371,19 +1392,57 @@ onUnmounted(() => {
           </div>
         </div>
         <p class="text-xs text-ink-subtle">{{ t('settings.jvm.ramHint', { min: jvmData.envDefaults.javaMinRam, max: jvmData.envDefaults.javaMaxRam }) }}</p>
+        <p v-if="jvmData.memoryLimitMb && jvmData.maxHeapMb" class="text-xs text-ink-subtle">
+          {{ t('settings.jvm.memoryLimitHint', { limit: jvmData.memoryLimitMb, max: jvmData.maxHeapMb }) }}
+        </p>
 
         <div class="space-y-1.5">
           <label class="text-sm font-medium text-ink">{{ t('settings.jvm.extraJavaArgs') }}</label>
           <input v-model="jvmForm.extraJavaArgs" type="text" placeholder="-XX:+UseZGC"
                  class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
           <p class="text-xs text-ink-subtle">{{ t('settings.jvm.extraJavaArgsHint') }}</p>
+          <p v-if="jvmData.invalid?.extraJavaArgs" class="text-xs text-status-warning">
+            {{ t('settings.jvm.storedInvalid', { error: jvmData.invalid.extraJavaArgs }) }}
+          </p>
         </div>
         <div class="space-y-1.5">
           <label class="text-sm font-medium text-ink">{{ t('settings.jvm.extraServerArgs') }}</label>
-          <input v-model="jvmForm.extraServerArgs" type="text" placeholder="--some-flag"
+          <input v-model="jvmForm.extraServerArgs" type="text" placeholder="--ignore-broken-mods"
                  class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
           <p class="text-xs text-ink-subtle">{{ t('settings.jvm.extraServerArgsHint') }}</p>
+          <p v-if="jvmData.invalid?.extraServerArgs" class="text-xs text-status-warning">
+            {{ t('settings.jvm.storedInvalid', { error: jvmData.invalid.extraServerArgs }) }}
+          </p>
         </div>
+
+        <div class="space-y-1.5">
+          <label class="text-sm font-medium text-ink">{{ t('settings.jvm.bootCommands') }}</label>
+          <textarea v-model="jvmForm.bootCommandsText" rows="3" placeholder="whitelist on"
+                    class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono"></textarea>
+          <p class="text-xs text-ink-subtle">{{ t('settings.jvm.bootCommandsHint') }}</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.jvm.nativeBackupMaxCount') }}</label>
+            <input v-model.number="jvmForm.nativeBackupMaxCount" type="number" min="1" max="100"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
+          </div>
+          <div class="space-y-1.5">
+            <label class="text-sm font-medium text-ink">{{ t('settings.jvm.nativeBackupArchiveMaxCount') }}</label>
+            <input v-model.number="jvmForm.nativeBackupArchiveMaxCount" type="number" min="1" max="100"
+                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink font-mono" />
+          </div>
+        </div>
+        <p class="text-xs text-ink-subtle">{{ t('settings.jvm.nativeBackupHint') }}</p>
+
+        <label class="flex items-start gap-3">
+          <input v-model="jvmForm.aotCache" type="checkbox" class="mt-1 accent-hytale-orange" />
+          <span>
+            <span class="text-sm font-medium text-ink">{{ t('settings.jvm.aotCache') }}</span>
+            <span class="block text-xs text-ink-subtle">{{ t('settings.jvm.aotCacheHint') }}</span>
+          </span>
+        </label>
 
         <div v-if="jvmNeedsRestart" class="flex items-center justify-between gap-3 p-3 rounded-lg bg-status-warning/10 border border-status-warning/20">
           <span class="text-sm text-status-warning">{{ t('settings.jvm.restartNote') }}</span>

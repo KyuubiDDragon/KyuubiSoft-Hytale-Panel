@@ -5,9 +5,11 @@ import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import ConfigFormEditor from '@/components/config/ConfigFormEditor.vue'
 import { serverApi, type ConfigFile, type QuickSettings, type UpdateConfig } from '@/api/server'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const { ask } = useConfirm()
 
 type EditorMode = 'form' | 'json'
 
@@ -113,12 +115,29 @@ async function saveUpdateConfig() {
   try {
     updateConfigSaving.value = true
     error.value = null
-    await serverApi.saveUpdateConfig(updateConfig)
+    try {
+      await serverApi.saveUpdateConfig(updateConfig)
+    } catch (e) {
+      const requiresRestart = (e as { response?: { data?: { requiresRestart?: boolean } } })?.response?.data?.requiresRestart
+      if (!requiresRestart) throw e
+      // Only accepted while the server is stopped: offer save + restart.
+      const ok = await ask({
+        title: t('updates.restartRequiredTitle'),
+        message: t('updates.restartRequiredConfirm'),
+        confirmText: t('updates.saveAndRestart'),
+        variant: 'danger',
+      })
+      if (!ok) return
+      await serverApi.saveUpdateConfig(updateConfig, { restart: true })
+    }
     originalUpdateConfig.value = { ...updateConfig }
     successMessage.value = t('config.saved')
     setTimeout(() => { successMessage.value = null }, 3000)
   } catch (e) {
-    error.value = t('errors.serverError')
+    // A timeout only means the page stopped waiting for the restart.
+    error.value = (e as { code?: string })?.code === 'ECONNABORTED'
+      ? t('updates.saveStillRunning')
+      : t('errors.serverError')
   } finally {
     updateConfigSaving.value = false
   }
@@ -399,14 +418,14 @@ onMounted(() => {
           <!-- Patchline -->
           <div>
             <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.updateConfig.patchline') }}</label>
+            <!-- Display only: the patchline is switched in the server settings -->
             <div class="grid grid-cols-2 gap-3">
-              <button
-                @click="updateConfig.patchline = 'release'"
+              <div
                 :class="[
-                  'p-3 rounded-lg border-2 text-left transition-all',
+                  'p-3 rounded-lg border-2 text-left',
                   updateConfig.patchline === 'release'
                     ? 'border-status-success bg-status-success/10'
-                    : 'border-border bg-surface-overlay hover:border-gray-500'
+                    : 'border-border bg-surface-overlay opacity-60'
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
@@ -414,14 +433,13 @@ onMounted(() => {
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-success/20 text-status-success">{{ t('config.updateConfig.stable') }}</span>
                 </div>
                 <p class="text-xs text-ink-subtle">{{ t('config.updateConfig.releaseHint') }}</p>
-              </button>
-              <button
-                @click="updateConfig.patchline = 'pre-release'"
+              </div>
+              <div
                 :class="[
-                  'p-3 rounded-lg border-2 text-left transition-all',
+                  'p-3 rounded-lg border-2 text-left',
                   updateConfig.patchline === 'pre-release'
                     ? 'border-status-warning bg-status-warning/10'
-                    : 'border-border bg-surface-overlay hover:border-gray-500'
+                    : 'border-border bg-surface-overlay opacity-60'
                 ]"
               >
                 <div class="flex items-center gap-2 mb-1">
@@ -429,8 +447,9 @@ onMounted(() => {
                   <span class="px-1.5 py-0.5 text-xs rounded bg-status-warning/20 text-status-warning">{{ t('config.updateConfig.beta') }}</span>
                 </div>
                 <p class="text-xs text-ink-subtle">{{ t('config.updateConfig.preReleaseHint') }}</p>
-              </button>
+              </div>
             </div>
+            <p class="text-xs text-ink-subtle mt-2">{{ t('updates.patchlineHint') }}</p>
           </div>
 
           <!-- Auto Apply Mode -->

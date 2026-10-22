@@ -103,6 +103,23 @@ router.put(
       }
       update.quickCommands = review.value;
     }
+    // Restart times drive stop/start of the server: anything but well-spaced
+    // "HH:MM" values is refused (an invalid one used to restart in a loop).
+    if ('scheduledRestarts' in incoming) {
+      const plan = incoming.scheduledRestarts;
+      if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+        res.status(400).json({ success: false, error: 'scheduledRestarts must be an object' });
+        return;
+      }
+      if ('times' in plan) {
+        const review = schedulerService.reviewRestartTimes((plan as { times: unknown }).times);
+        if (!review.ok) {
+          res.status(400).json({ success: false, error: review.error });
+          return;
+        }
+        update.scheduledRestarts = { ...plan, times: review.value };
+      }
+    }
 
     const success = schedulerService.saveConfig(update, req.serverId);
     if (success) {
@@ -197,11 +214,12 @@ router.get(
   },
 );
 
-// POST /api/scheduler/backup/run - Run backup now
+// POST /api/scheduler/backup/run - Run backup now (the same right as creating
+// one on the Backups page, not just editing the schedule)
 router.post(
   '/backup/run',
   authMiddleware,
-  requirePermission('scheduler.edit'),
+  requirePermission('scheduler.edit', 'backups.create'),
   async (req: AuthenticatedRequest, res: Response) => {
     const { createBackup } = await import('../services/backup.js');
     const result = await createBackup('manual', req.serverId);

@@ -218,6 +218,8 @@ export const config = {
   modsPath: process.env.MODS_PATH || '/opt/hytale/mods',
   pluginsPath: process.env.PLUGINS_PATH || '/opt/hytale/plugins',
   assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets',
+  // Native updater (staging/ + backup/), mounted read-only in the manager.
+  updaterPath: process.env.UPDATER_PATH || '/opt/hytale/updater',
 
   // Server port - internal port is always 18080, external port from MANAGER_PORT
   // Internal port is what Express listens on inside the container

@@ -15,11 +15,11 @@
  * (never a hard block) — we surface the uncertainty rather than guessing.
  */
 import fs from 'fs';
-import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { config } from '../config.js';
 import { getServer, getDefaultId } from './servers.js';
+import { readInstalledVersion } from './serverInstall.js';
 import { logger } from '../utils/logger.js';
 
 const execFileAsync = promisify(execFile);
@@ -82,12 +82,8 @@ export async function getServerVersion(serverId?: string): Promise<string | null
   } catch {
     /* registry not ready */
   }
-  try {
-    const v = fs.readFileSync(path.join(serverPath, '.hytale-version'), 'utf-8').trim();
-    return v || null;
-  } catch {
-    return null;
-  }
+  // JAR manifest first; `.hytale-version` holds a second (patchline) line now.
+  return (await readInstalledVersion(serverPath)).version;
 }
 
 // ---------- verdict from declared ranges ----------

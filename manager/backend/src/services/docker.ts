@@ -14,12 +14,13 @@
 import type Docker from 'dockerode';
 import { config } from '../config.js';
 import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.js';
-import { validateCommand, escapeShellArg } from '../utils/sanitize.js';
+import { validateCommand, containsControlChars } from '../utils/sanitize.js';
 import { clearOnlinePlayers } from './players.js';
 import { isDemoMode, getDemoStatus, getDemoStats, getDemoLogs } from './demoData.js';
 import { ensureLoaded, getDefaultId, getServer, resolveServerId } from './servers.js';
 import { createDockerClient } from './dockerClient.js';
 import { ensurePluginAuthConfig } from './pluginAuth.js';
+import { decodeDockerOutput } from './dockerStream.js';
 
 const docker = createDockerClient();
 
@@ -28,9 +29,10 @@ const docker = createDockerClient();
 // each one-shot Docker call against a timeout so the handler always returns.
 // Streaming calls (log follow, stdin attach) are deliberately NOT wrapped.
 const DOCKER_OP_TIMEOUT_MS = 30_000;
-// Graceful stop/restart asks the engine for up to 30s (`t: 30`) before SIGKILL,
-// so allow extra headroom before we give up on the whole operation.
-const DOCKER_STOP_TIMEOUT_MS = 45_000;
+// `docker stop` waits `t` seconds after SIGTERM before SIGKILL; allow some
+// headroom on top before we give up on the whole operation.
+const DEFAULT_STOP_SECONDS = 30;
+const DOCKER_STOP_HEADROOM_MS = 15_000;
 
 class DockerTimeoutError extends Error {
   constructor(op: string, ms: number) {
@@ -132,6 +134,79 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
   }
 }
 
+export interface ContainerState {
+  running: boolean;
+  status: string;
+  startedAt: string;
+  finishedAt: string;
+  /** Exit code of the last run; Docker resets it to 0 while running. */
+  exitCode: number;
+  oomKilled: boolean;
+  restartCount: number;
+}
+
+/**
+ * Raw container state for the lifecycle and the watchdog. Null when the
+ * container (or the server id) does not exist; other Docker errors throw.
+ */
+export async function getContainerState(serverId?: string): Promise<ContainerState | null> {
+  let name: string;
+  try {
+    name = await resolveContainerName(serverId);
+  } catch {
+    return null;
+  }
+  try {
+    const info = await withTimeout('inspect', docker.getContainer(name).inspect());
+    return {
+      running: info.State.Running === true,
+      status: info.State.Status,
+      startedAt: info.State.StartedAt ?? '',
+      finishedAt: info.State.FinishedAt ?? '',
+      exitCode: info.State.ExitCode ?? 0,
+      oomKilled: info.State.OOMKilled === true,
+      restartCount: info.RestartCount ?? 0,
+    };
+  } catch (error) {
+    if ((error as { statusCode?: number }).statusCode === 404) return null;
+    throw error;
+  }
+}
+
+/**
+ * The container's memory limit in bytes (compose `deploy.resources.limits.memory`),
+ * or null when it has none or Docker cannot be asked.
+ */
+export async function getContainerMemoryLimit(serverId?: string): Promise<number | null> {
+  if (isDemoMode()) return 8 * 1024 * 1024 * 1024;
+  try {
+    const name = await resolveContainerName(serverId);
+    const info = await withTimeout('inspect', docker.getContainer(name).inspect());
+    const limit = info.HostConfig?.Memory ?? 0;
+    return limit > 0 ? limit : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the Java server process runs inside the container (it does not
+ * while the entrypoint is still downloading or between update restarts).
+ * Null when Docker cannot tell; callers then assume it does.
+ */
+export async function isServerProcessRunning(serverId?: string): Promise<boolean | null> {
+  try {
+    const container = await getContainer(serverId);
+    if (!container) return null;
+    const top = await withTimeout('top', container.top());
+    const cmdIndex = (top.Titles ?? []).findIndex((t: string) => /^(CMD|COMMAND)$/i.test(t));
+    if (cmdIndex < 0) return null;
+    return (top.Processes ?? []).some((p: string[]) => /(^|\/)java\s/.test(p[cmdIndex] ?? ''));
+  } catch {
+    return null;
+  }
+}
+
 // Records the last time the panel itself stopped/restarted a server, so the
 // watchdog can tell a deliberate stop from a crash and not "restart" something
 // an operator just stopped (or fight a restart already in progress).
@@ -170,13 +245,25 @@ export async function startContainer(serverId?: string): Promise<ActionResponse>
   }
 }
 
-export async function stopContainer(serverId?: string): Promise<ActionResponse> {
+/**
+ * `docker stop`: SIGTERM, then SIGKILL after `timeoutSeconds`. The start script
+ * forwards SIGTERM to Java, which then saves and shuts down. Prefer
+ * serverLifecycle.stopServerGracefully(), which tries `/stop` first.
+ */
+export async function stopContainer(
+  serverId?: string,
+  timeoutSeconds: number = DEFAULT_STOP_SECONDS,
+): Promise<ActionResponse> {
   if (isDemoMode()) return { success: true, message: '[DEMO] Container stopped' };
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
     await noteIntentionalStop(serverId); // tell the watchdog this stop was deliberate
-    await withTimeout('stop', container.stop({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
+    await withTimeout(
+      'stop',
+      container.stop({ t: timeoutSeconds }),
+      timeoutSeconds * 1000 + DOCKER_STOP_HEADROOM_MS,
+    );
     clearOnlinePlayers();
     return { success: true, message: 'Container stopped' };
   } catch (error) {
@@ -184,6 +271,10 @@ export async function stopContainer(serverId?: string): Promise<ActionResponse> 
   }
 }
 
+/**
+ * @deprecated No caller is left: it bypasses `/stop` and the per-server
+ * lifecycle lock. Use restartServerGracefully() from services/serverLifecycle.ts.
+ */
 export async function restartContainer(serverId?: string): Promise<ActionResponse> {
   if (isDemoMode()) return { success: true, message: '[DEMO] Container restarted' };
   try {
@@ -191,7 +282,11 @@ export async function restartContainer(serverId?: string): Promise<ActionRespons
     if (!container) return { success: false, error: 'Container not found' };
     await noteIntentionalStop(serverId); // restart cycles through "stopped"; don't treat as a crash
     await ensurePluginAuthConfig(serverId); // picked up by the restarted process, see startContainer
-    await withTimeout('restart', container.restart({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
+    await withTimeout(
+      'restart',
+      container.restart({ t: DEFAULT_STOP_SECONDS }),
+      DEFAULT_STOP_SECONDS * 1000 + DOCKER_STOP_HEADROOM_MS,
+    );
     clearOnlinePlayers();
     return { success: true, message: 'Container restarted' };
   } catch (error) {
@@ -208,7 +303,8 @@ export async function getLogs(tail: number = 100, serverId?: string): Promise<st
       'logs',
       container.logs({ stdout: true, stderr: true, tail, timestamps: true }) as Promise<Buffer>,
     );
-    return logs.toString('utf-8');
+    // Without a TTY Docker frames stdout/stderr; strip those headers.
+    return decodeDockerOutput(logs);
   } catch {
     return '';
   }
@@ -236,6 +332,11 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
       stderr: false,
       hijack: true,
     });
+    // dockerode sends the attach options as a JSON request body, and Docker
+    // forwards those bytes to the container's stdin. Without a line break they
+    // would be glued in front of the first real command, which the server then
+    // rejects as unknown. Terminate them so they stay one harmless line.
+    stream.write('\n');
     stdinStreams.set(key, stream);
     stream.on('error', () => stdinStreams.delete(key));
     stream.on('close', () => stdinStreams.delete(key));
@@ -259,6 +360,30 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     );
     return { success: false, error: validation.error || 'Invalid command' };
   }
+  return writeConsoleLine(command, serverId);
+}
+
+// The panel's own shutdown and countdown commands (serverLifecycle.ts). They
+// are not on the operator console whitelist (`/world` also has destructive
+// subcommands), so only these exact shapes pass here.
+const LIFECYCLE_COMMAND =
+  /^\/(?:stop|notify (?:warning|danger) \S.*|eventtitle \S.*|world save --all --confirm)$/;
+
+export async function sendLifecycleCommand(
+  command: string,
+  serverId?: string,
+): Promise<ActionResponse> {
+  if (containsControlChars(command) || !LIFECYCLE_COMMAND.test(command)) {
+    return { success: false, error: 'Not a lifecycle command' };
+  }
+  return writeConsoleLine(command, serverId);
+}
+
+// The only way commands reach the server: its console stdin. There used to be
+// a `docker exec` fallback that echoed into /proc/1/fd/0; with a TTY that
+// lands in the terminal's output, not its input, so it reported success for
+// commands that never ran. A missing console is now reported as an error.
+async function writeConsoleLine(command: string, serverId?: string): Promise<ActionResponse> {
   if (isDemoMode()) {
     return { success: true, message: `[DEMO] Command executed: ${command}` };
   }
@@ -273,50 +398,28 @@ export async function execCommand(command: string, serverId?: string): Promise<A
 
     const attached = await ensureStdinAttached(serverId);
     const stream = attached.ok ? stdinStreams.get(attached.key) : undefined;
-    if (stream) {
-      try {
-        stream.write(command + '\n');
-        return { success: true, message: `Command executed: ${command}` };
-      } catch {
-        stdinStreams.delete(attached.key);
-      }
+    if (!stream) return { success: false, error: 'Server console is not reachable' };
+    try {
+      stream.write(command + '\n');
+      return { success: true, message: `Command executed: ${command}` };
+    } catch (error) {
+      stdinStreams.delete(attached.key);
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: `Writing to the server console failed: ${reason}` };
     }
-
-    const escapedCommand = escapeShellArg(command);
-    const exec = await withTimeout(
-      'exec',
-      container.exec({
-        Cmd: [
-          'sh',
-          '-c',
-          `
-        if command -v screen > /dev/null && screen -list | grep -q hytale; then
-          screen -S hytale -p 0 -X stuff ${escapedCommand}$'\n'
-        elif [ -p /tmp/server_input ]; then
-          echo ${escapedCommand} > /tmp/server_input
-        else
-          echo ${escapedCommand} >> /proc/1/fd/0
-        fi
-      `,
-        ],
-        AttachStdout: true,
-        AttachStderr: true,
-      }),
-    );
-    const execStream = await exec.start({});
-    return new Promise((resolve) => {
-      execStream.on('end', () => resolve({ success: true, message: `Command sent: ${command}` }));
-      execStream.on('error', (err: Error) => resolve({ success: false, error: err.message }));
-      setTimeout(() => resolve({ success: true, message: `Command sent: ${command}` }), 1000);
-    });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
+// How long execInContainer waits for a command before it returns the output
+// collected so far (the command keeps running in the container).
+const EXEC_OUTPUT_WAIT_MS = 5000;
+
 export async function execInContainer(
   command: string,
   serverId?: string,
+  options: { timeoutMs?: number } = {},
 ): Promise<ActionResponse & { output?: string }> {
   if (isDemoMode()) {
     if (command.includes('stats memory')) {
@@ -336,17 +439,17 @@ export async function execInContainer(
     );
     const stream = await exec.start({});
     return new Promise((resolve) => {
-      let output = '';
-      stream.on('data', (chunk: Buffer) => {
-        output += chunk.toString('utf8');
+      // exec output is framed (no TTY); decode the frames instead of guessing.
+      const chunks: Buffer[] = [];
+      const output = () => decodeDockerOutput(Buffer.concat(chunks)).trim();
+      stream.on('data', (chunk: Buffer | string) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       });
-      stream.on('end', () =>
-        resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }),
-      );
+      stream.on('end', () => resolve({ success: true, output: output() }));
       stream.on('error', (err: Error) => resolve({ success: false, error: err.message }));
       setTimeout(
-        () => resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }),
-        5000,
+        () => resolve({ success: true, output: output() }),
+        options.timeoutMs ?? EXEC_OUTPUT_WAIT_MS,
       );
     });
   } catch (error) {

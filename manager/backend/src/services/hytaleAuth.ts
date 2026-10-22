@@ -347,8 +347,6 @@ async function checkTokenFileExists(): Promise<boolean> {
     // Try common token file locations
     const possiblePaths = [
       // Main auth folder at /opt/hytale/auth (same level as server)
-      path.join(basePath, 'auth', 'credentials.json'),
-      path.join(basePath, 'auth', 'oauth_credentials.json'),
       path.join(basePath, 'auth', 'credentials.enc'),
       path.join(basePath, 'auth', 'auth.enc'),
       path.join(basePath, 'auth', 'token'),
@@ -592,11 +590,8 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
  */
 async function checkDownloaderCredentialsExist(): Promise<boolean> {
   const basePath = getHytaleBasePath();
-  const credPaths = [
-    path.join(basePath, 'auth', 'credentials.json'),
-    path.join(basePath, 'auth', 'oauth_credentials.json'),
-    path.join(basePath, 'downloader', '.hytale-downloader-credentials.json'),
-  ];
+  // The downloader volume is mounted read-only into the manager.
+  const credPaths = [path.join(basePath, 'downloader', '.hytale-downloader-credentials.json')];
 
   for (const credPath of credPaths) {
     try {

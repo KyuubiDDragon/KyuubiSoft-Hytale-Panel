@@ -7,21 +7,21 @@
  * plugin today, native HTTP endpoints once Hytale ships them).
  *
  * Versioning strategy:
- *   - Read the server version from /opt/hytale/server/.hytale-version
- *     (written by scripts/entrypoint.sh during downloader runs).
+ *   - Read the server version from the manifest of HytaleServer.jar, falling
+ *     back to /opt/hytale/server/.hytale-version (stamped by start-server.sh
+ *     from `java -jar HytaleServer.jar --version` on every start).
  *   - HytaleAPIFactory.create() picks the adapter that matches the version
  *     range; today there is only one, but the dispatch point is in place.
  *   - getCapabilities() exposes feature flags so callers can branch on
  *     supportsNativeUpdates / supportsServerBrowser without re-detecting.
  */
 
-import { readFile } from 'fs/promises';
-import path from 'path';
 import { config } from '../config.js';
 import { getPluginStatus, fetchFromPlugin, type PluginStatus } from './kyuubiApi.js';
+import { readInstalledVersion } from './serverInstall.js';
 
 export interface HytaleCapabilities {
-  /** Hytale 0.24.01.2026+ has a built-in update mechanism (exit code 8). */
+  /** Built-in update mechanism (`/update`, exit code 8), since the 2026-01-24 build. */
   supportsNativeUpdates: boolean;
   /** Hytale Update 5 (2026-05-28) adds a public server browser. */
   supportsServerBrowser: boolean;
@@ -33,7 +33,7 @@ export interface HytaleCapabilities {
 
 export interface HytaleVersionInfo {
   version: string | null;
-  source: 'version-file' | 'unknown';
+  source: 'jar' | 'version-file' | 'unknown';
 }
 
 export interface HytalePlayer {
@@ -55,15 +55,9 @@ export interface HytaleServerAPI {
   getOnlinePlayers(): Promise<HytalePlayer[]>;
 }
 
-const VERSION_FILE = path.join(config.serverPath, '.hytale-version');
-
-async function readVersionFile(): Promise<HytaleVersionInfo> {
-  try {
-    const raw = (await readFile(VERSION_FILE, 'utf-8')).trim();
-    return raw ? { version: raw, source: 'version-file' } : { version: null, source: 'unknown' };
-  } catch {
-    return { version: null, source: 'unknown' };
-  }
+async function readServerVersion(): Promise<HytaleVersionInfo> {
+  const installed = await readInstalledVersion(config.serverPath);
+  return { version: installed.version, source: installed.source };
 }
 
 function parseSemver(v: string | null): { major: number; minor: number; patch: number } | null {
@@ -73,20 +67,28 @@ function parseSemver(v: string | null): { major: number; minor: number; patch: n
   return { major: parseInt(m[1], 10), minor: parseInt(m[2], 10), patch: parseInt(m[3], 10) };
 }
 
-function capabilitiesFor(v: string | null): HytaleCapabilities {
+// Hytale used build dates as versions (2026.01.24-<hash>) until Update 5
+// switched to semantic versions (0.5.0); every 0.x release has both features.
+const NATIVE_UPDATES_SINCE = '2026.01.24';
+const SERVER_BROWSER_SINCE = '2026.05.28';
+const SERVER_BROWSER_SINCE_MINOR = 5;
+
+export function capabilitiesFor(v: string | null): HytaleCapabilities {
   const parsed = parseSemver(v);
-  // Defaults assume the current Early Access build line (0.x.y, post-2026-01).
+  // Defaults assume the current Early Access build line (0.x.y).
   const caps: HytaleCapabilities = {
     supportsNativeUpdates: true,
-    supportsServerBrowser: false,
+    supportsServerBrowser: true,
     configFormat: 'json',
     minJavaVersion: 25,
   };
-  if (parsed && parsed.major === 0) {
-    // Native update system landed with the 24.01.2026 build (0.x where x >= 24).
-    caps.supportsNativeUpdates = parsed.minor >= 24;
-    // Server browser shipped with Update 5 (2026-05-28).
-    caps.supportsServerBrowser = parsed.minor >= 28 || (parsed.minor === 25 && parsed.patch >= 28);
+  if (!parsed) return caps;
+  if (parsed.major === 0) {
+    caps.supportsServerBrowser = parsed.minor >= SERVER_BROWSER_SINCE_MINOR;
+  } else if (parsed.major >= 2000) {
+    const date = `${parsed.major}.${String(parsed.minor).padStart(2, '0')}.${String(parsed.patch).padStart(2, '0')}`;
+    caps.supportsNativeUpdates = date >= NATIVE_UPDATES_SINCE;
+    caps.supportsServerBrowser = date >= SERVER_BROWSER_SINCE;
   }
   return caps;
 }
@@ -100,14 +102,14 @@ class KyuubiSoftPluginAdapter implements HytaleServerAPI {
   private cachedVersion: HytaleVersionInfo | null = null;
 
   async getVersion(): Promise<HytaleVersionInfo> {
-    if (!this.cachedVersion) {
-      this.cachedVersion = await readVersionFile();
-    }
+    // Re-read every time (a few KB of the JAR): updates, rollbacks and
+    // manual copies change the version while the panel keeps running.
+    this.cachedVersion = await readServerVersion();
     return this.cachedVersion;
   }
 
   getCapabilities(): HytaleCapabilities {
-    // Capabilities are derived from the cached version. If we haven't read
+    // Capabilities are derived from the last read version. If we haven't read
     // yet, fall back to "current build line" defaults — callers can call
     // getVersion() first if they need accuracy.
     return capabilitiesFor(this.cachedVersion?.version ?? null);

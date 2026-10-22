@@ -97,6 +97,13 @@ describe('dockerImageManager helpers', () => {
     expect(opts.HostConfig?.SecurityOpt).toContain('no-new-privileges:true');
     expect(opts.Labels?.['kyuubisoft.panel.server-id']).toBe('abc12345');
   });
+
+  it('keeps stdin open without a TTY and gives the server time to save on stop', () => {
+    const opts = __test__.buildCreateOptions(makeInstance(), 'kptest-hytale');
+    expect(opts.OpenStdin).toBe(true);
+    expect(opts.Tty).toBe(false);
+    expect(opts.StopTimeout).toBeGreaterThanOrEqual(120);
+  });
 });
 
 describe('createInstanceContainer', () => {
@@ -186,7 +193,46 @@ describe('deleteInstanceContainer', () => {
     expect(f.getContainer).toHaveBeenNthCalledWith(1, 'hytale-srv-abc12345');
     // The removal targets the inspected container id, not the name again.
     expect(f.getContainer).toHaveBeenNthCalledWith(2, 'c0ffee000001');
+    // Without a lifecycle hook Docker uses the container's own StopTimeout (120 s), not 10 s.
+    expect(f.stop).toHaveBeenCalledWith();
     expect(f.remove).toHaveBeenCalledWith({ force: true, v: false });
+  });
+
+  it('removes inside whileStopped instead of stopping the container itself', async () => {
+    const f = fakeDockerWith({ Id: 'c0ffee000002', Config: { Labels: ownLabels } });
+    const order: string[] = [];
+    f.remove.mockImplementation(async () => {
+      order.push('remove');
+    });
+    const whileStopped = vi.fn(async (remove: () => Promise<void>) => {
+      order.push('stopped');
+      await remove();
+    });
+
+    const result = await deleteInstanceContainer(makeInstance(), { whileStopped }, f.docker);
+    expect(result.ok).toBe(true);
+    expect(order).toEqual(['stopped', 'remove']);
+    expect(f.stop).not.toHaveBeenCalled();
+  });
+
+  it('reports stop_failed and removes nothing when whileStopped cannot stop the server', async () => {
+    const f = fakeDockerWith({ Id: 'c0ffee000003', Config: { Labels: ownLabels } });
+    const whileStopped = vi.fn(async () => {
+      throw new Error('Another server operation (stop, start, rollback, restore) is running.');
+    });
+
+    const result = await deleteInstanceContainer(makeInstance(), { whileStopped }, f.docker);
+    expect(result).toMatchObject({ ok: false, code: 'stop_failed' });
+    expect(f.remove).not.toHaveBeenCalled();
+  });
+
+  it("never calls whileStopped for a container that is not the panel's", async () => {
+    const f = fakeDockerWith({ Id: 'f0e1gn000002', Config: { Labels: {} } });
+    const whileStopped = vi.fn(async (remove: () => Promise<void>) => remove());
+
+    const result = await deleteInstanceContainer(makeInstance(), { whileStopped }, f.docker);
+    expect(result).toMatchObject({ ok: false, code: 'not_managed' });
+    expect(whileStopped).not.toHaveBeenCalled();
   });
 
   it('refuses a container without the panel labels and leaves it untouched', async () => {

@@ -14,12 +14,12 @@ import {
 } from '../services/setupService.js';
 import { runSystemChecks, runSingleCheck } from '../services/systemCheck.js';
 import { validatePasswordPolicy } from '../services/users.js';
-import {
-  getStatus as getDockerStatus,
-  getLogs,
-  startContainer,
-  execCommand,
-} from '../services/docker.js';
+import { getStatus as getDockerStatus, getLogs, execCommand } from '../services/docker.js';
+import { startServer, stopServerGracefully } from '../services/serverLifecycle.js';
+import { parseVersionFile } from '../services/serverInstall.js';
+
+// Every setup start goes through the lifecycle lock, like the dashboard's.
+const startGameServer = () => startServer(undefined, { reason: 'setup' });
 import { config } from '../config.js';
 
 const router = Router();
@@ -77,7 +77,8 @@ router.get('/detect-existing', async (_req: Request, res: Response) => {
 
     let version: string | null = null;
     try {
-      version = (await fs.readFile(versionFile, 'utf-8')).trim() || null;
+      // Line 1 = version (line 2 holds the patchline).
+      version = parseVersionFile(await fs.readFile(versionFile, 'utf-8')).version;
     } catch {
       /* no version file */
     }
@@ -672,7 +673,7 @@ router.post('/download/auth/start', async (_req: Request, res: Response) => {
     // If container is not running, start it
     if (!containerStatus.running) {
       logger.info('[Setup] Starting game container for download...');
-      await startContainer();
+      await startGameServer();
 
       // Wait a bit for container to start
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -835,7 +836,7 @@ router.post('/download/start', async (req: Request, res: Response) => {
       // Just confirm it's running
       const containerStatus = await getDockerStatus();
       if (!containerStatus.running) {
-        await startContainer();
+        await startGameServer();
       }
 
       res.json({
@@ -1438,7 +1439,7 @@ router.post('/server/start-first', async (_req: Request, res: Response) => {
 
     // Start the container if not running
     if (!containerStatus.running) {
-      await startContainer();
+      await startGameServer();
     }
 
     // Initialize server auth state
@@ -1482,7 +1483,7 @@ router.post('/server/start', async (_req: Request, res: Response) => {
     }
 
     if (!containerStatus.running) {
-      await startContainer();
+      await startGameServer();
     }
 
     res.json({
@@ -1504,8 +1505,11 @@ router.post('/server/start', async (_req: Request, res: Response) => {
  */
 router.post('/server/stop', async (_req: Request, res: Response) => {
   try {
-    const { stopContainer } = await import('../services/docker.js');
-    await stopContainer();
+    const result = await stopServerGracefully(undefined, { reason: 'setup' });
+    if (!result.ok) {
+      res.status(500).json({ success: false, error: result.error || 'Failed to stop server' });
+      return;
+    }
 
     res.json({
       success: true,

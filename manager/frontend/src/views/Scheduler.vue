@@ -32,12 +32,49 @@ const config = reactive<ScheduleConfig>({
     enabled: false,
     times: [],
     warningMinutes: [30, 15, 5, 1],
-    warningMessage: 'Server restart in {minutes} minute(s)!',
+    warningMessage: 'Server restart in {time}!',
     restartMessage: 'Server is restarting now!',
     createBackup: true,
+    onlyWhenEmpty: false,
   },
   quickCommands: [],
   scheduledCommands: [],
+})
+
+// What happens at every scheduled restart, mirroring the server's countdown:
+// a notification per warning, the big on-screen title with the first one in
+// the last minute, all worlds saved 10 s before, then /stop, wait, start.
+interface RestartPlanStep {
+  at: string
+  text: string
+}
+const restartPlanSteps = computed<RestartPlanStep[]>(() => {
+  const plan = config.scheduledRestarts
+  const atRestart = t('scheduler.restartPlan.atRestart')
+  const finish = {
+    at: atRestart,
+    text: t(plan.createBackup ? 'scheduler.restartPlan.stopBackupStart' : 'scheduler.restartPlan.stopStart'),
+  }
+  if (plan.onlyWhenEmpty) {
+    return [{ at: atRestart, text: t('scheduler.restartPlan.onlyWhenEmptyStep') }, finish]
+  }
+  const minutes = [...new Set(plan.warningMinutes.filter(m => Number.isInteger(m) && m > 0))].sort((a, b) => b - a)
+  const steps: RestartPlanStep[] = []
+  let titled = false
+  for (const m of minutes) {
+    const withTitle = !titled && m <= 1
+    if (withTitle) titled = true
+    steps.push({
+      at: t('scheduler.restartPlan.minutesBefore', { n: m }),
+      text: t(withTitle ? 'scheduler.restartPlan.notifyTitle' : 'scheduler.restartPlan.notify'),
+    })
+  }
+  if (minutes.length > 0) {
+    steps.push({ at: t('scheduler.restartPlan.secondsBefore', { n: 10 }), text: t('scheduler.restartPlan.save') })
+    if (plan.restartMessage.trim()) steps.push({ at: atRestart, text: t('scheduler.restartPlan.final') })
+  }
+  steps.push(finish)
+  return steps
 })
 
 const { addToast: showToast } = useToast()
@@ -147,8 +184,9 @@ async function saveRestartsConfig() {
     setTimeout(() => { successMessage.value = null }, 3000)
     // Reload status
     status.value = await schedulerApi.getStatus()
-  } catch (e) {
-    error.value = t('errors.serverError')
+  } catch (e: any) {
+    // e.g. 400 when two restart times are less than an hour apart
+    error.value = e?.response?.data?.error || t('errors.serverError')
   } finally {
     saving.value = false
   }
@@ -497,19 +535,6 @@ onMounted(() => {
                 class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
             </div>
-
-            <!-- Before Restart -->
-            <div class="flex items-center">
-              <label class="flex items-center cursor-pointer">
-                <input type="checkbox" v-model="config.backups.beforeRestart" class="sr-only peer">
-                <div class="w-5 h-5 bg-surface-overlay rounded peer peer-checked:bg-hytale-orange flex items-center justify-center">
-                  <svg v-if="config.backups.beforeRestart" class="w-3 h-3 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <span class="ml-2 text-sm text-ink-muted">{{ t('scheduler.beforeRestart') }}</span>
-              </label>
-            </div>
           </div>
 
           <!-- Status -->
@@ -608,10 +633,11 @@ onMounted(() => {
               <input
                 v-model="config.scheduledRestarts.warningMessage"
                 type="text"
-                :placeholder="t('scheduler.warningMessagePlaceholder')"
+                maxlength="200"
+                :placeholder="t('scheduler.warningMessagePlaceholder', { time: '{time}', minutes: '{minutes}' })"
                 class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
               />
-              <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.warningMessageHint') }}</p>
+              <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.warningMessageHint', { time: '{time}', minutes: '{minutes}' }) }}</p>
             </div>
 
             <!-- Restart Message -->
@@ -637,6 +663,36 @@ onMounted(() => {
                 <span class="ml-2 text-sm text-ink-muted">{{ t('scheduler.backupBeforeRestart') }}</span>
               </label>
             </div>
+
+            <!-- Only when empty -->
+            <div>
+              <label class="flex items-center cursor-pointer">
+                <input type="checkbox" v-model="config.scheduledRestarts.onlyWhenEmpty" class="sr-only peer">
+                <div class="w-5 h-5 bg-surface-overlay rounded peer peer-checked:bg-hytale-orange flex items-center justify-center">
+                  <svg v-if="config.scheduledRestarts.onlyWhenEmpty" class="w-3 h-3 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span class="ml-2 text-sm text-ink-muted">{{ t('scheduler.restartPlan.onlyWhenEmpty') }}</span>
+              </label>
+              <p class="text-xs text-ink-subtle mt-1 ml-7">{{ t('scheduler.restartPlan.onlyWhenEmptyHint') }}</p>
+            </div>
+
+            <!-- Restart plan preview -->
+            <div class="p-3 bg-surface rounded-lg">
+              <p class="text-sm font-medium text-ink mb-1">{{ t('scheduler.restartPlan.title') }}</p>
+              <p class="text-xs text-ink-subtle mb-2">{{ t('scheduler.restartPlan.intro') }}</p>
+              <ol class="space-y-1">
+                <li
+                  v-for="(step, index) in restartPlanSteps"
+                  :key="index"
+                  class="flex gap-3 text-sm"
+                >
+                  <span class="w-28 flex-shrink-0 font-mono text-xs text-hytale-orange pt-0.5">{{ step.at }}</span>
+                  <span class="text-ink-muted">{{ step.text }}</span>
+                </li>
+              </ol>
+            </div>
           </div>
 
           <!-- Status -->
@@ -650,8 +706,15 @@ onMounted(() => {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div class="flex-1">
-                  <p class="text-status-warning font-medium">{{ t('scheduler.pendingRestart') }}</p>
+                  <p class="text-status-warning font-medium">
+                    {{ t('scheduler.pendingRestart') }}
+                    <span
+                      v-if="status.scheduledRestarts.countdownRunning"
+                      class="ml-2 px-2 py-0.5 rounded bg-status-warning/20 text-xs"
+                    >{{ t('scheduler.restartPlan.countdownRunning') }}</span>
+                  </p>
                   <p class="text-ink-muted text-xs">{{ new Date(status.scheduledRestarts.pendingRestart.scheduledAt).toLocaleString() }}</p>
+                  <p v-if="status.scheduledRestarts.countdownRunning" class="text-ink-subtle text-xs">{{ t('scheduler.restartPlan.cancelHint') }}</p>
                 </div>
                 <button
                   v-if="authStore.hasPermission('scheduler.edit')"
@@ -722,10 +785,10 @@ onMounted(() => {
             <input
               v-model="config.announcements.welcome"
               type="text"
-              :placeholder="t('scheduler.welcomePlaceholder')"
+              :placeholder="t('scheduler.welcomePlaceholder', { player: '{player}' })"
               class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
-            <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.welcomeHint') }}</p>
+            <p class="text-xs text-ink-subtle mt-1">{{ t('scheduler.welcomeHint', { player: '{player}' }) }}</p>
           </div>
 
           <!-- Scheduled List -->

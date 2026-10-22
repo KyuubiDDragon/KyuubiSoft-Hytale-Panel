@@ -13,9 +13,12 @@
  * world list, so only an existing directory inside a known worlds root can be
  * targeted (no traversal).
  *
- * Imports and restores go through extractArchiveSafely(): archives containing
- * links, special files, absolute paths or ".." are refused before anything is
- * written, and extraction happens in a staging directory first.
+ * Imports and restores are validated by the archive safety layer: archives
+ * containing links, special files, absolute paths or ".." are refused before
+ * anything is written, the unpacked size is capped (ARCHIVE_EXTRACT_MAX_GB),
+ * and extraction happens in a staging directory next to the worlds dir.
+ * An import only adds new world folders (the server may keep running); a
+ * restore replaces one world folder while the server is stopped.
  */
 import fs from 'fs';
 import path from 'path';
@@ -26,12 +29,36 @@ import { getServer, getDefaultId } from './servers.js';
 import { getWorldsPaths } from './managementHelpers.js';
 import * as dockerService from './docker.js';
 import { logger } from '../utils/logger.js';
-import { archiveFormatFromName, extractArchiveSafely } from '../utils/archiveSafety.js';
+import {
+  ArchiveRejectedError,
+  archiveFormatFromName,
+  extractToStaging,
+  inspectArchive,
+  type ArchiveFormat,
+} from '../utils/archiveSafety.js';
+import { resolveRealPath, resolveRealPathWithin } from '../utils/pathSecurity.js';
+import { removeTree } from '../utils/noFollowFs.js';
 import { publish } from './eventBus.js';
+import {
+  EXTRACT_RESERVE_BYTES,
+  archiveExtractMaxBytes,
+  freeTimestampedPath,
+} from './backupCommon.js';
+import { flushWorldsIfRunning, withBackupLock } from './backup.js';
+import {
+  runningBackupJob,
+  startBackupJob,
+  waitForBackupJob,
+  type BackupJob,
+} from './backupJobs.js';
+import { withServerStopped } from './serverLifecycle.js';
 
 const execFileAsync = promisify(execFile);
 
 const WORLD_BACKUP_PREFIX = 'world_';
+// Staging next to the worlds dir (same filesystem, inside the data dir, and
+// excluded from panel backups by its .kp-extract- prefix).
+const WORLD_STAGING_PREFIX = '.kp-extract-world-';
 
 // A worlds dir that was replaced by a link elsewhere (e.g. into the panel's
 // own data) must not receive an import: the real target has to stay inside
@@ -154,9 +181,22 @@ export async function getWorldDetails(
 
 // ---------- backup / restore ----------
 
+// _YYYYMMDD-HHMMSS, or _YYYY-MM-DD-HHMM: what earlier versions actually wrote
+// (their timestamp kept the date dashes and cut the seconds off).
+const WORLD_BACKUP_TS = String.raw`_(?:\d{8}-\d{6}|\d{4}-\d{2}-\d{2}-\d{4})`;
+const WORLD_BACKUP_ID = new RegExp(
+  `^${WORLD_BACKUP_PREFIX}[A-Za-z0-9_.\\- ]+${WORLD_BACKUP_TS}\\.tar\\.gz$`,
+);
+const WORLD_BACKUP_SUFFIX = new RegExp(`${WORLD_BACKUP_TS}(?:\\.tar\\.gz)?$`);
+
 function safeBackupId(id: string): boolean {
   // Only our own generated world backup filenames.
-  return /^world_[A-Za-z0-9_.\- ]+_\d{8}-\d{6}\.tar\.gz$/.test(id);
+  return WORLD_BACKUP_ID.test(id);
+}
+
+/** world_<name>_<timestamp>.tar.gz → <name> */
+function worldNameOf(backupId: string): string {
+  return backupId.slice(WORLD_BACKUP_PREFIX.length).replace(WORLD_BACKUP_SUFFIX, '');
 }
 
 export async function backupWorld(
@@ -169,13 +209,20 @@ export async function backupWorld(
   const { backups } = await resolvePaths(serverId);
   fs.mkdirSync(backups, { recursive: true });
 
-  const ts = new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').slice(0, 15); // YYYYMMDD-HHMMSS
+  // YYYYMMDD-HHMMSS (the date dashes must go too, or the id check rejects the backup)
+  const tsAt = (at: Date) => at.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
   // Keep the world name readable but strip characters that don't belong in our id pattern.
   const safeName = worldName.replace(/[^A-Za-z0-9_.\- ]/g, '_');
-  const filename = `${WORLD_BACKUP_PREFIX}${safeName}_${ts}.tar.gz`;
-  const outFile = path.join(backups, filename);
+  // Never overwrite a backup from the same second (e.g. a restore's safety copy).
+  const outFile = freeTimestampedPath((at) =>
+    path.join(backups, `${WORLD_BACKUP_PREFIX}${safeName}_${tsAt(at)}.tar.gz`),
+  );
+  const filename = path.basename(outFile);
 
   try {
+    // A running server writes the world to disk first; a stopped one needs nothing.
+    const flush = await flushWorldsIfRunning(serverId);
+    if (flush.note) logger.warn(`[Worlds] backup of "${worldName}": ${flush.note}`);
     // No shell: tar gets an argv array. -C parent + the directory name means the
     // archive contains the world folder itself (restore recreates it by name).
     await execFileAsync(
@@ -218,10 +265,12 @@ export async function listWorldBackups(serverId?: string): Promise<WorldBackup[]
     if (!name.startsWith(WORLD_BACKUP_PREFIX) || !name.endsWith('.tar.gz')) continue;
     try {
       const st = fs.statSync(path.join(backups, name));
-      // world_<name>_<YYYYMMDD-HHMMSS>.tar.gz → recover <name>
-      const middle = name.slice(WORLD_BACKUP_PREFIX.length, -'.tar.gz'.length);
-      const world = middle.replace(/_\d{8}-\d{6}$/, '');
-      result.push({ id: name, world, createdAt: st.mtime.toISOString(), sizeBytes: st.size });
+      result.push({
+        id: name,
+        world: worldNameOf(name),
+        createdAt: st.mtime.toISOString(),
+        sizeBytes: st.size,
+      });
     } catch {
       /* skip */
     }
@@ -230,25 +279,154 @@ export async function listWorldBackups(serverId?: string): Promise<WorldBackup[]
   return result;
 }
 
+/** The primary worlds dir (first existing root, else the default). */
+function primaryWorldsDir(): string {
+  const roots = getWorldsPaths();
+  return roots.find((r) => fs.existsSync(r)) ?? roots[0];
+}
+
+interface StagedWorlds {
+  staging: string;
+  worldsDir: string; // real path
+  folders: string[];
+}
+
+/**
+ * Validate and unpack a world archive into a fresh staging dir next to the
+ * worlds dir. Only folders are allowed at the top level of the archive. The
+ * caller moves the folders on and removes `staging`.
+ */
+async function stageWorldArchive(archive: string, format: ArchiveFormat): Promise<StagedWorlds> {
+  const limits = { maxBytes: archiveExtractMaxBytes(), reserveBytes: EXTRACT_RESERVE_BYTES };
+  const declared = await inspectArchive(archive, format, limits);
+  const target = primaryWorldsDir();
+  await fs.promises.mkdir(target, { recursive: true });
+  // A worlds dir that was replaced by a link elsewhere is refused.
+  const worldsDir = resolveRealPath(target);
+  if (!worldsDir || !resolveRealPathWithin(worldsDir, worldExtractRoots())) {
+    throw new Error(`Refusing to extract: ${target} resolves outside the allowed directories.`);
+  }
+  const staging = await fs.promises.mkdtemp(
+    path.join(path.dirname(worldsDir), WORLD_STAGING_PREFIX),
+  );
+  try {
+    await extractToStaging(archive, format, staging, limits, declared);
+    const entries = await fs.promises.readdir(staging, { withFileTypes: true });
+    const loose = entries.find((e) => !e.isDirectory());
+    if (loose) {
+      throw new ArchiveRejectedError(
+        `A world archive may only contain world folders; "${loose.name}" is a file.`,
+      );
+    }
+    return { staging, worldsDir, folders: entries.map((e) => e.name) };
+  } catch (err) {
+    await removeTree(staging, [path.dirname(worldsDir)]).catch(() => undefined);
+    throw err;
+  }
+}
+
+/** Replace `worldsDir/name` with `staging/name`; rolls back on failure. */
+async function swapWorldFolder(staged: StagedWorlds, name: string): Promise<void> {
+  const live = path.join(staged.worldsDir, name);
+  const aside = path.join(staged.staging, `.previous-${name}`);
+  const hadLive = fs.existsSync(live);
+  if (hadLive) await fs.promises.rename(live, aside);
+  try {
+    await fs.promises.rename(path.join(staged.staging, name), live);
+  } catch (err) {
+    if (hadLive && !fs.existsSync(live)) await fs.promises.rename(aside, live);
+    throw err;
+  }
+}
+
+async function performWorldRestore(
+  file: string,
+  worldName: string,
+  serverId: string | undefined,
+  actor: string | undefined,
+  setStep: (step: string) => void,
+): Promise<{ message?: string; error?: string }> {
+  setStep('extracting');
+  let staged: StagedWorlds;
+  try {
+    staged = await stageWorldArchive(file, 'tar.gz');
+  } catch (err) {
+    return { error: `${err instanceof Error ? err.message : err} No world was changed.` };
+  }
+  try {
+    if (staged.folders.length !== 1) {
+      return {
+        error: 'A world backup must contain exactly one world folder. No world was changed.',
+      };
+    }
+    const [folder] = staged.folders;
+    let safety = '';
+    setStep('stopping-server');
+    // Lifecycle lock first, then the backup lock (see services/backup.ts).
+    await withServerStopped(serverId, { reason: 'restore', actor: actor ?? 'world-restore' }, () =>
+      withBackupLock(async () => {
+        if (fs.existsSync(path.join(staged.worldsDir, folder))) {
+          setStep('safety-backup');
+          const copy = await backupWorld(folder, serverId);
+          if (!copy.success) throw new Error(`safety backup failed: ${copy.error}`);
+          safety = copy.backup?.id ?? '';
+        }
+        setStep('swapping');
+        await swapWorldFolder(staged, folder);
+        setStep('starting-server');
+      }),
+    );
+    logger.info(`[Worlds] restored "${folder}" from ${path.basename(file)} (${worldName})`);
+    return {
+      message: safety
+        ? `World "${folder}" restored. The previous state was saved as ${safety}.`
+        : `World "${folder}" restored.`,
+    };
+  } catch (err) {
+    return { error: `World restore failed: ${err instanceof Error ? err.message : err}` };
+  } finally {
+    await removeTree(staged.staging, [path.dirname(staged.worldsDir)]).catch(() => undefined);
+  }
+}
+
+/**
+ * Restore a per-world backup as a background job: unpack while the server
+ * runs, then stop it, keep a backup of the current world, replace the world
+ * folder and start the server again.
+ */
+export async function startWorldRestore(
+  backupId: string,
+  serverId?: string,
+  actor?: string,
+): Promise<{ ok: true; job: BackupJob } | { ok: false; status: 400 | 404 | 409; error: string }> {
+  if (!safeBackupId(backupId)) return { ok: false, status: 400, error: 'Invalid backup id' };
+  const { backups } = await resolvePaths(serverId);
+  const file = path.join(backups, backupId);
+  if (!fs.existsSync(file)) return { ok: false, status: 404, error: 'Backup not found' };
+  const running = runningBackupJob();
+  if (running) {
+    return { ok: false, status: 409, error: `Another backup job is running (${running.type})` };
+  }
+  const worldName = worldNameOf(backupId);
+  const job = startBackupJob(
+    { type: 'world-restore', serverId, target: backupId, startedBy: actor },
+    (control) => performWorldRestore(file, worldName, serverId, actor, control.setStep),
+  );
+  return { ok: true, job };
+}
+
+/** World restore that waits for the job (for callers that want one call). */
 export async function restoreWorld(
   backupId: string,
   serverId?: string,
-): Promise<{ success: boolean; error?: string }> {
-  if (!safeBackupId(backupId)) return { success: false, error: 'Invalid backup id' };
-  const { backups } = await resolvePaths(serverId);
-  const file = path.join(backups, backupId);
-  if (!fs.existsSync(file)) return { success: false, error: 'Backup not found' };
-
-  // Restore into the primary worlds dir (first existing root, else the default).
-  const roots = getWorldsPaths();
-  const target = roots.find((r) => fs.existsSync(r)) ?? roots[0];
-
-  try {
-    await extractArchiveSafely(file, 'tar.gz', target, worldExtractRoots());
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'World restore failed' };
-  }
+  actor?: string,
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  const started = await startWorldRestore(backupId, serverId, actor);
+  if (!started.ok) return { success: false, error: started.error };
+  const finished = await waitForBackupJob(started.job.id)!;
+  return finished.state === 'succeeded'
+    ? { success: true, message: finished.message ?? undefined }
+    : { success: false, error: finished.error ?? 'World restore failed' };
 }
 
 export async function deleteWorldBackup(
@@ -268,28 +446,69 @@ export async function deleteWorldBackup(
 
 /**
  * Extract an uploaded world archive (.tar.gz/.tgz/.zip) into the worlds dir.
- * The archive is expected to contain a single top-level world folder. The
- * caller has already written the upload to `archivePath` (a temp file).
+ * The archive must contain world folders only, and none of them may exist
+ * yet: an import never writes into a world the server may have loaded (use a
+ * world backup to roll one back). The caller has already written the upload
+ * to `archivePath` (a temp file).
  */
 export async function importWorldArchive(
   archivePath: string,
   originalName: string,
   _serverId?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const roots = getWorldsPaths();
-  const target = roots.find((r) => fs.existsSync(r)) ?? roots[0];
-
   const format = archiveFormatFromName(originalName);
+  let staged: StagedWorlds | null = null;
   try {
     if (!format) {
       return { success: false, error: 'Unsupported archive type (use .zip, .tar.gz or .tgz)' };
     }
-    await extractArchiveSafely(archivePath, format, target, worldExtractRoots());
-    return { success: true };
+    // A restore may have moved the worlds dir aside right now.
+    const running = runningBackupJob();
+    if (running) {
+      return {
+        success: false,
+        error: `A backup job is running (${running.type}); try again later.`,
+      };
+    }
+    const prepared = await stageWorldArchive(archivePath, format);
+    staged = prepared;
+    // Under the backup lock, so no restore swaps the data dir in between.
+    return await withBackupLock(async () => {
+      const existing = prepared.folders.find((f) =>
+        fs.existsSync(path.join(prepared.worldsDir, f)),
+      );
+      if (existing) {
+        return {
+          success: false,
+          error: `A world named "${existing}" already exists. Delete or rename it first.`,
+        };
+      }
+      const moved: string[] = [];
+      try {
+        for (const folder of prepared.folders) {
+          await fs.promises.rename(
+            path.join(prepared.staging, folder),
+            path.join(prepared.worldsDir, folder),
+          );
+          moved.push(folder);
+        }
+      } catch (err) {
+        // All or nothing: take back what was already moved in.
+        for (const folder of moved) {
+          await fs.promises
+            .rename(path.join(prepared.worldsDir, folder), path.join(prepared.staging, folder))
+            .catch(() => undefined);
+        }
+        throw err;
+      }
+      return { success: true };
+    });
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'World import failed' };
   } finally {
     fs.rmSync(archivePath, { force: true });
+    if (staged)
+      await removeTree(staged.staging, [path.dirname(staged.worldsDir)]).catch(() => undefined);
   }
 }
 

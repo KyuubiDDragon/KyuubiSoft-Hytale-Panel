@@ -48,8 +48,9 @@ describe('docker.execCommand stdin gate', () => {
   it('writes a valid single-line command once, terminated by one newline', async () => {
     const result = await execCommand('/say hello', 'default');
     expect(result.success).toBe(true);
-    expect(stdinWrite).toHaveBeenCalledOnce();
-    expect(stdinWrite).toHaveBeenCalledWith('/say hello\n');
+    // A fresh attach first terminates the request body Docker leaks into stdin.
+    const commandWrites = stdinWrite.mock.calls.filter(([data]) => data !== '\n');
+    expect(commandWrites).toEqual([['/say hello\n']]);
   });
 
   const blocked = [

@@ -33,6 +33,12 @@ const fakeDocker = {
 };
 
 vi.mock('../services/docker.js', () => ({ getDockerInstance: () => fakeDocker }));
+// The graceful stop itself is covered in serverLifecycle.test.ts; here only
+// that the delete goes through it, after the ownership check.
+const { stopServerAndRun } = vi.hoisted(() => ({
+  stopServerAndRun: vi.fn(async (_id: string, _opts: unknown, fn: () => Promise<unknown>) => fn()),
+}));
+vi.mock('../services/serverLifecycle.js', () => ({ stopServerAndRun }));
 vi.mock('../services/audit.js', () => ({ audit: vi.fn() }));
 vi.mock('../middleware/auth.js', () => ({
   authMiddleware: (req: Request & { user?: string }, _res: Response, next: NextFunction) => {
@@ -125,6 +131,7 @@ describe('DELETE /api/servers/:id', () => {
     const res = await call('DELETE', `/${extra.id}`);
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ code: 'CONTAINER_NOT_MANAGED' });
+    expect(stopServerAndRun).not.toHaveBeenCalled();
     expect(stop).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
     expect(await registry.getServer(extra.id)).not.toBeNull();
@@ -148,8 +155,42 @@ describe('DELETE /api/servers/:id', () => {
     const res = await call('DELETE', `/${extra.id}`);
     expect(res.status).toBe(200);
     expect(getContainer).toHaveBeenCalledWith(extra.containerName);
+    // Stopped through the lifecycle (/stop, wait, under the server's lock),
+    // not with Docker's 10-second SIGTERM.
+    expect(stopServerAndRun).toHaveBeenCalledWith(
+      extra.id,
+      { reason: 'delete', actor: 'tester', rejectIfBusy: true },
+      expect.any(Function),
+    );
+    expect(stop).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalledWith({ force: true, v: false });
     expect(await registry.getServer(extra.id)).toBeNull();
+  });
+
+  it('keeps the container and the entry when the server cannot be stopped', async () => {
+    const extra = await addExtraServer();
+    inspect.mockResolvedValue({ Id: 'own000000002', Config: { Labels: ownLabelsFor(extra.id) } });
+    stopServerAndRun.mockRejectedValueOnce(new Error('Could not stop the server: daemon gone'));
+
+    const res = await call('DELETE', `/${extra.id}`);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      code: 'SERVER_STOP_FAILED',
+      detail: expect.stringMatching(/Could not stop the server/),
+    });
+    expect(remove).not.toHaveBeenCalled();
+    expect(await registry.getServer(extra.id)).not.toBeNull();
+  });
+
+  it('reports a failed removal after the stop as a Docker error', async () => {
+    const extra = await addExtraServer();
+    inspect.mockResolvedValue({ Id: 'own000000003', Config: { Labels: ownLabelsFor(extra.id) } });
+    remove.mockRejectedValueOnce(new Error('removal of container is already in progress'));
+
+    const res = await call('DELETE', `/${extra.id}`);
+    expect(res.status).toBe(502);
+    expect(res.body).toMatchObject({ code: 'CONTAINER_REMOVE_FAILED' });
+    expect(await registry.getServer(extra.id)).not.toBeNull();
   });
 
   it('keeps the entry when Docker cannot verify the container', async () => {

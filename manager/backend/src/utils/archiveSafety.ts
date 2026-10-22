@@ -6,53 +6,78 @@
  * and a member "link -> /app/data" followed by "link/users.json" writes
  * straight through the link. Archives are therefore checked twice:
  *   1. BEFORE extraction the member list is read directly from the archive
- *      (tar headers / zip central directory). A link, a special file, an
- *      absolute path or a ".." component rejects the whole archive, so a
- *      hostile archive never touches the disk.
+ *      (tar headers / zip central directory), one member at a time and
+ *      within limits for name length and entry count (archiveListing.ts). A
+ *      link, a special file, an absolute path or a ".." component rejects the
+ *      whole archive, so a hostile archive never touches the disk.
  *   2. AFTER extraction into a private staging directory every entry is
  *      lstat()ed again, so a disagreement between this parser and the system
  *      tool can't leave a link behind.
  * Only a tree that passes both checks is merged into the destination.
  *
- * tar/unzip run via execFile with an argv array (no shell).
+ * Callers can cap the unpacked size (ExtractLimits). The cap is checked
+ * against the sizes in the listing, enforced while the extractor runs (by
+ * watching the free space of the target filesystem, so an archive that
+ * unpacks to more than it declares is stopped) and checked once more on the
+ * extracted tree.
+ *
+ * tar/unzip run via spawn with an argv array (no shell).
  */
 import path from 'path';
-import { createReadStream, promises as fsp, type Stats } from 'fs';
-import type { FileHandle } from 'fs/promises';
-import { createGunzip } from 'zlib';
-import { Writable } from 'stream';
-import { pipeline } from 'stream/promises';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { promises as fsp, type Stats } from 'fs';
+import { spawn } from 'child_process';
 import { resolveRealPath, resolveRealPathWithin } from './pathSecurity.js';
+import { removeTree } from './noFollowFs.js';
+import {
+  ArchiveRejectedError,
+  TYPE_REASONS,
+  describeName,
+  listArchiveEntries,
+  rejectedEntry,
+  scanArchiveEntries,
+  type ArchiveEntry,
+  type ArchiveFormat,
+  type ScanOptions,
+} from './archiveListing.js';
 
-const execFileAsync = promisify(execFile);
+export { ArchiveRejectedError, listArchiveEntries, scanArchiveEntries };
+export type {
+  ArchiveEntry,
+  ArchiveEntryType,
+  ArchiveFormat,
+  ScanOptions,
+} from './archiveListing.js';
 
-export type ArchiveFormat = 'zip' | 'tar.gz';
-export type ArchiveEntryType = 'file' | 'directory' | 'symlink' | 'hardlink' | 'special';
-
-export interface ArchiveEntry {
-  /** Member name as the extractor will use it. */
-  name: string;
-  /** Other names the same member carries (ustar vs PAX/GNU long name, zip unicode path); all must be safe. */
-  aliases: string[];
-  type: ArchiveEntryType;
+/** Optional caps for an extraction. */
+export interface ExtractLimits {
+  /** Maximum total unpacked size in bytes. */
+  maxBytes?: number;
+  /** Free space that must remain on the target filesystem after unpacking. */
+  reserveBytes?: number;
 }
 
-/** An archive that was refused. The message is meant to be shown to the user. */
-export class ArchiveRejectedError extends Error {
+export interface ArchiveSummary {
+  files: number;
+  totalBytes: number;
+}
+
+/** The target filesystem has too little free space. The message is meant to be shown to the user. */
+export class ArchiveSpaceError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ArchiveRejectedError';
+    this.name = 'ArchiveSpaceError';
   }
 }
 
-const NOT_A_TAR_GZ = 'The archive is not a valid .tar.gz file.';
-const NOT_A_ZIP = 'The archive is not a valid .zip file.';
 const STAGING_PREFIX = '.kp-extract-';
 const STALE_STAGING_MS = 24 * 60 * 60 * 1000;
-const EXTRACT_MAX_BUFFER = 1024 * 1024 * 10;
-const NAME_DISPLAY_MAX = 120;
+const EXTRACTOR_STDERR_MAX = 64 * 1024;
+// How often the free space is sampled while an extractor runs, and how much
+// filesystem overhead (inodes, directory blocks) is tolerated on top of the
+// declared size before the extractor is stopped.
+const SPACE_GUARD_INTERVAL_MS = 500;
+const SPACE_GUARD_SLACK_BYTES = 256 * 1024 * 1024;
+const EXTRACT_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
 export function archiveFormatFromName(fileName: string): ArchiveFormat | null {
   const lower = fileName.toLowerCase();
@@ -65,27 +90,6 @@ export function archiveFormatFromName(fileName: string): ArchiveFormat | null {
 // Entry validation
 // ============================================================
 
-const TYPE_REASONS: Partial<Record<ArchiveEntryType, string>> = {
-  symlink: 'it is a symbolic link',
-  hardlink: 'it is a hard link',
-  special: 'it is a device, FIFO or other special file',
-};
-
-function describeName(name: string): string {
-  // eslint-disable-next-line no-control-regex
-  const printable = name.replace(/[\x00-\x1f\x7f]/g, '?');
-  return printable.length > NAME_DISPLAY_MAX
-    ? `${printable.slice(0, NAME_DISPLAY_MAX)}...`
-    : printable;
-}
-
-function rejectedEntry(name: string, reason: string): ArchiveRejectedError {
-  return new ArchiveRejectedError(
-    `Archive rejected: "${describeName(name)}" is not allowed because ${reason}. ` +
-      'Archives may only contain regular files and folders with relative paths.',
-  );
-}
-
 function unsafeNameReason(name: string): string | null {
   if (name === '') return 'its name is empty';
   if (name.includes('\0')) return 'its name contains a NUL byte';
@@ -96,422 +100,212 @@ function unsafeNameReason(name: string): string | null {
   return null;
 }
 
+export function assertSafeArchiveEntry(entry: ArchiveEntry): void {
+  const typeReason = TYPE_REASONS[entry.type];
+  if (typeReason) throw rejectedEntry(entry.name, typeReason);
+  for (const name of [entry.name, ...entry.aliases]) {
+    const reason = unsafeNameReason(name);
+    if (reason) throw rejectedEntry(name, reason);
+  }
+}
+
 export function assertSafeArchiveEntries(entries: ArchiveEntry[]): void {
-  for (const entry of entries) {
-    const typeReason = TYPE_REASONS[entry.type];
-    if (typeReason) throw rejectedEntry(entry.name, typeReason);
-    for (const name of [entry.name, ...entry.aliases]) {
-      const reason = unsafeNameReason(name);
-      if (reason) throw rejectedEntry(name, reason);
-    }
-  }
-}
-
-// ============================================================
-// tar.gz member listing (streamed, nothing is written to disk)
-// ============================================================
-
-const TAR_BLOCK = 512;
-const MAX_TAR_META_BYTES = 1024 * 1024; // PAX / GNU long-name payloads
-
-type TarMetaKind = 'pax' | 'paxGlobal' | 'longName' | 'longLink';
-
-function readCString(buf: Buffer, offset: number, length: number): string {
-  const nul = buf.indexOf(0, offset);
-  const end = nul === -1 || nul > offset + length ? offset + length : nul;
-  return buf.toString('utf8', offset, end);
-}
-
-function readTarNumber(block: Buffer, offset: number, length: number): number {
-  if (block[offset] & 0x80) {
-    // GNU base-256 encoding (sizes beyond the octal limit). 0xff = negative.
-    if (block[offset] === 0xff) throw new ArchiveRejectedError(NOT_A_TAR_GZ);
-    let value = 0;
-    for (let i = offset + 1; i < offset + length; i++) value = value * 256 + block[i];
-    return value;
-  }
-  const text = block.toString('latin1', offset, offset + length).replace(/^[\0 ]+|[\0 ]+$/g, '');
-  if (text === '') return 0;
-  if (!/^[0-7]+$/.test(text)) throw new ArchiveRejectedError(NOT_A_TAR_GZ);
-  return parseInt(text, 8);
-}
-
-function tarChecksumOk(block: Buffer): boolean {
-  const stored = readTarNumber(block, 148, 8);
-  let unsigned = 0;
-  let signed = 0;
-  for (let i = 0; i < TAR_BLOCK; i++) {
-    const b = i >= 148 && i < 156 ? 0x20 : block[i];
-    unsigned += b;
-    signed += b > 127 ? b - 256 : b;
-  }
-  return stored === unsigned || stored === signed;
-}
-
-function parsePaxRecords(data: Buffer): Record<string, string> {
-  const records: Record<string, string> = {};
-  let pos = 0;
-  while (pos < data.length) {
-    const space = data.indexOf(0x20, pos);
-    if (space === -1) break;
-    const length = parseInt(data.toString('latin1', pos, space), 10);
-    if (!Number.isFinite(length) || length <= space - pos || pos + length > data.length) {
-      throw new ArchiveRejectedError(NOT_A_TAR_GZ);
-    }
-    const record = data.toString('utf8', space + 1, pos + length - 1); // drop the trailing "\n"
-    const eq = record.indexOf('=');
-    if (eq > 0) records[record.slice(0, eq)] = record.slice(eq + 1);
-    pos += length;
-  }
-  return records;
-}
-
-function tarEntryType(typeflag: string, name: string): ArchiveEntryType {
-  switch (typeflag) {
-    case '0':
-    case '7':
-      return name.endsWith('/') ? 'directory' : 'file';
-    case '5':
-      return 'directory';
-    case '1':
-      return 'hardlink';
-    case '2':
-      return 'symlink';
-    default:
-      // Character/block devices, FIFOs, GNU dumpdir/sparse/multi-volume and unknown types.
-      return 'special';
-  }
-}
-
-class TarHeaderScanner {
-  readonly entries: ArchiveEntry[] = [];
-  private header = Buffer.alloc(0);
-  private skip = 0;
-  private meta: { kind: TarMetaKind; remaining: number; padding: number; chunks: Buffer[] } | null =
-    null;
-  private paxPath: string | undefined;
-  private paxSize: number | undefined;
-  private longName: string | undefined;
-  private zeroBlocks = 0;
-  private ended = false;
-
-  push(chunk: Buffer): void {
-    let offset = 0;
-    while (offset < chunk.length && !this.ended) {
-      if (this.skip > 0) {
-        const n = Math.min(this.skip, chunk.length - offset);
-        this.skip -= n;
-        offset += n;
-        continue;
-      }
-      if (this.meta) {
-        const n = Math.min(this.meta.remaining, chunk.length - offset);
-        this.meta.chunks.push(chunk.subarray(offset, offset + n));
-        this.meta.remaining -= n;
-        offset += n;
-        if (this.meta.remaining === 0) this.finishMeta();
-        continue;
-      }
-      const n = Math.min(TAR_BLOCK - this.header.length, chunk.length - offset);
-      this.header = Buffer.concat([this.header, chunk.subarray(offset, offset + n)]);
-      offset += n;
-      if (this.header.length === TAR_BLOCK) {
-        const block = this.header;
-        this.header = Buffer.alloc(0);
-        this.handleHeader(block);
-      }
-    }
-  }
-
-  finish(): void {
-    if (!this.ended && (this.header.length > 0 || this.skip > 0 || this.meta)) {
-      throw new ArchiveRejectedError(`${NOT_A_TAR_GZ} It appears to be truncated.`);
-    }
-  }
-
-  private handleHeader(block: Buffer): void {
-    if (block.every((b) => b === 0)) {
-      // Like GNU and BusyBox tar: only two zero blocks in a row end the
-      // archive; a lone one is skipped and reading continues.
-      this.zeroBlocks++;
-      if (this.zeroBlocks >= 2) this.ended = true;
-      return;
-    }
-    this.zeroBlocks = 0;
-    if (!tarChecksumOk(block)) throw new ArchiveRejectedError(NOT_A_TAR_GZ);
-
-    const typeflag = block[156] === 0 ? '0' : String.fromCharCode(block[156]);
-    const headerSize = readTarNumber(block, 124, 12);
-
-    const metaKind: TarMetaKind | null =
-      typeflag === 'x'
-        ? 'pax'
-        : typeflag === 'g'
-          ? 'paxGlobal'
-          : typeflag === 'L'
-            ? 'longName'
-            : typeflag === 'K'
-              ? 'longLink'
-              : null;
-    if (metaKind) {
-      if (headerSize > MAX_TAR_META_BYTES)
-        throw new ArchiveRejectedError(`${NOT_A_TAR_GZ} An extension header is too large.`);
-      this.meta = {
-        kind: metaKind,
-        remaining: headerSize,
-        padding: Math.ceil(headerSize / TAR_BLOCK) * TAR_BLOCK - headerSize,
-        chunks: [],
-      };
-      if (headerSize === 0) this.finishMeta();
-      return;
-    }
-
-    const rawName = readCString(block, 0, 100);
-    // Only POSIX ustar uses the prefix field; old GNU headers store timestamps
-    // there. An extractor might still join it, so that variant is checked too.
-    const prefixField = readCString(block, 345, 155);
-    const isPosixUstar = block.toString('latin1', 257, 263) === 'ustar\0';
-    const headerName = isPosixUstar && prefixField ? `${prefixField}/${rawName}` : rawName;
-    const name = this.paxPath ?? this.longName ?? headerName;
-    const aliases = [
-      headerName,
-      rawName,
-      prefixField ? `${prefixField}/${rawName}` : undefined,
-      this.paxPath,
-      this.longName,
-    ].filter((n): n is string => n !== undefined && n !== '' && n !== name);
-    const type = tarEntryType(typeflag, name);
-    this.entries.push({ name, aliases: [...new Set(aliases)], type });
-
-    const size = this.paxSize ?? headerSize;
-    // GNU tar reads no data for a folder entry, this scanner would skip it:
-    // a folder "carrying data" could hide the next header from the scan.
-    if (type === 'directory' && size > 0) {
-      throw rejectedEntry(name, 'it is a folder entry that carries data');
-    }
-    this.paxPath = undefined;
-    this.paxSize = undefined;
-    this.longName = undefined;
-    this.skip = Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
-  }
-
-  private finishMeta(): void {
-    const meta = this.meta!;
-    this.meta = null;
-    this.skip = meta.padding;
-    const data = Buffer.concat(meta.chunks);
-    if (meta.kind === 'longName') {
-      this.longName = readCString(data, 0, data.length);
-      return;
-    }
-    if (meta.kind === 'longLink') return; // link targets are irrelevant: links are refused anyway
-    const records = parsePaxRecords(data);
-    if (meta.kind === 'paxGlobal') {
-      for (const key of ['path', 'linkpath', 'size']) {
-        if (records[key] !== undefined) {
-          throw new ArchiveRejectedError(
-            `Archive rejected: a global tar header overrides the member ${key}, which is not supported.`,
-          );
-        }
-      }
-      return;
-    }
-    if (records.path !== undefined) this.paxPath = records.path;
-    if (records.size !== undefined) {
-      if (!/^\d+$/.test(records.size)) throw new ArchiveRejectedError(NOT_A_TAR_GZ);
-      this.paxSize = Number(records.size);
-    }
-  }
-}
-
-async function listTarGzEntries(archivePath: string): Promise<ArchiveEntry[]> {
-  const scanner = new TarHeaderScanner();
-  try {
-    await pipeline(
-      createReadStream(archivePath),
-      createGunzip(),
-      new Writable({
-        write(chunk: Buffer, _encoding, callback) {
-          try {
-            scanner.push(chunk);
-            callback();
-          } catch (err) {
-            callback(err as Error);
-          }
-        },
-      }),
-    );
-  } catch (err) {
-    if (err instanceof ArchiveRejectedError) throw err;
-    // zlib reports a non-gzip / corrupt stream with Z_* codes.
-    if (String((err as NodeJS.ErrnoException).code ?? '').startsWith('Z_')) {
-      throw new ArchiveRejectedError(NOT_A_TAR_GZ);
-    }
-    throw err;
-  }
-  scanner.finish();
-  return scanner.entries;
-}
-
-// ============================================================
-// zip member listing (central directory only)
-// ============================================================
-
-const ZIP_EOCD_SIG = 0x06054b50;
-const ZIP64_LOCATOR_SIG = 0x07064b50;
-const ZIP64_EOCD_SIG = 0x06064b50;
-const ZIP_CENTRAL_SIG = 0x02014b50;
-const ZIP_UNICODE_PATH_EXTRA = 0x7075;
-const ZIP_EOCD_MIN = 22;
-const MAX_ZIP_CENTRAL_DIR_BYTES = 256 * 1024 * 1024;
-
-const S_IFMT = 0o170000;
-const S_IFREG = 0o100000;
-const S_IFDIR = 0o040000;
-const S_IFLNK = 0o120000;
-
-async function readExactly(fh: FileHandle, length: number, position: number): Promise<Buffer> {
-  const buf = Buffer.alloc(length);
-  let done = 0;
-  while (done < length) {
-    const { bytesRead } = await fh.read(buf, done, length - done, position + done);
-    if (bytesRead === 0) throw new ArchiveRejectedError(NOT_A_ZIP);
-    done += bytesRead;
-  }
-  return buf;
-}
-
-/** Info-ZIP unicode path extra field (0x7075). unzip prefers it over the plain name. */
-function readZipUnicodePath(extra: Buffer): string | null {
-  let pos = 0;
-  while (pos + 4 <= extra.length) {
-    const id = extra.readUInt16LE(pos);
-    const length = extra.readUInt16LE(pos + 2);
-    const start = pos + 4;
-    const end = start + length;
-    if (end > extra.length) break;
-    if (id === ZIP_UNICODE_PATH_EXTRA && length >= 5) return extra.toString('utf8', start + 5, end);
-    pos = end;
-  }
-  return null;
-}
-
-function zipEntryType(externalAttributes: number, name: string): ArchiveEntryType {
-  // The upper 16 bits carry the Unix st_mode for archives made on Unix-like hosts.
-  const kind = (externalAttributes >>> 16) & 0xffff & S_IFMT;
-  if (kind === S_IFLNK) return 'symlink';
-  if (kind === S_IFDIR) return 'directory';
-  if (kind === 0 || kind === S_IFREG) return name.endsWith('/') ? 'directory' : 'file';
-  return 'special';
-}
-
-function parseZipCentralDirectory(cd: Buffer, count: number): ArchiveEntry[] {
-  const entries: ArchiveEntry[] = [];
-  let pos = 0;
-  for (let i = 0; i < count; i++) {
-    if (pos + 46 > cd.length || cd.readUInt32LE(pos) !== ZIP_CENTRAL_SIG) {
-      throw new ArchiveRejectedError(NOT_A_ZIP);
-    }
-    const flags = cd.readUInt16LE(pos + 8);
-    const nameLength = cd.readUInt16LE(pos + 28);
-    const extraLength = cd.readUInt16LE(pos + 30);
-    const commentLength = cd.readUInt16LE(pos + 32);
-    const externalAttributes = cd.readUInt32LE(pos + 38);
-    const nameEnd = pos + 46 + nameLength;
-    const extraEnd = nameEnd + extraLength;
-    if (extraEnd + commentLength > cd.length) throw new ArchiveRejectedError(NOT_A_ZIP);
-
-    // Bit 11 = UTF-8 name; otherwise CP437, for which latin1 keeps every ASCII byte intact.
-    const plainName = cd.toString(flags & 0x800 ? 'utf8' : 'latin1', pos + 46, nameEnd);
-    const unicodeName = readZipUnicodePath(cd.subarray(nameEnd, extraEnd));
-    const name = unicodeName ?? plainName;
-    entries.push({
-      name,
-      aliases: name !== plainName ? [plainName] : [],
-      type: zipEntryType(externalAttributes, name),
-    });
-    pos = extraEnd + commentLength;
-  }
-  // Entries beyond the declared count (e.g. a wrapped 16-bit count) would be
-  // seen by some unzip builds but not by this parser.
-  if (pos !== cd.length) throw new ArchiveRejectedError(NOT_A_ZIP);
-  return entries;
-}
-
-async function listZipEntries(archivePath: string): Promise<ArchiveEntry[]> {
-  const fh = await fsp.open(archivePath, 'r');
-  try {
-    const { size } = await fh.stat();
-    if (size < ZIP_EOCD_MIN) throw new ArchiveRejectedError(NOT_A_ZIP);
-    const tailLength = Math.min(size, ZIP_EOCD_MIN + 0xffff);
-    const tail = await readExactly(fh, tailLength, size - tailLength);
-
-    let eocd = -1;
-    for (let i = tailLength - ZIP_EOCD_MIN; i >= 0; i--) {
-      if (tail.readUInt32LE(i) === ZIP_EOCD_SIG) {
-        eocd = i;
-        break;
-      }
-    }
-    if (eocd < 0) throw new ArchiveRejectedError(NOT_A_ZIP);
-
-    let count = tail.readUInt16LE(eocd + 10);
-    let cdSize = tail.readUInt32LE(eocd + 12);
-    let cdOffset = tail.readUInt32LE(eocd + 16);
-    let multiDisk = tail.readUInt16LE(eocd + 4) !== 0 || tail.readUInt16LE(eocd + 6) !== 0;
-    // Where the central directory must end: at the (ZIP64) end record.
-    let cdEnd = size - tailLength + eocd;
-
-    if (count === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
-      // ZIP64: the locator sits directly in front of the classic EOCD record.
-      const locatorPos = cdEnd - 20;
-      if (locatorPos < 0) throw new ArchiveRejectedError(NOT_A_ZIP);
-      const locator = await readExactly(fh, 20, locatorPos);
-      if (locator.readUInt32LE(0) !== ZIP64_LOCATOR_SIG) throw new ArchiveRejectedError(NOT_A_ZIP);
-      const zip64Pos = Number(locator.readBigUInt64LE(8));
-      if (zip64Pos + 56 > locatorPos) throw new ArchiveRejectedError(NOT_A_ZIP);
-      const zip64 = await readExactly(fh, 56, zip64Pos);
-      if (zip64.readUInt32LE(0) !== ZIP64_EOCD_SIG) throw new ArchiveRejectedError(NOT_A_ZIP);
-      multiDisk = zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0;
-      count = Number(zip64.readBigUInt64LE(32));
-      cdSize = Number(zip64.readBigUInt64LE(40));
-      cdOffset = Number(zip64.readBigUInt64LE(48));
-      cdEnd = zip64Pos;
-    }
-
-    if (multiDisk)
-      throw new ArchiveRejectedError('Split (multi-part) zip archives are not supported.');
-    if (cdSize > MAX_ZIP_CENTRAL_DIR_BYTES) throw new ArchiveRejectedError(NOT_A_ZIP);
-    // unzip tolerates a central directory that is not where the end record
-    // says ("extra bytes at beginning") and goes looking for it; this parser
-    // would then read a different one. Only the exact layout is accepted, so
-    // self-extracting / prepended-data zips are refused.
-    if (cdOffset + cdSize !== cdEnd) {
-      throw new ArchiveRejectedError(
-        `${NOT_A_ZIP} Its central directory is not where the end record says.`,
-      );
-    }
-    const cd = await readExactly(fh, cdSize, cdOffset);
-    return parseZipCentralDirectory(cd, count);
-  } finally {
-    await fh.close();
-  }
+  for (const entry of entries) assertSafeArchiveEntry(entry);
 }
 
 // ============================================================
 // Public API
 // ============================================================
 
-export function listArchiveEntries(
-  archivePath: string,
-  format: ArchiveFormat,
-): Promise<ArchiveEntry[]> {
-  return format === 'zip' ? listZipEntries(archivePath) : listTarGzEntries(archivePath);
-}
-
 /** Read the member list and throw ArchiveRejectedError on the first unsafe member. */
 export async function assertSafeArchive(archivePath: string, format: ArchiveFormat): Promise<void> {
-  assertSafeArchiveEntries(await listArchiveEntries(archivePath, format));
+  await inspectArchive(archivePath, format);
+}
+
+export function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
+}
+
+function assertWithinLimit(totalBytes: number, maxBytes: number | undefined): void {
+  if (maxBytes !== undefined && totalBytes > maxBytes) {
+    throw new ArchiveRejectedError(
+      `Archive rejected: it unpacks to ${formatBytes(totalBytes)}, more than the allowed ` +
+        `${formatBytes(maxBytes)} (ARCHIVE_EXTRACT_MAX_GB).`,
+    );
+  }
+}
+
+/**
+ * Validate every member while the archive is read (see
+ * assertSafeArchiveEntry), and the declared unpacked size against
+ * `limits.maxBytes`. The first unsafe member, a broken name or entry limit
+ * (archiveListing.ts) or a running total above the size cap stops the read.
+ * Returns the number of files and the declared total size.
+ */
+export async function inspectArchive(
+  archivePath: string,
+  format: ArchiveFormat,
+  limits: ExtractLimits = {},
+  options: ScanOptions = {},
+): Promise<ArchiveSummary> {
+  let files = 0;
+  let totalBytes = 0;
+  await scanArchiveEntries(
+    archivePath,
+    format,
+    (entry) => {
+      assertSafeArchiveEntry(entry);
+      if (entry.type !== 'file') return;
+      files++;
+      totalBytes += entry.size;
+      if (limits.maxBytes !== undefined && totalBytes > limits.maxBytes) {
+        throw new ArchiveRejectedError(
+          `Archive rejected: it unpacks to at least ${formatBytes(totalBytes)}, more than the ` +
+            `allowed ${formatBytes(limits.maxBytes)} (ARCHIVE_EXTRACT_MAX_GB).`,
+        );
+      }
+    },
+    options,
+  );
+  return { files, totalBytes };
+}
+
+async function freeBytesOf(dir: string): Promise<number | null> {
+  try {
+    const st = await fsp.statfs(dir);
+    return st.bavail * st.bsize;
+  } catch {
+    return null;
+  }
+}
+
+/** Refuse up front when the target filesystem cannot hold `bytes` plus the reserve. */
+export async function assertFreeSpace(dir: string, bytes: number, reserveBytes = 0): Promise<void> {
+  const free = await freeBytesOf(dir);
+  if (free !== null && free < bytes + reserveBytes) {
+    throw new ArchiveSpaceError(
+      `Not enough free disk space: unpacking needs ${formatBytes(bytes + reserveBytes)} ` +
+        `(including a reserve of ${formatBytes(reserveBytes)}), only ${formatBytes(free)} are free.`,
+    );
+  }
+}
+
+function extractorCommand(
+  archivePath: string,
+  format: ArchiveFormat,
+  staging: string,
+): [string, string[]] {
+  if (format === 'zip') return ['unzip', ['-q', '-o', archivePath, '-d', staging]];
+  // Options before the operands (musl getopt does not permute). Ownership from
+  // the archive is never applied, even when the panel runs as root.
+  return ['tar', ['-x', '-z', '--no-same-owner', '-f', archivePath, '-C', staging]];
+}
+
+/**
+ * Run tar/unzip into `staging`. When limits are given, the free space of the
+ * staging filesystem is sampled while it runs: if clearly more than the
+ * declared size was written, or less than `reserveBytes` is left, the
+ * extractor is killed and the archive is refused, so a member that inflates
+ * beyond its declared size cannot fill the disk. A hung extractor is stopped
+ * after EXTRACT_TIMEOUT_MS.
+ */
+async function runExtractor(
+  archivePath: string,
+  format: ArchiveFormat,
+  staging: string,
+  limits: ExtractLimits,
+  declaredBytes: number,
+): Promise<void> {
+  const [cmd, args] = extractorCommand(archivePath, format, staging);
+  const freeAtStart = await freeBytesOf(staging);
+  const guarded =
+    freeAtStart !== null && (limits.maxBytes !== undefined || limits.reserveBytes !== undefined);
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    let guardError: Error | null = null;
+    const stop = (err: Error) => {
+      guardError ??= err;
+      child.kill('SIGKILL');
+    };
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderr.length < EXTRACTOR_STDERR_MAX) stderr += chunk.toString('utf8');
+    });
+    const guard = guarded
+      ? setInterval(() => {
+          void freeBytesOf(staging).then((free) => {
+            if (free === null || guardError) return;
+            // More written than the listing declared: the archive lied about its sizes.
+            if (freeAtStart! - free > declaredBytes + SPACE_GUARD_SLACK_BYTES) {
+              stop(
+                new ArchiveRejectedError(
+                  'Archive rejected: it unpacks to more data than its listing declares.',
+                ),
+              );
+            } else if (limits.reserveBytes !== undefined && free < limits.reserveBytes) {
+              stop(
+                new ArchiveSpaceError(
+                  `Unpacking stopped: less than ${formatBytes(limits.reserveBytes)} of disk space left.`,
+                ),
+              );
+            }
+          });
+        }, SPACE_GUARD_INTERVAL_MS)
+      : null;
+    guard?.unref?.();
+    const timer = setTimeout(
+      () => stop(new Error(`${cmd} did not finish within ${EXTRACT_TIMEOUT_MS / 60000} minutes`)),
+      EXTRACT_TIMEOUT_MS,
+    );
+    timer.unref?.();
+    const done = () => {
+      if (guard) clearInterval(guard);
+      clearTimeout(timer);
+    };
+    child.on('error', (err) => {
+      done();
+      reject(err);
+    });
+    child.on('close', (code, signal) => {
+      done();
+      if (guardError) return reject(guardError);
+      if (code === 0) return resolve();
+      const detail = stderr.trim().slice(-500) || (signal ? `killed by ${signal}` : `exit ${code}`);
+      reject(new Error(`${cmd} could not unpack the archive: ${detail}`));
+    });
+  });
+}
+
+/**
+ * Validate `archivePath`, unpack it into the EMPTY directory `staging` and
+ * re-verify the result (links, special files, size). The caller owns
+ * `staging` and moves the tree on; on error the staging contents are left for
+ * the caller to remove. `pre` skips the listing when the caller already ran
+ * inspectArchive.
+ */
+export async function extractToStaging(
+  archivePath: string,
+  format: ArchiveFormat,
+  staging: string,
+  limits: ExtractLimits = {},
+  pre?: ArchiveSummary,
+): Promise<ArchiveSummary> {
+  const declared = pre ?? (await inspectArchive(archivePath, format, limits));
+  if (limits.maxBytes !== undefined || limits.reserveBytes !== undefined) {
+    await assertFreeSpace(staging, declared.totalBytes, limits.reserveBytes ?? 0);
+  }
+  await runExtractor(archivePath, format, staging, limits, declared.totalBytes);
+  const actual = await inspectExtractedTree(staging);
+  if (actual.files === 0) throw new ArchiveRejectedError('The archive does not contain any files.');
+  assertWithinLimit(actual.totalBytes, limits.maxBytes);
+  return actual;
 }
 
 /**
@@ -530,7 +324,13 @@ async function ensureOwnerAccess(dir: string, st: Stats): Promise<void> {
  * number of regular files.
  */
 export async function assertSafeExtractedTree(dir: string): Promise<number> {
+  return (await inspectExtractedTree(dir)).files;
+}
+
+/** assertSafeExtractedTree that also returns the total size of the regular files. */
+export async function inspectExtractedTree(dir: string): Promise<ArchiveSummary> {
   let files = 0;
+  let totalBytes = 0;
   const walk = async (current: string, rel: string): Promise<void> => {
     for (const name of await fsp.readdir(current)) {
       const full = path.join(current, name);
@@ -546,12 +346,13 @@ export async function assertSafeExtractedTree(dir: string): Promise<number> {
       if (st.nlink > 1) throw rejectedEntry(relName, TYPE_REASONS.hardlink!);
       if (st.mode & 0o6000) await fsp.chmod(full, st.mode & 0o777);
       files++;
+      totalBytes += st.size;
     }
   };
   // A "./" member can rewrite the staging directory's own mode, too.
   await ensureOwnerAccess(dir, await fsp.lstat(dir));
   await walk(dir, '');
-  return files;
+  return { files, totalBytes };
 }
 
 async function lstatOrNull(p: string): Promise<Stats | null> {
@@ -572,7 +373,7 @@ async function moveEntry(from: string, to: string): Promise<void> {
     // A link at the destination is removed first so the copy can't write through it.
     if ((await lstatOrNull(to))?.isSymbolicLink()) await fsp.unlink(to);
     await fsp.cp(from, to, { recursive: true, force: true });
-    await fsp.rm(from, { recursive: true, force: true });
+    await removeTree(from, [path.dirname(from)]);
   }
 }
 
@@ -635,7 +436,7 @@ async function sweepStaleStaging(parent: string): Promise<void> {
     try {
       const st = await fsp.lstat(full);
       if (st.isDirectory() && Date.now() - st.mtimeMs > STALE_STAGING_MS) {
-        await fsp.rm(full, { recursive: true, force: true });
+        await removeTree(full, [parent]);
       }
     } catch {
       // best-effort
@@ -658,8 +459,9 @@ export async function extractArchiveSafely(
   format: ArchiveFormat,
   destDir: string,
   allowedRoots?: string[],
-): Promise<void> {
-  await assertSafeArchive(archivePath, format);
+  limits: ExtractLimits = {},
+): Promise<ArchiveSummary> {
+  const declared = await inspectArchive(archivePath, format, limits);
 
   await fsp.mkdir(destDir, { recursive: true });
   const destReal = resolveRealPath(destDir);
@@ -670,20 +472,10 @@ export async function extractArchiveSafely(
   // Stage next to the destination so the final moves are same-filesystem renames.
   const staging = await fsp.mkdtemp(path.join(path.dirname(destReal), STAGING_PREFIX));
   try {
-    if (format === 'zip') {
-      await execFileAsync('unzip', ['-q', '-o', archivePath, '-d', staging], {
-        maxBuffer: EXTRACT_MAX_BUFFER,
-      });
-    } else {
-      await execFileAsync('tar', ['-xzf', archivePath, '-C', staging], {
-        maxBuffer: EXTRACT_MAX_BUFFER,
-      });
-    }
-    if ((await assertSafeExtractedTree(staging)) === 0) {
-      throw new ArchiveRejectedError('The archive does not contain any files.');
-    }
+    const summary = await extractToStaging(archivePath, format, staging, limits, declared);
     await mergeInto(staging, destReal, '');
+    return summary;
   } finally {
-    await fsp.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+    await removeTree(staging, [path.dirname(destReal)]).catch(() => undefined);
   }
 }

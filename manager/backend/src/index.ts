@@ -673,8 +673,12 @@ server.listen(config.port, '0.0.0.0', async () => {
   // This must happen BEFORE security check as it may create config files
   await checkAndRunMigration();
 
-  // Migrate UpdateConfig for native update system (Hytale 24.01.2026+)
-  const updateMigration = await migrateUpdateConfig();
+  // Migrate UpdateConfig for native update system (Hytale 24.01.2026+); only
+  // while the game server is stopped (it would write its own config back).
+  const { getContainerState } = await import('./services/docker.js');
+  const updateMigration = await migrateUpdateConfig({
+    isServerRunning: async () => (await getContainerState())?.running === true,
+  });
   if (updateMigration.migrated) {
     console.log('[Startup] Migrated to native update system');
   }
@@ -744,6 +748,10 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Clear any restore staging dirs stranded by a crash mid-restore.
   void (await import('./services/backup.js')).sweepOrphanedRestoreDirs().catch(() => {});
+
+  // Move panel self-backups older versions left on the backups volume (which
+  // the game server can read) into the manager's own volume. Runs once.
+  void (await import('./services/panelBackups.js')).migrateLegacyPanelBackups();
 
   // Start the event-action engine (reactive automations bound to the EventBus).
   const { startEventActions } = await import('./services/eventActions.js');

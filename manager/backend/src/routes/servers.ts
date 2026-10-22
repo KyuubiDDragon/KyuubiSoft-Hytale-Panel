@@ -30,7 +30,9 @@ import {
 import {
   createInstanceContainer,
   deleteInstanceContainer,
+  type DeleteResult,
 } from '../services/dockerImageManager.js';
+import { stopServerAndRun } from '../services/serverLifecycle.js';
 import { audit } from '../services/audit.js';
 import { config } from '../config.js';
 import { z } from 'zod';
@@ -196,6 +198,16 @@ router.put(
 
 const isTrueFlag = (v: unknown): boolean => v === 'true' || v === '1';
 
+const DELETE_FAILURE: Record<
+  Exclude<DeleteResult, { ok: true }>['code'],
+  { status: number; code: string }
+> = {
+  not_managed: { status: 409, code: 'CONTAINER_NOT_MANAGED' },
+  // The server could not be stopped or another operation runs on it.
+  stop_failed: { status: 409, code: 'SERVER_STOP_FAILED' },
+  docker_error: { status: 502, code: 'CONTAINER_REMOVE_FAILED' },
+};
+
 router.delete(
   '/:id',
   authMiddleware,
@@ -227,7 +239,13 @@ router.delete(
     // Tear down the container before the registry entry so we don't leave an
     // orphan running with ports bound and no entry pointing at it.
     if (!keepContainer) {
-      const containerResult = await deleteInstanceContainer(instance, { removeData });
+      const containerResult = await deleteInstanceContainer(instance, {
+        removeData,
+        // A running server saves through `/stop` like every other stop path,
+        // and nothing else (restore, rollback) runs on it while it is removed.
+        whileStopped: (remove) =>
+          stopServerAndRun(id, { reason: 'delete', actor: req.user, rejectIfBusy: true }, remove),
+      });
       if (!containerResult.ok) {
         audit(req, 'server.container_deleted', {
           target: `server:${id}`,
@@ -238,10 +256,10 @@ router.delete(
           },
           success: false,
         });
-        const notManaged = containerResult.code === 'not_managed';
-        res.status(notManaged ? 409 : 502).json({
+        const { status, code } = DELETE_FAILURE[containerResult.code];
+        res.status(status).json({
           detail: containerResult.error,
-          code: notManaged ? 'CONTAINER_NOT_MANAGED' : 'CONTAINER_REMOVE_FAILED',
+          code,
           containerName: instance.containerName,
         });
         return;
