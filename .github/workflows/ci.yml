@@ -19,8 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm', cache-dependency-path: manager/backend/package-lock.json }
-      # bcrypt and better-sqlite3 ship prebuilt binaries for node 20 + linux-x64,
+        with: { node-version-file: '.nvmrc', cache: 'npm', cache-dependency-path: manager/backend/package-lock.json }
+      # bcrypt and better-sqlite3 ship prebuilt binaries for node 24 + linux-x64,
       # but apt-installing the toolchain keeps fallbacks working if a future
       # node bump drops the prebuilt.
       - run: sudo apt-get update && sudo apt-get install -y python3 make g++
@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm', cache-dependency-path: manager/frontend/package-lock.json }
+        with: { node-version-file: '.nvmrc', cache: 'npm', cache-dependency-path: manager/frontend/package-lock.json }
       - run: npm ci --no-audit --no-fund
       # Frontend type-check (vue-tsc 2.x). The pre-existing backlog has been
       # cleared, so this is now a blocking gate — keep it green.
