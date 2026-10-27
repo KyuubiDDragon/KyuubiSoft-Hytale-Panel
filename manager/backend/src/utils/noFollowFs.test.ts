@@ -220,19 +220,25 @@ describe('removeTree', () => {
     await expect(removeTree(inServer('missing'), [server])).resolves.toBeUndefined();
   });
 
-  it.skipIf(!CAN_LINK_DIRS)('deletes a linked folder inside the tree, not what it points to', async () => {
-    fs.mkdirSync(inServer('staging'));
-    fs.writeFileSync(inServer('staging', 'own.txt'), 'own');
-    fs.symlinkSync(panel, inServer('staging', 'escape'), 'junction');
-    await removeTree(inServer('staging'), [server]);
-    expect(fs.existsSync(inServer('staging'))).toBe(false);
-    expect(fs.readFileSync(secret, 'utf-8')).toBe(SECRET);
-  });
+  it.skipIf(!CAN_LINK_DIRS)(
+    'deletes a linked folder inside the tree, not what it points to',
+    async () => {
+      fs.mkdirSync(inServer('staging'));
+      fs.writeFileSync(inServer('staging', 'own.txt'), 'own');
+      fs.symlinkSync(panel, inServer('staging', 'escape'), 'junction');
+      await removeTree(inServer('staging'), [server]);
+      expect(fs.existsSync(inServer('staging'))).toBe(false);
+      expect(fs.readFileSync(secret, 'utf-8')).toBe(SECRET);
+    },
+  );
 
-  it.skipIf(!CAN_LINK_DIRS)('removes only the link when the tree itself is a linked folder', async () => {
-    fs.symlinkSync(panel, inServer('staging'), 'junction');
-    await removeTree(inServer('staging'), [server]);
-    expect(fs.existsSync(inServer('staging'))).toBe(false);
-    expect(fs.readFileSync(secret, 'utf-8')).toBe(SECRET);
-  });
+  it.skipIf(!CAN_LINK_DIRS)(
+    'removes only the link when the tree itself is a linked folder',
+    async () => {
+      fs.symlinkSync(panel, inServer('staging'), 'junction');
+      await removeTree(inServer('staging'), [server]);
+      expect(fs.existsSync(inServer('staging'))).toBe(false);
+      expect(fs.readFileSync(secret, 'utf-8')).toBe(SECRET);
+    },
+  );
 });
