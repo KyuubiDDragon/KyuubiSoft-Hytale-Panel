@@ -121,6 +121,18 @@ function validatePlayerName(res: Response, name: string): boolean {
   return true;
 }
 
+/**
+ * The plugin took a player action but did not answer in time, so it may still
+ * have run. Sending it again on the console could apply it twice (an item
+ * given twice), so the console fallback is skipped.
+ */
+function answerMaybeRan(res: Response, playerName: string): void {
+  res.status(504).json({
+    success: false,
+    error: `The plugin did not answer in time; the action on ${playerName} may still have happened, so it was not sent again`,
+  });
+}
+
 // ============== FILE PERSISTENCE HELPERS ==============
 
 interface WhitelistData {
@@ -772,6 +784,7 @@ router.post(
         });
         return;
       }
+      if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
     } catch {
       // Plugin not available, fall back to console command
     }
@@ -832,6 +845,7 @@ router.post(
         });
         return;
       }
+      if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
     } catch {
       // Plugin not available, fall back to console command
     }
@@ -885,6 +899,7 @@ router.post(
         });
         return;
       }
+      if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
     } catch {
       // Plugin not available, fall back to console command
     }
@@ -967,6 +982,7 @@ router.post(
         });
         return;
       }
+      if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
     } catch {
       // Plugin not available, fall back to console command
     }
@@ -1072,6 +1088,8 @@ router.post(
         res.json({ success: true, message: `Gave ${amount || 1} ${item} to ${playerName}` });
         return;
       }
+      // Giving the item again on the console could hand it out twice.
+      if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
     } catch {
       // Plugin not available — fall back to console command.
     }
@@ -1138,6 +1156,7 @@ router.post(
         });
         return;
       }
+      if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
     } catch {
       // Plugin not available, fall back to console command
     }
@@ -1266,6 +1285,7 @@ router.post(
         });
         return;
       }
+      if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
     } catch {
       // Plugin not available, fall back to console command
     }

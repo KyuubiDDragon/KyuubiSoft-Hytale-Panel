@@ -87,7 +87,9 @@ describe('event actions: no self-triggering', () => {
     await flush();
     expect(createBackup).toHaveBeenCalledTimes(1);
     expect(execCommand).toHaveBeenCalledTimes(1);
-    expect(execCommand).toHaveBeenCalledWith('/broadcast Backup auto_event_x done', 'default');
+    expect(execCommand).toHaveBeenCalledWith('/broadcast Backup auto_event_x done', 'default', {
+      actor: 'event/admin',
+    });
   });
 
   it('two backup rules do not ping-pong', async () => {

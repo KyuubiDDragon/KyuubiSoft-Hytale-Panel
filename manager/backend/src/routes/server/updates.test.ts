@@ -6,7 +6,8 @@
  * stubbed. Covers: status read from the files instead of console output,
  * `/update apply --confirm`, apply on a stopped server, the `Update` settings
  * block only written with the server stopped, rollback from updater/backup,
- * and pending history entries that are only confirmed by the installed version.
+ * pending history entries that are only confirmed by the installed version,
+ * and `/update` commands the server refused in its reply through the plugin.
  */
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { NextFunction, Request, Response } from 'express';
@@ -35,6 +36,19 @@ const execCommand = vi.fn(async (_cmd: string, _id?: string) => ({
   success: true,
   message: 'sent',
 }));
+/** A command the KyuubiSoft API plugin ran: it ends normally, the ids tell the outcome. */
+function pluginReply(messageIds: string[], text: string, status = 'DONE') {
+  const result = {
+    success: true,
+    message: text,
+    output: text,
+    via: 'plugin',
+    status,
+    lines: text.split('\n'),
+    messageIds,
+  };
+  return result;
+}
 vi.mock('../../services/docker.js', () => ({
   getContainerState: vi.fn(async () => ({
     running: state.running,
@@ -240,6 +254,42 @@ describe('POST /update-apply', () => {
     expect(execCommand).toHaveBeenCalledWith('/update apply --confirm', undefined);
   });
 
+  it('records nothing when the server answers through the plugin that nothing is staged', async () => {
+    stage();
+    execCommand.mockResolvedValueOnce(
+      pluginReply(['server.commands.update.no_staged'], 'No update is staged.'),
+    );
+    const { status, json } = await call('POST', '/update-apply');
+    expect(status).toBe(409);
+    expect(json).toMatchObject({ reason: 'nothing_staged', error: 'No update is staged.' });
+    expect((await call('GET', '/update-history')).json.history).toEqual([]);
+  });
+
+  it('records nothing when the pre-update backup of the server failed', async () => {
+    stage();
+    execCommand.mockResolvedValueOnce(
+      pluginReply(
+        ['server.commands.update.applying', 'server.commands.update.backup_failed'],
+        'Applying update 0.7.3...\nFailed to back up the current files.',
+      ),
+    );
+    const { status, json } = await call('POST', '/update-apply');
+    expect(status).toBe(409);
+    expect(json.reason).toBe('backup_failed');
+    expect((await call('GET', '/update-history')).json.history).toEqual([]);
+  });
+
+  it('records a pending entry when the server reports that it applies the update', async () => {
+    stage();
+    execCommand.mockResolvedValueOnce(
+      pluginReply(['server.commands.update.applying'], 'Applying update 0.7.3...', 'RUNNING'),
+    );
+    const { status } = await call('POST', '/update-apply');
+    expect(status).toBe(200);
+    const history = (await call('GET', '/update-history')).json.history;
+    expect(history[0]).toMatchObject({ action: 'apply', toVersion: '0.7.3', pending: true });
+  });
+
   it('confirms the pending entry once the installed version is the target', async () => {
     stage();
     await call('POST', '/update-apply');
@@ -322,6 +372,30 @@ describe('POST /update-download and /update-check', () => {
     expect((await call('POST', '/update-download')).json.reason).toBe('server_stopped');
   });
 
+  it('passes on the reason when the server turns the download down', async () => {
+    execCommand.mockResolvedValueOnce(
+      pluginReply(['server.commands.update.not_authenticated'], 'The server is not signed in.'),
+    );
+    const notSignedIn = await call('POST', '/update-download');
+    expect(notSignedIn.status).toBe(409);
+    expect(notSignedIn.json).toMatchObject({
+      reason: 'not_authenticated',
+      error: 'The server is not signed in.',
+    });
+
+    execCommand.mockResolvedValueOnce(
+      pluginReply(['server.commands.update.download_in_progress'], 'A download is running.'),
+    );
+    expect((await call('POST', '/update-download')).json.reason).toBe('download_in_progress');
+  });
+
+  it('accepts a download the server started', async () => {
+    execCommand.mockResolvedValueOnce(
+      pluginReply(['server.commands.update.downloading'], 'Downloading 0.7.3...', 'RUNNING'),
+    );
+    expect((await call('POST', '/update-download')).status).toBe(202);
+  });
+
   it('answers a missing downloader login with 409 + authRequired, not 401', async () => {
     // No credentials in the downloader volume (the container probe says missing).
     const { status, json } = await call('POST', '/update-check');
@@ -337,6 +411,16 @@ describe('POST /update-cancel', () => {
     expect(status).toBe(200);
     expect(execCommand).toHaveBeenCalledWith('/update cancel', undefined);
     expect(stagingExists()).toBe(true);
+  });
+
+  it('reports a discard the running server could not do', async () => {
+    stage();
+    execCommand.mockResolvedValueOnce(
+      pluginReply(['server.commands.update.cancel_failed'], 'Could not delete the update.'),
+    );
+    const { status, json } = await call('POST', '/update-cancel');
+    expect(status).toBe(409);
+    expect(json.reason).toBe('cancel_failed');
   });
 
   it('deletes the staging folder of a stopped server under the lifecycle lock', async () => {

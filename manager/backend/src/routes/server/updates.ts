@@ -45,6 +45,7 @@ import {
   LifecycleBusyError,
 } from '../../services/serverLifecycle.js';
 import { resolveServerId } from '../../services/servers.js';
+import { updateCommandRefusal } from '../../services/updateStatusReply.js';
 import { readJsonFile } from '../../utils/jsonStore.js';
 import { UnsafeFileError } from '../../utils/noFollowFs.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
@@ -67,6 +68,22 @@ const BUSY_RESPONSE = {
 async function refuseIfBusy(req: AuthenticatedRequest, res: Response): Promise<boolean> {
   if (!isLifecycleBusy(await resolveServerId(req.serverId))) return false;
   res.status(409).json(BUSY_RESPONSE);
+  return true;
+}
+
+/**
+ * 409 with the server's own answer when it turned an `/update` command down.
+ * Only a reply through the KyuubiSoft API plugin carries one; over stdin the
+ * result stays "sent" and the files show what happened.
+ */
+function refuseIfServerRefused(res: Response, result: dockerService.CommandExecResult): boolean {
+  const reason = updateCommandRefusal(result);
+  if (!reason) return false;
+  res.status(409).json({
+    success: false,
+    reason,
+    error: result.message || `The server refused the command (${reason})`,
+  });
   return true;
 }
 
@@ -357,6 +374,8 @@ router.post(
           .json({ success: false, error: result.error || 'Could not send the command' });
         return;
       }
+      // e.g. the server is not signed in, has no newer build or already downloads
+      if (refuseIfServerRefused(res, result)) return;
       res.status(202).json({
         success: true,
         message:
@@ -453,6 +472,9 @@ router.post(
             .json({ success: false, error: result.error || 'Could not send the command' });
           return;
         }
+        // No staged update in the server's view, or its pre-update backup
+        // failed: nothing is applied, so no history entry either.
+        if (refuseIfServerRefused(res, result)) return;
       } else {
         const started = await startServer(req.serverId, {
           reason: 'update',
@@ -534,6 +556,7 @@ router.post(
             .json({ success: false, error: result.error || 'Could not send the command' });
           return;
         }
+        if (refuseIfServerRefused(res, result)) return;
         res.json({ success: true, message: 'Cancel requested' });
         return;
       }

@@ -352,11 +352,39 @@ export interface PluginServerInfo {
   worldCount: number
   uptimeSeconds: number
   startedAt: string
+  // Plugin 2.1+: 10 s average of the slowest world (tpsWorld) and its real
+  // tick time in ms; absent while no world runs. Older plugins: capped at 20.
   tps: number
   mspt: number
+  targetTps?: number
+  tpsWorld?: string
 }
 
-// Extended TPS metrics from Prometheus endpoint
+// Tick statistics of one window ("10s", "1m", "5m"), plugin 2.1+
+export interface PluginTpsWindow {
+  window: string
+  tpsAvg: number
+  tpsMin: number
+  tpsMax: number
+  tickMsAvg: number
+  tickMsMin: number
+  tickMsMax: number
+}
+
+// Tick metrics and load of one world, plugin 2.1+
+export interface PluginWorldPerf {
+  world: string
+  targetTps: number
+  tickBudgetMs: number
+  tps: number
+  mspt: number
+  windows: PluginTpsWindow[]
+  players: number
+  entities: number
+  loadedChunks: number
+}
+
+// TPS summary: per-world metrics (plugin 2.1+) or the Prometheus gauges
 export interface PluginTpsMetrics {
   current: number
   average: number
@@ -365,6 +393,8 @@ export interface PluginTpsMetrics {
   target: number
   msptCurrent: number
   msptAverage: number
+  world?: string
+  worlds?: PluginWorldPerf[]
 }
 
 // Memory pool info
@@ -540,6 +570,37 @@ export interface FilePlayerInventory {
     backpack?: number
     tools?: number
   }
+  // 'live' when read from the running server (plugin 2.1+), absent for the saved file.
+  source?: 'live'
+}
+
+// Live player data from the plugin (read on the player's world thread).
+export interface LivePing {
+  type: string
+  lastMs?: number
+  avg1mMs?: number
+  min1mMs?: number
+  max1mMs?: number
+  avg5mMs?: number
+}
+
+export interface LivePlayerSnapshot {
+  uuid: string
+  name: string
+  world?: string
+  // Absent when the player was online before the plugin started.
+  joinedAt?: string
+  language?: string
+  groups?: string[]
+  ping?: LivePing
+  // Protocol checksum of the client; the server keeps no client build string.
+  protocolCrc?: number
+  gamemode?: string
+  stats?: Record<string, { value: number; max: number }>
+  position?: { x: number; y: number; z: number }
+  yaw?: number
+  pitch?: number
+  appearance?: Record<string, string>
 }
 
 export interface FilePlayerStats {
@@ -568,6 +629,9 @@ export interface FilePlayerDetails {
 export interface PerfSample {
   ts: number
   tps: number | null
+  // Target TPS and world of the sample's TPS (slowest world); null in gaps
+  targetTps?: number | null
+  world?: string | null
   mspt: number | null
   cpu: number | null
   mem: number | null
@@ -842,6 +906,24 @@ export const serverApi = {
   ): Promise<PluginApiResponse<PluginPlayerAppearance>> {
     const response = await api.get<PluginApiResponse<PluginPlayerAppearance>>(
       `/server/plugin/players/${encodeURIComponent(playerName)}/appearance`,
+    )
+    return response.data
+  },
+
+  // Live player data (plugin 2.1+); rejects with 404 while the player is offline.
+  async getPluginPlayerLive(playerName: string): Promise<PluginApiResponse<LivePlayerSnapshot>> {
+    const response = await api.get<PluginApiResponse<LivePlayerSnapshot>>(
+      `/server/plugin/players/${encodeURIComponent(playerName)}/live`,
+    )
+    return response.data
+  },
+
+  // The real inventory in the same shape as the saved-file inventory (source: 'live').
+  async getPluginPlayerLiveInventory(
+    playerName: string,
+  ): Promise<PluginApiResponse<FilePlayerInventory>> {
+    const response = await api.get<PluginApiResponse<FilePlayerInventory>>(
+      `/server/plugin/players/${encodeURIComponent(playerName)}/live/inventory`,
     )
     return response.data
   },

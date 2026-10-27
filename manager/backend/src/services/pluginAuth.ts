@@ -7,6 +7,15 @@
  * never in servers.json, which the API hands to the browser) and writes it
  * into the plugin's config file before each server start.
  *
+ * Where the plugin reads its config:
+ *  - 2.1.0+: its data directory, `<mods>/KyuubiDDragon_KyuubiSoftAPI/config.json`
+ *    (the server's mods folder is the plugin's data root).
+ *  - up to 2.0.x: `<server>/config/kyuubisoft-api/config.json`.
+ * The panel always writes the new file. It keeps the old one up to date only
+ * while it still matters: the file exists (2.1 moves it away on its first
+ * start) or a jar older than 2.1.0 is installed. A new file starts from the
+ * old one's keys, so port and CORS settings survive the move.
+ *
  * Old 1.4.x plugins keep working: the panel also sets their `authEnabled`
  * flag, so they check the same header on HTTP.
  */
@@ -48,9 +57,34 @@ const SECRET_FILE_MODE = 0o600;
 // O_NOFOLLOW is POSIX only; on Windows (dev/tests) it is undefined.
 const NO_FOLLOW = fsConstants.O_NOFOLLOW ?? 0;
 
-/** Where the plugin reads its config, relative to the server's working dir. */
-const PLUGIN_CONFIG_SEGMENTS = ['config', 'kyuubisoft-api', 'config.json'];
+/** The plugin's data directory name below the mods folder (`<Group>_<Name>`). */
+export const PLUGIN_DATA_DIR_NAME = 'KyuubiDDragon_KyuubiSoftAPI';
+/** Where plugin 2.1+ reads its config, relative to the server's mods dir. */
+const PLUGIN_CONFIG_SEGMENTS = [PLUGIN_DATA_DIR_NAME, 'config.json'];
 export const PLUGIN_CONFIG_RELATIVE_PATH = path.join(...PLUGIN_CONFIG_SEGMENTS);
+/** Where plugins up to 2.0.x read it, relative to the server's working dir. */
+const LEGACY_CONFIG_SEGMENTS = ['config', 'kyuubisoft-api', 'config.json'];
+export const LEGACY_PLUGIN_CONFIG_RELATIVE_PATH = path.join(...LEGACY_CONFIG_SEGMENTS);
+/** First plugin version that reads the config from its data directory. */
+const DATA_DIR_CONFIG_SINCE: readonly [number, number, number] = [2, 1, 0];
+
+/** A config file below a base dir the panel must not be lured out of. */
+interface ConfigLocation {
+  base: string;
+  segments: readonly string[];
+}
+
+function primaryLocation(modsDir: string): ConfigLocation {
+  return { base: modsDir, segments: PLUGIN_CONFIG_SEGMENTS };
+}
+
+function legacyLocation(serverDir: string): ConfigLocation {
+  return { base: serverDir, segments: LEGACY_CONFIG_SEGMENTS };
+}
+
+function locationPath(loc: ConfigLocation): string {
+  return path.join(loc.base, ...loc.segments);
+}
 
 /** The plugin config path is redirected (symlink) or not what it should be. */
 export class UnsafePluginConfigPathError extends Error {
@@ -69,6 +103,8 @@ export interface PluginConfigWriteResult {
   ok: boolean;
   changed: boolean;
   path?: string;
+  /** Set when the pre-2.1 config was kept up to date as well. */
+  legacyPath?: string;
   error?: string;
 }
 
@@ -100,8 +136,35 @@ export function isPluginJarFile(fileName: string): boolean {
   return lower.startsWith('kyuubisoftapi') && lower.endsWith('.jar');
 }
 
-export function pluginConfigPath(serverDir: string): string {
-  return path.join(serverDir, PLUGIN_CONFIG_RELATIVE_PATH);
+/** Version of a KyuubiSoftAPI jar from its file name, or null when it has none. */
+export function pluginJarVersion(fileName: string): [number, number, number] | null {
+  const match = /^kyuubisoftapi-(\d+)\.(\d+)\.(\d+)/i.exec(fileName);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+/**
+ * True when one of these mods-folder entries is a plugin jar that still reads
+ * the pre-2.1 config path. A jar without a version in its name counts as old.
+ */
+export function needsLegacyConfig(modsEntries: string[]): boolean {
+  return modsEntries.filter(isPluginJarFile).some((jar) => {
+    const version = pluginJarVersion(jar);
+    if (!version) return true;
+    for (let i = 0; i < 3; i++) {
+      if (version[i] !== DATA_DIR_CONFIG_SINCE[i]) return version[i] < DATA_DIR_CONFIG_SINCE[i];
+    }
+    return false;
+  });
+}
+
+/** Config path of plugin 2.1+ below the server's mods dir. */
+export function pluginConfigPath(modsDir: string): string {
+  return locationPath(primaryLocation(modsDir));
+}
+
+/** Config path of plugins up to 2.0.x below the server dir. */
+export function legacyPluginConfigPath(serverDir: string): string {
+  return locationPath(legacyLocation(serverDir));
 }
 
 /** Read the token file inside the lock; a damaged file counts as empty. */
@@ -166,21 +229,22 @@ async function lstatOrNull(target: string): Promise<Stats | null> {
 }
 
 /**
- * The server dir is shared with the game container, so a mod can plant
- * symlinks there to make the panel read or write elsewhere. Walk
- * config/kyuubisoft-api/config.json with lstat: no segment may be a symlink,
+ * The server and mods dirs are shared with the game container, so a mod can
+ * plant symlinks there to make the panel read or write elsewhere. Walk the
+ * config's path below its base dir with lstat: no segment may be a symlink,
  * directories must be real directories (missing ones are created one level at
- * a time) and an existing config must be a regular file. The real path must
- * still lie inside the server dir. Returns the config path.
+ * a time unless `create` is false) and an existing config must be a regular
+ * file. The real path must still lie inside the base dir. Returns the config
+ * path.
  */
-async function preparePluginConfigPath(serverDir: string): Promise<string> {
-  let current = serverDir;
-  for (const [i, segment] of PLUGIN_CONFIG_SEGMENTS.entries()) {
+async function preparePluginConfigPath(loc: ConfigLocation, create = true): Promise<string> {
+  let current = loc.base;
+  for (const [i, segment] of loc.segments.entries()) {
     current = path.join(current, segment);
-    const isFile = i === PLUGIN_CONFIG_SEGMENTS.length - 1;
-    const rel = path.relative(serverDir, current);
+    const isFile = i === loc.segments.length - 1;
+    const rel = path.relative(loc.base, current);
     let st = await lstatOrNull(current);
-    if (!st && !isFile) {
+    if (!st && !isFile && create) {
       await mkdir(current).catch((err: NodeJS.ErrnoException) => {
         if (err.code !== 'EEXIST') throw err;
       });
@@ -193,13 +257,14 @@ async function preparePluginConfigPath(serverDir: string): Promise<string> {
         `${rel} is not a regular ${isFile ? 'file' : 'directory'}`,
       );
     }
+    if (!st && !create) break; // nothing there yet, nothing to redirect
   }
-  if (!resolveRealPathWithin(current, [serverDir])) {
+  if (create && !resolveRealPathWithin(current, [loc.base])) {
     throw new UnsafePluginConfigPathError(
-      `${PLUGIN_CONFIG_RELATIVE_PATH} resolves outside the server directory`,
+      `${path.join(...loc.segments)} resolves outside its base directory`,
     );
   }
-  return current;
+  return locationPath(loc);
 }
 
 /** Content of the config without following a symlink at the file itself; null if absent. */
@@ -242,19 +307,67 @@ async function parseConfigOrBackup(
 }
 
 /**
- * Put `token` into the plugin config below `serverDir`, keeping every other
- * key the operator set (port, position interval, CORS allowlist, …). Returns
- * changed:false when the file already holds the token. Throws
- * UnsafePluginConfigPathError, without writing, when the path is redirected.
+ * Keys of the pre-2.1 config, to start a new data-dir config from. Null when
+ * there is none or it cannot be read safely (symlinked, unparseable): the new
+ * file then starts empty, the plugin uses its defaults.
+ */
+async function readLegacySeed(serverDir: string): Promise<Record<string, unknown> | null> {
+  const loc = legacyLocation(serverDir);
+  try {
+    const configPath = await preparePluginConfigPath(loc, false);
+    const raw = await readConfigNoFollow(configPath);
+    if (raw === null || raw.trim() === '') return null;
+    const parsed: unknown = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+    return isPlainObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the pre-2.1 config exists as a regular file (not a link). */
+async function legacyConfigExists(serverDir: string): Promise<boolean> {
+  try {
+    const st = await lstatOrNull(legacyPluginConfigPath(serverDir));
+    return !!st && st.isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Put `token` into the plugin 2.1+ config below `modsDir`, keeping every
+ * other key the operator set (port, position interval, CORS allowlist, …).
+ * When the file does not exist yet it starts from `seed` (the pre-2.1
+ * config's keys). Returns changed:false when the file already holds the
+ * token. Throws UnsafePluginConfigPathError, without writing, when the path is
+ * redirected.
  */
 export async function writePluginAuthConfig(
+  modsDir: string,
+  token: string,
+  seed: Record<string, unknown> | null = null,
+): Promise<{ changed: boolean }> {
+  return writeConfigAt(primaryLocation(modsDir), token, seed);
+}
+
+/** Same for the pre-2.1 config below `serverDir`, read by plugins up to 2.0.x. */
+export async function writeLegacyPluginAuthConfig(
   serverDir: string,
   token: string,
 ): Promise<{ changed: boolean }> {
-  const configPath = pluginConfigPath(serverDir);
+  return writeConfigAt(legacyLocation(serverDir), token, null);
+}
+
+async function writeConfigAt(
+  loc: ConfigLocation,
+  token: string,
+  seed: Record<string, unknown> | null,
+): Promise<{ changed: boolean }> {
+  const configPath = locationPath(loc);
   return withFileLock(configPath, async () => {
-    await preparePluginConfigPath(serverDir);
-    const current = await parseConfigOrBackup(configPath, await readConfigNoFollow(configPath));
+    await preparePluginConfigPath(loc);
+    const raw = await readConfigNoFollow(configPath);
+    const current = raw === null ? seed : await parseConfigOrBackup(configPath, raw);
 
     if (current?.insecureDisableAuth === true) {
       // The operator's explicit choice, so it stays; but say so on every start.
@@ -263,12 +376,14 @@ export async function writePluginAuthConfig(
       );
     }
 
-    if (current?.authToken === token && current?.authEnabled === true) return { changed: false };
+    if (raw !== null && current?.authToken === token && current?.authEnabled === true) {
+      return { changed: false };
+    }
 
     // Check again right before writing to keep the window for a swap small.
     // The temp file is created with O_EXCL and renamed over the entry itself,
     // so a link planted at the file name is replaced, never followed.
-    await preparePluginConfigPath(serverDir);
+    await preparePluginConfigPath(loc);
     // authEnabled only matters for 1.4.x plugins; 2.0.0 always requires the token.
     await writeJsonAtomic(
       configPath,
@@ -294,21 +409,45 @@ async function isDirectory(dir: string): Promise<boolean> {
   }
 }
 
+async function modsEntries(modsDir: string): Promise<string[]> {
+  try {
+    return await readdir(modsDir);
+  } catch {
+    return [];
+  }
+}
+
 async function ensureForServer(server: ServerInstance): Promise<PluginConfigWriteResult> {
-  if (!(await isDirectory(server.paths.server))) {
+  const { mods: modsDir, server: serverDir } = server.paths;
+  if (!(await isDirectory(modsDir))) {
     return {
       ok: false,
       changed: false,
-      error: `server directory ${server.paths.server} is not reachable from the panel`,
+      error: `mods directory ${modsDir} is not reachable from the panel`,
     };
   }
-  const configPath = pluginConfigPath(server.paths.server);
-  const { changed } = await writePluginAuthConfig(
-    server.paths.server,
-    await getPluginToken(server.id),
-  );
+  const token = await getPluginToken(server.id);
+  const serverDirReachable = await isDirectory(serverDir);
+  const legacyExists = serverDirReachable && (await legacyConfigExists(serverDir));
+
+  // Plugin 2.1+: data-dir config, started from the old file's keys.
+  const configPath = pluginConfigPath(modsDir);
+  const seed = legacyExists ? await readLegacySeed(serverDir) : null;
+  const { changed } = await writePluginAuthConfig(modsDir, token, seed);
   if (changed) console.log(`[PluginAuth:${server.id}] Plugin token written to ${configPath}`);
-  return { ok: true, changed, path: configPath };
+  const result: PluginConfigWriteResult = { ok: true, changed, path: configPath };
+
+  // Plugins up to 2.0.x: keep their file current while it is still read.
+  if (serverDirReachable && (legacyExists || needsLegacyConfig(await modsEntries(modsDir)))) {
+    const legacyPath = legacyPluginConfigPath(serverDir);
+    const legacy = await writeLegacyPluginAuthConfig(serverDir, token);
+    if (legacy.changed) {
+      console.log(`[PluginAuth:${server.id}] Plugin token written to ${legacyPath} (plugin < 2.1)`);
+    }
+    result.changed = result.changed || legacy.changed;
+    result.legacyPath = legacyPath;
+  }
+  return result;
 }
 
 /**
@@ -329,10 +468,10 @@ export async function ensurePluginAuthConfig(serverId?: string): Promise<PluginC
   } catch (err) {
     result = { ok: false, changed: false, error: err instanceof Error ? err.message : String(err) };
     if (err instanceof UnsafePluginConfigPathError) {
-      // Someone with write access to the server dir tried to redirect the write.
+      // Someone with write access to the server or mods dir tried to redirect the write.
       console.error(
         `[PluginAuth:${id}] SECURITY: refusing to write the plugin token, ${err.message}. ` +
-          'Remove the link in the server directory; the plugin stays locked until then.',
+          'Remove the link in the server or mods directory; the plugin stays locked until then.',
       );
       return result;
     }
@@ -344,17 +483,18 @@ export async function ensurePluginAuthConfig(serverId?: string): Promise<PluginC
 
 /** Plugin installed or configured for this server? Only then is a config worth writing at boot. */
 async function hasPluginFootprint(server: ServerInstance): Promise<boolean> {
-  try {
-    await stat(pluginConfigPath(server.paths.server));
-    return true;
-  } catch {
-    /* no config yet */
+  for (const configPath of [
+    pluginConfigPath(server.paths.mods),
+    legacyPluginConfigPath(server.paths.server),
+  ]) {
+    try {
+      await stat(configPath);
+      return true;
+    } catch {
+      /* no config there */
+    }
   }
-  try {
-    return (await readdir(server.paths.mods)).some(isPluginJarFile);
-  } catch {
-    return false;
-  }
+  return (await modsEntries(server.paths.mods)).some(isPluginJarFile);
 }
 
 let initialized = false;

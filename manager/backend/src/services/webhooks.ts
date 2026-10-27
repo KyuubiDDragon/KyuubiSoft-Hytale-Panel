@@ -18,7 +18,14 @@ import { getDb } from '../db/index.js';
 import { publish as publishEvent, subscribe } from './eventBus.js';
 import { webhookDeliveries } from './metrics.js';
 import { assertSafeResolvedUrl } from '../utils/urlGuard.js';
-import type { PanelEvent, PanelEventName } from '../schemas/events.js';
+import { logger } from '../utils/logger.js';
+import { KeyedTokenBucket } from '../utils/tokenBucket.js';
+import {
+  EXPLICIT_ONLY_EVENTS,
+  eventPatternMatches,
+  type PanelEvent,
+  type PanelEventName,
+} from '../schemas/events.js';
 
 const RETRY_DELAYS_MS = [30_000, 5 * 60_000, 30 * 60_000, 6 * 3600_000, 24 * 3600_000];
 const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
@@ -259,6 +266,16 @@ function markCompleted(
     .run(code, bodySnippet, attempt, nextAt, deliveryId);
 }
 
+/**
+ * Embed/attachment field text: objects as JSON (mod.event carries a nested
+ * payload) instead of "[object Object]", never empty (Discord rejects the
+ * whole embed for an empty field value).
+ */
+function fieldText(value: unknown): string {
+  const text = value !== null && typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return text.length > 0 ? text.slice(0, 1024) : '-';
+}
+
 function formatDiscordPayload(event: PanelEvent): unknown {
   const colorByName: Record<string, number> = {
     'server.started': 0x22c55e,
@@ -276,7 +293,7 @@ function formatDiscordPayload(event: PanelEvent): unknown {
     .slice(0, 10)
     .map(([k, v]) => ({
       name: k,
-      value: String(v).slice(0, 1024),
+      value: fieldText(v),
       inline: true,
     }));
   return {
@@ -303,7 +320,7 @@ function formatSlackPayload(event: PanelEvent): unknown {
           .slice(0, 10)
           .map(([k, v]) => ({
             title: k,
-            value: String(v).slice(0, 1024),
+            value: fieldText(v),
             short: true,
           })),
       },
@@ -377,22 +394,38 @@ async function tick(): Promise<void> {
   );
 }
 
+// Events outsiders can cause (refused joins) reach a webhook at most this often
+// per minute, so a connection flood cannot get the panel rate-limited or
+// banned by Discord/Slack. Other events are not throttled.
+const EXTERNAL_EVENTS_PER_MINUTE = 10;
+const externalEventThrottle = new KeyedTokenBucket({ perMinute: EXTERNAL_EVENTS_PER_MINUTE });
+const throttleLoggedAt = new Map<string, number>();
+
+function withinWebhookBudget(wh: Webhook, event: PanelEvent): boolean {
+  if (!EXPLICIT_ONLY_EVENTS.has(event.name)) return true;
+  const key = `${wh.id}\u0000${event.name}`;
+  if (externalEventThrottle.tryTake(key)) return true;
+  const now = Date.now();
+  if (now - (throttleLoggedAt.get(key) ?? 0) >= 60_000) {
+    throttleLoggedAt.set(key, now);
+    logger.warn(
+      `[Webhooks] "${wh.name}" throttled for ${event.name}: more than ${EXTERNAL_EVENTS_PER_MINUTE} per minute, further deliveries are dropped (logged at most once per minute)`,
+    );
+  }
+  return false;
+}
+
 export function startWebhookDispatcher(): void {
-  // Subscribe once. Match any event the webhook is listening to.
+  // Subscribe once. Match any event the webhook is listening to; wildcards
+  // never cover events outsiders can cause (schemas/events.ts).
   subscribe(['*'], (event) => {
     const hooks = (
       getDb().prepare('SELECT * FROM webhooks WHERE enabled = 1').all() as WebhookRow[]
     ).map(rowToWebhook);
     for (const wh of hooks) {
       if (
-        wh.events.some((p) => {
-          const s = p as string;
-          return (
-            s === '*' ||
-            s === event.name ||
-            (s.endsWith('.*') && event.name.startsWith(s.slice(0, -1)))
-          );
-        })
+        wh.events.some((p) => eventPatternMatches(p as string, event.name)) &&
+        withinWebhookBudget(wh, event)
       ) {
         enqueueDelivery(wh.id, event);
       }

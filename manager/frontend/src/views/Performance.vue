@@ -3,11 +3,12 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
 import { statsApi, type StatsEntry } from '@/api/management'
-import { serverApi, type PluginMemoryInfo, type PluginTpsMetrics, type PrometheusMetrics, type PerfSample, type StorageBreakdown } from '@/api/server'
+import { serverApi, type PluginMemoryInfo, type PluginTpsMetrics, type PluginTpsWindow, type PluginWorldPerf, type PrometheusMetrics, type PerfSample, type StorageBreakdown } from '@/api/server'
 import Card from '@/components/ui/Card.vue'
+import { tickBudgetMs, tpsLevel, tpsPercent, type TpsLevel } from '@/utils/tps'
 
 const { t } = useI18n()
-const { stats, status, playerCount, refresh, pluginAvailable, tps, mspt, maxPlayers: pluginMaxPlayers } = useServerStats()
+const { stats, status, playerCount, refresh, pluginAvailable, tps, mspt, targetTps, tpsWorld, maxPlayers: pluginMaxPlayers } = useServerStats()
 
 // Plugin memory data
 const pluginMemory = ref<PluginMemoryInfo | null>(null)
@@ -150,7 +151,7 @@ function addLocalEntry() {
 const cpuData = computed(() => localHistory.value.map(h => h.cpu))
 const memoryData = computed(() => localHistory.value.map(h => h.memory))
 const playersData = computed(() => localHistory.value.map(h => h.players))
-const tpsData = computed(() => localHistory.value.map(h => h.tps ?? 20))
+const tpsData = computed(() => localHistory.value.map(h => h.tps ?? targetTps.value))
 
 const avgCpu = computed(() => {
   if (cpuData.value.length === 0) return 0
@@ -196,10 +197,17 @@ function buildChart(values: (number | null)[], domainMax: number, domainMin = 0)
   return { line, area, last }
 }
 
-const tpsChart = computed(() => buildChart(perfHistory.value.map(s => s.tps), 20, 0))
+// Charts scale to the target rate (Hytale: 30 TPS), not a fixed 20.
+const historyTarget = computed(() =>
+  perfHistory.value.reduce((m, s) => Math.max(m, s.targetTps ?? 0), targetTps.value)
+)
+const tpsChart = computed(() => buildChart(perfHistory.value.map(s => s.tps), historyTarget.value, 0))
+// Tick time is compute time: the budget per tick (33.3 ms at 30 TPS) is the
+// line that matters, so the chart reaches at least up to it.
 const msptChart = computed(() => {
   const peak = perfHistory.value.reduce((m, s) => Math.max(m, s.mspt ?? 0), 0)
-  return buildChart(perfHistory.value.map(s => s.mspt), Math.max(50, Math.ceil(peak / 10) * 10), 0)
+  const budget = tickBudgetMs(historyTarget.value)
+  return buildChart(perfHistory.value.map(s => s.mspt), Math.max(budget, Math.ceil(peak)), 0)
 })
 const cpuChart = computed(() => buildChart(perfHistory.value.map(s => s.cpu), 100, 0))
 const memChart = computed(() => buildChart(perfHistory.value.map(s => s.mem), 100, 0))
@@ -210,7 +218,7 @@ const historyWindowMinutes = computed(() =>
 
 const historyCharts = computed(() => [
   { key: 'tps', label: t('performance.history.tps'), color: '#f59e0b', data: tpsChart.value, fmt: (v: number) => v.toFixed(1), unit: '' },
-  { key: 'mspt', label: t('performance.history.mspt'), color: '#3b82f6', data: msptChart.value, fmt: (v: number) => v.toFixed(1), unit: ' ms' },
+  { key: 'mspt', label: t('performance.history.mspt'), color: '#3b82f6', data: msptChart.value, fmt: (v: number) => v.toFixed(2), unit: ' ms' },
   { key: 'cpu', label: t('performance.history.cpu'), color: '#10b981', data: cpuChart.value, fmt: (v: number) => v.toFixed(0), unit: '%' },
   { key: 'mem', label: t('performance.history.mem'), color: '#a855f7', data: memChart.value, fmt: (v: number) => v.toFixed(0), unit: '%' },
 ])
@@ -238,13 +246,30 @@ const displayTpsMin = computed(() => serverTpsMin.value ?? localMinTps.value)
 const displayTpsMax = computed(() => serverTpsMax.value ?? localMaxTps.value)
 const displayTpsAvg = computed(() => serverTpsAvg.value ?? avgTps.value)
 
-// TPS status color
-const tpsStatus = computed(() => {
-  if (tps.value === null) return 'gray'
-  if (tps.value >= 19) return 'green'
-  if (tps.value >= 15) return 'yellow'
-  return 'red'
-})
+// TPS status color, relative to the target rate (>= 95 % green, >= 75 % yellow)
+const TPS_LEVEL_COLOR: Record<TpsLevel, 'green' | 'yellow' | 'red' | 'gray'> = {
+  good: 'green',
+  warn: 'yellow',
+  bad: 'red',
+  unknown: 'gray',
+}
+const tpsStatus = computed(() => TPS_LEVEL_COLOR[tpsLevel(tps.value, targetTps.value)])
+const tpsPct = computed(() => tpsPercent(tps.value, targetTps.value))
+// Target for the live TPS graph: the Prometheus/per-world target when known
+const chartTarget = computed(() => tpsMetrics.value?.target ?? targetTps.value)
+const chartTicks = computed(() => [1, 0.75, 0.5, 0.25, 0].map(f => Math.round(chartTarget.value * f * 10) / 10))
+
+// Per-world tick metrics (plugin 2.1+), slowest world first
+const worldPerf = computed(() =>
+  [...(tpsMetrics.value?.worlds ?? [])].sort((a, b) => a.tps / a.targetTps - b.tps / b.targetTps)
+)
+function worldWindow(w: PluginWorldPerf, label: string): PluginTpsWindow | undefined {
+  return w.windows.find(win => win.window === label)
+}
+function levelClass(value: number | null | undefined, target: number): string {
+  const level = tpsLevel(value, target)
+  return level === 'good' ? 'text-green-400' : level === 'warn' ? 'text-yellow-400' : level === 'bad' ? 'text-red-400' : 'text-ink-muted'
+}
 
 // JVM Heap memory display
 const heapUsed = computed(() => pluginMemory.value?.heapUsed ?? null)
@@ -489,11 +514,13 @@ onUnmounted(() => {
               tpsStatus === 'green' ? 'text-green-400' : tpsStatus === 'yellow' ? 'text-yellow-400' : tpsStatus === 'red' ? 'text-red-400' : 'text-ink-muted'
             ]">
               {{ tps?.toFixed(1) ?? '-' }}
+              <span class="text-xs font-normal text-ink-subtle">{{ t('performance.ofTarget', { target: targetTps }) }}<template v-if="tpsPct !== null"> · {{ tpsPct }}%</template></span>
             </p>
-            <div class="flex items-center gap-2 text-xs text-ink-subtle">
-              <span v-if="mspt !== null">{{ mspt.toFixed(1) }} ms/tick</span>
+            <div class="flex items-center gap-2 text-xs text-ink-subtle flex-wrap">
+              <span v-if="mspt !== null">{{ mspt.toFixed(2) }} {{ t('performance.tickTime') }}</span>
               <span v-if="displayTpsMin !== null" class="text-ink-subtle">|</span>
               <span v-if="displayTpsMin !== null" class="text-yellow-500">{{ t('performance.min') }}: {{ displayTpsMin.toFixed(1) }}</span>
+              <span v-if="tpsWorld && worldPerf.length > 1" class="text-ink-subtle">| {{ t('performance.tpsInWorld', { world: tpsWorld }) }}</span>
             </div>
           </div>
         </div>
@@ -703,26 +730,26 @@ onUnmounted(() => {
             <span class="text-ink-muted">{{ t('performance.avg') }}: <span class="text-green-400">{{ displayTpsAvg?.toFixed(1) ?? '-' }}</span></span>
             <span class="text-ink-muted">{{ t('performance.min') }}: <span class="text-yellow-400">{{ displayTpsMin?.toFixed(1) ?? '-' }}</span></span>
             <span class="text-ink-muted">{{ t('performance.max') }}: <span class="text-blue-400">{{ displayTpsMax?.toFixed(1) ?? '-' }}</span></span>
-            <span v-if="serverMsptAvg !== null" class="text-ink-muted">{{ t('performance.msptAvg') }}: <span class="text-purple-400">{{ serverMsptAvg.toFixed(1) }}ms</span></span>
+            <span v-if="serverMsptAvg !== null" class="text-ink-muted">{{ t('performance.msptAvg') }}: <span class="text-purple-400">{{ serverMsptAvg.toFixed(2) }}ms</span></span>
           </div>
         </div>
         <div class="relative h-48 bg-surface-overlay rounded-lg overflow-hidden">
           <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <!-- Grid lines for TPS (20 = max, 15 = warning threshold) -->
-            <line x1="0" y1="25" x2="100" y2="25" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
+            <!-- Grid lines relative to the target TPS; the red one is the 75 % warning threshold -->
+            <line x1="0" y1="25" x2="100" y2="25" stroke="#ef4444" stroke-width="0.5" stroke-dasharray="2" opacity="0.3" />
             <line x1="0" y1="50" x2="100" y2="50" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
-            <line x1="0" y1="75" x2="100" y2="75" stroke="#ef4444" stroke-width="0.5" stroke-dasharray="2" opacity="0.3" />
+            <line x1="0" y1="75" x2="100" y2="75" stroke="#374151" stroke-width="0.5" stroke-dasharray="2" />
 
             <!-- Area -->
             <path
-              :d="generateAreaPath(tpsData, 20)"
+              :d="generateAreaPath(tpsData, chartTarget)"
               fill="url(#tpsGradient)"
               class="transition-all duration-300"
             />
 
             <!-- Line -->
             <path
-              :d="generatePath(tpsData, 20)"
+              :d="generatePath(tpsData, chartTarget)"
               fill="none"
               stroke="#22c55e"
               stroke-width="0.5"
@@ -738,14 +765,56 @@ onUnmounted(() => {
             </defs>
           </svg>
 
-          <!-- Y-axis labels for TPS -->
+          <!-- Y-axis labels for TPS (target, 75 %, 50 %, 25 %, 0) -->
           <div class="absolute left-2 top-0 h-full flex flex-col justify-between py-2 text-xs text-ink-subtle">
-            <span>20</span>
-            <span>15</span>
-            <span>10</span>
-            <span>5</span>
-            <span>0</span>
+            <span v-for="tick in chartTicks" :key="tick">{{ tick }}</span>
           </div>
+        </div>
+      </Card>
+
+      <!-- TPS per world (plugin 2.1+) -->
+      <Card v-if="pluginAvailable && worldPerf.length > 0" class="lg:col-span-2">
+        <div class="mb-3">
+          <h3 class="font-semibold text-ink">{{ t('performance.perWorld.title') }}</h3>
+          <p class="text-xs text-ink-subtle mt-1">{{ t('performance.perWorld.hint', { budget: (worldPerf[0]?.tickBudgetMs ?? 0).toFixed(1) }) }}</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs text-ink-subtle border-b border-border">
+                <th class="py-2 pr-4 font-medium">{{ t('performance.perWorld.world') }}</th>
+                <th class="py-2 pr-4 font-medium text-right">{{ t('performance.perWorld.tps10s') }}</th>
+                <th class="py-2 pr-4 font-medium text-right">{{ t('performance.perWorld.tps1m') }}</th>
+                <th class="py-2 pr-4 font-medium text-right">{{ t('performance.perWorld.min1m') }}</th>
+                <th class="py-2 pr-4 font-medium text-right">{{ t('performance.perWorld.tickAvg') }}</th>
+                <th class="py-2 pr-4 font-medium text-right">{{ t('performance.perWorld.tickMax') }}</th>
+                <th class="py-2 pr-4 font-medium text-right">{{ t('performance.perWorld.players') }}</th>
+                <th class="py-2 pr-4 font-medium text-right">{{ t('performance.perWorld.entities') }}</th>
+                <th class="py-2 font-medium text-right">{{ t('performance.perWorld.chunks') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="w in worldPerf" :key="w.world" class="border-b border-border/50 last:border-0">
+                <td class="py-2 pr-4 font-mono text-ink">{{ w.world }}</td>
+                <td class="py-2 pr-4 text-right" :class="levelClass(w.tps, w.targetTps)">
+                  {{ w.tps.toFixed(1) }} <span class="text-xs text-ink-subtle">/ {{ w.targetTps }} · {{ tpsPercent(w.tps, w.targetTps) }}%</span>
+                </td>
+                <td class="py-2 pr-4 text-right" :class="levelClass(worldWindow(w, '1m')?.tpsAvg, w.targetTps)">
+                  {{ worldWindow(w, '1m')?.tpsAvg.toFixed(1) ?? '-' }}
+                </td>
+                <td class="py-2 pr-4 text-right" :class="levelClass(worldWindow(w, '1m')?.tpsMin, w.targetTps)">
+                  {{ worldWindow(w, '1m')?.tpsMin.toFixed(1) ?? '-' }}
+                </td>
+                <td class="py-2 pr-4 text-right text-ink-muted">{{ worldWindow(w, '1m')?.tickMsAvg.toFixed(2) ?? '-' }} ms</td>
+                <td class="py-2 pr-4 text-right" :class="(worldWindow(w, '1m')?.tickMsMax ?? 0) > w.tickBudgetMs ? 'text-yellow-400' : 'text-ink-muted'">
+                  {{ worldWindow(w, '1m')?.tickMsMax.toFixed(1) ?? '-' }} ms
+                </td>
+                <td class="py-2 pr-4 text-right text-ink-muted">{{ w.players >= 0 ? w.players : '-' }}</td>
+                <td class="py-2 pr-4 text-right text-ink-muted">{{ w.entities >= 0 ? w.entities : '-' }}</td>
+                <td class="py-2 text-right text-ink-muted">{{ w.loadedChunks >= 0 ? w.loadedChunks : '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>
@@ -794,7 +863,7 @@ onUnmounted(() => {
           </div>
           <div class="p-3 bg-surface-overlay rounded-lg text-center">
             <p class="text-xs text-ink-subtle mb-1">{{ t('performance.msptAvg') }}</p>
-            <p class="text-lg font-bold text-orange-400">{{ tpsMetrics.msptAverage.toFixed(1) }}ms</p>
+            <p class="text-lg font-bold text-orange-400">{{ tpsMetrics.msptAverage.toFixed(2) }}ms</p>
           </div>
         </div>
       </div>

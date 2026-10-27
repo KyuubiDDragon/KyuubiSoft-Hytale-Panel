@@ -35,7 +35,7 @@ const __dirname = path.dirname(__filename);
 
 // Plugin version (should match the built JAR version in
 // manager/backend/assets/plugins/ and plugins/kyuubisoft-api/build.gradle).
-export const PLUGIN_VERSION = '2.0.0';
+export const PLUGIN_VERSION = '2.1.0';
 // Legacy default plugin port. Kept exported for back-compat with callers
 // that read this constant directly (e.g. configService snapshots, status
 // fallbacks). Per-server callers should use `resolvePluginEndpoint(serverId)`
@@ -72,6 +72,10 @@ export interface PluginApiResponse {
   data?: unknown;
   error?: string;
   authError?: PluginAuthError;
+  /** HTTP status of a refused GET (e.g. 404 player offline, 501 not offered by this server build). */
+  status?: number;
+  /** A POST timed out after it was sent: the plugin may still have run the action. */
+  maybeRan?: boolean;
 }
 
 /**
@@ -291,7 +295,7 @@ export async function fetchFromPlugin<T>(
       const authError = await classifyAuthFailure(response);
       return authError
         ? authFailure(authError)
-        : { success: false, error: `HTTP ${response.status}` };
+        : { success: false, error: `HTTP ${response.status}`, status: response.status };
     }
 
     const data = (await response.json()) as T;
@@ -422,9 +426,13 @@ export async function postToPlugin<T>(
       error: (data.error ?? data.message) as string | undefined,
     };
   } catch (error) {
+    // Aborted by the timeout: unlike a refused connection, the plugin may
+    // have taken the action and still be running it.
+    const maybeRan = error instanceof Error && error.name === 'AbortError';
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to connect to plugin',
+      ...(maybeRan ? { maybeRan: true } : {}),
     };
   }
 }
@@ -439,6 +447,48 @@ export async function getPlayersFromPlugin(serverId?: string): Promise<PluginApi
 /**
  * Get server info from the plugin API
  */
+/** Tick window as plugin 2.1 reports it ("10s", "1m", "5m"). */
+export interface PluginTpsWindow {
+  window: string;
+  tpsAvg: number;
+  tpsMin: number;
+  tpsMax: number;
+  tickMsAvg: number;
+  tickMsMin: number;
+  tickMsMax: number;
+}
+
+export interface PluginWorldPerf {
+  world: string;
+  targetTps: number;
+  tickBudgetMs: number;
+  tps: number;
+  mspt: number;
+  windows: PluginTpsWindow[];
+  players: number;
+  entities: number;
+  loadedChunks: number;
+}
+
+/** GET /api/server/tps (plugin 2.1+): headline = slowest world relative to its target. */
+export interface PluginServerTps {
+  world?: string;
+  tps?: number;
+  mspt?: number;
+  targetTps: number;
+  worlds: PluginWorldPerf[];
+}
+
+/**
+ * Real per-world tick metrics from plugin 2.1+. Older plugins answer 404;
+ * callers fall back to the Prometheus gauges then.
+ */
+export async function getTpsFromPlugin(
+  serverId?: string,
+): Promise<PluginApiResponse & { data?: PluginServerTps }> {
+  return fetchFromPlugin<PluginServerTps>('/api/server/tps', serverId);
+}
+
 export async function getServerInfoFromPlugin(serverId?: string): Promise<PluginApiResponse> {
   return fetchFromPlugin('/api/server/info', serverId);
 }
@@ -746,4 +796,395 @@ export async function uninstallPlugin(
       error: error instanceof Error ? error.message : 'Failed to uninstall plugin',
     };
   }
+}
+
+// ============================================================
+// Live data (plugin 2.1+): server status, plugins, access, permissions,
+// sessions and world-thread player reads. Read-only: changes go through
+// server commands, so the server stays the single writer.
+// ============================================================
+
+export interface LiveServerStatus {
+  build: { version?: string; revision?: string; patchline?: string };
+  update: {
+    moduleEnabled: boolean;
+    patchline?: string;
+    currentVersion?: string;
+    latestVersion?: string;
+    available: boolean;
+    stagedVersion?: string;
+    downloading: boolean;
+    progress?: { percent: number; downloadedBytes: number; totalBytes: number; etaSeconds: number };
+  };
+  /** Never contains tokens: only which tokens exist and when they expire. */
+  auth: {
+    mode?: string;
+    authenticated: boolean;
+    hasSessionToken: boolean;
+    hasIdentityToken: boolean;
+    singleplayer: boolean;
+    tokenExpiresAt?: string;
+    expiresInSeconds?: number;
+    expired?: boolean;
+    profileName?: string;
+    profileUuid?: string;
+    summary?: string;
+  };
+  lifecycle: {
+    booted: boolean;
+    shuttingDown: boolean;
+    bootedAt?: string;
+    shutdownReason?: string;
+    shutdownMessage?: string;
+  };
+  collectedAt: string;
+}
+
+export interface LivePluginInfo {
+  id: string;
+  group?: string;
+  name?: string;
+  version?: string;
+  /**
+   * NONE, SETUP, START, ENABLED, SHUTDOWN, DISABLED, FAILED, NOT_LOADED (known
+   * but not loaded) or REJECTED (jar in the mods folder the server refused).
+   */
+  state?: string;
+  enabled: boolean;
+  /** Built-in server module (group "Hytale"). */
+  core: boolean;
+  disabledByDefault?: boolean;
+  description?: string;
+  website?: string;
+  authors?: string[];
+  serverVersionRange?: string;
+  /** COMPATIBLE, MISSING, PARSE_FAILED or INCOMPATIBLE; absent for core modules. */
+  serverVersionCheck?: string;
+  versionMismatch: boolean;
+  dependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  /** REJECTED only: the jar name and the dependencies no known plugin provides. */
+  file?: string;
+  missingDependencies?: string[];
+  error?: { type: string; message?: string; wrapperType?: string; wrapperMessage?: string };
+}
+
+export interface LivePluginList {
+  serverVersion?: string;
+  managerState?: string;
+  count: number;
+  coreCount: number;
+  failedCount: number;
+  mismatchCount: number;
+  plugins: LivePluginInfo[];
+}
+
+/** 0.7 whitelist: the RequireJoinPermission flag plus users holding the join grant. */
+export interface LiveWhitelist {
+  enabled: boolean;
+  permission?: string;
+  count: number;
+  entries: { uuid: string; name?: string; online: boolean }[];
+}
+
+export interface LiveBan {
+  target?: string;
+  targetName?: string;
+  by?: string;
+  byName?: string;
+  timestamp?: string;
+  /** Absent for permanent bans. */
+  expiresOn?: string;
+  permanent: boolean;
+  inEffect: boolean;
+  reason?: string;
+}
+
+export interface LiveBans {
+  provider?: string;
+  count: number;
+  activeCount: number;
+  entries: LiveBan[];
+}
+
+export interface LivePermissionGroup {
+  name: string;
+  parent?: string;
+  permissions: string[];
+  effectivePermissions: string[];
+}
+
+export interface LivePermissionGroups {
+  defaultGroup: string;
+  operatorGroup: string;
+  providers: string[];
+  providersTampered: boolean;
+  count: number;
+  groups: LivePermissionGroup[];
+  virtualGroups: Record<string, string[]>;
+}
+
+export interface LivePermissionUser {
+  uuid: string;
+  name?: string;
+  online: boolean;
+  groups: string[];
+  permissions: string[];
+  operator: boolean;
+  joinGrant?: boolean;
+  allowedToJoin?: boolean;
+  banned?: boolean;
+}
+
+export interface LivePermissionUsers {
+  /** Always false: the server cannot list every user (online, whitelisted and wildcard users only). */
+  complete: boolean;
+  count: number;
+  users: LivePermissionUser[];
+}
+
+export interface LivePing {
+  type: string;
+  lastMs?: number;
+  avg1mMs?: number;
+  min1mMs?: number;
+  max1mMs?: number;
+  avg5mMs?: number;
+}
+
+export interface LiveSession {
+  uuid: string;
+  name: string;
+  world?: string;
+  /** Absent for players that were online before the plugin started. */
+  joinedAt?: string;
+  language?: string;
+  groups?: string[];
+  ping?: LivePing;
+  /** Protocol checksum of the client; the server keeps no client build string. */
+  protocolCrc?: number;
+}
+
+export interface LivePlayerSnapshot extends LiveSession {
+  gamemode?: string;
+  stats?: Record<string, { value: number; max: number }>;
+  position?: { x: number; y: number; z: number };
+  yaw?: number;
+  pitch?: number;
+  /** Skin parts by slot (haircut, eyes, ...). */
+  appearance?: Record<string, string>;
+}
+
+export interface LiveInventoryItem {
+  section?: string;
+  slot: number;
+  itemId: string;
+  amount: number;
+  durability?: number;
+  maxDurability?: number;
+  unbreakable?: boolean;
+  broken?: boolean;
+}
+
+export interface LiveInventorySection {
+  capacity: number;
+  activeSlot?: number;
+  items: LiveInventoryItem[];
+}
+
+export type LiveInventorySectionId =
+  'hotbar' | 'storage' | 'armor' | 'utility' | 'tools' | 'backpack';
+
+export interface LivePlayerInventory {
+  uuid: string;
+  name: string;
+  world?: string;
+  sections: Partial<Record<LiveInventorySectionId, LiveInventorySection>>;
+  items: LiveInventoryItem[];
+  totalSlots: number;
+  usedSlots: number;
+}
+
+async function fetchLive<T>(
+  endpoint: string,
+  serverId?: string,
+): Promise<PluginApiResponse & { data?: T }> {
+  if (isDemoMode()) {
+    return { success: false, error: 'Live data is not available in demo mode', status: 501 };
+  }
+  return fetchFromPlugin<T>(endpoint, serverId);
+}
+
+/** Build, update, auth and lifecycle state of the running server. */
+export function getServerStatusFromPlugin(serverId?: string) {
+  return fetchLive<LiveServerStatus>('/api/server/status', serverId);
+}
+
+/** Every plugin/mod the server knows, with load state, version and load error. */
+export function getLoadedPluginsFromPlugin(serverId?: string) {
+  return fetchLive<LivePluginList>('/api/plugins', serverId);
+}
+
+export function getWhitelistFromPlugin(serverId?: string) {
+  return fetchLive<LiveWhitelist>('/api/access/whitelist', serverId);
+}
+
+export function getBansFromPlugin(serverId?: string) {
+  return fetchLive<LiveBans>('/api/access/bans', serverId);
+}
+
+export function getPermissionGroupsFromPlugin(serverId?: string) {
+  return fetchLive<LivePermissionGroups>('/api/permissions/groups', serverId);
+}
+
+export function getPermissionUsersFromPlugin(serverId?: string) {
+  return fetchLive<LivePermissionUsers>('/api/permissions/users', serverId);
+}
+
+export function getPermissionUserFromPlugin(uuid: string, serverId?: string) {
+  return fetchLive<LivePermissionUser>(
+    `/api/permissions/users/${encodeURIComponent(uuid)}`,
+    serverId,
+  );
+}
+
+/** Online sessions with world, join time, ping and groups (no world-thread reads). */
+export function getSessionsFromPlugin(serverId?: string) {
+  return fetchLive<{ count: number; sessions: LiveSession[] }>('/api/sessions', serverId);
+}
+
+/** Game mode, stats, position, ping, groups and skin, read on the player's world thread. */
+export function getPlayerLiveFromPlugin(player: string, serverId?: string) {
+  return fetchLive<LivePlayerSnapshot>(`/api/players/${encodeURIComponent(player)}/live`, serverId);
+}
+
+/** The real inventory (hotbar, storage, armor, utility, tools, backpack). */
+export function getPlayerLiveInventoryFromPlugin(player: string, serverId?: string) {
+  return fetchLive<LivePlayerInventory>(
+    `/api/players/${encodeURIComponent(player)}/inventory`,
+    serverId,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mod panel registry (/api/mods/panel, plugin 2.1+): status pages and admin
+// actions that KS mods register with the plugin. The raw answer is returned;
+// routes/modPanel.ts validates it (schemas/modPanel.ts) before the frontend
+// sees it.
+// ---------------------------------------------------------------------------
+
+/** The plugin's mod panel answer: HTTP status 0 means unreachable. */
+export interface ModPanelPluginResponse {
+  ok: boolean;
+  status: number;
+  body: unknown;
+  error?: string;
+  authError?: PluginAuthError;
+}
+
+/** Who asks, passed on to the mod (informational) as X-Panel-Actor / Accept-Language. */
+export interface ModPanelCaller {
+  actor?: string;
+  locale?: string;
+}
+
+// Plugin limits: snapshot 3 s, action 10 s; a bit more so the plugin's own
+// timeout answer arrives instead of an abort here.
+const MOD_PANEL_LIST_TIMEOUT_MS = 5000;
+const MOD_PANEL_SNAPSHOT_TIMEOUT_MS = 6000;
+const MOD_PANEL_ACTION_TIMEOUT_MS = 15000;
+// Accepted by the plugin as X-Panel-Actor.
+const MOD_PANEL_ACTOR = /^[\w.@-]{1,64}$/;
+
+async function requestModPanel(
+  method: 'GET' | 'POST',
+  endpoint: string,
+  timeoutMs: number,
+  serverId: string | undefined,
+  caller: ModPanelCaller,
+  body?: unknown,
+): Promise<ModPanelPluginResponse> {
+  if (isDemoMode()) {
+    return endpoint === '/api/mods/panel'
+      ? { ok: true, status: 200, body: { apiVersion: 1, providers: [] } }
+      : {
+          ok: false,
+          status: 404,
+          body: { status: 404, error: 'Unknown provider', code: 'not_found' },
+        };
+  }
+  try {
+    const { host, port } = await resolvePluginEndpoint(serverId);
+    const headers: Record<string, string> = await getPluginAuthHeaders(serverId);
+    // Only what the plugin accepts; anything else (e.g. non-Latin-1 names) would make fetch throw.
+    if (caller.actor && MOD_PANEL_ACTOR.test(caller.actor)) headers['X-Panel-Actor'] = caller.actor;
+    if (caller.locale) headers['Accept-Language'] = caller.locale;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const response = await fetch(`http://${host}:${port}${endpoint}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const authError = response.ok ? undefined : await classifyAuthFailure(response);
+    if (authError) {
+      return {
+        ok: false,
+        status: response.status,
+        body: null,
+        error: AUTH_ERROR_MESSAGES[authError],
+        authError,
+      };
+    }
+    const parsed: unknown = await response.json().catch(() => null);
+    return { ok: response.ok, status: response.status, body: parsed };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      body: null,
+      error: error instanceof Error ? error.message : 'Failed to connect to plugin',
+    };
+  }
+}
+
+/** Registered mod providers with their actions. */
+export function getModPanelProviders(
+  serverId?: string,
+  caller: ModPanelCaller = {},
+): Promise<ModPanelPluginResponse> {
+  return requestModPanel('GET', '/api/mods/panel', MOD_PANEL_LIST_TIMEOUT_MS, serverId, caller);
+}
+
+/** One provider's current snapshot. */
+export function getModPanelSnapshot(
+  providerId: string,
+  serverId?: string,
+  caller: ModPanelCaller = {},
+): Promise<ModPanelPluginResponse> {
+  return requestModPanel(
+    'GET',
+    `/api/mods/panel/${encodeURIComponent(providerId)}`,
+    MOD_PANEL_SNAPSHOT_TIMEOUT_MS,
+    serverId,
+    caller,
+  );
+}
+
+/** Runs a provider's action; the plugin checks params and confirmation again. */
+export function runModPanelAction(
+  providerId: string,
+  actionId: string,
+  request: { params?: Record<string, unknown>; confirmed?: boolean },
+  serverId?: string,
+  caller: ModPanelCaller = {},
+): Promise<ModPanelPluginResponse> {
+  return requestModPanel(
+    'POST',
+    `/api/mods/panel/${encodeURIComponent(providerId)}/actions/${encodeURIComponent(actionId)}`,
+    MOD_PANEL_ACTION_TIMEOUT_MS,
+    serverId,
+    caller,
+    { params: request.params ?? {}, confirmed: request.confirmed === true },
+  );
 }

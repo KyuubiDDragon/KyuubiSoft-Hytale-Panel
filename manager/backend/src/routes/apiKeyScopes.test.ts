@@ -169,7 +169,7 @@ describe('HTTP console honours API-key scopes', () => {
       'console.execute.admin',
     ]);
     expect(r.status).toBe(200);
-    expect(execCommand).toHaveBeenCalledWith('/op add Steve', undefined);
+    expect(execCommand).toHaveBeenCalledWith('/op add Steve', undefined, { actor: 'root' });
   });
 
   it('still requires the owner to hold the admin tier', async () => {
@@ -253,12 +253,87 @@ describe('ws-ticket and WS console honour API-key scopes', () => {
     ]);
     const msg = await sendOverWs(ticket, '/op add Steve');
     expect(msg).toMatchObject({ type: 'command_response', success: true });
-    expect(execCommand).toHaveBeenCalledWith('/op add Steve', 'default');
+    expect(execCommand).toHaveBeenCalledWith('/op add Steve', 'default', { actor: 'root' });
   });
 
   it('closes the socket for a key ticket without console.view', async () => {
     const ticket = createWsTicket('root', undefined, ['players.view']);
     expect(await sendOverWs(ticket, '/say hi')).toEqual({ closed: 4003 });
+  });
+
+  it('answers commands beyond 20 waiting ones with an error instead of queueing them', async () => {
+    const ticket = createWsTicket('root');
+    const ws = new WebSocket(`ws://${base}/api/console/ws?ticket=${ticket}`);
+    const replies: Array<{ success?: boolean; error?: string; command?: string }> = [];
+    ws.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type === 'command_response') replies.push(msg);
+    });
+    await new Promise<void>((resolve) => ws.on('open', () => resolve()));
+    // The handler is attached after the log replay: probe until it answers.
+    await vi.waitFor(
+      () => {
+        ws.send(JSON.stringify({ type: 'command', payload: '/say probe' }));
+        expect(replies.length).toBeGreaterThan(0);
+      },
+      { timeout: 3000, interval: 100 },
+    );
+    await new Promise((r) => setTimeout(r, 200));
+    replies.length = 0;
+
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    execCommand.mockImplementation(async (command: string) => {
+      await gate;
+      return { success: true, message: `sent ${command}` };
+    });
+    for (let i = 0; i < 25; i++) {
+      ws.send(JSON.stringify({ type: 'command', payload: `/say ${i}` }));
+    }
+    await vi.waitFor(() => expect(replies).toHaveLength(5), { timeout: 3000 });
+    expect(
+      replies.every((r) => r.success === false && /Too many commands/.test(r.error ?? '')),
+    ).toBe(true);
+    release();
+    await vi.waitFor(() => expect(replies).toHaveLength(25), { timeout: 3000 });
+    expect(replies.filter((r) => r.success).map((r) => r.command)).toHaveLength(20);
+    ws.close();
+    execCommand.mockImplementation(async (command: string) => ({
+      success: true,
+      message: `sent ${command}`,
+    }));
+  });
+});
+
+describe('console autocomplete only completes commands the caller may run', () => {
+  async function complete(line: string, user: string) {
+    const res = await fetch(
+      `http://${base}/api/console/commands/complete?line=${encodeURIComponent(line)}`,
+      { headers: { 'x-test-user': user }, signal: AbortSignal.timeout(5000) },
+    );
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+  }
+
+  it('gives no suggestions for an admin-tier command to an operator', async () => {
+    // Answered without asking the plugin (the plugin is not installed in this test).
+    expect(await complete('/op add ', 'operator')).toEqual({
+      status: 200,
+      body: { available: true, suggestions: [] },
+    });
+    expect((await complete('/whitelist remove ', 'operator')).body.available).toBe(true);
+  });
+
+  it('gives no suggestions for a command outside the whitelist', async () => {
+    expect((await complete('/notacommand x', 'root')).body).toEqual({
+      available: true,
+      suggestions: [],
+    });
+  });
+
+  it('asks the plugin for commands the caller may run', async () => {
+    // Without an installed plugin the lookup itself answers "not available".
+    expect((await complete('/say h', 'operator')).body.available).toBe(false);
+    expect((await complete('/op add ', 'root')).body.available).toBe(false);
   });
 });
 

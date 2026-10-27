@@ -34,6 +34,7 @@ import {
 import { authorizeCommand, actorFromRequest } from '../../services/commandPolicy.js';
 import { resolveInstallPaths, discardStagedUpdate } from '../../services/serverInstall.js';
 import { withServerStopped, LifecycleBusyError } from '../../services/serverLifecycle.js';
+import { updateCommandRefusal } from '../../services/updateStatusReply.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 
 const router = Router();
@@ -206,6 +207,16 @@ router.put(
           res.status(503).json({
             success: false,
             error: `Could not ask the server to discard its downloaded update: ${cancelled.error}`,
+          });
+          return;
+        }
+        // The server answered (through the plugin) that it could not drop it.
+        const refused = updateCommandRefusal(cancelled);
+        if (refused) {
+          res.status(409).json({
+            success: false,
+            reason: refused,
+            error: `The server could not discard its downloaded update: ${cancelled.message ?? refused}`,
           });
           return;
         }

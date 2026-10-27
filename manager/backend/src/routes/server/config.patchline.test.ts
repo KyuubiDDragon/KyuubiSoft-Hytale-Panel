@@ -156,6 +156,23 @@ describe('PUT /patchline', () => {
     expect(execInContainer).not.toHaveBeenCalled();
   });
 
+  it('does not switch when the server answers that it could not discard its update', async () => {
+    state.running = true;
+    // Through the plugin the command ends normally; the reply says it failed.
+    execCommand.mockResolvedValueOnce({
+      success: true,
+      message: 'Could not delete the update.',
+      via: 'plugin',
+      status: 'DONE',
+      messageIds: ['server.commands.update.cancel_failed'],
+    } as never);
+    const { status, json } = await setPatchline('pre-release');
+    expect(status).toBe(409);
+    expect(json.reason).toBe('cancel_failed');
+    expect(panelConfig().patchline).toBe('release');
+    expect(execInContainer).not.toHaveBeenCalled();
+  });
+
   it('keeps the staged update when the patchline stays the same', async () => {
     const { status, json } = await setPatchline('release');
     expect(status).toBe(200);

@@ -21,6 +21,12 @@ import { ensureLoaded, getDefaultId, getServer, resolveServerId } from './server
 import { createDockerClient } from './dockerClient.js';
 import { ensurePluginAuthConfig } from './pluginAuth.js';
 import { decodeDockerOutput } from './dockerStream.js';
+import {
+  runCommandViaPlugin,
+  type PluginCommandAttempt,
+  type PluginCommandStatus,
+} from './pluginCommands.js';
+import { currentCommandActor } from './commandActor.js';
 
 const docker = createDockerClient();
 
@@ -230,6 +236,12 @@ function isStopCommand(command: string): boolean {
   return /^\/?(stop|shutdown)\b/i.test(command.trim()) && !/--crash\b/i.test(command);
 }
 
+// Commands that take the server, and the plugin with it, down: a stop, and
+// `/update apply --confirm`, which restarts into the staged update (exit 8).
+function takesServerDown(command: string): boolean {
+  return isStopCommand(command) || /^\/?update\s+apply\b.*\s--confirm\b/i.test(command.trim());
+}
+
 export async function startContainer(serverId?: string): Promise<ActionResponse> {
   if (isDemoMode()) return { success: true, message: '[DEMO] Container started' };
   try {
@@ -347,11 +359,83 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
   }
 }
 
-export async function execCommand(command: string, serverId?: string): Promise<ActionResponse> {
-  // SECURITY: single gate for everything written to the game console. It runs
-  // after every caller has filled in its placeholders, so an embedded line
-  // break (a second, unchecked console command) or a TTY control byte (Ctrl-C
-  // shuts the server down) is rejected here no matter which path built it.
+export interface ExecCommandOptions {
+  /** Panel user the command runs for; defaults to the user of the current request. */
+  actor?: string | null;
+  /** Also print the answer to the server console; see echoesToServerLog. */
+  echo?: boolean;
+  /** How long the plugin waits for the command before answering RUNNING. */
+  timeoutMs?: number;
+}
+
+/**
+ * Outcome of execCommand. Through the KyuubiSoft API plugin (`via: 'plugin'`)
+ * `success` is the command's real outcome, `lines`/`output` its answer and
+ * `status` how it ended. Through stdin (`via: 'stdin'`) `success` only means
+ * the line was written to the console.
+ */
+export interface CommandExecResult extends ActionResponse {
+  via?: 'plugin' | 'stdin' | 'demo';
+  status?: PluginCommandStatus;
+  lines?: string[];
+  messageIds?: string[];
+}
+
+// Some callers read a command's answer from the server log: the Hytale sign-in
+// flow (services/hytaleAuth.ts, the setup wizard) the device code of /auth,
+// the native backup (services/nativeBackups.ts) the result of /backup, and the
+// panel backup (services/backup.ts) the end of `/world save --all`. Their
+// answers are also printed there, as they were when every command ran as the
+// console.
+function echoesToServerLog(command: string): boolean {
+  return /^\/?(auth|backup|world\s+save)\b/i.test(command.trim());
+}
+const ECHOED_COMMAND_TIMEOUT_MS = 1_500;
+
+function fromPluginAttempt(
+  command: string,
+  attempt: Exclude<PluginCommandAttempt, { kind: 'unavailable' }>,
+): CommandExecResult {
+  if (attempt.kind === 'invalid') return { success: false, error: attempt.error, via: 'plugin' };
+  if (attempt.kind === 'unknown') {
+    // Such a command takes the plugin down with the server, often before it answers.
+    if (takesServerDown(command)) {
+      return { success: true, message: `Command sent: ${command}`, via: 'plugin' };
+    }
+    return {
+      success: false,
+      error: `${attempt.error}. The command may still have run; it was not sent again.`,
+      via: 'plugin',
+    };
+  }
+  const { reply } = attempt;
+  const output = reply.output.join('\n');
+  const fallbackMessage =
+    reply.status === 'RUNNING'
+      ? `Command still running: ${command}`
+      : `Command executed: ${command}`;
+  return {
+    success: reply.ok,
+    message: output || fallbackMessage,
+    output,
+    error: reply.ok ? undefined : (reply.error ?? 'Command failed'),
+    via: 'plugin',
+    status: reply.status,
+    lines: reply.output,
+    messageIds: reply.messageIds,
+  };
+}
+
+export async function execCommand(
+  command: string,
+  serverId?: string,
+  options: ExecCommandOptions = {},
+): Promise<CommandExecResult> {
+  // SECURITY: single gate for everything an operator, a rule or a route sends
+  // to the game console, on either path below. It runs after every caller has
+  // filled in its placeholders, so an embedded line break (a second, unchecked
+  // console command) or a TTY control byte (Ctrl-C shuts the server down) is
+  // rejected here no matter which path built it.
   const validation = validateCommand(command);
   if (!validation.valid) {
     // JSON.stringify keeps a smuggled line break from forging log lines.
@@ -360,7 +444,7 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     );
     return { success: false, error: validation.error || 'Invalid command' };
   }
-  return writeConsoleLine(command, serverId);
+  return deliverCommand(command, serverId, options);
 }
 
 // The panel's own shutdown and countdown commands (serverLifecycle.ts). They
@@ -372,40 +456,68 @@ const LIFECYCLE_COMMAND =
 export async function sendLifecycleCommand(
   command: string,
   serverId?: string,
-): Promise<ActionResponse> {
+): Promise<CommandExecResult> {
   if (containsControlChars(command) || !LIFECYCLE_COMMAND.test(command)) {
     return { success: false, error: 'Not a lifecycle command' };
   }
+  return deliverCommand(command, serverId);
+}
+
+// The two ways a command reaches the server, both behind the caller's gate.
+// Preferred: the plugin runs the command and returns its answer. The stdin
+// console is only used when the plugin did not take the command (not
+// installed, unreachable, too old, token refused); a command that may have
+// reached the plugin is never sent a second time.
+async function deliverCommand(
+  command: string,
+  serverId: string | undefined,
+  options: ExecCommandOptions = {},
+): Promise<CommandExecResult> {
+  if (isDemoMode()) {
+    return { success: true, message: `[DEMO] Command executed: ${command}`, via: 'demo' };
+  }
+
+  // A console stop exits the container just like a UI stop does.
+  if (isStopCommand(command)) await noteIntentionalStop(serverId);
+  const echo = options.echo ?? echoesToServerLog(command);
+  const attempt = await runCommandViaPlugin(command, serverId, {
+    actor: options.actor ?? currentCommandActor(),
+    echo,
+    // Callers of echoed commands read the answer from the log; a long-running
+    // one (/auth login device waits for the sign-in) must not hold them up.
+    timeoutMs: options.timeoutMs ?? (echo ? ECHOED_COMMAND_TIMEOUT_MS : undefined),
+  });
+  if (attempt.kind !== 'unavailable') return fromPluginAttempt(command, attempt);
   return writeConsoleLine(command, serverId);
 }
 
-// The only way commands reach the server: its console stdin. There used to be
-// a `docker exec` fallback that echoed into /proc/1/fd/0; with a TTY that
-// lands in the terminal's output, not its input, so it reported success for
-// commands that never ran. A missing console is now reported as an error.
-async function writeConsoleLine(command: string, serverId?: string): Promise<ActionResponse> {
-  if (isDemoMode()) {
-    return { success: true, message: `[DEMO] Command executed: ${command}` };
-  }
+// The fallback: the server's console stdin. There used to be a `docker exec`
+// fallback behind it that echoed into /proc/1/fd/0; with a TTY that lands in
+// the terminal's output, not its input, so it reported success for commands
+// that never ran. A missing console is now reported as an error.
+async function writeConsoleLine(command: string, serverId?: string): Promise<CommandExecResult> {
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
 
-    // A console stop exits the container just like a UI stop does.
-    if (isStopCommand(command)) await noteIntentionalStop(serverId);
-
     const attached = await ensureStdinAttached(serverId);
     const stream = attached.ok ? stdinStreams.get(attached.key) : undefined;
-    if (!stream) return { success: false, error: 'Server console is not reachable' };
+    if (!stream) {
+      return { success: false, error: 'Server console is not reachable', via: 'stdin' };
+    }
     try {
       stream.write(command + '\n');
-      return { success: true, message: `Command executed: ${command}` };
+      return { success: true, message: `Command executed: ${command}`, via: 'stdin' };
     } catch (error) {
       stdinStreams.delete(attached.key);
       const reason = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, error: `Writing to the server console failed: ${reason}` };
+      return {
+        success: false,
+        error: `Writing to the server console failed: ${reason}`,
+        via: 'stdin',
+      };
     }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

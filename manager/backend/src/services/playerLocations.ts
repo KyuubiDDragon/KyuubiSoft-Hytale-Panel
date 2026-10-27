@@ -238,6 +238,7 @@ export function initializePlayerLocations(): void {
   eventBus.subscribe(['player_death'], (evt: PanelEvent) => {
     const p = evt.payload as {
       player?: string;
+      uuid?: string;
       world?: string;
       x?: number;
       y?: number;
@@ -246,7 +247,8 @@ export function initializePlayerLocations(): void {
     if (!p.player || p.x === undefined || p.y === undefined || p.z === undefined) return;
     pushSample({
       playerName: p.player,
-      uuid: p.player, // we don't know UUID here, use name as stable id
+      // Plugin 2.1+ sends the UUID; older ones only the name.
+      uuid: p.uuid ?? p.player,
       x: Number(p.x),
       y: Number(p.y),
       z: Number(p.z),

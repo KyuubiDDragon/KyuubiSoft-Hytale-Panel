@@ -2,9 +2,10 @@
  * Update Center state for one server, built from what the panel can verify:
  * the files of the installation (installed and staged version, previous
  * version in updater/backup, free disk space), the container state and the
- * downloader. Console replies are not used: the panel cannot read the output
- * of a console command yet, so "download running" is not observable — a
- * finished download shows up as a staged update.
+ * downloader. Console replies are not part of the state: they only exist
+ * through the KyuubiSoft API plugin (the routes use them to see whether the
+ * server refused one of the panel's `/update` commands), so "download running"
+ * is not shown — a finished download shows up as a staged update.
  */
 import path from 'path';
 import * as dockerService from './docker.js';

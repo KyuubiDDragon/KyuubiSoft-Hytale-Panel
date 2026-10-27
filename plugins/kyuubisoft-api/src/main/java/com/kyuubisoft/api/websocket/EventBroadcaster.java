@@ -1,6 +1,7 @@
 package com.kyuubisoft.api.websocket;
 
 import com.google.gson.Gson;
+import com.kyuubisoft.api.metrics.WorldPerf;
 import io.netty.channel.Channel;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
@@ -63,24 +64,11 @@ public class EventBroadcaster {
     }
 
     /**
-     * Broadcast player death event (without position)
+     * Broadcast a player death. The caller (the death system) fills the
+     * victim, cause, killer and position; type and timestamp are set here.
      */
-    public void broadcastPlayerDeath(String playerName, String cause) {
-        broadcastPlayerDeath(playerName, cause, null, null, null, null);
-    }
-
-    /**
-     * Broadcast player death event with position
-     */
-    public void broadcastPlayerDeath(String playerName, String cause, String world, Double x, Double y, Double z) {
-        PlayerDeathEvent event = new PlayerDeathEvent();
+    public void broadcastPlayerDeath(PlayerDeathEvent event) {
         event.type = "player_death";
-        event.player = playerName;
-        event.cause = cause;
-        event.world = world;
-        event.x = x;
-        event.y = y;
-        event.z = z;
         event.timestamp = Instant.now().toString();
 
         broadcast(event);
@@ -128,16 +116,38 @@ public class EventBroadcaster {
     }
 
     /**
-     * Broadcast TPS update (can be called periodically)
+     * Broadcast the tick metrics of one world (sent periodically per world by
+     * {@link TpsTicker}). {@code tps}/{@code mspt} are the 10 s averages; the
+     * windows carry min/avg/max for 10 s, 1 min and 5 min.
      */
-    public void broadcastTpsUpdate(double tps, double mspt) {
+    public void broadcastTpsUpdate(WorldPerf.Snapshot perf) {
         TpsEvent event = new TpsEvent();
         event.type = "tps_update";
-        event.tps = tps;
-        event.mspt = mspt;
+        event.world = perf.world;
+        event.tps = perf.tps;
+        event.mspt = perf.mspt;
+        event.targetTps = perf.targetTps;
+        event.tickBudgetMs = perf.tickBudgetMs;
+        event.windows = perf.windows;
+        event.players = perf.players;
+        event.entities = perf.entities;
+        event.loadedChunks = perf.loadedChunks;
         event.timestamp = Instant.now().toString();
 
         broadcast(event);
+    }
+
+    /** True while at least one WebSocket client listens; lets periodic producers skip work. */
+    public boolean hasClients() {
+        return !channels.isEmpty();
+    }
+
+    /**
+     * Broadcast a ready-made event frame that sets its own {@code type} and
+     * {@code timestamp} (the live-data events in {@code live.LiveEvents}).
+     */
+    public void broadcastEvent(Object frame) {
+        broadcast(frame);
     }
 
     /**
@@ -151,6 +161,35 @@ public class EventBroadcaster {
         String json = GSON.toJson(event);
         TextWebSocketFrame frame = new TextWebSocketFrame(json);
         channels.writeAndFlush(frame);
+    }
+
+    /**
+     * Broadcast an event a mod sent through {@code PanelRegistry.publishEvent}. The payload is
+     * already checked and trimmed by {@code panel.internal.ModEvents}.
+     */
+    public void broadcastModEvent(String modId, String event, java.util.Map<String, Object> payload) {
+        ModEvent frame = new ModEvent();
+        frame.type = "mod_event";
+        frame.modId = modId;
+        frame.event = event;
+        frame.payload = payload;
+        frame.timestamp = Instant.now().toString();
+
+        broadcast(frame);
+    }
+
+    /**
+     * Broadcast that the set of registered commands changed (a plugin loaded,
+     * unloaded or reloaded), so the panel refreshes its cached command list.
+     */
+    public void broadcastCommandsChanged(String revision, int count) {
+        CommandsChangedEvent event = new CommandsChangedEvent();
+        event.type = "commands_changed";
+        event.revision = revision;
+        event.count = count;
+        event.timestamp = Instant.now().toString();
+
+        broadcast(event);
     }
 
     /**
@@ -172,7 +211,15 @@ public class EventBroadcaster {
     public static class PlayerDeathEvent {
         public String type;
         public String player;
+        public String uuid;
+        /** Damage cause id, e.g. "Physical", "Fall", "Drowning"; "unknown" when the server gives none. */
         public String cause;
+        /** Name of the killing player or entity; omitted when unknown. */
+        public String killer;
+        /** UUID of the killing player; omitted for non-player killers. */
+        public String killerUuid;
+        /** "player", "entity", "environment" or "command"; omitted when unknown. */
+        public String killerType;
         public String world;
         public Double x;
         public Double y;
@@ -190,8 +237,17 @@ public class EventBroadcaster {
 
     public static class TpsEvent {
         public String type;
+        public String world;
+        /** 10 s average TPS (server formula, capped at the target). */
         public double tps;
+        /** 10 s average time a tick took to compute, in ms. */
         public double mspt;
+        public int targetTps;
+        public double tickBudgetMs;
+        public java.util.List<WorldPerf.Window> windows;
+        public int players;
+        public int entities;
+        public int loadedChunks;
         public String timestamp;
     }
 
@@ -206,6 +262,21 @@ public class EventBroadcaster {
         public Double yaw;
         public Double pitch;
         public Integer latencyMs;
+        public String timestamp;
+    }
+
+    public static class ModEvent {
+        public String type;
+        public String modId;
+        public String event;
+        public java.util.Map<String, Object> payload;
+        public String timestamp;
+    }
+
+    public static class CommandsChangedEvent {
+        public String type;
+        public String revision;
+        public int count;
         public String timestamp;
     }
 }

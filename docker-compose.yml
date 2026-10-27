@@ -209,13 +209,15 @@ services:
       - SERVER_STOP_TIMEOUT_SECONDS=${SERVER_STOP_TIMEOUT_SECONDS:-120}
 
       # Watchdog (crash detection + alerts, see .env.example). The defaults
-      # here must stay explicit: an empty value would read as 0.
+      # here must stay explicit: an empty value would read as 0. The one
+      # exception is WATCHDOG_TPS_ALERT: empty means "use the percentage".
       - WATCHDOG_ENABLED=${WATCHDOG_ENABLED:-true}
       - WATCHDOG_AUTO_RESTART=${WATCHDOG_AUTO_RESTART:-false}
       - WATCHDOG_MAX_RESTARTS=${WATCHDOG_MAX_RESTARTS:-3}
       - WATCHDOG_RESTART_WINDOW_MS=${WATCHDOG_RESTART_WINDOW_MS:-600000}
       - WATCHDOG_MEM_ALERT_PERCENT=${WATCHDOG_MEM_ALERT_PERCENT:-95}
-      - WATCHDOG_TPS_ALERT=${WATCHDOG_TPS_ALERT:-15}
+      - WATCHDOG_TPS_ALERT_PERCENT=${WATCHDOG_TPS_ALERT_PERCENT:-75}
+      - WATCHDOG_TPS_ALERT=${WATCHDOG_TPS_ALERT:-}
       - WATCHDOG_DISK_ALERT_MIN_GB=${WATCHDOG_DISK_ALERT_MIN_GB:-2}
 
       # Modtale API (optional)

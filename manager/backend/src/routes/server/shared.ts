@@ -8,6 +8,7 @@ import { config } from '../../config.js';
 import * as dockerService from '../../services/docker.js';
 import { escapeShellArg } from '../../utils/sanitize.js';
 import { withFileLock, writeJsonAtomic } from '../../utils/jsonStore.js';
+import { DEFAULT_TARGET_TPS } from '../../services/tpsState.js';
 
 // Allowed config file extensions
 export const CONFIG_EXTENSIONS = [
@@ -368,15 +369,7 @@ export function parsePrometheusMetrics(raw: string): Record<string, unknown> {
   const playersPerWorld: Record<string, number> = labeledMetrics['hytale_players_world'] || {};
 
   return {
-    tps: {
-      current: metrics['hytale_tps_current'] ?? 20,
-      average: metrics['hytale_tps_average'] ?? 20,
-      min: metrics['hytale_tps_min'] ?? 20,
-      max: metrics['hytale_tps_max'] ?? 20,
-      target: metrics['hytale_tps_target'] ?? 20,
-      msptCurrent: metrics['hytale_mspt_current'] ?? 50,
-      msptAverage: metrics['hytale_mspt_average'] ?? 50,
-    },
+    tps: tpsGauges(metrics),
     players: {
       online: metrics['hytale_players_online'] ?? 0,
       max: metrics['hytale_players_max'] ?? 100,
@@ -422,13 +415,23 @@ export function parseTpsMetrics(raw: string): Record<string, number> {
     }
   }
 
+  return tpsGauges(metrics);
+}
+
+/**
+ * The unlabeled hytale_tps_* / hytale_mspt_* gauges. Missing values fall back
+ * to the target (Hytale default 30 TPS) and 0 ms instead of the old 20/50.
+ */
+function tpsGauges(metrics: Record<string, number>): Record<string, number> {
+  const target = metrics['hytale_tps_target'] ?? DEFAULT_TARGET_TPS;
+  const current = metrics['hytale_tps_current'] ?? target;
   return {
-    current: metrics['hytale_tps_current'] ?? 20,
-    average: metrics['hytale_tps_average'] ?? 20,
-    min: metrics['hytale_tps_min'] ?? 20,
-    max: metrics['hytale_tps_max'] ?? 20,
-    target: metrics['hytale_tps_target'] ?? 20,
-    msptCurrent: metrics['hytale_mspt_current'] ?? 50,
-    msptAverage: metrics['hytale_mspt_average'] ?? 50,
+    current,
+    average: metrics['hytale_tps_average'] ?? current,
+    min: metrics['hytale_tps_min'] ?? current,
+    max: metrics['hytale_tps_max'] ?? current,
+    target,
+    msptCurrent: metrics['hytale_mspt_current'] ?? 0,
+    msptAverage: metrics['hytale_mspt_average'] ?? metrics['hytale_mspt_current'] ?? 0,
   };
 }

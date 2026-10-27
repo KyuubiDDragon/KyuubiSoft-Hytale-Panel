@@ -20,12 +20,14 @@
  * the rule's own backup) is tagged with the chain of running rules. A rule
  * never fires for an event its own action caused, chains stop after
  * MAX_RULE_CHAIN rules, and a backup rule runs at most once per cooldown.
+ * Floods: every rule runs at most RULE_RUNS_PER_MINUTE times per event name.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getDb } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 import { subscribe } from './eventBus.js';
-import { PanelEventNames, type PanelEvent } from '../schemas/events.js';
+import { PanelEventNames, eventPatternMatches, type PanelEvent } from '../schemas/events.js';
+import { KeyedTokenBucket } from '../utils/tokenBucket.js';
 import { isValidPlayerName, stripControlChars, containsControlChars } from '../utils/sanitize.js';
 import {
   authorizeCommand,
@@ -225,10 +227,26 @@ export async function approveEventAction(
     : { ok: false, status: 404, error: 'Rule not found' };
 }
 
-function patternMatches(pattern: string, name: string): boolean {
-  if (pattern === '*') return true;
-  if (pattern.endsWith('.*')) return name.startsWith(pattern.slice(0, -1));
-  return pattern === name;
+// One rule runs at most this often per event name. Some events can be caused
+// from outside (refused joins under made-up names), and a rule must not turn a
+// flood of them into a flood of console commands, broadcasts or backups.
+export const RULE_RUNS_PER_MINUTE = 10;
+const THROTTLE_LOG_INTERVAL_MS = 60_000;
+const ruleThrottle = new KeyedTokenBucket({ perMinute: RULE_RUNS_PER_MINUTE });
+const throttleLoggedAt = new Map<string, number>();
+
+/** May `rule` run for `evt` now? A dropped run is logged before anything executes. */
+function withinRuleBudget(rule: EventAction, evt: PanelEvent): boolean {
+  const key = `${rule.id}\u0000${evt.name}`;
+  if (ruleThrottle.tryTake(key)) return true;
+  const now = Date.now();
+  if (now - (throttleLoggedAt.get(key) ?? 0) >= THROTTLE_LOG_INTERVAL_MS) {
+    throttleLoggedAt.set(key, now);
+    logger.warn(
+      `[EventAction] "${rule.name}" throttled for ${evt.name}: more than ${RULE_RUNS_PER_MINUTE} runs per minute, further runs are dropped (logged at most once per minute)`,
+    );
+  }
+  return false;
 }
 
 export const ACTION_TYPES: readonly EventActionType[] = ['command', 'announce', 'backup'];
@@ -387,6 +405,17 @@ function skipAction(rule: EventAction, evt: PanelEvent, reason: string): void {
   });
 }
 
+// Sender name in the server log: "Panel:event/<creator>".
+function eventActor(rule: EventAction): string {
+  return rule.createdBy ? `event/${rule.createdBy}` : 'event';
+}
+
+function commandFailed(rule: EventAction, evt: PanelEvent, error: string | undefined): void {
+  logger.warn(
+    `[EventAction] "${rule.name}" command failed for ${evt.name}: ${error ?? 'unknown error'}`,
+  );
+}
+
 async function runAction(rule: EventAction, evt: PanelEvent): Promise<void> {
   const serverId = rule.serverId ?? evt.serverId ?? undefined;
   try {
@@ -397,12 +426,18 @@ async function runAction(rule: EventAction, evt: PanelEvent): Promise<void> {
       const auth = await authorizeStoredCommand(rule.createdBy, rendered.text, serverId);
       if (!auth.allowed) return skipAction(rule, evt, auth.error);
       const { execCommand } = await import('./docker.js');
-      await execCommand(rendered.text, serverId);
+      const result = await execCommand(rendered.text, serverId, { actor: eventActor(rule) });
+      if (!result.success) return commandFailed(rule, evt, result.error);
     } else if (rule.actionType === 'announce' && rule.actionPayload.message) {
       const rendered = renderTemplate(rule.actionPayload.message, evt);
       if (!rendered.ok) return skipAction(rule, evt, rendered.error);
       const { execCommand } = await import('./docker.js');
-      await execCommand(`/broadcast ${stripControlChars(rendered.text).trim()}`, serverId);
+      const result = await execCommand(
+        `/broadcast ${stripControlChars(rendered.text).trim()}`,
+        serverId,
+        { actor: eventActor(rule) },
+      );
+      if (!result.success) return commandFailed(rule, evt, result.error);
     } else if (rule.actionType === 'backup') {
       const { createBackup } = await import('./backup.js');
       const result = await createBackup({ kind: 'auto', label: 'event' }, serverId);
@@ -428,10 +463,14 @@ const lastBackupAction = new Map<string, number>();
  * Whether `rule` may fire for an event seen with `chain`; records backup runs.
  * A backup run counts at its start, also when it fails: a rule whose backup
  * keeps failing (full disk) must not retry on every matching event.
+ *
+ * The checks without side effects come first, so an event the rule must not
+ * run for (its own, or one inside the backup cooldown) costs it no run of its
+ * per-event budget, and a run the budget drops starts no backup cooldown.
  */
 function mayFire(rule: EventAction, evt: PanelEvent, chain: readonly string[]): boolean {
   if (chain.includes(rule.id)) return false; // its own action caused this event
-  if (rule.actionType !== 'backup') return true;
+  if (rule.actionType !== 'backup') return withinRuleBudget(rule, evt);
   const now = Date.now();
   // Expired entries are dropped, so deleted rules and servers don't pile up.
   for (const [k, at] of lastBackupAction) {
@@ -443,6 +482,7 @@ function mayFire(rule: EventAction, evt: PanelEvent, chain: readonly string[]): 
     logger.info(`[EventAction] "${rule.name}" skipped for ${evt.name}: backup cooldown`);
     return false;
   }
+  if (!withinRuleBudget(rule, evt)) return false;
   lastBackupAction.set(key, now);
   return true;
 }
@@ -467,7 +507,8 @@ export function startEventActions(): void {
     for (const rule of rules) {
       if (!rule.enabled) continue;
       if (rule.serverId && evt.serverId && rule.serverId !== evt.serverId) continue;
-      if (!patternMatches(rule.eventPattern, evt.name)) continue;
+      // Wildcards never cover events outsiders can cause (schemas/events.ts).
+      if (!eventPatternMatches(rule.eventPattern, evt.name)) continue;
       if (!mayFire(rule, evt, chain)) continue;
       void ruleChain.run([...chain, rule.id], () => runAction(rule, evt));
     }

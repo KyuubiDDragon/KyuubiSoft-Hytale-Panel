@@ -28,8 +28,9 @@
  */
 import fs from 'fs';
 import { logger } from '../utils/logger.js';
-import { publish, eventBus, type PanelEvent } from './eventBus.js';
+import { publish } from './eventBus.js';
 import { listServers, type ServerInstance } from './servers.js';
+import { findLaggingWorld, getWorldTicks, startTpsState, tpsRatio } from './tpsState.js';
 import {
   getContainerState,
   getDockerInstance,
@@ -58,8 +59,17 @@ const RESTART_WINDOW_MS = envInt('WATCHDOG_RESTART_WINDOW_MS', 10 * 60_000);
 const INTENTIONAL_GRACE_MS = envInt('WATCHDOG_INTENTIONAL_STOP_GRACE_MS', 60_000);
 const MEM_ALERT_PERCENT = envInt('WATCHDOG_MEM_ALERT_PERCENT', 95);
 const MEM_ALERT_COOLDOWN_MS = envInt('WATCHDOG_MEM_ALERT_COOLDOWN_MS', 5 * 60_000);
-// Low-TPS (server lag) alert. TPS arrives from the plugin's server_tick events.
-const TPS_ALERT = envInt('WATCHDOG_TPS_ALERT', 15); // alert when TPS < this; 0 = off
+// Low-TPS (server lag) alert. TPS arrives per world from the plugin's
+// server_tick events. The threshold is relative to each world's target rate
+// (Hytale: 30 TPS): alert when a world runs below this percentage.
+// WATCHDOG_TPS_ALERT (absolute TPS) still works and wins when set; 0 = off.
+const TPS_ALERT_PERCENT = envInt('WATCHDOG_TPS_ALERT_PERCENT', 75);
+// A blank value (e.g. an uncommented "WATCHDOG_TPS_ALERT=") counts as unset.
+const TPS_ALERT_ABSOLUTE = process.env.WATCHDOG_TPS_ALERT?.trim()
+  ? envInt('WATCHDOG_TPS_ALERT', 0)
+  : null;
+const TPS_ALERT_ENABLED =
+  TPS_ALERT_ABSOLUTE !== null ? TPS_ALERT_ABSOLUTE > 0 : TPS_ALERT_PERCENT > 0;
 const TPS_ALERT_COOLDOWN_MS = envInt('WATCHDOG_TPS_ALERT_COOLDOWN_MS', 5 * 60_000);
 const TPS_STALE_MS = envInt('WATCHDOG_TPS_STALE_MS', 60_000); // ignore TPS readings older than this
 // Low-disk alert on each server's data volume.
@@ -85,22 +95,6 @@ interface WatchState {
 
 const state = new Map<string, WatchState>();
 let timer: NodeJS.Timeout | null = null;
-
-// Latest TPS/MSPT per server, fed by the plugin's server_tick events.
-const latestTick = new Map<string, { tps: number | null; mspt: number | null; at: number }>();
-let tickSubscribed = false;
-function subscribeTicks(): void {
-  if (tickSubscribed) return;
-  tickSubscribed = true;
-  eventBus.subscribe(['server_tick'], (evt: PanelEvent) => {
-    const p = evt.payload as { tps?: number; mspt?: number; serverId?: string };
-    latestTick.set(p.serverId ?? '__default__', {
-      tps: typeof p.tps === 'number' ? p.tps : null,
-      mspt: typeof p.mspt === 'number' ? p.mspt : null,
-      at: Date.now(),
-    });
-  });
-}
 
 function getState(serverId: string): WatchState {
   let s = state.get(serverId);
@@ -296,20 +290,30 @@ async function tickServer(srv: ServerInstance): Promise<void> {
   }
 
   // Low-TPS (lag) alert, only while running and only on fresh readings.
-  if (running && TPS_ALERT > 0) {
-    const tick = latestTick.get(serverId) ?? latestTick.get('__default__');
-    if (tick && tick.tps !== null && Date.now() - tick.at < TPS_STALE_MS && tick.tps < TPS_ALERT) {
+  if (running && TPS_ALERT_ENABLED) {
+    const lagging = findLaggingWorld(getWorldTicks(serverId, TPS_STALE_MS), {
+      absolute: TPS_ALERT_ABSOLUTE,
+      percent: TPS_ALERT_PERCENT,
+    });
+    if (lagging) {
       const now = Date.now();
       if (now - s.lastTpsAlertAt > TPS_ALERT_COOLDOWN_MS) {
         s.lastTpsAlertAt = now;
+        const { tick } = lagging;
         publish(
           'server.alert',
           {
             serverId,
             reason: 'low_tps',
-            tps: tick.tps,
+            world: tick.world || undefined,
+            tps: Math.round(lagging.tps * 100) / 100,
+            targetTps: tick.targetTps,
+            percentOfTarget: Math.round(
+              tpsRatio({ tps: lagging.tps, targetTps: tick.targetTps }) * 100,
+            ),
             mspt: tick.mspt,
-            threshold: TPS_ALERT,
+            threshold: Math.round(lagging.limit * 100) / 100,
+            thresholdPercent: TPS_ALERT_ABSOLUTE !== null ? undefined : TPS_ALERT_PERCENT,
           },
           serverId,
         );
@@ -444,9 +448,14 @@ export function startWatchdog(): void {
     return;
   }
   if (timer) return;
-  subscribeTicks();
+  startTpsState();
+  const tpsAlert = !TPS_ALERT_ENABLED
+    ? 'off'
+    : TPS_ALERT_ABSOLUTE !== null
+      ? `${TPS_ALERT_ABSOLUTE}`
+      : `${TPS_ALERT_PERCENT}%`;
   logger.info(
-    `[Watchdog] started (poll=${POLL_MS}ms, autoRestart=${AUTO_RESTART}, maxRestarts=${MAX_RESTARTS}/${Math.round(RESTART_WINDOW_MS / 60000)}min, memAlert=${MEM_ALERT_PERCENT}%, tpsAlert=${TPS_ALERT}, diskAlert=${DISK_ALERT_MIN_GB}GB)`,
+    `[Watchdog] started (poll=${POLL_MS}ms, autoRestart=${AUTO_RESTART}, maxRestarts=${MAX_RESTARTS}/${Math.round(RESTART_WINDOW_MS / 60000)}min, memAlert=${MEM_ALERT_PERCENT}%, tpsAlert=${tpsAlert}, diskAlert=${DISK_ALERT_MIN_GB}GB)`,
   );
   timer = setInterval(() => {
     void tick();

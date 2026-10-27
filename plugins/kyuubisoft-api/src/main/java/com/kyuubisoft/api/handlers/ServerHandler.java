@@ -1,52 +1,45 @@
 package com.kyuubisoft.api.handlers;
 
+import com.hypixel.hytale.server.core.HytaleServer;
+import com.hypixel.hytale.server.core.HytaleServerConfig;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.common.util.java.ManifestUtil;
+import com.kyuubisoft.api.metrics.CpuSampler;
+import com.kyuubisoft.api.metrics.WorldPerf;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.time.Instant;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.List;
 
 /**
  * Handler for server-related API endpoints
  */
 public class ServerHandler {
 
-    private static final long SERVER_START_TIME = System.currentTimeMillis();
-    private static final Pattern MAX_PLAYERS_PATTERN = Pattern.compile("\"MaxPlayers\"\\s*:\\s*(\\d+)");
+    /** Hytale's default tick rate, used only while no world runs yet. */
+    private static final int DEFAULT_TARGET_TPS = 30;
 
-    /**
-     * Read MaxPlayers from config.json
-     */
-    private int getMaxPlayersFromConfig() {
+    /** Epoch millis when the server process (this JVM) started. */
+    public static long processStartMillis() {
+        return ManagementFactory.getRuntimeMXBean().getStartTime();
+    }
+
+    /** Seconds since the server process started. */
+    public static long uptimeSeconds() {
+        return ManagementFactory.getRuntimeMXBean().getUptime() / 1000;
+    }
+
+    /** MaxPlayers from the server's own config; -1 when it is not loaded. */
+    public static int maxPlayers() {
         try {
-            File configFile = new File("config.json");
-            if (!configFile.exists()) {
-                return 100; // Default if config doesn't exist
-            }
-
-            StringBuilder content = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    content.append(line);
-                }
-            }
-
-            Matcher matcher = MAX_PLAYERS_PATTERN.matcher(content.toString());
-            if (matcher.find()) {
-                return Integer.parseInt(matcher.group(1));
-            }
-        } catch (Exception e) {
-            System.err.println("[KyuubiAPI] Failed to read MaxPlayers from config: " + e.getMessage());
+            HytaleServer server = HytaleServer.get();
+            HytaleServerConfig config = server != null ? server.getConfig() : null;
+            return config != null ? config.getMaxPlayers() : -1;
+        } catch (RuntimeException e) {
+            return -1;
         }
-        return 100; // Default fallback
     }
 
     /**
@@ -68,11 +61,10 @@ public class ServerHandler {
         // Player counts
         try {
             info.onlinePlayers = Universe.get().getPlayers().size();
-            info.maxPlayers = getMaxPlayersFromConfig();
         } catch (Exception e) {
             info.onlinePlayers = 0;
-            info.maxPlayers = getMaxPlayersFromConfig();
         }
+        info.maxPlayers = maxPlayers();
 
         // World count
         try {
@@ -81,21 +73,40 @@ public class ServerHandler {
             info.worldCount = 0;
         }
 
-        // Uptime
-        info.uptimeSeconds = (System.currentTimeMillis() - SERVER_START_TIME) / 1000;
-        info.startedAt = Instant.ofEpochMilli(SERVER_START_TIME).toString();
+        // Uptime of the server process, not of this plugin.
+        info.uptimeSeconds = uptimeSeconds();
+        info.startedAt = Instant.ofEpochMilli(processStartMillis()).toString();
 
-        // Real TPS/MSPT from the tracker (falls back to ideal if not started).
-        com.kyuubisoft.api.metrics.TpsTracker tracker = com.kyuubisoft.api.metrics.TpsTracker.getInstance();
-        if (tracker != null) {
-            info.tps = tracker.getCurrentTps();
-            info.mspt = tracker.getCurrentMspt();
-        } else {
-            info.tps = 20.0;
-            info.mspt = 50.0;
-        }
+        ServerTps tps = getTps();
+        info.tps = tps.tps;
+        info.mspt = tps.mspt;
+        info.targetTps = tps.targetTps;
+        info.tpsWorld = tps.world;
 
         return info;
+    }
+
+    /**
+     * GET /api/server/tps
+     * Tick metrics of every running world plus the headline value: the world
+     * with the lowest TPS relative to its target (10 s average).
+     */
+    public ServerTps getTps() {
+        List<WorldPerf.Snapshot> worlds = WorldPerf.snapshotAll();
+        WorldPerf.Snapshot slowest = WorldPerf.slowest(worlds);
+        ServerTps result = new ServerTps();
+        result.worlds = worlds;
+        if (slowest != null) {
+            result.world = slowest.world;
+            result.tps = slowest.tps;
+            result.mspt = slowest.mspt;
+            result.targetTps = slowest.targetTps;
+        } else {
+            result.tps = null;
+            result.mspt = null;
+            result.targetTps = DEFAULT_TARGET_TPS;
+        }
+        return result;
     }
 
     /**
@@ -105,45 +116,38 @@ public class ServerHandler {
     public PerformanceInfo getPerformance() {
         PerformanceInfo perf = new PerformanceInfo();
 
-        // Real TPS/MSPT from the tracker.
-        com.kyuubisoft.api.metrics.TpsTracker tracker = com.kyuubisoft.api.metrics.TpsTracker.getInstance();
-        if (tracker != null) {
-            perf.tps = tracker.getCurrentTps();
-            perf.mspt = tracker.getCurrentMspt();
-        } else {
-            perf.tps = 20.0;
-            perf.mspt = 50.0;
-        }
+        ServerTps tps = getTps();
+        perf.tps = tps.tps;
+        perf.mspt = tps.mspt;
+        perf.targetTps = tps.targetTps;
+        perf.tpsWorld = tps.world;
+        perf.worlds = tps.worlds;
 
-        // Entity count (total across all worlds)
-        try {
-            perf.totalEntities = -1; // TODO: Count entities when API available
-        } catch (Exception e) {
-            perf.totalEntities = -1;
+        // Entities and loaded chunks summed over all running worlds.
+        int entities = 0;
+        int chunks = 0;
+        for (WorldPerf.Snapshot world : tps.worlds) {
+            if (world.entities > 0) entities += world.entities;
+            if (world.loadedChunks > 0) chunks += world.loadedChunks;
         }
+        perf.totalEntities = entities;
+        perf.totalLoadedChunks = chunks;
 
-        // Loaded chunks (total)
-        try {
-            perf.totalLoadedChunks = -1; // TODO: Count chunks when API available
-        } catch (Exception e) {
-            perf.totalLoadedChunks = -1;
-        }
+        // CPU usage from the background sampler (the MXBean read can block).
+        // A negative load means "no sample yet": omitted, not -100 %.
+        perf.cpuUsage = percentOrNull(CpuSampler.systemLoad());
+        perf.processCpuUsage = percentOrNull(CpuSampler.processLoad());
 
-        // CPU usage (JVM)
-        try {
-            com.sun.management.OperatingSystemMXBean osBean =
-                    (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-            perf.cpuUsage = Math.round(osBean.getCpuLoad() * 100.0 * 100.0) / 100.0;
-            perf.processCpuUsage = Math.round(osBean.getProcessCpuLoad() * 100.0 * 100.0) / 100.0;
-        } catch (Exception e) {
-            perf.cpuUsage = -1;
-            perf.processCpuUsage = -1;
-        }
-
-        // Thread count
-        perf.threadCount = Thread.activeCount();
+        // All live threads of the JVM, not just this plugin's thread group.
+        perf.threadCount = ManagementFactory.getThreadMXBean().getThreadCount();
 
         return perf;
+    }
+
+    /** A 0..1 load as a percentage with two decimals; null when unknown. */
+    static Double percentOrNull(double load) {
+        if (Double.isNaN(load) || load < 0) return null;
+        return Math.round(load * 100.0 * 100.0) / 100.0;
     }
 
     /**
@@ -190,22 +194,43 @@ public class ServerHandler {
         public String version;
         public String patchline;
         public int onlinePlayers;
+        /** From the server config; -1 when unknown. */
         public int maxPlayers;
         public int worldCount;
+        /** Since the server process started. */
         public long uptimeSeconds;
         public String startedAt;
-        public double tps;
-        public double mspt;
+        /** 10 s average TPS of {@link #tpsWorld}; null while no world runs. */
+        public Double tps;
+        /** 10 s average tick time of {@link #tpsWorld} in ms (compute time, not the interval). */
+        public Double mspt;
+        public int targetTps;
+        /** World the headline TPS belongs to: the one with the lowest TPS relative to its target. */
+        public String tpsWorld;
+    }
+
+    public static class ServerTps {
+        /** World with the lowest TPS relative to its target; null without worlds. */
+        public String world;
+        public Double tps;
+        public Double mspt;
+        public int targetTps;
+        public List<WorldPerf.Snapshot> worlds;
     }
 
     public static class PerformanceInfo {
-        public double tps;
-        public double mspt;
+        public Double tps;
+        public Double mspt;
+        public int targetTps;
+        public String tpsWorld;
         public int totalEntities;
         public int totalLoadedChunks;
-        public double cpuUsage;
-        public double processCpuUsage;
+        /** System CPU load in percent; omitted while unknown. */
+        public Double cpuUsage;
+        /** CPU load of the server process in percent; omitted while unknown. */
+        public Double processCpuUsage;
         public int threadCount;
+        public List<WorldPerf.Snapshot> worlds;
     }
 
     public static class MemoryInfo {

@@ -38,6 +38,59 @@ function getOrCreateStreamState(serverId: string): StreamState {
   return s;
 }
 
+// Commands of one console connection that may wait for their turn at once.
+const MAX_WAITING_COMMANDS = 20;
+
+/** A client's command request id, echoed back only if it is a short plain token. */
+function commandRequestId(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : undefined;
+}
+
+/**
+ * Run one command from the WS console and always answer it, so the client's
+ * pending reply block is resolved even when something throws.
+ */
+async function runConsoleCommand(
+  ws: WebSocket,
+  command: string,
+  requestId: string | undefined,
+): Promise<void> {
+  const reply = (body: Record<string, unknown>) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'command_response', requestId, command, ...body }));
+    }
+  };
+  try {
+    const wsUsername = clientUsernames.get(ws);
+    const wsServerId = clientServerId.get(ws);
+    // Same check as the HTTP console: whitelist, then the command's
+    // tier on the SAME server it will run on (so a per-server operator
+    // role is honoured), limited by the API key's scopes if any.
+    const auth = await authorizeCommand(
+      { username: wsUsername, apiKeyScopes: clientApiKeyScopes.get(ws) },
+      command,
+      wsServerId,
+    );
+    if (!auth.allowed) {
+      reply({ success: false, error: auth.error });
+      return;
+    }
+
+    const result = await execCommand(command, wsServerId, { actor: wsUsername });
+    reply({
+      success: result.success,
+      output: result.output || result.message,
+      lines: result.lines,
+      status: result.status,
+      via: result.via,
+      error: result.error,
+    });
+  } catch (error) {
+    console.error('WebSocket command error:', error);
+    reply({ success: false, error: 'Command failed' });
+  }
+}
+
 function getClientsForServer(serverId: string): Set<WebSocket> {
   let s = clientsByServer.get(serverId);
   if (!s) {
@@ -178,45 +231,39 @@ export function setupWebSocket(wss: WebSocketServer): void {
       startLogStreaming(serverId);
     }
 
+    // Commands run one after another per console, in the order they were
+    // typed, as they did when every command went to stdin. The queue is
+    // bounded, so a client cannot pile up thousands of waiting commands.
+    let commandQueue: Promise<void> = Promise.resolve();
+    let waitingCommands = 0;
+
     ws.on('message', async (data: Buffer) => {
       try {
         const message: WsMessage = JSON.parse(data.toString());
 
         switch (message.type) {
           case 'command':
-            if (message.payload) {
-              const wsUsername = clientUsernames.get(ws);
-              const wsServerId = clientServerId.get(ws);
-              // Same check as the HTTP console: whitelist, then the command's
-              // tier on the SAME server it will run on (so a per-server operator
-              // role is honoured), limited by the API key's scopes if any.
-              const auth = await authorizeCommand(
-                { username: wsUsername, apiKeyScopes: clientApiKeyScopes.get(ws) },
-                message.payload,
-                wsServerId,
-              );
-              if (!auth.allowed) {
+            if (typeof message.payload === 'string' && message.payload) {
+              const payload = message.payload;
+              const requestId = commandRequestId(message.requestId);
+              if (waitingCommands >= MAX_WAITING_COMMANDS) {
                 ws.send(
                   JSON.stringify({
                     type: 'command_response',
-                    command: message.payload,
+                    requestId,
+                    command: payload,
                     success: false,
-                    error: auth.error,
+                    error: `Too many commands waiting (${MAX_WAITING_COMMANDS}); try again when the earlier ones have finished`,
                   }),
                 );
                 break;
               }
-
-              const result = await execCommand(message.payload, wsServerId);
-              ws.send(
-                JSON.stringify({
-                  type: 'command_response',
-                  command: message.payload,
-                  success: result.success,
-                  output: result.message,
-                  error: result.error,
-                }),
-              );
+              waitingCommands++;
+              commandQueue = commandQueue
+                .then(() => runConsoleCommand(ws, payload, requestId))
+                .finally(() => {
+                  waitingCommands--;
+                });
             }
             break;
 
