@@ -19,6 +19,21 @@ fs.mkdirSync(tmpDir, { recursive: true });
 process.env.MANAGER_DATA_PATH = tmpDir;
 delete process.env.DEMO_MODE;
 
+// In the stack the plugin listens on its fixed port inside each container;
+// here the stand-in runs on a random local port.
+const pluginPorts = vi.hoisted(() => new Map<string, number>());
+vi.mock('./serverContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./serverContext.js')>();
+  return {
+    ...actual,
+    getServerContext: async (id?: string | null) => {
+      const ctx = await actual.getServerContext(id);
+      const port = pluginPorts.get(ctx.id);
+      return port ? { ...ctx, plugin: { ...ctx.plugin, port } } : ctx;
+    },
+  };
+});
+
 const ts = '2026-10-22T12:39:50.682345300Z';
 
 // Recorded from the plugin on a 0.7.3 server (scratch copy).
@@ -226,6 +241,7 @@ describe('plugin WebSocket to panel event', () => {
       socket.send(JSON.stringify(recorded.pluginUnloaded));
     });
     const port = (wss.address() as AddressInfo).port;
+    pluginPorts.set('live', port);
     fs.writeFileSync(
       path.join(tmpDir, 'servers.json'),
       JSON.stringify({

@@ -36,6 +36,46 @@ export interface User {
   createdAt: string;
   lastLogin?: string;
   tokenVersion: number;
+  /** Servers the account may use. Absent = every server, [] = none. Admins ('*') ignore it. */
+  allowedServers?: string[];
+}
+
+/**
+ * The servers an account is limited to, or null when it may use every server.
+ * Fails closed: a missing account or a value that is not a list of ids
+ * (hand-edited or damaged users.json) limits it to no server at all.
+ */
+export function allowedServersOf(
+  user: Pick<User, 'username' | 'allowedServers'> | null,
+): string[] | null {
+  if (!user) return [];
+  const value = (user as { allowedServers?: unknown }).allowedServers;
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value) && value.every((id) => typeof id === 'string')) {
+    return [...new Set(value as string[])];
+  }
+  console.error(
+    `[Users] allowedServers of "${user.username}" is not a list of server ids; treating it as no server`,
+  );
+  return [];
+}
+
+/**
+ * The account fields the API hands out. users.json also holds other modules'
+ * per-user data (2FA secrets, backup-code hashes, SSO links); none of it may
+ * leave this module through a user listing or an update reply.
+ */
+function toPublicUser(user: User): Omit<User, 'passwordHash'> {
+  const publicUser: Omit<User, 'passwordHash'> = {
+    username: user.username,
+    roleId: user.roleId,
+    createdAt: user.createdAt,
+    tokenVersion: user.tokenVersion,
+  };
+  if (user.lastLogin !== undefined) publicUser.lastLogin = user.lastLogin;
+  const allowed = allowedServersOf(user);
+  if (allowed !== null) publicUser.allowedServers = allowed;
+  return publicUser;
 }
 
 // A valid bcrypt hash compared against when the supplied username doesn't
@@ -210,7 +250,7 @@ export async function getAllUsers(): Promise<Omit<User, 'passwordHash'>[]> {
   }
 
   const data = await readUsers();
-  return data.users.map(({ passwordHash, ...user }) => user);
+  return data.users.map(toPublicUser);
 }
 
 // Get user by username
@@ -282,11 +322,20 @@ export async function verifyUserCredentials(
   return user;
 }
 
+/** Accounts only get roles that exist; anything else would break every rights lookup. */
+async function assertKnownRole(roleId: unknown): Promise<void> {
+  if (typeof roleId !== 'string' || roleId === '') throw new Error('roleId must be a role id');
+  // roles.ts imports this module; importing it lazily keeps the cycle out of load time.
+  const { roleExists } = await import('./roles.js');
+  if (!(await roleExists(roleId))) throw new Error(`Unknown role: ${roleId}`);
+}
+
 // Create new user
 export async function createUser(
   username: string,
   password: string,
   roleId: string = 'viewer',
+  allowedServers: string[] | null = null,
 ): Promise<Omit<User, 'passwordHash'>> {
   const data = await readUsers();
 
@@ -307,6 +356,7 @@ export async function createUser(
   if (policyError) {
     throw new Error(policyError);
   }
+  await assertKnownRole(roleId);
 
   // SECURITY: Use async bcrypt to prevent blocking the event loop
   const passwordHash = await bcrypt.hash(password, 12);
@@ -317,6 +367,8 @@ export async function createUser(
     roleId,
     createdAt: new Date().toISOString(),
     tokenVersion: 1,
+    // Written with the account, so it never exists without its list.
+    ...(allowedServers === null ? {} : { allowedServers: [...new Set(allowedServers)] }),
   };
 
   await updateUsers((current) => {
@@ -326,8 +378,7 @@ export async function createUser(
     current.users.push(newUser);
   });
 
-  const { passwordHash: _, ...userWithoutPassword } = newUser;
-  return userWithoutPassword;
+  return toPublicUser(newUser);
 }
 
 // Update user
@@ -339,6 +390,7 @@ export async function updateUser(
   if (findUserIndex(data, username) === -1) {
     throw new Error('User not found');
   }
+  if (updates.roleId) await assertKnownRole(updates.roleId);
 
   // Hash outside the lock: bcrypt takes ~250 ms and would stall every other
   // users.json write (logins, 2FA) meanwhile.
@@ -372,8 +424,41 @@ export async function updateUser(
     updated = user;
   });
 
-  const { passwordHash: _, ...userWithoutPassword } = updated!;
-  return userWithoutPassword;
+  return toPublicUser(updated!);
+}
+
+/**
+ * Set (list) or clear (null = every server) the servers an account may use.
+ * Sessions stay valid: every request reads the list from users.json again.
+ */
+export async function setUserAllowedServers(
+  username: string,
+  serverIds: string[] | null,
+): Promise<Omit<User, 'passwordHash'>> {
+  let updated: User | undefined;
+  await updateUsers((current) => {
+    const user = current.users.find((u) => u.username === username);
+    if (!user) throw new Error('User not found');
+    if (serverIds === null) delete user.allowedServers;
+    else user.allowedServers = [...new Set(serverIds)];
+    updated = user;
+  });
+  return toPublicUser(updated!);
+}
+
+/** Take a deleted server off every account's list. Returns how many lists changed. */
+export async function removeServerFromAllowedLists(serverId: string): Promise<number> {
+  let changed = 0;
+  await updateUsers((current) => {
+    for (const user of current.users) {
+      const list = user.allowedServers;
+      if (!Array.isArray(list) || !list.includes(serverId)) continue;
+      user.allowedServers = list.filter((id) => id !== serverId);
+      changed++;
+    }
+    return changed > 0;
+  });
+  return changed;
 }
 
 // Delete user

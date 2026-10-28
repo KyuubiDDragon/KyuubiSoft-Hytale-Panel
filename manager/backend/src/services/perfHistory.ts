@@ -6,11 +6,12 @@
  * keeps the last {@link MAX_SAMPLES} so the panel can draw time-series charts
  * without a persistent store. Transient by design — history resets on restart.
  *
- * TPS is the default server's slowest world relative to its target, stored
- * together with that target so the chart can scale to it (Hytale: 30 TPS).
+ * Every registered server has its own buffer. TPS is that server's slowest
+ * world relative to its target, stored together with that target so the
+ * chart can scale to it (Hytale: 30 TPS).
  */
 import { getStats } from './docker.js';
-import { getDefaultId } from './servers.js';
+import { listServers, onServerDeleted, resolveServerId } from './servers.js';
 import { slowestWorld, startTpsState, type WorldTick } from './tpsState.js';
 
 export interface PerfSample {
@@ -30,7 +31,7 @@ const SAMPLE_INTERVAL_MS = 10_000;
 // A world that sent nothing for this long counts as "no reading" (gap).
 const TPS_MAX_AGE_MS = 30_000;
 
-const buffer: PerfSample[] = [];
+const buffers = new Map<string, PerfSample[]>();
 let timer: NodeJS.Timeout | null = null;
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
@@ -50,36 +51,58 @@ export function tpsFields(
   };
 }
 
-async function sample(): Promise<void> {
+/** Takes one sample of a server into its buffer. */
+export async function sampleServer(serverId: string, now: number = Date.now()): Promise<void> {
   let cpu: number | null = null;
   let mem: number | null = null;
   try {
-    const s = await getStats();
+    const s = await getStats(serverId);
     if (typeof s.cpu_percent === 'number') cpu = round1(s.cpu_percent);
     if (typeof s.memory_percent === 'number') mem = round1(s.memory_percent);
   } catch {
     // Server may be down — record a gap (nulls) rather than dropping the tick.
   }
-  let tick: WorldTick | null = null;
-  try {
-    tick = slowestWorld(await getDefaultId(), TPS_MAX_AGE_MS);
-  } catch {
-    // Registry not ready: no TPS for this sample.
+  const tick: WorldTick | null = slowestWorld(serverId, TPS_MAX_AGE_MS, now);
+  let buffer = buffers.get(serverId);
+  if (!buffer) {
+    buffer = [];
+    buffers.set(serverId, buffer);
   }
-  buffer.push({ ts: Date.now(), ...tpsFields(tick), cpu, mem });
+  buffer.push({ ts: now, ...tpsFields(tick), cpu, mem });
   while (buffer.length > MAX_SAMPLES) buffer.shift();
+}
+
+let sampling = false;
+
+async function sampleAll(): Promise<void> {
+  // A slow Docker answer must not stack up sampling rounds.
+  if (sampling) return;
+  sampling = true;
+  try {
+    const servers = await listServers();
+    await Promise.all(servers.map((s) => sampleServer(s.id).catch(() => {})));
+  } finally {
+    sampling = false;
+  }
 }
 
 export function startPerfHistory(): void {
   if (timer) return;
   startTpsState();
+  onServerDeleted((serverId) => {
+    buffers.delete(serverId);
+  });
   timer = setInterval(() => {
-    sample().catch(() => {});
+    sampleAll().catch(() => {});
   }, SAMPLE_INTERVAL_MS);
   timer.unref?.();
   console.log('[perf] history sampling started');
 }
 
-export function getPerfHistory(): { intervalMs: number; samples: PerfSample[] } {
-  return { intervalMs: SAMPLE_INTERVAL_MS, samples: buffer.slice() };
+/** A server's samples, oldest first; `undefined` is the default server. */
+export async function getPerfHistory(
+  serverId?: string,
+): Promise<{ intervalMs: number; samples: PerfSample[] }> {
+  const id = await resolveServerId(serverId);
+  return { intervalMs: SAMPLE_INTERVAL_MS, samples: (buffers.get(id) ?? []).slice() };
 }

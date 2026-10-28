@@ -8,6 +8,7 @@ import { readdir, stat } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
+import { requireServerFiles } from '../../middleware/serverScope.js';
 import { audit } from '../../services/audit.js';
 import {
   isDemoMode,
@@ -128,6 +129,7 @@ router.get(
   '/quick-settings',
   authMiddleware,
   requirePermission('config.view'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -178,6 +180,7 @@ router.put(
   '/quick-settings',
   authMiddleware,
   requirePermission('config.edit'),
+  requireServerFiles,
   requireRestartPermissionIfAsked,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
@@ -316,6 +319,7 @@ router.get(
   '/config/files',
   authMiddleware,
   requirePermission('config.view'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -368,6 +372,7 @@ router.get(
   '/config/:filename',
   authMiddleware,
   requirePermission('config.view'),
+  requireServerFiles,
   guardAccessFileReads,
   async (req: AuthenticatedRequest, res: Response) => {
     const filename = configFileName(req.params.filename);
@@ -518,6 +523,7 @@ router.put(
   '/config/:filename',
   authMiddleware,
   requirePermission('config.edit'),
+  requireServerFiles,
   requireRestartPermissionIfAsked,
   guardAccessFiles,
   async (req: AuthenticatedRequest, res: Response) => {

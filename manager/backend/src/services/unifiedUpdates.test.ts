@@ -4,6 +4,7 @@
  * unified update status must never pass them through raw.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { serverContextIn } from '../test/serverContextStub.js';
 
 vi.mock('./cfwidget.js', () => ({
   getUpdateStatus: async () => ({ mods: [] }),
@@ -53,7 +54,8 @@ const { getUnifiedUpdateStatus } = await import('./unifiedUpdates.js');
 
 describe('getUnifiedUpdateStatus changelog sanitizing', () => {
   it('sanitizes CurseForge, Modtale and GitHub changelogs', async () => {
-    const status = await getUnifiedUpdateStatus();
+    // The sources are mocked; nothing is read from the server's folders.
+    const status = await getUnifiedUpdateStatus(serverContextIn('/tmp/kp-unified'));
     const bySource = Object.fromEntries(status.mods.map((m) => [m.source, m.changelog]));
 
     expect(bySource.curseforge).toBe('<p>CF notes</p>');

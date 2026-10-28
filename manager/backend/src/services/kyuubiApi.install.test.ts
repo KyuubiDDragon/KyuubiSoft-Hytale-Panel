@@ -19,6 +19,7 @@ vi.mock('./servers.js', () => ({
   getDefaultId: async () => 'default',
   getServer: async (id: string) => ({ id, paths: { mods: modsDir } }),
   resolveServerId: async (id?: string) => id ?? 'default',
+  isComposeServer: (s: { id: string }) => s.id === 'default',
 }));
 vi.mock('./pluginAuth.js', () => ({
   ensurePluginAuthConfig: (id?: string) => ensurePluginAuthConfig(id),

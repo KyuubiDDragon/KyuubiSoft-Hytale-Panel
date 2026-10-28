@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename, access } from 'fs/promises';
+import { readFile, mkdir, access } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import {
@@ -8,8 +8,9 @@ import {
   DEFAULT_ROLES,
   PermissionEntry,
 } from '../types/permissions.js';
-import { getUser, getAllUsers, invalidateUserTokens } from './users.js';
+import { getUser, getAllUsers, invalidateUserTokens, allowedServersOf } from './users.js';
 import { isDemoMode } from './demoData.js';
+import { withFileLock, writeJsonAtomic } from '../utils/jsonStore.js';
 
 // Path to roles file in the persistent data volume
 const DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
@@ -37,14 +38,13 @@ async function readRoles(): Promise<RolesData> {
   }
 }
 
-// Write roles to file using atomic write (write to .tmp then rename)
+// Write roles to file atomically (own temp file, fsync, rename), one write at a
+// time: several first reads that each create the defaults must not rename
+// over each other (EPERM on Windows).
 async function writeRoles(data: RolesData): Promise<void> {
   await ensureDataDir();
   data.lastModified = new Date().toISOString();
-
-  const tmpFile = `${ROLES_FILE}.tmp`;
-  await writeFile(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
-  await rename(tmpFile, ROLES_FILE);
+  await withFileLock(ROLES_FILE, () => writeJsonAtomic(ROLES_FILE, data));
 }
 
 // Map role names to fixed IDs for backward compatibility
@@ -55,6 +55,39 @@ const SYSTEM_ROLE_IDS: Record<string, string> = {
   Viewer: 'viewer',
 };
 
+// Lower-case names getUserPermissions resolves legacy role ids by, and the id each belongs to.
+const LEGACY_ROLE_NAMES: Record<string, string> = {
+  administrator: 'admin',
+  admin: 'admin',
+  moderator: 'moderator',
+  operator: 'operator',
+  viewer: 'viewer',
+};
+
+/**
+ * Role names are unique regardless of case and never take a legacy role name,
+ * another role's id or a role id an account still carries: an account whose
+ * role id does not resolve is matched by name, so such a name would hand its
+ * permissions to other accounts.
+ */
+async function assertRoleNameFree(data: RolesData, name: string, self: Role | null): Promise<void> {
+  const lower = name.trim().toLowerCase();
+  if (data.roles.some((r) => r !== self && r.name.trim().toLowerCase() === lower)) {
+    throw new Error('Role name already exists');
+  }
+  const legacyId = LEGACY_ROLE_NAMES[lower];
+  const takenIds = [
+    ...data.roles.filter((r) => r !== self).map((r) => r.id),
+    ...(await getAllUsers()).map((u) => u.roleId).filter((id) => id !== self?.id),
+  ];
+  if (
+    (legacyId !== undefined && self?.id !== legacyId) ||
+    takenIds.some((id) => typeof id === 'string' && id.toLowerCase() === lower)
+  ) {
+    throw new Error('Role name is reserved');
+  }
+}
+
 /**
  * Permissions added after roles.json was first written. New installs get them
  * through DEFAULT_ROLES. An existing file runs each entry once: every built-in
@@ -64,6 +97,21 @@ const SYSTEM_ROLE_IDS: Record<string, string> = {
  */
 const PERMISSION_MIGRATIONS: ReadonlyArray<{ id: string; permissions: readonly Permission[] }> = [
   { id: 'mod-panel-permissions', permissions: ['mods.panel.view', 'mods.panel.action'] },
+];
+
+/**
+ * Permissions split off an existing one. An existing file runs each entry
+ * once: every role holding `from`, built-in or custom, also gets `grant`, so
+ * nobody loses what the role could do before the split. Recorded in
+ * appliedMigrations like the entries above, so a later removal sticks.
+ */
+const IMPLIED_PERMISSION_MIGRATIONS: ReadonlyArray<{
+  id: string;
+  from: Permission;
+  grant: readonly Permission[];
+}> = [
+  // Editing servers and reconciling their containers needed servers.create before.
+  { id: 'servers-manage-permission', from: 'servers.create', grant: ['servers.manage'] },
 ];
 
 // Create default roles data structure
@@ -83,7 +131,9 @@ function createDefaultRolesData(): RolesData {
     version: 1,
     lastModified: now,
     // DEFAULT_ROLES already contains every migrated permission.
-    appliedMigrations: PERMISSION_MIGRATIONS.map((m) => m.id),
+    appliedMigrations: [...PERMISSION_MIGRATIONS, ...IMPLIED_PERMISSION_MIGRATIONS].map(
+      (m) => m.id,
+    ),
   };
 }
 
@@ -107,6 +157,33 @@ export function migrateSystemRolePermissions(data: RolesData): boolean {
       );
       if (missing.length === 0) continue;
       console.log(`[Roles] Granting ${missing.join(', ')} to built-in role "${role.name}"`);
+      role.permissions = [...role.permissions, ...missing];
+      role.updatedAt = new Date().toISOString();
+    }
+    applied.add(migration.id);
+  }
+  data.appliedMigrations = [...applied];
+  return true;
+}
+
+/**
+ * Give every role of an existing roles.json that holds a split-off
+ * permission its new part (IMPLIED_PERMISSION_MIGRATIONS). Idempotent like
+ * migrateSystemRolePermissions. Returns whether `data` changed.
+ */
+export function migrateImpliedPermissions(data: RolesData): boolean {
+  const applied = new Set(data.appliedMigrations ?? []);
+  const pending = IMPLIED_PERMISSION_MIGRATIONS.filter((m) => !applied.has(m.id));
+  if (pending.length === 0) return false;
+
+  for (const migration of pending) {
+    for (const role of data.roles) {
+      if (role.permissions.includes('*') || !role.permissions.includes(migration.from)) continue;
+      const missing = migration.grant.filter((p) => !role.permissions.includes(p));
+      if (missing.length === 0) continue;
+      console.log(
+        `[Roles] Granting ${missing.join(', ')} to role "${role.name}" (has ${migration.from})`,
+      );
       role.permissions = [...role.permissions, ...missing];
       role.updatedAt = new Date().toISOString();
     }
@@ -167,7 +244,9 @@ export async function initializeRoles(): Promise<void> {
     // Check for migrations on existing data
     const data = await readRoles();
     const migrated = await migrateSystemRoleDescriptions(data);
-    const granted = migrateSystemRolePermissions(data);
+    const builtInGranted = migrateSystemRolePermissions(data);
+    const impliedGranted = migrateImpliedPermissions(data);
+    const granted = builtInGranted || impliedGranted;
     if (migrated || granted) {
       data.version += 1;
       await writeRoles(data);
@@ -271,10 +350,7 @@ export async function createRole(roleData: {
   const data = await readRoles();
   const now = new Date().toISOString();
 
-  // Check if role name already exists
-  if (data.roles.some((r) => r.name === roleData.name)) {
-    throw new Error('Role name already exists');
-  }
+  await assertRoleNameFree(data, roleData.name, null);
 
   const newRole: Role = {
     id: randomUUID(),
@@ -321,9 +397,7 @@ export async function updateRole(
 
   // Check if new name conflicts with existing role
   if (updates.name && updates.name !== role.name) {
-    if (data.roles.some((r) => r.name === updates.name && r.id !== id)) {
-      throw new Error('Role name already exists');
-    }
+    await assertRoleNameFree(data, updates.name, role);
   }
 
   // Check if permissions are being changed
@@ -458,7 +532,7 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
   let role = await getRole(roleId);
 
   if (role) {
-    return role.permissions;
+    return withoutAccountRightsIfLimited(user, role.permissions);
   }
 
   // If not found by UUID, try to match by legacy role name
@@ -476,10 +550,42 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
     roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId) ?? null;
 
   if (role) {
-    return role.permissions;
+    return withoutAccountRightsIfLimited(user, role.permissions);
   }
 
   return [];
+}
+
+/**
+ * Panel-wide rights that a user with a server list does not get, whatever the
+ * role says. Accounts, roles and other users' keys reach every server: an
+ * account such a user creates, or a password they reset, would not be bound to
+ * their list. The account list shows every account with its servers; webhooks,
+ * panel settings and the audit log show or affect every server. A deliberately
+ * coarse cut until these features know about servers.
+ */
+export const PANEL_WIDE_RIGHTS: ReadonlySet<string> = new Set([
+  'users.view',
+  'users.create',
+  'users.edit',
+  'users.delete',
+  'roles.manage',
+  'apikeys.manage.all',
+  'webhooks.manage',
+  'settings.edit',
+  'audit.view',
+  'audit.export',
+  // One activity log for the whole panel.
+  'activity.view',
+  'activity.clear',
+]);
+
+function withoutAccountRightsIfLimited(
+  user: Parameters<typeof allowedServersOf>[0],
+  permissions: PermissionEntry[],
+): PermissionEntry[] {
+  if (permissions.includes('*') || allowedServersOf(user) === null) return permissions;
+  return permissions.filter((p) => !PANEL_WIDE_RIGHTS.has(p));
 }
 
 /**
@@ -489,9 +595,15 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
  * are a subset of their own (no privilege escalation via user create/update).
  */
 export async function getRolePermissions(roleId: string): Promise<PermissionEntry[]> {
-  if (!roleId) return [];
-  let role = await getRole(roleId);
-  if (role) return role.permissions;
+  const role = await resolveRole(roleId);
+  return role ? role.permissions : [];
+}
+
+// The role a role id stands for: by id, else by legacy name (as getUserPermissions does).
+async function resolveRole(roleId: string): Promise<Role | null> {
+  if (!roleId) return null;
+  const role = await getRole(roleId);
+  if (role) return role;
   const roles = await getAllRoles();
   const roleNameMap: Record<string, string> = {
     admin: 'Administrator',
@@ -500,15 +612,23 @@ export async function getRolePermissions(roleId: string): Promise<PermissionEntr
     viewer: 'Viewer',
   };
   const roleName = roleNameMap[roleId] || roleId;
-  role =
-    roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId) ?? null;
-  return role ? role.permissions : [];
+  return (
+    roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId) ?? null
+  );
+}
+
+/** Does this role id stand for a role? The built-in admin always does. */
+export async function roleExists(roleId: string): Promise<boolean> {
+  return roleId === 'admin' || (await resolveRole(roleId)) !== null;
 }
 
 /**
  * Permissions effective for a user on a particular server. Resolves the
  * hybrid model: a global role from users.json plus optional per-server
  * role overrides in user.serverScopes[serverId].roleId.
+ *
+ * A user with an allowedServers list has no permissions at all on a server
+ * outside it; the per-server overrides only apply inside the list.
  *
  * When serverId is omitted only the global role's permissions are returned
  * — that's the right answer for routes that aren't scoped to one server
@@ -520,8 +640,10 @@ export async function getUserPermissionsForServer(
 ): Promise<PermissionEntry[]> {
   const global = await getUserPermissions(username);
   if (!serverId) return global;
-  if (global.includes('*')) return global; // admins bypass scoping
+  if (global.includes('*')) return global; // admins bypass scoping and the server list
   const user = await getUser(username);
+  const allowed = allowedServersOf(user);
+  if (allowed !== null && !allowed.includes(serverId)) return [];
   const userAny = user as unknown as { serverScopes?: Record<string, { roleId: string }> } | null;
   const scopedRoleId = userAny?.serverScopes?.[serverId]?.roleId;
   if (!scopedRoleId) return global;
@@ -532,7 +654,10 @@ export async function getUserPermissionsForServer(
   // Per-server permissions ADD to the global set (least surprise: granting
   // a scoped operator role to a viewer makes them an operator on that server,
   // never less).
-  return Array.from(new Set([...global, ...role.permissions])) as PermissionEntry[];
+  return withoutAccountRightsIfLimited(
+    user,
+    Array.from(new Set([...global, ...role.permissions])) as PermissionEntry[],
+  );
 }
 
 // Check if user has specific permission (handle '*' wildcard for admin)
@@ -549,4 +674,20 @@ export async function hasPermission(
   }
 
   return permissions.includes(permission);
+}
+
+/**
+ * The servers a user may use: null = every server (no allowedServers list, or
+ * an admin '*' role, which ignores the list), otherwise the allowed ids.
+ */
+export async function getUserAllowedServers(username: string): Promise<string[] | null> {
+  const global = await getUserPermissions(username);
+  if (global.includes('*')) return null;
+  return allowedServersOf(await getUser(username));
+}
+
+/** May the user act on this server at all (before any per-permission check)? */
+export async function userMayAccessServer(username: string, serverId: string): Promise<boolean> {
+  const allowed = await getUserAllowedServers(username);
+  return allowed === null || allowed.includes(serverId);
 }

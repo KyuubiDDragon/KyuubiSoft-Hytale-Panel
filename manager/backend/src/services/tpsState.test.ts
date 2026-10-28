@@ -68,9 +68,11 @@ describe('recordServerTick', () => {
     expect(getWorldTicks('srv', FRESH, NOW)).toEqual([]);
   });
 
-  it('falls back to frames without a server id', () => {
+  it('keeps the servers apart and drops frames without a server id', () => {
     recordServerTick({ tps: 25, targetTps: 30 }, NOW);
-    expect(getWorldTicks('anything', FRESH, NOW)).toHaveLength(1);
+    recordServerTick({ serverId: 'other', tps: 12, targetTps: 30 }, NOW);
+    expect(getWorldTicks('srv', FRESH, NOW)).toEqual([]);
+    expect(getWorldTicks('other', FRESH, NOW)).toHaveLength(1);
   });
 
   it('drops stale readings', () => {

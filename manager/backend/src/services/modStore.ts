@@ -5,12 +5,15 @@ import { logger } from '../utils/logger.js';
  * Supports external mod registry from kyuubisoft.com
  */
 
-import { writeFile, mkdir, access, readFile } from 'fs/promises';
+import { mkdir, access } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import http from 'http';
-import { config } from '../config.js';
 import { assertSafeResolvedUrl, UnsafeUrlError } from '../utils/urlGuard.js';
+import { readRegularFile, replaceFileContent, UnsafeFileError } from '../utils/noFollowFs.js';
+import { resolveRealPathWithin } from '../utils/pathSecurity.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
+import type { ServerContext } from './serverContext.js';
 
 // External registry URL
 const EXTERNAL_REGISTRY_URL = 'https://kyuubisoft.com/hytale-mods.json';
@@ -57,7 +60,7 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
     github: 'cryptobench/EasyWebMap',
     category: 'map',
     configTemplate: {
-      httpPort: 18081, // Placeholder - replaced with config.webMapPort during install
+      httpPort: 18081, // Placeholder - replaced with the server's web map port during install
       updateIntervalMs: 1000,
       tileCacheSize: 20000,
       enabledWorlds: [],
@@ -75,7 +78,7 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
       acmeEmail: '',
       useProductionAcme: true,
     },
-    configPath: 'cryptobench_EasyWebMap/config.json', // Relative to modsPath
+    configPath: 'cryptobench_EasyWebMap/config.json', // Relative to the mods folder
     ports: [{ name: 'HTTP', default: 18081, env: 'WEBMAP_PORT' }],
   },
 ];
@@ -285,6 +288,26 @@ export async function getLatestRelease(githubRepo: string): Promise<GitHubReleas
 const MAX_DOWNLOAD_REDIRECTS = 5;
 
 /**
+ * The game server can write to its mods folder: a folder below it that is a
+ * link out of it is refused, and files are replaced instead of written
+ * through a link planted under their name.
+ */
+async function writeModsFolderFile(modsDir: string, file: string, content: string): Promise<void> {
+  const dir = path.dirname(file);
+  if (!resolveRealPathWithin(dir, [modsDir])) {
+    throw new UnsafeFileError(dir, 'it lies outside the expected folder');
+  }
+  await mkdir(dir, { recursive: true });
+  await replaceFileContent(file, content, [modsDir]);
+}
+
+async function readModsFolderFile(modsDir: string, file: string): Promise<string> {
+  return (await readRegularFile(file, [modsDir], { maxBytes: MAX_SERVER_FILE_BYTES })).toString(
+    'utf-8',
+  );
+}
+
+/**
  * Download file from URL.
  *
  * SECURITY: the URL and every redirect target are SSRF-checked
@@ -335,7 +358,10 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
                 res.on('end', async () => {
                   try {
                     const buffer = Buffer.concat(chunks);
-                    await writeFile(destPath, buffer);
+                    // destPath is <mods folder>/<plain name>. The game server can
+                    // write to that folder: the file is replaced, never written
+                    // through a link planted under its name.
+                    await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
                     resolve(true);
                   } catch (e) {
                     logger.error('Failed to write file:', e);
@@ -470,6 +496,7 @@ function escapeRegex(str: string): string {
  * Check if a mod is installed
  */
 export async function isModInstalled(
+  server: ServerContext,
   modId: string,
   registry?: ModStoreEntry[],
 ): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
@@ -482,7 +509,7 @@ export async function isModInstalled(
   const { readdir } = await import('fs/promises');
 
   try {
-    const files = await readdir(config.modsPath);
+    const files = await readdir(server.paths.mods);
 
     // Check for mod file (precise matching to avoid false positives)
     for (const file of files) {
@@ -503,7 +530,7 @@ export async function isModInstalled(
 /**
  * Install a mod from the registry
  */
-export async function installMod(modId: string): Promise<InstallResult> {
+export async function installMod(server: ServerContext, modId: string): Promise<InstallResult> {
   logger.info(`[ModStore] installMod called for: ${modId}`);
   const registry = await getModRegistry();
   const mod = registry.find((m) => m.id === modId);
@@ -521,7 +548,7 @@ export async function installMod(modId: string): Promise<InstallResult> {
   }
 
   // Check if already installed
-  const installed = await isModInstalled(modId, registry);
+  const installed = await isModInstalled(server, modId, registry);
   if (installed.installed) {
     logger.info(`[ModStore] Mod already installed: ${installed.filename}`);
     return { success: false, error: `Mod already installed: ${installed.filename}` };
@@ -562,14 +589,15 @@ export async function installMod(modId: string): Promise<InstallResult> {
   }
 
   // Ensure mods directory exists
+  const modsDir = server.paths.mods;
   try {
-    await access(config.modsPath);
+    await access(modsDir);
   } catch {
-    await mkdir(config.modsPath, { recursive: true });
+    await mkdir(modsDir, { recursive: true });
   }
 
   // Download the JAR
-  const destPath = path.join(config.modsPath, filename);
+  const destPath = path.join(modsDir, filename);
   const downloaded = await downloadFile(downloadUrl, destPath);
 
   if (!downloaded) {
@@ -580,29 +608,24 @@ export async function installMod(modId: string): Promise<InstallResult> {
   let configCreated = false;
   if (mod.configTemplate && mod.configPath) {
     try {
-      // Config path is relative to modsPath (where the JAR is installed)
-      const configFullPath = path.join(config.modsPath, mod.configPath);
-      const configDir = path.dirname(configFullPath);
+      // Config path is relative to the mods folder (where the JAR is installed)
+      const configFullPath = path.join(modsDir, mod.configPath);
 
       // Create a copy of the template and apply dynamic port values
       const configData = { ...mod.configTemplate };
 
-      // For EasyWebMap, set the httpPort from environment/config
+      // For EasyWebMap, set the httpPort to the server's web map port
       if (modId === 'easywebmap' && 'httpPort' in configData) {
-        configData.httpPort = config.webMapPort;
-        logger.info(`[ModStore] Setting EasyWebMap httpPort to ${config.webMapPort}`);
+        configData.httpPort = server.network.webMapPort;
+        logger.info(`[ModStore] Setting EasyWebMap httpPort to ${server.network.webMapPort}`);
       }
-
-      logger.info(`[ModStore] Creating config directory: ${configDir}`);
-      await mkdir(configDir, { recursive: true });
 
       const configContent = JSON.stringify(configData, null, 2);
       logger.info(`[ModStore] Writing config file: ${configFullPath}`);
-      await writeFile(configFullPath, configContent, 'utf-8');
+      await writeModsFolderFile(modsDir, configFullPath, configContent);
 
       // Verify the config was written correctly
-      const { readFile } = await import('fs/promises');
-      const verifyContent = await readFile(configFullPath, 'utf-8');
+      const verifyContent = await readModsFolderFile(modsDir, configFullPath);
       if (verifyContent === configContent) {
         logger.info(`[ModStore] Config file verified successfully (${configContent.length} bytes)`);
         configCreated = true;
@@ -626,8 +649,11 @@ export async function installMod(modId: string): Promise<InstallResult> {
 /**
  * Uninstall a mod
  */
-export async function uninstallMod(modId: string): Promise<{ success: boolean; error?: string }> {
-  const installed = await isModInstalled(modId);
+export async function uninstallMod(
+  server: ServerContext,
+  modId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const installed = await isModInstalled(server, modId);
   if (!installed.installed || !installed.filename) {
     return { success: false, error: 'Mod not installed' };
   }
@@ -635,7 +661,7 @@ export async function uninstallMod(modId: string): Promise<{ success: boolean; e
   const { unlink } = await import('fs/promises');
 
   try {
-    await unlink(path.join(config.modsPath, installed.filename));
+    await unlink(path.join(server.paths.mods, installed.filename));
     return { success: true };
   } catch (e) {
     return { success: false, error: 'Failed to delete mod file' };
@@ -645,7 +671,10 @@ export async function uninstallMod(modId: string): Promise<{ success: boolean; e
 /**
  * Check if an update is available for a mod
  */
-export async function checkModUpdate(modId: string): Promise<{
+export async function checkModUpdate(
+  server: ServerContext,
+  modId: string,
+): Promise<{
   hasUpdate: boolean;
   installedVersion?: string;
   latestVersion?: string;
@@ -657,7 +686,7 @@ export async function checkModUpdate(modId: string): Promise<{
     return { hasUpdate: false, error: 'Mod not found' };
   }
 
-  const installed = await isModInstalled(modId, registry);
+  const installed = await isModInstalled(server, modId, registry);
   if (!installed.installed || !installed.installedVersion) {
     return { hasUpdate: false, error: 'Mod not installed or version unknown' };
   }
@@ -696,7 +725,7 @@ export async function checkModUpdate(modId: string): Promise<{
 /**
  * Update a mod to the latest version
  */
-export async function updateMod(modId: string): Promise<InstallResult> {
+export async function updateMod(server: ServerContext, modId: string): Promise<InstallResult> {
   const registry = await getModRegistry();
   const mod = registry.find((m) => m.id === modId);
   if (!mod) {
@@ -704,7 +733,7 @@ export async function updateMod(modId: string): Promise<InstallResult> {
   }
 
   // Check if installed
-  const installed = await isModInstalled(modId, registry);
+  const installed = await isModInstalled(server, modId, registry);
   if (!installed.installed || !installed.filename) {
     return { success: false, error: 'Mod not installed' };
   }
@@ -755,14 +784,14 @@ export async function updateMod(modId: string): Promise<InstallResult> {
 
   // Delete old version
   try {
-    await unlink(path.join(config.modsPath, installed.filename));
+    await unlink(path.join(server.paths.mods, installed.filename));
   } catch (e) {
     logger.error('Failed to delete old mod file:', e);
     // Continue anyway - download new version
   }
 
   // Download new version
-  const destPath = path.join(config.modsPath, filename);
+  const destPath = path.join(server.paths.mods, filename);
   const downloaded = await downloadFile(downloadUrl, destPath);
 
   if (!downloaded) {
@@ -779,7 +808,7 @@ export async function updateMod(modId: string): Promise<InstallResult> {
 /**
  * Get all available mods with installation status and update info
  */
-export async function getAvailableMods(): Promise<
+export async function getAvailableMods(server: ServerContext): Promise<
   (ModStoreEntry & {
     installed: boolean;
     installedFilename?: string;
@@ -792,7 +821,7 @@ export async function getAvailableMods(): Promise<
   const result = [];
 
   for (const mod of registry) {
-    const status = await isModInstalled(mod.id, registry);
+    const status = await isModInstalled(server, mod.id, registry);
 
     let latestVersion: string | undefined;
     let hasUpdate = false;
@@ -848,14 +877,14 @@ export function getRegistryInfo(): { url: string; cached: boolean; cacheAge?: nu
  * Ensure EasyWebMap config exists and has correct port
  * This can be called after server startup to fix config if mod created default
  */
-export async function ensureEasyWebMapConfig(): Promise<{
+export async function ensureEasyWebMapConfig(server: ServerContext): Promise<{
   success: boolean;
   created: boolean;
   updated: boolean;
   error?: string;
 }> {
-  const configPath = path.join(config.modsPath, 'cryptobench_EasyWebMap/config.json');
-  const expectedPort = config.webMapPort;
+  const configPath = path.join(server.paths.mods, 'cryptobench_EasyWebMap/config.json');
+  const expectedPort = server.network.webMapPort;
 
   logger.info(
     `[ModStore] ensureEasyWebMapConfig: checking ${configPath}, expected port: ${expectedPort}`,
@@ -863,26 +892,16 @@ export async function ensureEasyWebMapConfig(): Promise<{
 
   try {
     // Check if EasyWebMap is installed
-    const installed = await isModInstalled('easywebmap');
+    const installed = await isModInstalled(server, 'easywebmap');
     if (!installed.installed) {
       logger.info('[ModStore] EasyWebMap not installed, skipping config check');
       return { success: true, created: false, updated: false };
     }
 
-    // Check if config directory exists
-    const configDir = path.dirname(configPath);
-    try {
-      await access(configDir);
-    } catch {
-      // Directory doesn't exist, create it with our config
-      logger.info(`[ModStore] Creating config directory: ${configDir}`);
-      await mkdir(configDir, { recursive: true });
-    }
-
     // Check if config file exists
     let existingConfig: Record<string, unknown> | null = null;
     try {
-      const content = await readFile(configPath, 'utf-8');
+      const content = await readModsFolderFile(server.paths.mods, configPath);
       existingConfig = JSON.parse(content);
       logger.info(
         `[ModStore] Found existing config, httpPort: ${(existingConfig as { httpPort?: number }).httpPort}`,
@@ -909,7 +928,7 @@ export async function ensureEasyWebMapConfig(): Promise<{
     if (!existingConfig) {
       // Create new config
       const newConfig = { ...mod.configTemplate, httpPort: expectedPort };
-      await writeFile(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+      await writeModsFolderFile(server.paths.mods, configPath, JSON.stringify(newConfig, null, 2));
       logger.info(`[ModStore] Created new EasyWebMap config with httpPort: ${expectedPort}`);
       return { success: true, created: true, updated: false };
     }
@@ -917,7 +936,11 @@ export async function ensureEasyWebMapConfig(): Promise<{
     // Check if port needs updating
     if ((existingConfig as { httpPort?: number }).httpPort !== expectedPort) {
       (existingConfig as { httpPort: number }).httpPort = expectedPort;
-      await writeFile(configPath, JSON.stringify(existingConfig, null, 2), 'utf-8');
+      await writeModsFolderFile(
+        server.paths.mods,
+        configPath,
+        JSON.stringify(existingConfig, null, 2),
+      );
       logger.info(`[ModStore] Updated EasyWebMap config httpPort to: ${expectedPort}`);
       return { success: true, created: false, updated: true };
     }

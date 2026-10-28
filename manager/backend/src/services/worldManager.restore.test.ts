@@ -19,10 +19,16 @@ process.env.MANAGER_DATA_PATH = path.join(root, 'manager');
 fs.mkdirSync(process.env.MANAGER_DATA_PATH, { recursive: true });
 
 const { lifecycle } = vi.hoisted(() => ({ lifecycle: [] as string[] }));
-vi.mock('./managementHelpers.js', () => ({ getWorldsPaths: () => [worldsDir] }));
+// The worlds dir is the default server's data/worlds (worldRoots of its context).
 vi.mock('./servers.js', () => ({
   getDefaultId: async () => 'default',
-  getServer: async () => ({ paths: { backups: backupsDir, server: process.env.SERVER_PATH } }),
+  resolveServerId: async (id?: string) => id || 'default',
+  resolveServerIdSync: (id?: string) => id || 'default',
+  isComposeServer: (s: { id: string }) => s.id === 'default',
+  getServer: async (id: string) =>
+    id === 'default'
+      ? { id, paths: { backups: backupsDir, server: process.env.SERVER_PATH, data: dataDir } }
+      : null,
   listServers: async () => [],
 }));
 vi.mock('./serverLifecycle.js', () => ({
@@ -141,9 +147,13 @@ describe('world backup ids', () => {
 
     const listed = (await worlds.listWorldBackups()).map((b) => b.world).sort();
     expect(listed).toEqual(['My World', 'Spawn']);
-    expect(await worlds.deleteWorldBackup('world_Spawn_2026-10-22-0304.tar.gz')).toEqual({ success: true });
+    expect(await worlds.deleteWorldBackup('world_Spawn_2026-10-22-0304.tar.gz')).toEqual({
+      success: true,
+    });
     expect(fs.existsSync(path.join(backupsDir, 'world_Spawn_2026-10-22-0304.tar.gz'))).toBe(false);
-    expect(await worlds.deleteWorldBackup('world_x_2026-10-22.tar.gz')).toMatchObject({ success: false });
+    expect(await worlds.deleteWorldBackup('world_x_2026-10-22.tar.gz')).toMatchObject({
+      success: false,
+    });
   });
 });
 

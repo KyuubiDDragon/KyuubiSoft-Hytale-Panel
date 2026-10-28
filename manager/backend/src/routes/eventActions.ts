@@ -1,6 +1,11 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/permissions.js';
+import {
+  ALL_SERVERS_REQUIRED,
+  SERVER_NOT_ALLOWED,
+  accessibleServerIds,
+  requirePermission,
+} from '../middleware/permissions.js';
 import { audit } from '../services/audit.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import {
@@ -24,6 +29,44 @@ import { listServers } from '../services/servers.js';
 import { asyncRoute } from '../utils/asyncRoute.js';
 
 const router = Router();
+
+/**
+ * Why the caller may not manage a rule on `serverId` (null = every server),
+ * or null when they may. A caller limited to some servers only sees and
+ * manages rules of those servers; a rule for every server needs access to
+ * every server.
+ */
+async function serverAccessProblem(
+  req: AuthenticatedRequest,
+  serverId: string | null,
+): Promise<{ error: string; code: string } | null> {
+  const allowed = await accessibleServerIds(req);
+  if (allowed === null) return null;
+  if (serverId === null) {
+    return {
+      error: 'A rule for every server needs access to every server; choose a server',
+      code: ALL_SERVERS_REQUIRED,
+    };
+  }
+  return allowed.includes(serverId)
+    ? null
+    : { error: `No access to server ${serverId}`, code: SERVER_NOT_ALLOWED };
+}
+
+/** The rule, after checking the caller may manage it; null after answering 404/403. */
+async function ownRule(req: AuthenticatedRequest, res: Response): Promise<EventAction | null> {
+  const rule = getEventAction(req.params.id);
+  if (!rule) {
+    res.status(404).json({ error: 'Rule not found' });
+    return null;
+  }
+  const problem = await serverAccessProblem(req, rule.serverId);
+  if (problem) {
+    res.status(403).json(problem);
+    return null;
+  }
+  return rule;
+}
 
 /** Whether the rule's server, or one of them for a rule on every server, lacks a plugin connection. */
 async function withoutPlugin(serverId: string | null): Promise<boolean> {
@@ -60,10 +103,15 @@ router.get(
   '/',
   authMiddleware,
   requirePermission('scheduler.view'),
-  asyncRoute(async (_req: Request, res: Response) => {
-    // Command rules come with a derived blockedReason (see approve below).
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    // Command rules come with a derived blockedReason (see approve below);
+    // only the rules of servers the caller may use.
+    const rules = [];
+    for (const rule of await listEventActionViews()) {
+      if (!(await serverAccessProblem(req, rule.serverId))) rules.push(rule);
+    }
     res.json({
-      rules: await listEventActionViews(),
+      rules,
       events: availableEvents(),
       actionTypes: ACTION_TYPES,
     });
@@ -77,6 +125,7 @@ router.post(
   authMiddleware,
   requirePermission('scheduler.edit'),
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    if (!(await ownRule(req, res))) return;
     const result = await approveEventAction(req.params.id, actorFromRequest(req));
     if (!result.ok) {
       res.status(result.status).json({ error: result.error });
@@ -108,6 +157,14 @@ router.post(
       actionPayload: input.actionPayload ?? {},
       enabled: true,
     } as EventActionDraft;
+    const problem = await serverAccessProblem(
+      req,
+      typeof draft.serverId === 'string' ? draft.serverId : null,
+    );
+    if (problem) {
+      res.status(403).json(problem);
+      return;
+    }
     const review = await reviewEventAction(draft, null, actorFromRequest(req));
     if (!review.ok) {
       res.status(review.status).json({ error: review.error });
@@ -135,13 +192,18 @@ router.put(
   authMiddleware,
   requirePermission('scheduler.edit'),
   async (req: AuthenticatedRequest, res: Response) => {
-    const existing = getEventAction(req.params.id);
-    if (!existing) {
-      res.status(404).json({ error: 'Rule not found' });
-      return;
-    }
+    const existing = await ownRule(req, res);
+    if (!existing) return;
     const merged = { ...existing, ...pickDraftFields(req.body) } as EventAction & EventActionDraft;
     const draft = { ...merged, serverId: merged.serverId || null };
+    const problem = await serverAccessProblem(
+      req,
+      typeof draft.serverId === 'string' ? draft.serverId : null,
+    );
+    if (problem) {
+      res.status(403).json(problem);
+      return;
+    }
     const review = await reviewEventAction(draft, existing, actorFromRequest(req));
     if (!review.ok) {
       res.status(review.status).json({ error: review.error });
@@ -170,14 +232,15 @@ router.delete(
   '/:id',
   authMiddleware,
   requirePermission('scheduler.edit'),
-  (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    if (!(await ownRule(req, res))) return;
     if (!deleteEventAction(req.params.id)) {
       res.status(404).json({ error: 'Rule not found' });
       return;
     }
     audit(req, 'event_action.deleted', { target: `event_action:${req.params.id}` });
     res.json({ success: true });
-  },
+  }),
 );
 
 export default router;

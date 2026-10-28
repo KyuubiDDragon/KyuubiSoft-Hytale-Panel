@@ -5,6 +5,9 @@
  * KyuubiSoft plugin by services/pluginEvents.ts) and records each play session
  * in the `play_sessions` table, from which we derive per-player totals and a
  * leaderboard. Open sessions (player currently online) count their live time.
+ *
+ * Sessions belong to one server: a player online on two servers has one open
+ * session on each, and leaving one server ends only that one.
  */
 import { getDb } from '../db/index.js';
 import { eventBus, type PanelEvent } from './eventBus.js';
@@ -17,14 +20,14 @@ interface JoinLeavePayload {
 
 const nowIso = (): string => new Date().toISOString();
 
-/** Close the latest still-open session for a player, stamping its duration. */
-function closeOpenFor(uuid: string): void {
+/** Close a player's latest still-open session on a server, stamping its duration. */
+function closeOpenFor(uuid: string, serverId: string): void {
   const db = getDb();
   const sess = db
     .prepare(
-      'SELECT id, joined_at FROM play_sessions WHERE uuid = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1',
+      'SELECT id, joined_at FROM play_sessions WHERE uuid = ? AND server_id = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1',
     )
-    .get(uuid) as { id: number; joined_at: string } | undefined;
+    .get(uuid, serverId) as { id: number; joined_at: string } | undefined;
   if (!sess) return;
   const joined = Date.parse(sess.joined_at);
   const dur = Number.isFinite(joined) ? Math.max(0, Date.now() - joined) : 0;
@@ -38,26 +41,27 @@ function closeOpenFor(uuid: string): void {
 /** On startup, close any sessions orphaned by a panel/server restart. */
 function closeAllOpen(): void {
   const db = getDb();
-  const open = db.prepare('SELECT uuid FROM play_sessions WHERE left_at IS NULL').all() as Array<{
-    uuid: string;
-  }>;
-  for (const o of open) closeOpenFor(o.uuid);
+  const open = db
+    .prepare('SELECT DISTINCT uuid, server_id FROM play_sessions WHERE left_at IS NULL')
+    .all() as Array<{ uuid: string; server_id: string }>;
+  for (const o of open) closeOpenFor(o.uuid, o.server_id);
 }
 
+// Join and leave signals always carry the server (pluginEvents.ts, playerPresence.ts).
 function onJoin(p: JoinLeavePayload): void {
   const uuid = String(p.uuid ?? p.player ?? '').trim();
-  if (!uuid) return;
-  closeOpenFor(uuid); // defensive: never leave two sessions open for one player
+  if (!uuid || !p.serverId) return;
+  closeOpenFor(uuid, p.serverId); // defensive: never leave two sessions open for one player
   getDb()
     .prepare(
       'INSERT INTO play_sessions (server_id, uuid, player_name, joined_at) VALUES (?, ?, ?, ?)',
     )
-    .run(p.serverId ?? null, uuid, String(p.player ?? uuid), nowIso());
+    .run(p.serverId, uuid, String(p.player ?? uuid), nowIso());
 }
 
 function onLeave(p: JoinLeavePayload): void {
   const uuid = String(p.uuid ?? p.player ?? '').trim();
-  if (uuid) closeOpenFor(uuid);
+  if (uuid && p.serverId) closeOpenFor(uuid, p.serverId);
 }
 
 let started = false;
@@ -159,9 +163,11 @@ export interface SessionRow {
   serverId: string | null;
 }
 
+/** A player's sessions on one server, newest first, with the total playtime there. */
 export function getPlayerSessions(
   uuid: string,
-  limit = 50,
+  limit: number,
+  serverId: string,
 ): {
   uuid: string;
   playerName: string;
@@ -172,9 +178,9 @@ export function getPlayerSessions(
   const db = getDb();
   const rows = db
     .prepare(
-      'SELECT player_name, joined_at, left_at, duration_ms, server_id FROM play_sessions WHERE uuid = ? ORDER BY joined_at DESC LIMIT ?',
+      'SELECT player_name, joined_at, left_at, duration_ms, server_id FROM play_sessions WHERE uuid = ? AND server_id = ? ORDER BY joined_at DESC LIMIT ?',
     )
-    .all(uuid, Math.max(1, limit)) as Array<{
+    .all(uuid, serverId, Math.max(1, limit)) as Array<{
     player_name: string;
     joined_at: string;
     left_at: string | null;
@@ -182,13 +188,15 @@ export function getPlayerSessions(
     server_id: string | null;
   }>;
   const totalRow = db
-    .prepare('SELECT SUM(COALESCE(duration_ms, 0)) AS t FROM play_sessions WHERE uuid = ?')
-    .get(uuid) as { t: number | null };
+    .prepare(
+      'SELECT SUM(COALESCE(duration_ms, 0)) AS t FROM play_sessions WHERE uuid = ? AND server_id = ?',
+    )
+    .get(uuid, serverId) as { t: number | null };
   const open = db
     .prepare(
-      'SELECT joined_at FROM play_sessions WHERE uuid = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1',
+      'SELECT joined_at FROM play_sessions WHERE uuid = ? AND server_id = ? AND left_at IS NULL ORDER BY joined_at DESC LIMIT 1',
     )
-    .get(uuid) as { joined_at: string } | undefined;
+    .get(uuid, serverId) as { joined_at: string } | undefined;
   let total = totalRow.t ?? 0;
   if (open) {
     const j = Date.parse(open.joined_at);

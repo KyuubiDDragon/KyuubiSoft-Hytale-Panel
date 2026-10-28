@@ -16,6 +16,7 @@ import {
 } from '../services/backupJobs.js';
 import { audit } from '../services/audit.js';
 import { isDemoMode, getDemoBackups } from '../services/demoData.js';
+import { resolveServerIdSync } from '../services/servers.js';
 
 const router = Router();
 
@@ -112,7 +113,7 @@ router.get(
   authMiddleware,
   requirePermission('backups.view'),
   (req: Request, res: Response) => {
-    const scope = req.serverId ?? null;
+    const scope = resolveServerIdSync(req.serverId);
     const jobs = listBackupJobs().filter((j) => j.serverId === scope);
     // Only one job runs at a time; `running` tells the UI to wait even if it
     // belongs to another server.
@@ -131,7 +132,7 @@ router.get(
   requirePermission('backups.view'),
   (req: Request, res: Response) => {
     const job = getBackupJob(req.params.jobId);
-    if (!job || job.serverId !== (req.serverId ?? null)) {
+    if (!job || job.serverId !== resolveServerIdSync(req.serverId)) {
       res.status(404).json({ detail: 'Job not found' });
       return;
     }

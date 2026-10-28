@@ -25,6 +25,13 @@ const { createBackup, execCommand } = vi.hoisted(() => ({
 }));
 vi.mock('./docker.js', () => ({ execCommand }));
 vi.mock('./backup.js', () => ({ createBackup }));
+// Servers the rule creator may use (null = every server).
+const creatorServers = vi.hoisted(() => ({ allowed: null as string[] | null }));
+vi.mock('./roles.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./roles.js')>()),
+  userMayAccessServer: async (_user: string, serverId: string) =>
+    creatorServers.allowed === null || creatorServers.allowed.includes(serverId),
+}));
 
 const ea = await import('./eventActions.js');
 const { publish } = await import('./eventBus.js');
@@ -79,7 +86,7 @@ describe('event actions: loop guard, backup cooldown and run budget', () => {
     expect(execCommand).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE);
   });
 
-  it('a backup run the budget drops leaves no cooldown behind', async () => {
+  it('a rule for every server backs up each crashed server once per cooldown', async () => {
     ea.createEventAction({
       name: 'backup on crash',
       serverId: null,
@@ -88,25 +95,42 @@ describe('event actions: loop guard, backup cooldown and run budget', () => {
       actionPayload: {},
       createdBy: 'admin',
     });
-    // One rule for every server: one cooldown per server, one budget per event name.
-    for (let i = 1; i <= ea.RULE_RUNS_PER_MINUTE; i++) {
+    // One cooldown and one run budget per server: crashes on many servers
+    // do not use up each other's runs.
+    for (let i = 1; i <= ea.RULE_RUNS_PER_MINUTE + 1; i++) {
       publish('server.crashed', {}, `s${i}`);
       await flush();
     }
-    expect(createBackup).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE);
-
+    expect(createBackup).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE + 1);
     const late = `s${ea.RULE_RUNS_PER_MINUTE + 1}`;
-    publish('server.crashed', {}, late);
-    await flush();
-    expect(createBackup).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE); // budget spent
+    expect(createBackup).toHaveBeenLastCalledWith({ kind: 'auto', label: 'event' }, late);
 
-    // A minute later the budget has refilled, long before a cooldown would end.
-    clock += 60_000;
-    vi.setSystemTime(clock);
+    // The same server again: inside its cooldown.
     publish('server.crashed', {}, late);
     await flush();
     expect(createBackup).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE + 1);
-    expect(createBackup).toHaveBeenLastCalledWith({ kind: 'auto', label: 'event' }, late);
+  });
+
+  it('counts the run budget per server: a flood on one server leaves the others their runs', async () => {
+    ea.createEventAction({
+      name: 'alert',
+      serverId: null,
+      eventPattern: 'server.alert',
+      actionType: 'announce',
+      actionPayload: { message: 'Alert {reason}' },
+      createdBy: 'admin',
+    });
+    execCommand.mockImplementation(async () => ({ success: true }));
+    for (let i = 0; i < ea.RULE_RUNS_PER_MINUTE + 3; i++) {
+      publish('server.alert', { reason: 'flood' }, 'a');
+      await flush();
+    }
+    expect(execCommand).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE);
+
+    publish('server.alert', { reason: 'other' }, 'b');
+    await flush();
+    expect(execCommand).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE + 1);
+    expect(execCommand).toHaveBeenLastCalledWith('/broadcast Alert other', 'b', expect.anything());
   });
 
   it('a backup rule inside its cooldown costs no budget', async () => {
@@ -134,5 +158,54 @@ describe('event actions: loop guard, backup cooldown and run budget', () => {
     publish('server.crashed', {}, 'default');
     await flush();
     expect(createBackup).toHaveBeenCalledTimes(2);
+  });
+
+  it("a rule for one server ignores the other servers' events, also those without an id", async () => {
+    ea.createEventAction({
+      name: 'alert on B',
+      serverId: 'b',
+      eventPattern: 'server.alert',
+      actionType: 'announce',
+      actionPayload: { message: 'Alert {reason}' },
+      createdBy: 'admin',
+    });
+    execCommand.mockImplementation(async () => ({ success: true }));
+    publish('server.alert', { reason: 'on-default' }, 'default');
+    // Without an id: the default server's event (here "default"), not B's.
+    publish('server.alert', { reason: 'legacy' });
+    await flush();
+    expect(execCommand).not.toHaveBeenCalled();
+
+    publish('server.alert', { reason: 'on-b' }, 'b');
+    await flush();
+    expect(execCommand).toHaveBeenCalledWith('/broadcast Alert on-b', 'b', expect.anything());
+  });
+
+  it('runs no action of any type on a server its creator may no longer use', async () => {
+    for (const actionType of ['announce', 'backup'] as const) {
+      ea.createEventAction({
+        name: `${actionType} on alert`,
+        serverId: null,
+        eventPattern: 'server.alert',
+        actionType,
+        actionPayload: actionType === 'announce' ? { message: 'Alert {reason}' } : {},
+        createdBy: 'admin',
+      });
+    }
+    execCommand.mockImplementation(async () => ({ success: true }));
+    creatorServers.allowed = ['b'];
+    try {
+      publish('server.alert', { reason: 'on-default' }, 'default');
+      await flush();
+      expect(execCommand).not.toHaveBeenCalled();
+      expect(createBackup).not.toHaveBeenCalled();
+
+      publish('server.alert', { reason: 'on-b' }, 'b');
+      await flush();
+      expect(execCommand).toHaveBeenCalledWith('/broadcast Alert on-b', 'b', expect.anything());
+      expect(createBackup).toHaveBeenCalledWith({ kind: 'auto', label: 'event' }, 'b');
+    } finally {
+      creatorServers.allowed = null;
+    }
   });
 });

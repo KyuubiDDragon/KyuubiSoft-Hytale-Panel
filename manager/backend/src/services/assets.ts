@@ -3,6 +3,10 @@ import { logger } from '../utils/logger.js';
  * Asset Service
  * Handles extraction, browsing, and reading of Hytale game assets
  * Assets are extracted to a separate directory (not backed up)
+ *
+ * The extracted cache is panel-wide (it only depends on the game version):
+ * it is filled from the Assets.zip of the server the request is for, and the
+ * metadata records which server that was.
  */
 
 import fs from 'fs';
@@ -11,6 +15,8 @@ import { spawn } from 'child_process';
 import crypto from 'crypto';
 import { config } from '../config.js';
 import { isPathSafe, safePathJoin, resolveRealPathWithin } from '../utils/pathSecurity.js';
+import { COMPOSE_SERVER_ID } from './servers.js';
+import type { ServerContext } from './serverContext.js';
 import {
   assertSafeArchive,
   assertSafeExtractedTree,
@@ -25,6 +31,15 @@ interface AssetMeta {
   extractedAt: string;
   sourceFile: string;
   fileCount: number;
+  /** Server whose archive was extracted; missing in metadata from before multiserver. */
+  sourceServerId?: string;
+  sourceServerName?: string;
+}
+
+/** Server whose Assets.zip filled the cache; null when unknown (copied in by hand). */
+export interface AssetCacheSource {
+  serverId: string;
+  serverName: string | null;
 }
 
 interface AssetFileInfo {
@@ -47,8 +62,12 @@ interface AssetTreeNode {
 
 interface AssetStatus {
   extracted: boolean;
+  /** Whether the requested server has an Assets.zip; sourceFile is that archive. */
   sourceExists: boolean;
   sourceFile: string | null;
+  /** The cache is shared by all servers: where it came from. */
+  cacheSource: AssetCacheSource | null;
+  cacheFromThisServer: boolean;
   sourceSize: number;
   extractedAt: string | null;
   fileCount: number;
@@ -83,11 +102,11 @@ interface SearchResult {
 /**
  * Find the Assets.zip file in the server directory
  */
-export function findAssetsArchive(): string | null {
+export function findAssetsArchive(server: Pick<ServerContext, 'paths'>): string | null {
   const possibleNames = ['Assets.zip', 'assets.zip', 'ASSETS.ZIP'];
 
   for (const name of possibleNames) {
-    const archivePath = path.join(config.serverPath, name);
+    const archivePath = path.join(server.paths.server, name);
     if (fs.existsSync(archivePath)) {
       return archivePath;
     }
@@ -95,7 +114,7 @@ export function findAssetsArchive(): string | null {
 
   // Also check in data directory
   for (const name of possibleNames) {
-    const archivePath = path.join(config.dataPath, name);
+    const archivePath = path.join(server.paths.data, name);
     if (fs.existsSync(archivePath)) {
       return archivePath;
     }
@@ -205,11 +224,25 @@ function getDirectorySize(dirPath: string): number {
   return size;
 }
 
+/** Before multiserver every extraction came from the compose server. */
+function cacheSourceOf(meta: AssetMeta | null): AssetCacheSource | null {
+  if (!meta || meta.sourceHash === 'manual-copy') return null;
+  return {
+    serverId: meta.sourceServerId ?? COMPOSE_SERVER_ID,
+    serverName: meta.sourceServerName ?? null,
+  };
+}
+
+/** Where the shared cache came from, without scanning it. */
+export function getAssetCacheSource(): AssetCacheSource | null {
+  return cacheSourceOf(readAssetMeta());
+}
+
 /**
- * Get status of the asset extraction
+ * Get status of the asset extraction, seen from one server
  */
-export function getAssetStatus(): AssetStatus {
-  const sourceFile = findAssetsArchive();
+export function getAssetStatus(server: ServerContext): AssetStatus {
+  const sourceFile = findAssetsArchive(server);
   let meta = readAssetMeta();
 
   let needsUpdate = false;
@@ -249,11 +282,14 @@ export function getAssetStatus(): AssetStatus {
       // Ignore
     }
 
-    if (meta && meta.sourceHash !== 'manual-copy') {
+    // Only this server's own archive can be compared with what was extracted.
+    if (meta && meta.sourceHash !== 'manual-copy' && cacheSourceOf(meta)?.serverId === server.id) {
       const currentHash = calculateFileHashSync(sourceFile);
       needsUpdate = currentHash !== meta.sourceHash;
     }
   }
+
+  const cacheSource = cacheSourceOf(meta);
 
   // Assets are extracted if meta exists OR if the directory has files
   const extracted = meta !== null || (assetsExist && totalSize > 0);
@@ -262,6 +298,8 @@ export function getAssetStatus(): AssetStatus {
     extracted: extracted,
     sourceExists: sourceFile !== null,
     sourceFile: sourceFile,
+    cacheSource,
+    cacheFromThisServer: cacheSource?.serverId === server.id,
     sourceSize: sourceSize,
     extractedAt: meta?.extractedAt || null,
     fileCount: meta?.fileCount || fileCount,
@@ -273,10 +311,14 @@ export function getAssetStatus(): AssetStatus {
 }
 
 /**
- * Extract assets from the archive (async with progress tracking)
+ * Extract the server's assets archive into the shared cache (async with progress tracking)
  */
-export function extractAssets(): { success: boolean; error?: string; message?: string } {
-  const sourceFile = findAssetsArchive();
+export function extractAssets(server: ServerContext): {
+  success: boolean;
+  error?: string;
+  message?: string;
+} {
+  const sourceFile = findAssetsArchive(server);
 
   if (!sourceFile) {
     return { success: false, error: 'Assets.zip not found in server or data directory' };
@@ -296,7 +338,7 @@ export function extractAssets(): { success: boolean; error?: string; message?: s
   };
 
   // Run extraction asynchronously
-  runExtraction(sourceFile).catch((err) => {
+  runExtraction(sourceFile, server).catch((err) => {
     logger.error('[Assets] Extraction error:', err);
     if (extractionProgress) {
       extractionProgress.status = 'failed';
@@ -314,7 +356,7 @@ export function extractAssets(): { success: boolean; error?: string; message?: s
 /**
  * Internal async extraction function
  */
-async function runExtraction(sourceFile: string): Promise<void> {
+async function runExtraction(sourceFile: string, server: ServerContext): Promise<void> {
   let archiveChecked = false;
   try {
     // The zip sits in the (file-manager writable) server dir, so check its
@@ -473,6 +515,8 @@ async function runExtraction(sourceFile: string): Promise<void> {
       extractedAt: new Date().toISOString(),
       sourceFile: sourceFile,
       fileCount,
+      sourceServerId: server.id,
+      sourceServerName: server.name,
     });
 
     if (extractionProgress) {

@@ -19,10 +19,18 @@ export interface JwtPayload {
   exp: number;
 }
 
+/** What an authenticated REST API key may do. */
+export interface ApiKeyGrant {
+  id: string;
+  scopes: string[];
+  /** Servers the key is limited to; null or absent = every server its owner may use. */
+  serverIds?: string[] | null;
+}
+
 export interface AuthenticatedRequest extends Request {
   user?: string;
   /** Set when the caller authenticated via REST API key instead of JWT. */
-  apiKey?: { id: string; scopes: string[] };
+  apiKey?: ApiKeyGrant;
   /** Per-server scope when the route lives under /api/servers/:serverId/... */
   serverId?: string;
 }
@@ -36,7 +44,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: string;
-      apiKey?: { id: string; scopes: string[] };
+      apiKey?: ApiKeyGrant;
       serverId?: string;
     }
   }

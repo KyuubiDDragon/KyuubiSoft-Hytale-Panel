@@ -7,6 +7,7 @@
  * restore that was interrupted is recovered from its on-disk journal.
  */
 import crypto from 'crypto';
+import { resolveServerIdSync } from './servers.js';
 
 export type BackupJobType = 'restore' | 'native-restore' | 'native-create' | 'world-restore';
 export type BackupJobState = 'running' | 'succeeded' | 'failed';
@@ -14,7 +15,8 @@ export type BackupJobState = 'running' | 'succeeded' | 'failed';
 export interface BackupJob {
   id: string;
   type: BackupJobType;
-  serverId: string | null;
+  /** Always the resolved id, so legacy and scoped routes list the same jobs. */
+  serverId: string;
   target: string; // backup id / native file the job works on
   state: BackupJobState;
   /** Current step, e.g. 'validating', 'extracting', 'stopping', 'safety-backup', 'swapping'. */
@@ -73,7 +75,7 @@ export function startBackupJob(
   const job: BackupJob = {
     id: crypto.randomUUID(),
     type: init.type,
-    serverId: init.serverId ?? null,
+    serverId: resolveServerIdSync(init.serverId),
     target: init.target,
     state: 'running',
     step: 'queued',

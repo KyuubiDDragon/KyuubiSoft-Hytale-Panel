@@ -32,7 +32,7 @@ export async function authMiddleware(
       return;
     }
     req.user = result.ownerUsername;
-    req.apiKey = { id: result.keyId, scopes: result.scopes };
+    req.apiKey = { id: result.keyId, scopes: result.scopes, serverIds: result.serverIds };
     next();
     return;
   }

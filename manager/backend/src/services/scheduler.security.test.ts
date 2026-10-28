@@ -78,10 +78,9 @@ function entry(id: string, command: string, extra: Record<string, unknown> = {})
   };
 }
 
-// Persist + scheduler restart happen asynchronously after saveConfig.
+// saveConfig resolves once the file is written and the timers are re-armed.
 async function saveAndRestart(scheduledCommands: unknown[]): Promise<void> {
-  scheduler.saveConfig({ scheduledCommands } as never, 'default');
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  expect(await scheduler.saveConfig({ scheduledCommands } as never, 'default')).toBe(true);
 }
 
 beforeAll(async () => {

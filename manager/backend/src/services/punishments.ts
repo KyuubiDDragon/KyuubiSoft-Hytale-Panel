@@ -5,6 +5,11 @@
  * tempmute / warn) in SQLite, replacing the ad-hoc bans-names.json mapping.
  * Temp punishments carry an expiry; a background loop lifts them automatically
  * (issuing /unban or /unmute) when they lapse and marks them inactive.
+ *
+ * Every entry belongs to one server: new entries store the resolved id (the
+ * default server for callers without one), and lists, unbans and unmutes only
+ * touch entries of the server they are for. Entries from before per-server
+ * punishments were assigned to the compose server by a database migration.
  */
 import { getDb } from '../db/index.js';
 import { logger } from '../utils/logger.js';
@@ -87,7 +92,8 @@ export function parseDuration(input: string | number | undefined | null): number
   return n * (mult[unit] ?? 1000);
 }
 
-export function recordPunishment(opts: {
+/** Records a punishment on a server; `serverId` undefined is the default server. */
+export async function recordPunishment(opts: {
   serverId?: string;
   playerName: string;
   uuid?: string | null;
@@ -95,7 +101,8 @@ export function recordPunishment(opts: {
   reason?: string | null;
   byUser: string;
   durationMs?: number | null;
-}): Punishment {
+}): Promise<Punishment> {
+  const serverId = await resolveServerId(opts.serverId);
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
   const expiresAt =
@@ -109,7 +116,7 @@ export function recordPunishment(opts: {
   `,
     )
     .run(
-      opts.serverId ?? null,
+      serverId,
       opts.playerName,
       opts.uuid ?? null,
       opts.type,
@@ -128,11 +135,25 @@ export function getPunishment(id: number): Punishment | null {
   return row ? rowToPunishment(row) : null;
 }
 
+/**
+ * Punishments, newest first. With `serverId` only that server's entries;
+ * without it every server's (data export).
+ */
 export function listPunishments(
-  opts: { player?: string; type?: string; activeOnly?: boolean; limit?: number } = {},
+  opts: {
+    serverId?: string;
+    player?: string;
+    type?: string;
+    activeOnly?: boolean;
+    limit?: number;
+  } = {},
 ): Punishment[] {
   const where: string[] = [];
   const params: unknown[] = [];
+  if (opts.serverId) {
+    where.push('server_id = ?');
+    params.push(opts.serverId);
+  }
   if (opts.player) {
     where.push('player_name = ? COLLATE NOCASE');
     params.push(opts.player);
@@ -152,8 +173,8 @@ export function listPunishments(
   return rows.map(rowToPunishment);
 }
 
-export function getActivePunishments(playerName: string): Punishment[] {
-  return listPunishments({ player: playerName, activeOnly: true });
+export function getActivePunishments(playerName: string, serverId: string): Punishment[] {
+  return listPunishments({ serverId, player: playerName, activeOnly: true });
 }
 
 /** Manually lift a punishment (e.g. on unban). Returns true if a row changed. */
@@ -169,8 +190,7 @@ export function revokePunishment(id: number, byUser: string): boolean {
 /**
  * Closes a player's open entries of `types` on one server, matched by UUID or
  * by any of the names: after an unban, or after a permanent ban (then only
- * the temp-bans), so the expiry loop does not lift that ban later. Entries
- * without a server belong to the default one.
+ * the temp-bans), so the expiry loop does not lift that ban later.
  */
 export async function closeBanRecords(
   target: { serverId?: string; names: readonly (string | undefined)[]; uuid?: string | null },
@@ -184,35 +204,39 @@ export async function closeBanRecords(
     ...names.map(() => 'player_name = ? COLLATE NOCASE'),
     ...(uuid ? ['lower(uuid) = ?'] : []),
   ].join(' OR ');
+  const server = await resolveServerId(target.serverId);
   const rows = getDb()
     .prepare(
-      `SELECT id, server_id FROM punishments
-     WHERE active = 1 AND type IN (${types.map(() => '?').join(',')}) AND (${who})`,
+      `SELECT id FROM punishments
+     WHERE active = 1 AND server_id = ? AND type IN (${types.map(() => '?').join(',')}) AND (${who})`,
     )
-    .all(...types, ...names, ...(uuid ? [uuid] : [])) as { id: number; server_id: string | null }[];
-  const server = await resolveServerId(target.serverId);
+    .all(server, ...types, ...names, ...(uuid ? [uuid] : [])) as { id: number }[];
   let closed = 0;
   for (const row of rows) {
-    if ((await resolveServerId(row.server_id ?? undefined)) !== server) continue;
     if (revokePunishment(row.id, byUser)) closed++;
   }
   return closed;
 }
 
-/** Lift all active stateful punishments for a player (used to close old mute records). */
-export function deactivateActiveForPlayer(
+/**
+ * Lift a player's active stateful punishments of `type` on one server (used
+ * to close old mute records); `serverId` undefined is the default server.
+ */
+export async function deactivateActiveForPlayer(
   playerName: string,
   type: PunishmentType | PunishmentType[],
   byUser: string,
-): number {
+  serverId?: string,
+): Promise<number> {
+  const server = await resolveServerId(serverId);
   const types = Array.isArray(type) ? type : [type];
   const placeholders = types.map(() => '?').join(',');
   const info = getDb()
     .prepare(
       `UPDATE punishments SET active = 0, revoked_at = ?, revoked_by = ?
-     WHERE active = 1 AND player_name = ? COLLATE NOCASE AND type IN (${placeholders})`,
+     WHERE active = 1 AND server_id = ? AND player_name = ? COLLATE NOCASE AND type IN (${placeholders})`,
     )
-    .run(new Date().toISOString(), byUser, playerName, ...types);
+    .run(new Date().toISOString(), byUser, server, playerName, ...types);
   return info.changes;
 }
 

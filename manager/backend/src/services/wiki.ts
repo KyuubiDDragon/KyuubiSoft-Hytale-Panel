@@ -3,7 +3,8 @@
  *
  * Scans the mods/plugins directories for JAR files, extracts each archive's
  * `manifest.json` (Hytale plugin format) and renders a Markdown page per
- * mod/plugin plus an index.json.
+ * mod/plugin plus an index.json. Every server has its own wiki (in its
+ * manager-side folder); the wiki settings are panel-wide.
  *
  * The ZIP reader is implemented in-house to avoid adding a runtime
  * dependency: we read the central directory, locate the entry by name and
@@ -14,13 +15,14 @@
 import { readdir, readFile, writeFile, mkdir, stat, open } from 'fs/promises';
 import path from 'path';
 import { inflateRawSync } from 'zlib';
-import { config } from '../config.js';
 import { isDemoMode } from './demoData.js';
 import { getConfig, updateConfig } from './configService.js';
+import { managerDataDir } from './perServerData.js';
+import { checkServerFiles, type ServerContext } from './serverContext.js';
 
-const DATA_PATH = process.env.MANAGER_DATA_PATH || '/app/data';
-const WIKI_DIR = path.join(DATA_PATH, 'wiki');
-const INDEX_PATH = path.join(WIKI_DIR, 'index.json');
+function wikiDir(server: Pick<ServerContext, 'id'>): string {
+  return path.join(managerDataDir(server.id), 'wiki');
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -349,53 +351,60 @@ function demoEntries(): WikiEntry[] {
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function regenerateWiki(): Promise<WikiIndex> {
-  await mkdir(WIKI_DIR, { recursive: true });
+export async function regenerateWiki(server: ServerContext): Promise<WikiIndex> {
+  const dir = wikiDir(server);
+  await mkdir(dir, { recursive: true });
 
   let entries: WikiEntry[];
   if (isDemoMode()) {
     entries = demoEntries();
     console.log('[wiki] demo mode — using simulated entries');
   } else {
-    const mods = await scanDir(config.modsPath, 'mod');
-    const plugins = await scanDir(config.pluginsPath, 'plugin');
+    const mods = await scanDir(server.paths.mods, 'mod');
+    const plugins = await scanDir(server.paths.plugins, 'plugin');
     entries = [...mods, ...plugins];
     console.log(`[wiki] scanned: ${mods.length} mods + ${plugins.length} plugins`);
   }
 
   // Write per-entry markdown files.
   for (const e of entries) {
-    await writeFile(path.join(WIKI_DIR, `${e.slug}.md`), renderMarkdown(e), 'utf-8');
+    await writeFile(path.join(dir, `${e.slug}.md`), renderMarkdown(e), 'utf-8');
   }
 
   const index: WikiIndex = {
     generatedAt: new Date().toISOString(),
     entries,
   };
-  await writeFile(INDEX_PATH, JSON.stringify(index, null, 2), 'utf-8');
+  await writeFile(path.join(dir, 'index.json'), JSON.stringify(index, null, 2), 'utf-8');
   return index;
 }
 
-export async function loadWikiIndex(): Promise<WikiIndex> {
+export async function loadWikiIndex(server: ServerContext): Promise<WikiIndex> {
   try {
-    const content = await readFile(INDEX_PATH, 'utf-8');
+    const content = await readFile(path.join(wikiDir(server), 'index.json'), 'utf-8');
     return JSON.parse(content) as WikiIndex;
   } catch {
-    // Lazy initial scan so a fresh install isn't blank.
-    return regenerateWiki();
+    // Lazy initial scan so a fresh install isn't blank. While the server's
+    // folders are not visible there is nothing to scan, and an empty index
+    // must not be stored as if it were the result.
+    if (!checkServerFiles(server).available) {
+      return { generatedAt: new Date().toISOString(), entries: [] };
+    }
+    return regenerateWiki(server);
   }
 }
 
 export async function loadWikiPage(
+  server: ServerContext,
   slug: string,
 ): Promise<{ entry: WikiEntry; markdown: string } | null> {
   const safe = slug.replace(/[^a-z0-9-]/gi, '');
   if (!safe) return null;
   try {
-    const index = await loadWikiIndex();
+    const index = await loadWikiIndex(server);
     const entry = index.entries.find((e) => e.slug === safe);
     if (!entry) return null;
-    const markdown = await readFile(path.join(WIKI_DIR, `${safe}.md`), 'utf-8');
+    const markdown = await readFile(path.join(wikiDir(server), `${safe}.md`), 'utf-8');
     return { entry, markdown };
   } catch {
     return null;

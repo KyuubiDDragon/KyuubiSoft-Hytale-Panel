@@ -118,7 +118,9 @@ describe('who is online at the start', () => {
     expect(names('a')).toEqual(['Alice']);
     expect(names('b')).toEqual([]);
     expect(panelEvents).toEqual([]);
-    expect(h.sync).toHaveBeenCalledWith(new Set(['Alice']));
+    // Each server's player list is synced on its own.
+    expect(h.sync).toHaveBeenCalledWith('a', new Set(['Alice']));
+    expect(h.sync).toHaveBeenCalledWith('b', new Set());
   });
 
   it('counts nobody online on a server whose container is not running', async () => {
@@ -171,7 +173,7 @@ describe('without a plugin connection: the server log', () => {
     // Its record follows lines without markers, so it is rarely clean.
     live.onEntries([{ ...serverStart(), clean: false }]);
     expect(names('a')).toEqual([]);
-    expect(h.offline).toHaveBeenCalledWith('Alice');
+    expect(h.offline).toHaveBeenCalledWith('a', 'Alice');
     expect(panelEvents.map((e) => e.name)).toEqual(['player.joined']);
   });
 });
@@ -204,15 +206,29 @@ describe('with the plugin connected', () => {
 });
 
 describe('several servers', () => {
-  it('keeps a player online in the history until they left every server', async () => {
+  it("keeps each server's player list on its own", async () => {
     await start();
     h.listeners.get('a')!.onEntries([join('Alice', ALICE)]);
     h.listeners.get('b')!.onEntries([join('Alice', ALICE)]);
-    expect(h.online).toHaveBeenCalledTimes(1);
+    expect(h.online.mock.calls.map((c) => [c[0], c[1]])).toEqual([
+      ['a', 'Alice'],
+      ['b', 'Alice'],
+    ]);
+    // Leaving A ends the session there only.
     h.listeners.get('a')!.onEntries([leave('Alice', ALICE)]);
-    expect(h.offline).not.toHaveBeenCalled();
-    h.listeners.get('b')!.onEntries([leave('Alice', ALICE)]);
-    expect(h.offline).toHaveBeenCalledTimes(1);
+    expect(h.offline.mock.calls).toEqual([['a', 'Alice']]);
+    expect(names('b')).toEqual(['Alice']);
+  });
+
+  it('a stop of one server leaves the players of the other online', async () => {
+    await start();
+    h.listeners.get('a')!.onEntries([join('Alice', ALICE)]);
+    h.listeners.get('b')!.onEntries([join('Bob', BOB)]);
+    const { publish } = await import('./eventBus.js');
+    publish('server.stopped', {}, 'b');
+    expect(names('b')).toEqual([]);
+    expect(names('a')).toEqual(['Alice']);
+    expect(h.offline.mock.calls).toEqual([['b', 'Bob']]);
   });
 
   it('clears a server that stopped or crashed without reporting leaves', async () => {

@@ -1,10 +1,9 @@
 // Panel-meta endpoints: panel version check + new-features banner.
 import { Router, Request, Response } from 'express';
 import { readFile, access, constants } from 'fs/promises';
-import path from 'path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
-import { config } from '../../config.js';
+import { getConfigFilePath } from '../../config.js';
 import { dismissNewFeaturesBanner } from '../../services/migration.js';
 import { checkPanelUpdate, getCurrentVersion } from '../../services/panelVersionService.js';
 import { isDemoMode, getDemoNewFeatures } from '../../services/demoData.js';
@@ -32,7 +31,7 @@ router.get(
     }
 
     try {
-      const configPath = path.join(config.dataPath, 'config.json');
+      const configPath = getConfigFilePath();
 
       try {
         await access(configPath, constants.R_OK);

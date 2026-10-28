@@ -12,6 +12,12 @@
  *
  * Deliveries retry up to MAX_ATTEMPTS times with backoff
  * 30s → 5min → 30min → 6h → 24h, then move to status='gave_up'.
+ *
+ * Servers: a delivered event carries the id and name of the server it is
+ * about (`serverId`, `serverName`; also in the Discord/Slack footer). A
+ * webhook with `serverIds` only gets events of those servers; panel-wide
+ * events (logins, users, roles, panel updates) then do not reach it. An empty
+ * list means every server and every event, as before.
  */
 import crypto from 'crypto';
 import { getDb } from '../db/index.js';
@@ -19,6 +25,8 @@ import { publish as publishEvent, subscribe } from './eventBus.js';
 import { webhookDeliveries } from './metrics.js';
 import { assertSafeResolvedUrl } from '../utils/urlGuard.js';
 import { logger } from '../utils/logger.js';
+import { eventServerId } from './eventServer.js';
+import { serverDisplayName } from './perServerData.js';
 import { KeyedTokenBucket } from '../utils/tokenBucket.js';
 import {
   EXPLICIT_ONLY_EVENTS,
@@ -38,6 +46,8 @@ export interface Webhook {
   url: string;
   type: 'discord' | 'slack' | 'generic';
   events: PanelEventName[];
+  /** Servers whose events it gets; empty = every server and panel-wide events. */
+  serverIds: string[];
   secret: string | null;
   enabled: boolean;
   createdBy: string;
@@ -45,18 +55,36 @@ export interface Webhook {
   updatedAt: string;
 }
 
+/** An event as stored for delivery: with the name of its server. */
+export type DeliveredEvent = PanelEvent & { serverName?: string };
+
 interface WebhookRow {
   id: string;
   name: string;
   url: string;
   type: string;
   events: string;
+  server_ids: string | null;
   secret: string | null;
   enabled: number;
   created_by: string;
   created_at: string;
   updated_at: string;
 }
+
+function parseServerIds(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw) as unknown;
+    return Array.isArray(list) ? list.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+// NULL in the database for "every server", so rows from before the column match.
+const serverIdsColumn = (ids: readonly string[] | undefined) =>
+  ids && ids.length > 0 ? JSON.stringify([...new Set(ids)]) : null;
 
 function rowToWebhook(r: WebhookRow): Webhook {
   return {
@@ -65,6 +93,7 @@ function rowToWebhook(r: WebhookRow): Webhook {
     url: r.url,
     type: r.type as Webhook['type'],
     events: JSON.parse(r.events) as PanelEventName[],
+    serverIds: parseServerIds(r.server_ids),
     secret: r.secret,
     enabled: r.enabled === 1,
     createdBy: r.created_by,
@@ -90,6 +119,7 @@ export function createWebhook(opts: {
   url: string;
   type: 'discord' | 'slack' | 'generic';
   events: PanelEventName[];
+  serverIds?: string[];
   secret?: string | null;
   enabled?: boolean;
   createdBy: string;
@@ -99,8 +129,8 @@ export function createWebhook(opts: {
   getDb()
     .prepare(
       `
-    INSERT INTO webhooks (id, name, url, type, events, secret, enabled, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO webhooks (id, name, url, type, events, server_ids, secret, enabled, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
     )
     .run(
@@ -109,6 +139,7 @@ export function createWebhook(opts: {
       opts.url,
       opts.type,
       JSON.stringify(opts.events),
+      serverIdsColumn(opts.serverIds),
       opts.secret ?? null,
       opts.enabled === false ? 0 : 1,
       opts.createdBy,
@@ -124,11 +155,13 @@ export function updateWebhook(
 ): Webhook | null {
   const current = getWebhook(id);
   if (!current) return null;
-  const next: Webhook = { ...current, ...patch, updatedAt: new Date().toISOString() };
+  // Fields the patch leaves out (or sets to undefined) keep their value.
+  const given = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  const next: Webhook = { ...current, ...given, updatedAt: new Date().toISOString() };
   getDb()
     .prepare(
       `
-    UPDATE webhooks SET name=?, url=?, type=?, events=?, secret=?, enabled=?, updated_at=? WHERE id=?
+    UPDATE webhooks SET name=?, url=?, type=?, events=?, server_ids=?, secret=?, enabled=?, updated_at=? WHERE id=?
   `,
     )
     .run(
@@ -136,6 +169,7 @@ export function updateWebhook(
       next.url,
       next.type,
       JSON.stringify(next.events),
+      serverIdsColumn(next.serverIds),
       next.secret ?? null,
       next.enabled ? 1 : 0,
       next.updatedAt,
@@ -191,7 +225,7 @@ export function listDeliveries(
   return { deliveries: rows.slice(0, limit), nextCursor: overflow ? rows[limit - 1].id : null };
 }
 
-function enqueueDelivery(webhookId: string, event: PanelEvent): void {
+function enqueueDelivery(webhookId: string, event: DeliveredEvent): void {
   const now = new Date().toISOString();
   getDb()
     .prepare(
@@ -276,7 +310,12 @@ function fieldText(value: unknown): string {
   return text.length > 0 ? text.slice(0, 1024) : '-';
 }
 
-function formatDiscordPayload(event: PanelEvent): unknown {
+/** Footer text of chat-style deliveries: the panel and, when known, the server. */
+function footerText(event: DeliveredEvent): string {
+  return event.serverName ? `KyuubiSoft Panel · ${event.serverName}` : 'KyuubiSoft Panel';
+}
+
+export function formatDiscordPayload(event: DeliveredEvent): unknown {
   const colorByName: Record<string, number> = {
     'server.started': 0x22c55e,
     'server.stopped': 0xfbbf24,
@@ -302,19 +341,20 @@ function formatDiscordPayload(event: PanelEvent): unknown {
         title: event.name,
         color,
         timestamp: event.timestamp,
-        footer: { text: 'KyuubiSoft Panel' },
+        footer: { text: footerText(event) },
         fields,
       },
     ],
   };
 }
 
-function formatSlackPayload(event: PanelEvent): unknown {
+export function formatSlackPayload(event: DeliveredEvent): unknown {
   return {
     text: `*${event.name}*`,
     attachments: [
       {
         color: '#FF6B35',
+        footer: footerText(event),
         ts: Math.floor(Date.parse(event.timestamp) / 1000),
         fields: Object.entries(event.payload)
           .slice(0, 10)
@@ -329,7 +369,7 @@ function formatSlackPayload(event: PanelEvent): unknown {
 }
 
 async function deliverOne(delivery: DeliveryRow, webhook: Webhook): Promise<void> {
-  const event = JSON.parse(delivery.payload) as PanelEvent;
+  const event = JSON.parse(delivery.payload) as DeliveredEvent;
   const body =
     webhook.type === 'discord'
       ? JSON.stringify(formatDiscordPayload(event))
@@ -415,21 +455,43 @@ function withinWebhookBudget(wh: Webhook, event: PanelEvent): boolean {
   return false;
 }
 
-export function startWebhookDispatcher(): void {
-  // Subscribe once. Match any event the webhook is listening to; wildcards
-  // never cover events outsiders can cause (schemas/events.ts).
-  subscribe(['*'], (event) => {
-    const hooks = (
-      getDb().prepare('SELECT * FROM webhooks WHERE enabled = 1').all() as WebhookRow[]
-    ).map(rowToWebhook);
-    for (const wh of hooks) {
-      if (
-        wh.events.some((p) => eventPatternMatches(p as string, event.name)) &&
-        withinWebhookBudget(wh, event)
-      ) {
-        enqueueDelivery(wh.id, event);
-      }
+/** Does the webhook take events of this server (null = a panel-wide event)? */
+export function webhookCoversServer(
+  wh: Pick<Webhook, 'serverIds'>,
+  serverId: string | null,
+): boolean {
+  if (wh.serverIds.length === 0) return true;
+  return serverId !== null && wh.serverIds.includes(serverId);
+}
+
+/** Queue `event` for every enabled webhook that subscribed to it. */
+export async function dispatchEvent(event: PanelEvent): Promise<void> {
+  const hooks = (
+    getDb().prepare('SELECT * FROM webhooks WHERE enabled = 1').all() as WebhookRow[]
+  ).map(rowToWebhook);
+  // Wildcards never cover events outsiders can cause (schemas/events.ts).
+  const subscribed = hooks.filter((wh) =>
+    wh.events.some((p) => eventPatternMatches(p as string, event.name)),
+  );
+  if (subscribed.length === 0) return;
+  const serverId = await eventServerId(event);
+  const delivered: DeliveredEvent = serverId
+    ? { ...event, serverId, serverName: await serverDisplayName(serverId) }
+    : event;
+  for (const wh of subscribed) {
+    if (webhookCoversServer(wh, serverId) && withinWebhookBudget(wh, event)) {
+      enqueueDelivery(wh.id, delivered);
     }
+  }
+}
+
+export function startWebhookDispatcher(): void {
+  // Subscribe once; the server of an event may need the registry, so the
+  // matching runs off the publisher's call stack.
+  subscribe(['*'], (event) => {
+    dispatchEvent(event).catch((err) =>
+      logger.error(`[Webhooks] could not queue ${event.name}:`, err),
+    );
   });
   tickHandle = setInterval(() => {
     void tick().catch(() => {});

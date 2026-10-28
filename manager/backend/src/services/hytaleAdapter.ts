@@ -10,14 +10,15 @@
  *   - Read the server version from the manifest of HytaleServer.jar, falling
  *     back to /opt/hytale/server/.hytale-version (stamped by start-server.sh
  *     from `java -jar HytaleServer.jar --version` on every start).
- *   - HytaleAPIFactory.create() picks the adapter that matches the version
- *     range; today there is only one, but the dispatch point is in place.
+ *   - HytaleAPIFactory.get(serverId) picks the adapter that matches the
+ *     version range; today there is only one, but the dispatch point is in
+ *     place. Every server has its own adapter.
  *   - getCapabilities() exposes feature flags so callers can branch on
  *     supportsNativeUpdates / supportsServerBrowser without re-detecting.
  */
 
-import { config } from '../config.js';
 import { getPluginStatus, fetchFromPlugin, type PluginStatus } from './kyuubiApi.js';
+import { getServerContext } from './serverContext.js';
 import { readInstalledVersion } from './serverInstall.js';
 
 export interface HytaleCapabilities {
@@ -55,8 +56,9 @@ export interface HytaleServerAPI {
   getOnlinePlayers(): Promise<HytalePlayer[]>;
 }
 
-async function readServerVersion(): Promise<HytaleVersionInfo> {
-  const installed = await readInstalledVersion(config.serverPath);
+async function readServerVersion(serverId: string): Promise<HytaleVersionInfo> {
+  const { paths } = await getServerContext(serverId);
+  const installed = await readInstalledVersion(paths.server);
   return { version: installed.version, source: installed.source };
 }
 
@@ -101,10 +103,12 @@ export function capabilitiesFor(v: string | null): HytaleCapabilities {
 class KyuubiSoftPluginAdapter implements HytaleServerAPI {
   private cachedVersion: HytaleVersionInfo | null = null;
 
+  constructor(private readonly serverId: string) {}
+
   async getVersion(): Promise<HytaleVersionInfo> {
     // Re-read every time (a few KB of the JAR): updates, rollbacks and
     // manual copies change the version while the panel keeps running.
-    this.cachedVersion = await readServerVersion();
+    this.cachedVersion = await readServerVersion(this.serverId);
     return this.cachedVersion;
   }
 
@@ -116,43 +120,50 @@ class KyuubiSoftPluginAdapter implements HytaleServerAPI {
   }
 
   async isReachable(): Promise<boolean> {
-    const status = await getPluginStatus();
+    const status = await getPluginStatus(this.serverId);
     return status.running;
   }
 
   async getTransportStatus(): Promise<{ transport: string; details: PluginStatus | null }> {
-    const status = await getPluginStatus();
+    const status = await getPluginStatus(this.serverId);
     return { transport: 'kyuubisoft-plugin', details: status };
   }
 
   async getOnlinePlayers(): Promise<HytalePlayer[]> {
-    const resp = await fetchFromPlugin<{ players?: HytalePlayer[] }>('/api/players/online');
+    const resp = await fetchFromPlugin<{ players?: HytalePlayer[] }>(
+      '/api/players/online',
+      this.serverId,
+    );
     if (!resp.success || !resp.data?.players) return [];
     return resp.data.players;
   }
 }
 
-let singleton: HytaleServerAPI | null = null;
+const adapters = new Map<string, HytaleServerAPI>();
 
 export class HytaleAPIFactory {
   /**
-   * Return the adapter for the running server. Cached for the process
-   * lifetime; call resetCachedAdapter() after a server update.
+   * Return the adapter for a server (registry id). Cached for the process
+   * lifetime; call reset(serverId) after a server update.
    */
-  static get(): HytaleServerAPI {
-    if (!singleton) {
+  static get(serverId: string): HytaleServerAPI {
+    let adapter = adapters.get(serverId);
+    if (!adapter) {
       // Single adapter today. Once a second transport exists, branch on
       // version / available capabilities here before returning.
-      singleton = new KyuubiSoftPluginAdapter();
+      adapter = new KyuubiSoftPluginAdapter(serverId);
+      adapters.set(serverId, adapter);
     }
-    return singleton;
+    return adapter;
   }
 
-  static reset(): void {
-    singleton = null;
+  /** Forget the adapter of one server, or of every server. */
+  static reset(serverId?: string): void {
+    if (serverId === undefined) adapters.clear();
+    else adapters.delete(serverId);
   }
 }
 
-export function getHytaleApi(): HytaleServerAPI {
-  return HytaleAPIFactory.get();
+export function getHytaleApi(serverId: string): HytaleServerAPI {
+  return HytaleAPIFactory.get(serverId);
 }

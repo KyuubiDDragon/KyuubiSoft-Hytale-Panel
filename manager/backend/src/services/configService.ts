@@ -323,6 +323,10 @@ export async function saveConfig(config: PanelConfig): Promise<void> {
   // Atomically rename temp file to actual config file
   await rename(tempPath, configPath);
 
+  // getConfig() serves what was just saved, as loadConfig() would read it
+  // back (a copy, so later changes to `config` stay out of the cache).
+  cachedConfig = deepMerge(getDefaultConfig(), JSON.parse(content) as Partial<PanelConfig>);
+
   logger.info('[ConfigService] Configuration saved successfully');
 }
 

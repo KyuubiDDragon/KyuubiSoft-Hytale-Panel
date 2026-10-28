@@ -113,11 +113,6 @@ export function onPresenceChange(listener: (change: PresenceChange) => void): ()
   return () => listeners.delete(listener);
 }
 
-function isOnlineAnywhere(uuid: string): boolean {
-  for (const presence of servers.values()) if (presence.online.has(uuid)) return true;
-  return false;
-}
-
 /**
  * Applies a join or leave. Returns false when it changes nothing (the player
  * was online already, or was not).
@@ -133,14 +128,14 @@ function apply(
   if (!presence) return false;
   const key = uuid.toLowerCase();
   const timestamp = new Date().toISOString();
+  // Each server keeps its own player list (sessions and playtime per server).
   if (kind === 'join') {
     if (presence.online.has(key)) return false;
-    const firstServer = !isOnlineAnywhere(key);
     presence.online.set(key, { name, uuid: key, since: timestamp });
-    if (firstServer) notePlayerOnline(name, { uuid: key });
+    notePlayerOnline(serverId, name, { uuid: key });
   } else {
     if (!presence.online.delete(key)) return false;
-    if (!isOnlineAnywhere(key)) notePlayerOffline(name);
+    notePlayerOffline(serverId, name);
   }
   const change: PresenceChange = {
     serverId,
@@ -166,9 +161,7 @@ function clearServer(serverId: string): void {
   if (!presence) return;
   const gone = [...presence.online.values()];
   presence.online.clear();
-  for (const player of gone) {
-    if (!isOnlineAnywhere(player.uuid)) notePlayerOffline(player.name);
-  }
+  for (const player of gone) notePlayerOffline(serverId, player.name);
 }
 
 function onLogEntries(serverId: string, entries: AssembledLogEntry[]): void {
@@ -302,14 +295,16 @@ export async function startPlayerPresence(): Promise<void> {
     return [];
   });
   await Promise.all(list.map((s) => watch(s.id)));
-  const names = new Set<string>();
-  for (const presence of servers.values()) {
-    for (const player of presence.online.values()) names.add(player.name);
-  }
-  await syncOnlinePlayers(names);
+  await Promise.all(
+    [...servers.entries()].map(([serverId, presence]) =>
+      syncOnlinePlayers(serverId, new Set([...presence.online.values()].map((p) => p.name))).catch(
+        (err) => console.error(`[Presence:${serverId}] could not sync the player list:`, err),
+      ),
+    ),
+  );
 }
 
-/** Stops watching (panel shutdown, tests). Who is online stays as it is in players.json. */
+/** Stops watching (panel shutdown, tests). Who is online stays as it is in each players.json. */
 export function stopPlayerPresence(): void {
   for (const undo of teardown.splice(0)) undo();
   for (const presence of servers.values()) {

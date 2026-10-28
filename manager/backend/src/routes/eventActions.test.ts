@@ -7,7 +7,7 @@
  * Real rule store (temp data dir); auth, permissions, the role lookup, the
  * server list and the plugin connection are stubbed.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { NextFunction, Request, Response } from 'express';
 import type { AddressInfo } from 'net';
 import type { Server } from 'http';
@@ -40,8 +40,13 @@ vi.mock('../middleware/auth.js', () => ({
     next();
   },
 }));
+// null = the caller may use every server; a list limits them to those servers.
+const access = vi.hoisted(() => ({ allowed: null as string[] | null }));
 vi.mock('../middleware/permissions.js', () => ({
   requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  accessibleServerIds: async () => access.allowed,
+  ALL_SERVERS_REQUIRED: 'ALL_SERVERS_REQUIRED',
+  SERVER_NOT_ALLOWED: 'SERVER_NOT_ALLOWED',
 }));
 
 const express = (await import('express')).default;
@@ -165,5 +170,41 @@ describe('command rules on joins and leaves without the plugin', () => {
     const other = await call('POST', '/', { ...rule('/say crashed'), eventPattern: 'server.*' });
     expect(other.status).toBe(200);
     expect(codes(other.json)).toEqual([]);
+  });
+});
+
+describe('rules and the servers a caller may use', () => {
+  beforeEach(() => {
+    plugin.connected = new Set(plugin.servers);
+  });
+  afterEach(() => {
+    access.allowed = null;
+  });
+
+  it('a caller limited to server b manages rules of b only', async () => {
+    const onDefault = await call('POST', '/', { ...rule('/say hi {player}'), serverId: 'default' });
+    expect(onDefault.status).toBe(200);
+    access.allowed = ['b'];
+
+    expect((await call('POST', '/', rule('/say hi {player}'))).status).toBe(403);
+    const forAll = await call('POST', '/', rule('/say hi {player}'));
+    expect((forAll.json as unknown as { code: string }).code).toBe('ALL_SERVERS_REQUIRED');
+    expect(
+      (await call('POST', '/', { ...rule('/say hi {player}'), serverId: 'default' })).status,
+    ).toBe(403);
+    const onB = await call('POST', '/', { ...rule('/say hi {player}'), serverId: 'b' });
+    expect(onB.status).toBe(200);
+
+    // Another server's rule: neither listed nor changeable nor deletable.
+    const list = (await call('GET', '/')).json as unknown as {
+      rules: Array<{ id: string; serverId: string | null }>;
+    };
+    expect(list.rules.map((r) => r.id)).toContain(onB.json.rule.id);
+    expect(new Set(list.rules.map((r) => r.serverId))).toEqual(new Set(['b']));
+    const id = onDefault.json.rule.id;
+    expect((await call('PUT', `/${id}`, { name: 'x' })).status).toBe(403);
+    expect((await call('DELETE', `/${id}`)).status).toBe(403);
+    // Nor may it move its own rule to every server.
+    expect((await call('PUT', `/${onB.json.rule.id}`, { serverId: null })).status).toBe(403);
   });
 });

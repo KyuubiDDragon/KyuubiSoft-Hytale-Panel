@@ -1,13 +1,22 @@
 /**
  * Routes for the replay recorder (V3.1.2).
+ *
+ * Segments belong to one server: the scoped mount /api/servers/:id/replay, or
+ * the default server on the legacy path. The recording switch and retention
+ * (`/config`) apply to every server, so changing them needs replay.manage
+ * outside any server role.
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/permissions.js';
+import { requirePermission, requireAllServerAccess } from '../middleware/permissions.js';
 import * as replay from '../services/replay.js';
 import { logActivity } from '../services/activityLog.js';
+import { resolveServerId } from '../services/servers.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import { asyncRoute } from '../utils/asyncRoute.js';
 import { createReadStream } from 'fs';
+
+const serverOf = (req: AuthenticatedRequest) => resolveServerId(req.serverId);
 
 /**
  * Browser EventSource cannot set custom headers, so the SSE stream route
@@ -21,15 +30,21 @@ function authForSse(req: Request, res: Response, next: NextFunction): void {
   authMiddleware(req as AuthenticatedRequest, res, next);
 }
 
+const MAX_RETENTION_DAYS = 365;
+
+function isValidRetentionDays(v: unknown): boolean {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= MAX_RETENTION_DAYS;
+}
+
 const router = Router();
 
 router.get(
   '/',
   authMiddleware,
   requirePermission('replay.view'),
-  async (_req: Request, res: Response) => {
-    res.json({ segments: await replay.listSegments() });
-  },
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    res.json({ segments: await replay.listSegments(await serverOf(req)) });
+  }),
 );
 
 router.get(
@@ -45,8 +60,16 @@ router.put(
   '/config',
   authMiddleware,
   requirePermission('replay.manage'),
+  // The switch covers every server: an account limited to some servers may not change it.
+  requireAllServerAccess(),
   async (req: AuthenticatedRequest, res: Response) => {
     const { recordingEnabled, retentionDays } = req.body ?? {};
+    if (retentionDays !== undefined && !isValidRetentionDays(retentionDays)) {
+      res.status(400).json({
+        error: `retentionDays must be a whole number between 1 and ${MAX_RETENTION_DAYS}`,
+      });
+      return;
+    }
     const next = await replay.setReplayConfig({
       recordingEnabled: typeof recordingEnabled === 'boolean' ? recordingEnabled : undefined,
       retentionDays: typeof retentionDays === 'number' ? retentionDays : undefined,
@@ -67,8 +90,8 @@ router.get(
   '/:id/manifest',
   authMiddleware,
   requirePermission('replay.view'),
-  async (req: Request, res: Response) => {
-    const m = await replay.getManifest(req.params.id);
+  async (req: AuthenticatedRequest, res: Response) => {
+    const m = await replay.getManifest(req.params.id, await serverOf(req));
     if (!m) {
       res.status(404).json({ error: 'Segment not found' });
       return;
@@ -84,8 +107,8 @@ router.get(
   '/:id/stream',
   authForSse,
   requirePermission('replay.view'),
-  (req: Request, res: Response) => {
-    const stream = replay.openTicksStream(req.params.id);
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const stream = replay.openTicksStream(req.params.id, await serverOf(req));
     if (!stream) {
       res.status(404).json({ error: 'Segment not found' });
       return;
@@ -115,7 +138,7 @@ router.get(
       // Best-effort cleanup; readable streams from fs are unref'd by destroy.
       (stream as { destroy?: () => void }).destroy?.();
     });
-  },
+  }),
 );
 
 router.post(
@@ -123,7 +146,7 @@ router.post(
   authMiddleware,
   requirePermission('replay.manage'),
   async (req: AuthenticatedRequest, res: Response) => {
-    const token = await replay.createExportToken(req.params.id);
+    const token = await replay.createExportToken(req.params.id, await serverOf(req));
     if (!token) {
       res.status(404).json({ error: 'Segment not found' });
       return;
@@ -150,7 +173,7 @@ router.delete(
   authMiddleware,
   requirePermission('replay.manage'),
   async (req: AuthenticatedRequest, res: Response) => {
-    const ok = await replay.deleteSegment(req.params.id);
+    const ok = await replay.deleteSegment(req.params.id, await serverOf(req));
     await logActivity(req.user || 'system', 'replay.deleted', 'replay', ok, req.params.id);
     if (!ok) {
       res.status(404).json({ error: 'Segment not found' });

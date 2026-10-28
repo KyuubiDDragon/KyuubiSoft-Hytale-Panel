@@ -9,8 +9,9 @@ import * as fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import multer from 'multer';
-import { config } from '../config.js';
 import { resolveRealPathWithin } from '../utils/pathSecurity.js';
+import { COMPOSE_SERVER_ID } from './servers.js';
+import { getServerContext } from './serverContext.js';
 
 // SECURITY: Magic bytes for file type verification
 export const FILE_SIGNATURES: Record<string, number[][] | null> = {
@@ -122,26 +123,32 @@ export function generateSafeFilename(originalName: string): string {
 export const ALLOWED_MOD_EXTENSIONS = ['.jar', '.zip', '.js', '.lua'];
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB limit (reduced from 100MB)
 
-// Configure multer for file uploads with security improvements
-const modsStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, config.modsPath);
-  },
-  filename: (_req, file, cb) => {
-    // SECURITY: Generate safe filename to prevent path traversal and overwrites
-    cb(null, generateSafeFilename(file.originalname));
-  },
-});
+/**
+ * " (server <id>)" for activity log details about any server but the compose
+ * one, so the log of a single-server panel reads as before.
+ */
+export function onServer(serverId: string | undefined): string {
+  return serverId && serverId !== COMPOSE_SERVER_ID ? ` (server ${serverId})` : '';
+}
 
-const pluginsStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, config.pluginsPath);
-  },
-  filename: (_req, file, cb) => {
-    // SECURITY: Generate safe filename to prevent path traversal and overwrites
-    cb(null, generateSafeFilename(file.originalname));
-  },
-});
+// Configure multer for file uploads with security improvements. Uploads land
+// in the folder of the request's server (legacy routes: the default server).
+function uploadStorage(folder: 'mods' | 'plugins') {
+  return multer.diskStorage({
+    destination: (req, _file, cb) => {
+      getServerContext(req.serverId)
+        .then((ctx) => cb(null, ctx.paths[folder]))
+        .catch((err: Error) => cb(err, ''));
+    },
+    filename: (_req, file, cb) => {
+      // SECURITY: Generate safe filename to prevent path traversal and overwrites
+      cb(null, generateSafeFilename(file.originalname));
+    },
+  });
+}
+
+const modsStorage = uploadStorage('mods');
+const pluginsStorage = uploadStorage('plugins');
 
 export const uploadMod = multer({
   storage: modsStorage,
@@ -189,24 +196,22 @@ export interface WorldInfo {
   files: WorldFileInfo[]; // All editable JSON files in this world
 }
 
-// Possible world paths to check - only actual world directories
-export function getWorldsPaths(): string[] {
-  return [
-    path.join(config.dataPath, 'worlds'), // /opt/hytale/data/worlds
-    path.join(config.serverPath, 'universe', 'worlds'), // /opt/hytale/server/universe/worlds (symlink)
-    path.join(config.serverPath, 'worlds'), // /opt/hytale/server/worlds (fallback)
-  ];
-}
+// The worlds roots of a server come from worldRoots() in services/serverContext.ts.
 
 /**
- * Locate `<worldsRoot>/<worldName>/<relFile>` across the known worlds roots
- * and return its REAL path (symlinks resolved), or null. A candidate that
- * resolves outside its worlds root - e.g. a world folder or config.json that
- * is a link to a panel file - is ignored, so world config reads/writes can't
- * be redirected at secrets. Callers still validate worldName/relFile.
+ * Locate `<worldsRoot>/<worldName>/<relFile>` across a server's worlds roots
+ * (worldRoots(ctx)) and return its REAL path (symlinks resolved), or null. A
+ * candidate that resolves outside its worlds root - e.g. a world folder or
+ * config.json that is a link to a panel file - is ignored, so world config
+ * reads/writes can't be redirected at secrets. Callers still validate
+ * worldName/relFile.
  */
-export async function findWorldFile(worldName: string, relFile: string): Promise<string | null> {
-  for (const worldsPath of getWorldsPaths()) {
+export async function findWorldFile(
+  roots: string[],
+  worldName: string,
+  relFile: string,
+): Promise<string | null> {
+  for (const worldsPath of roots) {
     const candidate = path.join(worldsPath, worldName, relFile);
     const real = resolveRealPathWithin(candidate, [worldsPath]);
     if (!real) {

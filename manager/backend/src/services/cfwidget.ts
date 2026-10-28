@@ -5,13 +5,15 @@ import { logger } from '../utils/logger.js';
  * No API key required - uses https://api.cfwidget.com
  */
 
-import { readFile, writeFile, mkdir, access, unlink } from 'fs/promises';
-import { createWriteStream } from 'fs';
+import { mkdir, access, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import http from 'http';
-import { config } from '../config.js';
 import { resolveFileInDir, resolveRealPathWithin } from '../utils/pathSecurity.js';
+import { listServers } from './servers.js';
+import { checkServerFiles, contextFromServer, type ServerContext } from './serverContext.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 
 // CFWidget API Configuration
 const CFWIDGET_API_BASE = 'api.cfwidget.com';
@@ -121,6 +123,7 @@ export function clearCFWidgetCache(): void {
 
 // ============== Tracked Mods Storage ==============
 
+// Kept in each server's data folder: every server tracks its own mods.
 const TRACKED_MODS_FILE = 'cfwidget-tracked.json';
 
 interface TrackedModsData {
@@ -140,26 +143,28 @@ const WISHLIST_PREFIX = '[wishlist]';
  * null if it isn't a bare .jar/.zip file name ("../users.json", "/etc/x",
  * "..\\x.jar" and friends are all refused).
  */
-export function resolveTrackedModFile(filename: unknown): string | null {
+export function resolveTrackedModFile(server: ServerContext, filename: unknown): string | null {
   if (typeof filename !== 'string' || !MOD_FILE_PATTERN.test(filename)) return null;
-  return resolveFileInDir(config.modsPath, filename);
+  return resolveFileInDir(server.paths.mods, filename);
 }
 
-function isValidTrackedKey(key: string): boolean {
+function isValidTrackedKey(server: ServerContext, key: string): boolean {
   if (key.startsWith(WISHLIST_PREFIX)) return SLUG_PATTERN.test(key.slice(WISHLIST_PREFIX.length));
-  return resolveTrackedModFile(key) !== null;
+  return resolveTrackedModFile(server, key) !== null;
 }
 
-function getTrackedModsPath(): string {
-  return path.join(config.dataPath, TRACKED_MODS_FILE);
+function getTrackedModsPath(server: ServerContext): string {
+  return path.join(server.paths.data, TRACKED_MODS_FILE);
 }
 
-async function loadTrackedMods(): Promise<TrackedModsData> {
+async function loadTrackedMods(server: ServerContext): Promise<TrackedModsData> {
   let parsed: Partial<TrackedModsData>;
   try {
-    const filePath = getTrackedModsPath();
-    const data = await readFile(filePath, 'utf-8');
-    parsed = JSON.parse(data);
+    // In the server's data folder: only a regular file there is read.
+    const data = await readRegularFile(getTrackedModsPath(server), [server.paths.data], {
+      maxBytes: MAX_SERVER_FILE_BYTES,
+    });
+    parsed = JSON.parse(data.toString('utf-8'));
   } catch {
     return { mods: Object.create(null), lastGlobalCheck: null };
   }
@@ -174,8 +179,8 @@ async function loadTrackedMods(): Promise<TrackedModsData> {
     if (
       mod &&
       typeof mod === 'object' &&
-      isValidTrackedKey(key) &&
-      isValidTrackedKey(String(mod.filename))
+      isValidTrackedKey(server, key) &&
+      isValidTrackedKey(server, String(mod.filename))
     ) {
       mods[key] = mod;
     } else {
@@ -187,11 +192,11 @@ async function loadTrackedMods(): Promise<TrackedModsData> {
   return { mods, lastGlobalCheck: parsed?.lastGlobalCheck ?? null };
 }
 
-async function saveTrackedMods(data: TrackedModsData): Promise<void> {
+async function saveTrackedMods(server: ServerContext, data: TrackedModsData): Promise<void> {
   try {
-    const filePath = getTrackedModsPath();
+    const filePath = getTrackedModsPath(server);
     await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, JSON.stringify(data, null, 2));
+    await replaceFileContent(filePath, JSON.stringify(data, null, 2), [server.paths.data]);
   } catch (e) {
     logger.error('[CFWidget] Failed to save tracked mods:', e);
   }
@@ -350,6 +355,7 @@ export function extractSlugFromUrl(input: string): string | null {
  * If filename is empty, the mod is added as a "wishlist" item (not yet installed)
  */
 export async function trackMod(
+  server: ServerContext,
   filename: string,
   curseforgeInput: string,
   currentVersion?: string,
@@ -365,7 +371,7 @@ export async function trackMod(
 
   // The filename is later used to delete the old file on update/uninstall:
   // only a bare .jar/.zip name in the mods folder is accepted.
-  if (!isWishlist && !resolveTrackedModFile(filename)) {
+  if (!isWishlist && !resolveTrackedModFile(server, filename)) {
     return {
       success: false,
       error: 'Invalid mod filename (expected a .jar or .zip file name from the mods folder)',
@@ -415,9 +421,9 @@ export async function trackMod(
   }
 
   // Save to tracked mods
-  const data = await loadTrackedMods();
+  const data = await loadTrackedMods(server);
   data.mods[actualFilename] = trackedMod;
-  await saveTrackedMods(data);
+  await saveTrackedMods(server, data);
 
   return { success: true, mod: trackedMod };
 }
@@ -425,12 +431,12 @@ export async function trackMod(
 /**
  * Untrack a mod
  */
-export async function untrackMod(filename: string): Promise<boolean> {
-  const data = await loadTrackedMods();
+export async function untrackMod(server: ServerContext, filename: string): Promise<boolean> {
+  const data = await loadTrackedMods(server);
 
   if (data.mods[filename]) {
     delete data.mods[filename];
-    await saveTrackedMods(data);
+    await saveTrackedMods(server, data);
     return true;
   }
 
@@ -440,15 +446,18 @@ export async function untrackMod(filename: string): Promise<boolean> {
 /**
  * Get all tracked mods
  */
-export async function getTrackedMods(): Promise<TrackedModsData> {
-  return loadTrackedMods();
+export async function getTrackedMods(server: ServerContext): Promise<TrackedModsData> {
+  return loadTrackedMods(server);
 }
 
 /**
  * Check for updates on a single mod
  */
-export async function checkModUpdate(filename: string): Promise<TrackedMod | null> {
-  const data = await loadTrackedMods();
+export async function checkModUpdate(
+  server: ServerContext,
+  filename: string,
+): Promise<TrackedMod | null> {
+  const data = await loadTrackedMods(server);
   const tracked = data.mods[filename];
 
   if (!tracked) {
@@ -487,7 +496,7 @@ export async function checkModUpdate(filename: string): Promise<TrackedMod | nul
   if (!tracked.installed) {
     tracked.hasUpdate = true;
     data.mods[filename] = tracked;
-    await saveTrackedMods(data);
+    await saveTrackedMods(server, data);
     return tracked;
   }
 
@@ -513,7 +522,7 @@ export async function checkModUpdate(filename: string): Promise<TrackedMod | nul
   }
 
   data.mods[filename] = tracked;
-  await saveTrackedMods(data);
+  await saveTrackedMods(server, data);
 
   return tracked;
 }
@@ -521,15 +530,15 @@ export async function checkModUpdate(filename: string): Promise<TrackedMod | nul
 /**
  * Check for updates on all tracked mods
  */
-export async function checkAllUpdates(): Promise<ModUpdateStatus> {
-  const data = await loadTrackedMods();
+export async function checkAllUpdates(server: ServerContext): Promise<ModUpdateStatus> {
+  const data = await loadTrackedMods(server);
   const mods = Object.values(data.mods);
 
   let updatesAvailable = 0;
   const updatedMods: TrackedMod[] = [];
 
   for (const mod of mods) {
-    const updated = await checkModUpdate(mod.filename);
+    const updated = await checkModUpdate(server, mod.filename);
     if (updated) {
       updatedMods.push(updated);
       if (updated.hasUpdate) {
@@ -543,9 +552,9 @@ export async function checkAllUpdates(): Promise<ModUpdateStatus> {
 
   // Reload data after all updates to get the correct state
   // (checkModUpdate saves each mod individually, so we need fresh data)
-  const freshData = await loadTrackedMods();
+  const freshData = await loadTrackedMods(server);
   freshData.lastGlobalCheck = new Date().toISOString();
-  await saveTrackedMods(freshData);
+  await saveTrackedMods(server, freshData);
 
   return {
     totalTracked: updatedMods.length,
@@ -558,8 +567,8 @@ export async function checkAllUpdates(): Promise<ModUpdateStatus> {
 /**
  * Get current update status without checking (uses cached data)
  */
-export async function getUpdateStatus(): Promise<ModUpdateStatus> {
-  const data = await loadTrackedMods();
+export async function getUpdateStatus(server: ServerContext): Promise<ModUpdateStatus> {
+  const data = await loadTrackedMods(server);
   const mods = Object.values(data.mods);
 
   const updatesAvailable = mods.filter((m) => m.hasUpdate).length;
@@ -576,11 +585,12 @@ export async function getUpdateStatus(): Promise<ModUpdateStatus> {
  * Update installed version for a tracked mod
  */
 export async function updateInstalledVersion(
+  server: ServerContext,
   filename: string,
   version: string,
   fileId?: number,
 ): Promise<boolean> {
-  const data = await loadTrackedMods();
+  const data = await loadTrackedMods(server);
   const tracked = data.mods[filename];
 
   if (!tracked) {
@@ -602,7 +612,7 @@ export async function updateInstalledVersion(
   }
 
   data.mods[filename] = tracked;
-  await saveTrackedMods(data);
+  await saveTrackedMods(server, data);
 
   return true;
 }
@@ -672,19 +682,23 @@ async function downloadFile(url: string, destPath: string, redirectCount = 0): P
           return;
         }
 
-        const file = createWriteStream(destPath);
-
-        response.pipe(file);
-
-        file.on('finish', () => {
-          file.close();
-          logger.info(`[CFWidget] Download complete: ${destPath}`);
-          resolve(true);
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', async () => {
+          try {
+            // destPath is <mods folder>/<plain name>. The game server can write
+            // to that folder: the file is replaced, never written through a
+            // link planted under its name.
+            await replaceFileContent(destPath, Buffer.concat(chunks), [path.dirname(destPath)]);
+            logger.info(`[CFWidget] Download complete: ${destPath}`);
+            resolve(true);
+          } catch (err) {
+            logger.error('[CFWidget] File write error:', err);
+            resolve(false);
+          }
         });
-
-        file.on('error', (err) => {
-          logger.error('[CFWidget] File write error:', err);
-          file.close();
+        response.on('error', (err) => {
+          logger.error('[CFWidget] Download error:', err);
           resolve(false);
         });
       });
@@ -734,8 +748,11 @@ export interface CFWidgetInstallResult {
 /**
  * Install or update a tracked mod from CFWidget
  */
-export async function installTrackedMod(trackedFilename: string): Promise<CFWidgetInstallResult> {
-  const data = await loadTrackedMods();
+export async function installTrackedMod(
+  server: ServerContext,
+  trackedFilename: string,
+): Promise<CFWidgetInstallResult> {
+  const data = await loadTrackedMods(server);
   const tracked = data.mods[trackedFilename];
 
   if (!tracked) {
@@ -763,22 +780,23 @@ export async function installTrackedMod(trackedFilename: string): Promise<CFWidg
   }
 
   // Ensure mods directory exists
+  const modsDir = server.paths.mods;
   try {
-    await access(config.modsPath);
+    await access(modsDir);
   } catch {
-    await mkdir(config.modsPath, { recursive: true });
+    await mkdir(modsDir, { recursive: true });
   }
 
   // Build destination path
-  const destPath = path.join(config.modsPath, safeFilename);
+  const destPath = path.join(modsDir, safeFilename);
   const resolvedDest = path.resolve(destPath);
-  const resolvedTarget = path.resolve(config.modsPath);
+  const resolvedTarget = path.resolve(modsDir);
 
   // Security: Prevent path traversal (also via a symlink already sitting at
   // the destination - the download stream would follow it)
   if (
     !resolvedDest.startsWith(resolvedTarget + path.sep) ||
-    !resolveRealPathWithin(destPath, [config.modsPath])
+    !resolveRealPathWithin(destPath, [modsDir])
   ) {
     logger.error('[CFWidget] Path traversal attempt detected');
     return { success: false, error: 'Invalid destination path' };
@@ -803,7 +821,7 @@ export async function installTrackedMod(trackedFilename: string): Promise<CFWidg
 
   // Delete old file if updating to new version
   if (isUpdate && tracked.filename && !tracked.filename.startsWith(WISHLIST_PREFIX)) {
-    const oldPath = resolveTrackedModFile(tracked.filename);
+    const oldPath = resolveTrackedModFile(server, tracked.filename);
     if (!oldPath) {
       logger.warn(
         `[CFWidget] Not deleting old version with invalid filename: ${JSON.stringify(tracked.filename)}`,
@@ -842,7 +860,7 @@ export async function installTrackedMod(trackedFilename: string): Promise<CFWidg
   };
 
   data.mods[safeFilename] = updatedMod;
-  await saveTrackedMods(data);
+  await saveTrackedMods(server, data);
 
   logger.info(
     `[CFWidget] ${isWishlist ? 'Installed' : 'Updated'} ${modInfo.title} (${safeFilename})`,
@@ -860,9 +878,10 @@ export async function installTrackedMod(trackedFilename: string): Promise<CFWidg
  * Uninstall a tracked mod (delete file and untrack)
  */
 export async function uninstallTrackedMod(
+  server: ServerContext,
   filename: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const data = await loadTrackedMods();
+  const data = await loadTrackedMods(server);
   const tracked = data.mods[filename];
 
   if (!tracked) {
@@ -871,7 +890,7 @@ export async function uninstallTrackedMod(
 
   // Only delete file if it's installed (not a wishlist item)
   if (tracked.installed && !filename.startsWith(WISHLIST_PREFIX)) {
-    const filePath = resolveTrackedModFile(filename);
+    const filePath = resolveTrackedModFile(server, filename);
     if (!filePath) {
       return { success: false, error: 'Invalid mod filename' };
     }
@@ -886,7 +905,7 @@ export async function uninstallTrackedMod(
 
   // Remove from tracked mods
   delete data.mods[filename];
-  await saveTrackedMods(data);
+  await saveTrackedMods(server, data);
 
   return { success: true };
 }
@@ -926,22 +945,34 @@ export function stopAutoUpdateCheck(): void {
 }
 
 /**
- * Run the automatic update check
+ * Run the automatic update check for every server whose files the panel sees
  */
 async function runAutoCheck(): Promise<void> {
+  let servers: ServerContext[];
   try {
-    logger.info('[CFWidget] Running automatic update check...');
-    const status = await checkAllUpdates();
-    lastAutoCheck = new Date();
-
-    if (status.updatesAvailable > 0) {
-      logger.info(`[CFWidget] Found ${status.updatesAvailable} mod update(s) available`);
-    } else {
-      logger.info('[CFWidget] All tracked mods are up to date');
-    }
+    servers = (await listServers()).map(contextFromServer);
   } catch (e) {
     logger.error('[CFWidget] Auto update check failed:', e);
+    return;
   }
+  for (const server of servers) {
+    if (!checkServerFiles(server).available) continue;
+    try {
+      logger.info(`[CFWidget] Running automatic update check for server ${server.id}...`);
+      const status = await checkAllUpdates(server);
+
+      if (status.updatesAvailable > 0) {
+        logger.info(
+          `[CFWidget] Found ${status.updatesAvailable} mod update(s) available on server ${server.id}`,
+        );
+      } else {
+        logger.info(`[CFWidget] All tracked mods of server ${server.id} are up to date`);
+      }
+    } catch (e) {
+      logger.error(`[CFWidget] Auto update check failed for server ${server.id}:`, e);
+    }
+  }
+  lastAutoCheck = new Date();
 }
 
 /**

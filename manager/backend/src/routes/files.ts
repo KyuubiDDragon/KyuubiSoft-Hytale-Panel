@@ -16,8 +16,10 @@ import {
   openDownloadStream,
   FileManagerError,
   MAX_WRITE_BYTES,
+  type FileManagerFolders,
 } from '../services/fileManager.js';
-import { verifyUploadMagic } from '../services/managementHelpers.js';
+import { onServer, verifyUploadMagic } from '../services/managementHelpers.js';
+import { getServerContext, UnknownServerError } from '../services/serverContext.js';
 
 const router = Router();
 
@@ -25,9 +27,18 @@ const router = Router();
 // Helpers
 // ============================================================
 
+/** The folders of the request's server (legacy routes: the default server). */
+async function serverFolders(req: AuthenticatedRequest): Promise<FileManagerFolders> {
+  return (await getServerContext(req.serverId)).paths;
+}
+
 function fmError(res: Response, err: unknown): void {
   if (err instanceof FileManagerError) {
     res.status(err.status).json({ error: err.message, code: err.code });
+    return;
+  }
+  if (err instanceof UnknownServerError) {
+    res.status(404).json({ error: 'Server not found' });
     return;
   }
   const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -42,8 +53,9 @@ async function audit(
   success: boolean,
   details?: string,
 ): Promise<void> {
+  const note = `${details ?? ''}${onServer(req.serverId)}`.trim();
   try {
-    await logActivity(req.user || 'unknown', action, 'config', success, target, details);
+    await logActivity(req.user || 'unknown', action, 'config', success, target, note || undefined);
   } catch (e) {
     console.error('[files] audit failed:', e);
   }
@@ -93,15 +105,19 @@ router.get(
   '/roots',
   authMiddleware,
   requirePermission('files.read'),
-  (_req: AuthenticatedRequest, res: Response) => {
-    const roots = getRoots().map((r) => ({
-      id: r.id,
-      path: r.path,
-      rw: r.rw,
-      label: r.label || r.id,
-      permission: r.permission,
-    }));
-    res.json({ roots });
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const roots = getRoots(await serverFolders(req)).map((r) => ({
+        id: r.id,
+        path: r.path,
+        rw: r.rw,
+        label: r.label || r.id,
+        permission: r.permission,
+      }));
+      res.json({ roots });
+    } catch (err) {
+      fmError(res, err);
+    }
   },
 );
 
@@ -118,7 +134,7 @@ router.get(
       return;
     }
     try {
-      const result = await listDir(rootId, relPath);
+      const result = await listDir(await serverFolders(req), rootId, relPath);
       res.json(result);
     } catch (err) {
       fmError(res, err);
@@ -139,7 +155,7 @@ router.get(
       return;
     }
     try {
-      const result = await readFile(rootId, relPath);
+      const result = await readFile(await serverFolders(req), rootId, relPath);
       res.json({
         rootId,
         path: relPath,
@@ -179,7 +195,14 @@ router.put(
     }
 
     try {
-      const result = await writeFile(rootId, relPath, content, encoding || 'utf-8', ifMatchMtime);
+      const result = await writeFile(
+        await serverFolders(req),
+        rootId,
+        relPath,
+        content,
+        encoding || 'utf-8',
+        ifMatchMtime,
+      );
       await audit(req, 'file.write', `files:${rootId}:${relPath}`, true);
       res.json({ ok: true, ...result });
     } catch (err) {
@@ -225,7 +248,7 @@ router.post(
     }
 
     try {
-      const result = await uploadFile(rootId, relPath, {
+      const result = await uploadFile(await serverFolders(req), rootId, relPath, {
         buffer: file.buffer,
         originalname: file.originalname,
         size: file.size,
@@ -270,7 +293,7 @@ router.delete(
       return;
     }
     try {
-      await deleteFile(rootId, relPath);
+      await deleteFile(await serverFolders(req), rootId, relPath);
       await audit(req, 'file.delete', `files:${rootId}:${relPath}`, true);
       res.json({ ok: true });
     } catch (err) {
@@ -303,7 +326,7 @@ router.post(
       return;
     }
     try {
-      await moveFile(rootId, from, to);
+      await moveFile(await serverFolders(req), rootId, from, to);
       await audit(req, 'file.move', `files:${rootId}:${from} -> ${to}`, true);
       res.json({ ok: true });
     } catch (err) {
@@ -332,7 +355,11 @@ router.get(
       return;
     }
     try {
-      const { stream, size, filename } = await openDownloadStream(rootId, relPath);
+      const { stream, size, filename } = await openDownloadStream(
+        await serverFolders(req),
+        rootId,
+        relPath,
+      );
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Length', String(size));
       res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);

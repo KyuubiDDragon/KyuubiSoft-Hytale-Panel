@@ -17,8 +17,7 @@
 import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { config } from '../config.js';
-import { getServer, getDefaultId } from './servers.js';
+import type { ServerContext } from './serverContext.js';
 import { readInstalledVersion } from './serverInstall.js';
 import { logger } from '../utils/logger.js';
 
@@ -73,17 +72,11 @@ function versionsMatch(a: string, b: string): boolean {
   return compareVersions(a, b) === 0;
 }
 
-export async function getServerVersion(serverId?: string): Promise<string | null> {
-  let serverPath = config.serverPath;
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const s = await getServer(id);
-    if (s) serverPath = s.paths.server;
-  } catch {
-    /* registry not ready */
-  }
+export async function getServerVersion(
+  server: Pick<ServerContext, 'paths'>,
+): Promise<string | null> {
   // JAR manifest first; `.hytale-version` holds a second (patchline) line now.
-  return (await readInstalledVersion(serverPath)).version;
+  return (await readInstalledVersion(server.paths.server)).version;
 }
 
 // ---------- verdict from declared ranges ----------
@@ -202,9 +195,9 @@ export async function probeJarCompat(jarPath: string): Promise<DeclaredCompat | 
 
 export async function checkRegistryMod(
   declared: DeclaredCompat,
-  serverId?: string,
+  server: Pick<ServerContext, 'paths'>,
 ): Promise<CompatResult> {
-  const serverVersion = await getServerVersion(serverId);
+  const serverVersion = await getServerVersion(server);
   const hasDeclared =
     (declared.gameVersions && declared.gameVersions.length) ||
     declared.minServerVersion ||
@@ -212,8 +205,11 @@ export async function checkRegistryMod(
   return evaluate(declared, serverVersion, hasDeclared ? 'registry' : 'none');
 }
 
-export async function checkInstalledJar(jarPath: string, serverId?: string): Promise<CompatResult> {
-  const serverVersion = await getServerVersion(serverId);
+export async function checkInstalledJar(
+  jarPath: string,
+  server: Pick<ServerContext, 'paths'>,
+): Promise<CompatResult> {
+  const serverVersion = await getServerVersion(server);
   let declared: DeclaredCompat | null = null;
   try {
     declared = await probeJarCompat(jarPath);

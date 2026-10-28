@@ -17,6 +17,11 @@ const { createBackup, execCommand } = vi.hoisted(() => ({
 }));
 vi.mock('./docker.js', () => ({ execCommand }));
 vi.mock('./backup.js', () => ({ createBackup }));
+// The rule creators may use every server; the server list has its own tests.
+vi.mock('./roles.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./roles.js')>()),
+  userMayAccessServer: async () => true,
+}));
 
 const ea = await import('./eventActions.js');
 const { publish } = await import('./eventBus.js');

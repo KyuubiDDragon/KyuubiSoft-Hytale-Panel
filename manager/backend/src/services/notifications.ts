@@ -9,6 +9,8 @@ import { getDb } from '../db/index.js';
 import { subscribe } from './eventBus.js';
 import type { PanelEvent } from '../schemas/events.js';
 import { pushToUserAsync } from './webPush.js';
+import { eventServerId } from './eventServer.js';
+import { getUserAllowedServers, getUserPermissions, userMayAccessServer } from './roles.js';
 
 export type NotificationLevel = 'info' | 'warning' | 'error' | 'success';
 
@@ -157,7 +159,29 @@ export function setPreference(
     .run(username, eventName, next.in_app, next.email, next.webhook);
 }
 
-function fanOutEvent(event: PanelEvent): void {
+// Panel-wide events (sign-ins, accounts, roles) go only to accounts that may read
+// them anyway; the right each family needs. 'panel.' needs none.
+const PANEL_WIDE_EVENT_RIGHTS: ReadonlyArray<readonly [string, string | null]> = [
+  ['auth.', 'audit.view'],
+  ['user.', 'users.view'],
+  ['role.', 'roles.manage'],
+  ['panel.', null],
+];
+
+/** May this recipient see the event? Server events need access to that server. */
+async function mayReceive(username: string, event: PanelEvent): Promise<boolean> {
+  const serverId = await eventServerId(event);
+  if (serverId) return userMayAccessServer(username, serverId);
+  const required = PANEL_WIDE_EVENT_RIGHTS.find(([prefix]) => event.name.startsWith(prefix))?.[1];
+  if (required === undefined) return false;
+  // Accounts with a server list never get panel-wide events.
+  if ((await getUserAllowedServers(username)) !== null) return false;
+  if (required === null) return true;
+  const granted = await getUserPermissions(username);
+  return granted.includes('*') || (granted as string[]).includes(required);
+}
+
+async function fanOutEvent(event: PanelEvent): Promise<void> {
   // Look up every user that has in-app delivery toggled on for this event.
   const recipients = getDb()
     .prepare('SELECT username FROM notification_prefs WHERE event_name = ? AND in_app = 1')
@@ -165,6 +189,11 @@ function fanOutEvent(event: PanelEvent): void {
   if (recipients.length === 0) return;
   const title = describeEvent(event);
   for (const r of recipients) {
+    try {
+      if (!(await mayReceive(r.username, event))) continue;
+    } catch {
+      continue; // unknown account or unreadable users file: deliver nothing
+    }
     notify(r.username, {
       title,
       body: JSON.stringify(event.payload, null, 2).slice(0, 500),
@@ -208,5 +237,7 @@ function levelForEvent(name: string): NotificationLevel {
 }
 
 export function startNotificationFanout(): void {
-  subscribe(['*'], fanOutEvent);
+  subscribe(['*'], (event) => {
+    fanOutEvent(event).catch(() => {});
+  });
 }

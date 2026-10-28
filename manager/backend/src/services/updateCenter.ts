@@ -152,7 +152,7 @@ export async function getUpdateCenterStatus(serverId?: string): Promise<UpdateCe
     getStagedUpdate(updaterPath),
     getNativeBackup(updaterPath),
     dockerService.getContainerState(serverId).catch(() => null),
-    readPanelConfig(),
+    readPanelConfig(serverId),
     serverConfigJson(paths.serverPath),
   ]);
   const running = container?.running === true;
@@ -222,10 +222,10 @@ export async function getUpdateCenterStatus(serverId?: string): Promise<UpdateCe
   };
 }
 
-/** Latest version on the panel's patchline, via the downloader (needs its login). */
+/** Latest version on the server's patchline, via its downloader (needs its login). */
 export async function checkLatestVersion(serverId?: string): Promise<LatestCheck> {
-  const { patchline } = await readPanelConfig();
-  const result = await getLatestVersion(patchline);
+  const { patchline } = await readPanelConfig(serverId);
+  const result = await getLatestVersion(patchline, serverId);
   const check: LatestCheck = {
     patchline,
     latestVersion: result.version,

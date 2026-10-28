@@ -12,9 +12,8 @@ import { randomBytes } from 'crypto';
 
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
-import { verifyWsTicket, verifyToken } from './services/auth.js';
-import { hasPermission } from './services/roles.js';
-import { scopeAllows } from './services/commandPolicy.js';
+import { isLocationsSocketPath, setupLocationsSocket } from './locationsSocket.js';
+import { getServerContext } from './services/serverContext.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { logger } from './utils/logger.js';
 
@@ -34,6 +33,8 @@ import notificationsRoutes from './routes/notifications.js';
 import auditRoutes from './routes/audit.js';
 import serversRoutes from './routes/servers.js';
 import ssoRoutes from './routes/sso.js';
+import userServersRoutes from './routes/userServers.js';
+import { installServerListCleanup } from './services/serverLists.js';
 import filesRoutes from './routes/files.js';
 import playerLocationsRoutes from './routes/playerLocations.js';
 import replayRoutes from './routes/replay.js';
@@ -57,7 +58,6 @@ import { initializePluginAuth } from './services/pluginAuth.js';
 import { initializePlayerLocations } from './services/playerLocations.js';
 import { initializeReplay, shutdownReplay } from './services/replay.js';
 import { initializeRoles } from './services/roles.js';
-import * as playerLocations from './services/playerLocations.js';
 import { isSetupComplete } from './services/setupService.js';
 import {
   checkAndRunMigration,
@@ -102,75 +102,29 @@ if (config.trustProxy) {
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 setupWebSocket(wss);
 
-// Secondary WSS for live player-location broadcasts. Kept separate so the
-// console WS handler stays untouched.
+// Secondary WSS for live player-location broadcasts of one server
+// (locationsSocket.ts). Kept separate so the console WS handler stays untouched.
 const locationsWss = new WebSocketServer({ noServer: true });
-locationsWss.on('connection', async (socket: import('ws').WebSocket, req: IncomingMessage) => {
-  // SECURITY: authenticate BEFORE streaming. This socket exposes live player
-  // UUIDs + world coordinates, so it must enforce the same players.view gate
-  // as GET /api/players/locations. Previously it streamed to anyone who could
-  // reach the panel — no token, no permission check. Accepts a single-use WS
-  // ticket (preferred) or an access token (legacy fallback, mirrors the
-  // console WS).
-  try {
-    const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const ticket = url.searchParams.get('ticket');
-    const token = url.searchParams.get('token');
-    let username: string | null = null;
-    let apiKeyScopes: string[] | undefined;
-    if (ticket) {
-      const r = verifyWsTicket(ticket);
-      if (r.valid && r.username) {
-        username = r.username;
-        apiKeyScopes = r.apiKeyScopes;
-      }
-    } else if (token) {
-      const r = verifyToken(token, 'access');
-      if (r) username = r.username;
-    }
-    if (!username) {
-      socket.close(4001, 'Authentication required');
-      return;
-    }
-    // A ticket requested with an API key only opens this stream if the key
-    // itself is scoped for players.view.
-    if (
-      !scopeAllows(apiKeyScopes, 'players.view') ||
-      !(await hasPermission(username, 'players.view'))
-    ) {
-      socket.close(4003, 'Permission denied: players.view required');
-      return;
-    }
-  } catch {
-    socket.close(4001, 'Authentication failed');
-    return;
-  }
-
-  // Authenticated: send initial snapshot, then stream subsequent updates.
-  try {
-    socket.send(JSON.stringify({ type: 'snapshot', samples: playerLocations.getLatestSnapshot() }));
-  } catch {
-    /* socket may already be closed */
-  }
-  const unsubscribe = playerLocations.addListener((s) => {
-    try {
-      socket.send(JSON.stringify({ type: 'sample', sample: s }));
-    } catch {
-      /* ignore - will be cleaned up by close */
-    }
-  });
-  socket.on('close', () => unsubscribe());
-  socket.on('error', () => unsubscribe());
-});
+setupLocationsSocket(locationsWss);
 
 // WebMap proxy - MUST be mounted BEFORE helmet: the third-party map page gets
 // its own sandboxing CSP (routes/webmap.ts) instead of the panel's strict one.
 // It is only reachable under /api/webmap/t/<session>/ with a session minted via
 // POST /api/webmap/session (players.view), and always runs with an opaque
 // origin, so its scripts can't use the panel's token, cookies or API.
-const webMapTarget = `http://${config.gameContainerName}:${config.webMapPort}`;
-console.log(`[WebMap] Proxy configured for: ${webMapTarget}`);
-const webMapProxy = createWebMapProxy(webMapTarget);
+// Each session belongs to one server; its map runs in that server's container.
+// While MULTISERVER_ENABLED is off only the compose server's map is served.
+async function webMapTargetFor(serverId: string): Promise<string> {
+  const ctx = await getServerContext(serverId);
+  if (!config.multiserverEnabled && ctx.kind !== 'compose') {
+    throw new Error(`Multiserver is disabled; no map for server ${serverId}`);
+  }
+  return `http://${ctx.containerName}:${ctx.network.webMapPort}`;
+}
+console.log(
+  `[WebMap] Proxy configured for http://${config.gameContainerName}:${config.webMapPort} (compose server) and each additional server's container`,
+);
+const webMapProxy = createWebMapProxy(webMapTargetFor);
 app.use('/api/webmap', webMapProxy.middleware);
 
 // Handle ALL WebSocket upgrades manually (noServer mode)
@@ -194,8 +148,9 @@ server.on('upgrade', (request, socket, head) => {
     return;
   }
 
-  // Handle /api/players/locations/ws - live position broadcasts
-  if (pathname.startsWith('/api/players/locations/ws')) {
+  // Handle /api/players/locations/ws and /api/servers/:id/players/locations/ws -
+  // live position broadcasts of one server
+  if (isLocationsSocketPath(pathname.split('?')[0])) {
     console.log(`[Locations WS] Handling player-locations WebSocket upgrade`);
     locationsWss.handleUpgrade(request, socket, head, (ws) => {
       locationsWss.emit('connection', ws, request);
@@ -466,58 +421,91 @@ app.use(async (req, res, next) => {
 // ============================================================
 // API Routes (require setup to be complete)
 // ============================================================
+
+// The server registry loads before the first request resolves a server. A
+// damaged servers.json stops the panel here instead of being replaced by a
+// fresh one that forgets every additional server.
+import { ensureLoaded as loadServerRegistry } from './services/servers.js';
+import { warnIfServerFilesUnavailable } from './services/serverContext.js';
+import {
+  legacyServerScope,
+  requireServerFiles,
+  serverScopeMiddleware,
+} from './middleware/serverScope.js';
+try {
+  await loadServerRegistry();
+} catch (err) {
+  console.error(`[FATAL] ${err instanceof Error ? err.message : err}`);
+  process.exit(1);
+}
+installServerListCleanup();
+await warnIfServerFilesUnavailable().catch((err) =>
+  console.error('[servers] Could not check the server folders:', err),
+);
+
+// Server-bound resources exist twice: legacy /api/<resource>/... acts on the
+// default server, /api/servers/:serverId/<resource>/... on the named one.
+// Both set req.serverId, so handlers always get a concrete id. Routers whose
+// every route works on the server's files also answer 409 while those files
+// are not visible to the panel.
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', userServersRoutes);
 app.use('/api/auth/sso', ssoRoutes);
-app.use('/api/server', serverRoutes);
-app.use('/api/console', consoleRoutes);
-app.use('/api/backups', backupRoutes);
+app.use('/api/server', legacyServerScope, serverRoutes);
+app.use('/api/console', legacyServerScope, consoleRoutes);
+app.use('/api/backups', legacyServerScope, requireServerFiles, backupRoutes);
 // IMPORTANT: more specific player routes must come before /api/players.
-app.use('/api/players/locations', playerLocationsRoutes);
-app.use('/api/players', playersRoutes);
-app.use('/api/management', managementRoutes);
-app.use('/api/scheduler', schedulerRoutes);
-app.use('/api/assets', assetsRoutes);
+app.use('/api/players/locations', legacyServerScope, playerLocationsRoutes);
+app.use('/api/players', legacyServerScope, playersRoutes);
+app.use('/api/management', legacyServerScope, requireServerFiles, managementRoutes);
+app.use('/api/scheduler', legacyServerScope, requireServerFiles, schedulerRoutes);
+app.use('/api/assets', legacyServerScope, assetsRoutes);
 app.use('/api/roles', rolesRouter);
+// Webhooks and event actions take a server id as a filter (none = every
+// server), so they get no default id.
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/me/notifications', notificationsRoutes);
 app.use('/api/audit-log', auditRoutes);
-app.use('/api/files', filesRoutes);
+app.use('/api/files', legacyServerScope, requireServerFiles, filesRoutes);
 app.use('/api/metrics', metricsRoutes);
-app.use('/api/replay', replayRoutes);
-app.use('/api/wiki', wikiRoutes);
+app.use('/api/replay', legacyServerScope, replayRoutes);
+app.use('/api/wiki', legacyServerScope, wikiRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/event-actions', eventActionsRoutes);
-app.use('/api/mod-panel', modPanelRoutes);
+app.use('/api/mod-panel', legacyServerScope, modPanelRoutes);
 // WebMap session minting/revocation (the map proxy is mounted before helmet).
-app.use('/api/webmap', webMapRoutes);
+app.use('/api/webmap', legacyServerScope, webMapRoutes);
 // Public, unauthenticated status (off unless config.publicStatus.enabled).
 app.use('/api/public', publicRoutes);
 
 // v3 multi-server registry.
 //
 //   /api/servers/*                        — registry CRUD (this router)
-//   /api/servers/:serverId/<resource>/... — scoped invocation of any
-//                                           resource router. The serverScope
-//                                           middleware sets req.serverId,
-//                                           the service layer (docker.ts,
-//                                           scheduler.ts, backup.ts, …) uses
-//                                           it. Legacy /api/<resource>/...
-//                                           still works against the default
-//                                           server identified by
-//                                           servers.json.defaultId.
+//   /api/servers/:serverId/<resource>/... — scoped invocation of a resource
+//                                           router. serverScopeMiddleware
+//                                           validates the id (only the
+//                                           compose server while
+//                                           MULTISERVER_ENABLED is off) and
+//                                           sets req.serverId.
 app.use('/api/servers', serversRoutes);
 
-import { serverScopeMiddleware } from './middleware/serverScope.js';
-app.use('/api/servers/:serverId/server', serverScopeMiddleware, serverRoutes);
-app.use('/api/servers/:serverId/console', serverScopeMiddleware, consoleRoutes);
-app.use('/api/servers/:serverId/backups', serverScopeMiddleware, backupRoutes);
-app.use('/api/servers/:serverId/players', serverScopeMiddleware, playersRoutes);
-app.use('/api/servers/:serverId/management', serverScopeMiddleware, managementRoutes);
-app.use('/api/servers/:serverId/scheduler', serverScopeMiddleware, schedulerRoutes);
-app.use('/api/servers/:serverId/assets', serverScopeMiddleware, assetsRoutes);
-app.use('/api/servers/:serverId/files', serverScopeMiddleware, filesRoutes);
-app.use('/api/servers/:serverId/mod-panel', serverScopeMiddleware, modPanelRoutes);
+const scoped = [serverScopeMiddleware];
+const scopedWithFiles = [serverScopeMiddleware, requireServerFiles];
+app.use('/api/servers/:serverId/server', scoped, serverRoutes);
+app.use('/api/servers/:serverId/console', scoped, consoleRoutes);
+app.use('/api/servers/:serverId/backups', scopedWithFiles, backupRoutes);
+// More specific player routes first, as on the legacy mounts.
+app.use('/api/servers/:serverId/players/locations', scoped, playerLocationsRoutes);
+app.use('/api/servers/:serverId/players', scoped, playersRoutes);
+app.use('/api/servers/:serverId/replay', scoped, replayRoutes);
+app.use('/api/servers/:serverId/webmap', scoped, webMapRoutes);
+app.use('/api/servers/:serverId/management', scopedWithFiles, managementRoutes);
+app.use('/api/servers/:serverId/scheduler', scopedWithFiles, schedulerRoutes);
+app.use('/api/servers/:serverId/assets', scoped, assetsRoutes);
+app.use('/api/servers/:serverId/files', scopedWithFiles, filesRoutes);
+app.use('/api/servers/:serverId/mod-panel', scoped, modPanelRoutes);
+app.use('/api/servers/:serverId/wiki', scoped, wikiRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -758,6 +746,10 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Start the crash watchdog (monitoring/alerts always; auto-restart opt-in via
   // WATCHDOG_AUTO_RESTART=true).
   startWatchdog();
+
+  // Match the status of additional servers with their containers (an entry
+  // left in "creating" by a restart, a container removed by hand).
+  void (await import('./services/serverReconcile.js')).startServerReconcile();
 
   // Start the punishment-expiry loop (lifts lapsed temp bans/mutes).
   startPunishmentExpiry();

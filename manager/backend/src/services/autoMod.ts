@@ -148,7 +148,7 @@ async function enforce(
       await logActivity(SYSTEM_USER, `automod_${action}`, 'player', false, player, result.error);
       return;
     }
-    recordPunishment({
+    await recordPunishment({
       serverId,
       playerName: player,
       type: action === 'kick' ? 'kick' : 'warn',

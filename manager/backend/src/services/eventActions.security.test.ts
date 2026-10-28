@@ -25,6 +25,8 @@ vi.mock('./roles.js', async (importOriginal) => ({
     const p = perms.get(user) ?? [];
     return p.includes('*') || p.includes(permission);
   },
+  // Every creator here may use every server; the server list has its own tests.
+  userMayAccessServer: async () => true,
 }));
 // eventActions only needs execCommand (imported lazily when a rule fires).
 vi.mock('./docker.js', () => ({ execCommand }));

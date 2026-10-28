@@ -7,7 +7,8 @@ import path from 'path';
 import os from 'os';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { verifyUploadMagic, findWorldFile } from './managementHelpers.js';
-import { config } from '../config.js';
+import { worldRoots } from './serverContext.js';
+import { serverContextIn } from '../test/serverContextStub.js';
 
 const buf = (...bytes: number[]) => Buffer.from(bytes);
 
@@ -60,7 +61,8 @@ describe('findWorldFile', () => {
   let base: string;
   let worlds: string;
   let outside: string;
-  const saved = { dataPath: config.dataPath, serverPath: config.serverPath };
+  // data/worlds exists, the server folder (universe/worlds, worlds) does not.
+  const roots = () => worldRoots(serverContextIn(base));
 
   beforeAll(() => {
     base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kp-worlds-')));
@@ -80,34 +82,30 @@ describe('findWorldFile', () => {
         'file',
       );
     }
-    config.dataPath = path.join(base, 'data');
-    config.serverPath = path.join(base, 'server'); // does not exist
   });
 
   afterAll(() => {
-    config.dataPath = saved.dataPath;
-    config.serverPath = saved.serverPath;
     fs.rmSync(base, { recursive: true, force: true });
   });
 
   it('finds regular world files', async () => {
-    expect(await findWorldFile('Good', 'config.json')).toBe(
+    expect(await findWorldFile(roots(), 'Good', 'config.json')).toBe(
       path.join(worlds, 'Good', 'config.json'),
     );
-    expect(await findWorldFile('Good', 'resources/Time.json')).toBe(
+    expect(await findWorldFile(roots(), 'Good', 'resources/Time.json')).toBe(
       path.join(worlds, 'Good', 'resources', 'Time.json'),
     );
-    expect(await findWorldFile('Missing', 'config.json')).toBeNull();
+    expect(await findWorldFile(roots(), 'Missing', 'config.json')).toBeNull();
   });
 
   it.skipIf(!CAN_LINK_DIRS)(
     'ignores a world folder that links out of the worlds root',
     async () => {
-      expect(await findWorldFile('Evil', 'config.json')).toBeNull();
+      expect(await findWorldFile(roots(), 'Evil', 'config.json')).toBeNull();
     },
   );
 
   it.skipIf(!CAN_LINK_FILES)('ignores a world config.json that links to a panel file', async () => {
-    expect(await findWorldFile('Sneaky', 'config.json')).toBeNull();
+    expect(await findWorldFile(roots(), 'Sneaky', 'config.json')).toBeNull();
   });
 });

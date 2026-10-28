@@ -24,8 +24,9 @@ import {
   getRegistryInfo,
   getModRegistry,
 } from '../../services/modStore.js';
-import { config } from '../../config.js';
 import { checkRegistryMod, checkInstalledJar } from '../../services/modCompat.js';
+import { onServer } from '../../services/managementHelpers.js';
+import { getServerContext } from '../../services/serverContext.js';
 import {
   searchMods as modtaleSearch,
   getModDetails as modtaleGetDetails,
@@ -94,6 +95,10 @@ import {
 
 const router = Router();
 
+// Installs, install lists and tracked mods belong to the request's server
+// (legacy routes: the default server); the catalogs are the same for all.
+const serverOf = (req: Request) => getServerContext(req.serverId);
+
 // ============== MOD STORE ==============
 
 // GET /api/management/modstore
@@ -101,7 +106,7 @@ router.get(
   '/modstore',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return demo mod store
     if (isDemoMode()) {
       res.json({ mods: getDemoModStore() });
@@ -109,7 +114,7 @@ router.get(
     }
 
     try {
-      const mods = await getAvailableMods();
+      const mods = await getAvailableMods(await serverOf(req));
       res.json({ mods });
     } catch (error) {
       res.status(500).json({ error: 'Failed to get mod store' });
@@ -125,7 +130,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { modId } = req.params;
-      const mods = await getAvailableMods();
+      const mods = await getAvailableMods(await serverOf(req));
       const mod = mods.find((m) => m.id === modId);
 
       if (!mod) {
@@ -197,7 +202,7 @@ router.get(
           minServerVersion: entry.minServerVersion,
           maxServerVersion: entry.maxServerVersion,
         },
-        req.serverId,
+        await serverOf(req),
       );
       res.json(result);
     } catch (error) {
@@ -224,11 +229,12 @@ router.get(
     }
     try {
       const filename = path.basename(req.params.filename); // no traversal
+      const server = await serverOf(req);
       // Look in mods first; if the mod declares nothing there, try plugins.
-      const fromMods = await checkInstalledJar(path.join(config.modsPath, filename), req.serverId);
+      const fromMods = await checkInstalledJar(path.join(server.paths.mods, filename), server);
       const result =
         fromMods.declared.source === 'none'
-          ? await checkInstalledJar(path.join(config.pluginsPath, filename), req.serverId)
+          ? await checkInstalledJar(path.join(server.paths.plugins, filename), server)
           : fromMods;
       res.json(result);
     } catch (error) {
@@ -257,7 +263,7 @@ router.post(
 
     try {
       const { modId } = req.params;
-      const result = await installMod(modId);
+      const result = await installMod(await serverOf(req), modId);
 
       if (result.success) {
         await logActivity(
@@ -266,7 +272,7 @@ router.post(
           'mod',
           true,
           result.filename,
-          `Installed ${modId} v${result.version} from Mod Store`,
+          `Installed ${modId} v${result.version} from Mod Store${onServer(req.serverId)}`,
         );
       }
 
@@ -292,7 +298,7 @@ router.delete(
 
     try {
       const { modId } = req.params;
-      const result = await uninstallMod(modId);
+      const result = await uninstallMod(await serverOf(req), modId);
 
       if (result.success) {
         await logActivity(
@@ -301,7 +307,7 @@ router.delete(
           'mod',
           true,
           modId,
-          `Uninstalled ${modId} from Mod Store`,
+          `Uninstalled ${modId} from Mod Store${onServer(req.serverId)}`,
         );
       }
 
@@ -332,7 +338,7 @@ router.post(
 
     try {
       const { modId } = req.params;
-      const result = await updateMod(modId);
+      const result = await updateMod(await serverOf(req), modId);
 
       if (result.success) {
         await logActivity(
@@ -341,7 +347,7 @@ router.post(
           'mod',
           true,
           result.filename,
-          `Updated ${modId} to ${result.version} from Mod Store`,
+          `Updated ${modId} to ${result.version} from Mod Store${onServer(req.serverId)}`,
         );
       }
 
@@ -357,10 +363,10 @@ router.post(
   '/modstore/refresh',
   authMiddleware,
   requirePermission('mods.install'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
       refreshRegistry();
-      const mods = await getAvailableMods();
+      const mods = await getAvailableMods(await serverOf(req));
       res.json({ success: true, modCount: mods.length, registry: getRegistryInfo() });
     } catch (error) {
       res.status(500).json({ success: false, error: 'Failed to refresh registry' });
@@ -510,7 +516,7 @@ router.post(
         return;
       }
 
-      const result = await installModFromModtale(projectId, versionId);
+      const result = await installModFromModtale(await serverOf(req), projectId, versionId);
 
       if (result.success) {
         await logActivity(
@@ -519,7 +525,7 @@ router.post(
           'mod',
           true,
           result.filename,
-          `Installed ${result.projectTitle} v${result.version} from Modtale`,
+          `Installed ${result.projectTitle} v${result.version} from Modtale${onServer(req.serverId)}`,
         );
       }
 
@@ -627,9 +633,9 @@ router.get(
   '/modtale/installed',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
-      const installed = await getInstalledModtaleInfo();
+      const installed = await getInstalledModtaleInfo(await serverOf(req));
       res.json({ installed });
     } catch (error) {
       res.status(500).json({ error: 'Failed to get installed mods' });
@@ -657,7 +663,7 @@ router.delete(
         return res.status(400).json({ error: 'Invalid project ID' });
       }
 
-      const result = await uninstallModtale(projectId);
+      const result = await uninstallModtale(await serverOf(req), projectId);
 
       if (result.success) {
         // Log the uninstall activity
@@ -667,7 +673,7 @@ router.delete(
           'mod',
           true,
           projectId,
-          `Uninstalled Modtale mod: ${projectId}`,
+          `Uninstalled Modtale mod: ${projectId}${onServer(req.serverId)}`,
         );
       }
 
@@ -799,7 +805,7 @@ router.post(
         return;
       }
 
-      const result = await installResourceFromStackMart(resourceId);
+      const result = await installResourceFromStackMart(await serverOf(req), resourceId);
 
       if (result.success) {
         const user = req.user || 'system';
@@ -809,7 +815,7 @@ router.post(
           'mod',
           true,
           result.resourceName || resourceId,
-          `Installed ${result.resourceName} v${result.version} from StackMart`,
+          `Installed ${result.resourceName} v${result.version} from StackMart${onServer(req.serverId)}`,
         );
       }
 
@@ -887,9 +893,9 @@ router.get(
   '/stackmart/installed',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
-      const installed = await getInstalledStackMartInfo();
+      const installed = await getInstalledStackMartInfo(await serverOf(req));
       res.json({ installed });
     } catch {
       res.status(500).json({ error: 'Failed to get installed resources' });
@@ -922,7 +928,7 @@ router.delete(
         return;
       }
 
-      const result = await uninstallStackMart(resourceId);
+      const result = await uninstallStackMart(await serverOf(req), resourceId);
 
       if (result.success) {
         const user = req.user || 'system';
@@ -932,7 +938,7 @@ router.delete(
           'mod',
           true,
           resourceId,
-          `Uninstalled StackMart resource: ${resourceId}`,
+          `Uninstalled StackMart resource: ${resourceId}${onServer(req.serverId)}`,
         );
       }
 
@@ -1170,7 +1176,7 @@ router.post(
         return;
       }
 
-      const result = await installModFromCurseForge(modId, fileId);
+      const result = await installModFromCurseForge(await serverOf(req), modId, fileId);
 
       if (result.success) {
         const user = req.user || 'system';
@@ -1180,7 +1186,7 @@ router.post(
           'mod',
           true,
           result.modName || modId.toString(),
-          `Installed ${result.modName} (${result.version}) from CurseForge`,
+          `Installed ${result.modName} (${result.version}) from CurseForge${onServer(req.serverId)}`,
         );
       }
 
@@ -1221,7 +1227,7 @@ router.post(
         return;
       }
 
-      const result = await curseforgeUpdateMod(modId, fileId);
+      const result = await curseforgeUpdateMod(await serverOf(req), modId, fileId);
 
       if (result.success) {
         const user = req.user || 'system';
@@ -1231,7 +1237,7 @@ router.post(
           'mod',
           true,
           result.modName || modId.toString(),
-          `Updated ${result.modName} to ${result.version} from CurseForge`,
+          `Updated ${result.modName} to ${result.version} from CurseForge${onServer(req.serverId)}`,
         );
       }
 
@@ -1248,7 +1254,7 @@ router.get(
   '/curseforge/updates',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return mock updates
     if (isDemoMode()) {
       res.json({
@@ -1270,7 +1276,7 @@ router.get(
     }
 
     try {
-      const updates = await curseforgeCheckUpdates();
+      const updates = await curseforgeCheckUpdates(await serverOf(req));
       res.json({ updates });
     } catch (error) {
       console.error('CurseForge updates check error:', error);
@@ -1404,7 +1410,7 @@ router.get(
   '/curseforge/installed',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return mock installed mods
     if (isDemoMode()) {
       res.json({
@@ -1425,8 +1431,12 @@ router.get(
       return;
     }
 
-    const mods = await getInstalledCurseForgeInfo();
-    res.json({ mods });
+    try {
+      const mods = await getInstalledCurseForgeInfo(await serverOf(req));
+      res.json({ mods });
+    } catch {
+      res.status(500).json({ error: 'Failed to get installed mods' });
+    }
   },
 );
 
@@ -1451,7 +1461,7 @@ router.delete(
         return;
       }
 
-      const result = await uninstallCurseForge(modId);
+      const result = await uninstallCurseForge(await serverOf(req), modId);
 
       if (result.success) {
         const user = req.user || 'system';
@@ -1461,7 +1471,7 @@ router.delete(
           'mod',
           true,
           modId.toString(),
-          `Uninstalled CurseForge mod: ${modId}`,
+          `Uninstalled CurseForge mod: ${modId}${onServer(req.serverId)}`,
         );
       }
 
@@ -1483,7 +1493,7 @@ router.get(
   '/modupdates/status',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return mock status
     if (isDemoMode()) {
       res.json({
@@ -1508,7 +1518,7 @@ router.get(
 
     try {
       // CFWidget status - for manually tracked mods via CurseForge slug
-      const status = await cfwidgetStatus();
+      const status = await cfwidgetStatus(await serverOf(req));
       res.json(status);
     } catch (error) {
       console.error('Mod updates status error:', error);
@@ -1522,7 +1532,7 @@ router.post(
   '/modupdates/check',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return mock check result
     if (isDemoMode()) {
       res.json({
@@ -1536,7 +1546,7 @@ router.post(
     }
 
     try {
-      const status = await cfwidgetCheckAll();
+      const status = await cfwidgetCheckAll(await serverOf(req));
       res.json(status);
     } catch (error) {
       console.error('Mod updates check error:', error);
@@ -1576,7 +1586,12 @@ router.post(
         return;
       }
 
-      const result = await cfwidgetTrackMod(filename || '', curseforgeInput, currentVersion);
+      const result = await cfwidgetTrackMod(
+        await serverOf(req),
+        filename || '',
+        curseforgeInput,
+        currentVersion,
+      );
 
       if (result.success) {
         const user = req.user || 'system';
@@ -1586,7 +1601,7 @@ router.post(
           'mod',
           true,
           filename,
-          `Started tracking updates for ${filename}`,
+          `Started tracking updates for ${filename}${onServer(req.serverId)}`,
         );
       }
 
@@ -1612,7 +1627,7 @@ router.delete(
 
     try {
       const { filename } = req.params;
-      const success = await cfwidgetUntrackMod(decodeURIComponent(filename));
+      const success = await cfwidgetUntrackMod(await serverOf(req), decodeURIComponent(filename));
 
       if (success) {
         const user = req.user || 'system';
@@ -1622,7 +1637,7 @@ router.delete(
           'mod',
           true,
           filename,
-          `Stopped tracking updates for ${filename}`,
+          `Stopped tracking updates for ${filename}${onServer(req.serverId)}`,
         );
       }
 
@@ -1653,7 +1668,7 @@ router.get(
 
     try {
       const { filename } = req.params;
-      const mod = await cfwidgetCheckMod(decodeURIComponent(filename));
+      const mod = await cfwidgetCheckMod(await serverOf(req), decodeURIComponent(filename));
 
       if (mod) {
         res.json(mod);
@@ -1750,7 +1765,12 @@ router.put(
         return;
       }
 
-      const success = await cfwidgetUpdateVersion(decodeURIComponent(filename), version, fileId);
+      const success = await cfwidgetUpdateVersion(
+        await serverOf(req),
+        decodeURIComponent(filename),
+        version,
+        fileId,
+      );
       res.json({ success });
     } catch (error) {
       console.error('Update version error:', error);
@@ -1779,7 +1799,7 @@ router.post(
       const { filename } = req.params;
       const decodedFilename = decodeURIComponent(filename);
 
-      const result = await cfwidgetInstallMod(decodedFilename);
+      const result = await cfwidgetInstallMod(await serverOf(req), decodedFilename);
 
       if (result.success) {
         const user = req.user || 'system';
@@ -1789,7 +1809,7 @@ router.post(
           'mod',
           true,
           result.filename || decodedFilename,
-          `Installed ${result.modName} v${result.version}`,
+          `Installed ${result.modName} v${result.version}${onServer(req.serverId)}`,
         );
       }
 
@@ -1817,7 +1837,7 @@ router.delete(
       const { filename } = req.params;
       const decodedFilename = decodeURIComponent(filename);
 
-      const result = await cfwidgetUninstallMod(decodedFilename);
+      const result = await cfwidgetUninstallMod(await serverOf(req), decodedFilename);
 
       if (result.success) {
         const user = req.user || 'system';
@@ -1827,7 +1847,7 @@ router.delete(
           'mod',
           true,
           decodedFilename,
-          `Uninstalled mod`,
+          `Uninstalled mod${onServer(req.serverId)}`,
         );
       }
 

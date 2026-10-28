@@ -1,8 +1,12 @@
 import { logger } from '../utils/logger.js';
-import { readFile, writeFile, readdir } from 'fs/promises';
+import { readdir, rename } from 'fs/promises';
 import path from 'path';
-import { config } from '../config.js';
 import type { PlayerInfo } from '../types/index.js';
+import { listServers, onServerDeleted, resolveServerId } from './servers.js';
+import { serverFolders } from './perServerData.js';
+import { playersDir } from './serverContext.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 import { recordDeathPosition, getLastDeathPosition } from './chatLog.js';
 import {
   isDemoMode,
@@ -230,15 +234,50 @@ export interface PlayerEntry {
   sessionCount: number;
 }
 
-// In-memory player list
-let players: Map<string, PlayerEntry> = new Map();
-let playersLoaded = false;
-let playersLoadPromise: Promise<void> | null = null; // SECURITY: Prevent race condition during load
+// Player list of one server, kept in memory and saved to its players.json.
+// Every server has its own: sessions, playtime and statistics count per server.
+interface PlayerStore {
+  serverId: string;
+  players: Map<string, PlayerEntry>;
+  loaded: boolean;
+  loadPromise: Promise<void> | null; // SECURITY: Prevent race condition during load
+  // SECURITY: Debounced save to prevent race conditions and excessive disk I/O
+  saveTimeout: NodeJS.Timeout | null;
+  savePromise: Promise<void> | null;
+  peakOnlineToday: number;
+  peakResetDate: string;
+  loadErrorLogged: boolean;
+}
 
-// SECURITY: Debounced save to prevent race conditions and excessive disk I/O
-let saveTimeout: NodeJS.Timeout | null = null;
-let savePromise: Promise<void> | null = null;
+const stores = new Map<string, PlayerStore>();
 const SAVE_DEBOUNCE_MS = 1000; // Wait 1 second before saving to batch changes
+
+/** The store of a resolved server id, created (not yet loaded) on first use. */
+function storeFor(serverId: string): PlayerStore {
+  let store = stores.get(serverId);
+  if (!store) {
+    store = {
+      serverId,
+      players: new Map(),
+      loaded: false,
+      loadPromise: null,
+      saveTimeout: null,
+      savePromise: null,
+      peakOnlineToday: 0,
+      peakResetDate: new Date().toDateString(),
+      loadErrorLogged: false,
+    };
+    stores.set(serverId, store);
+  }
+  return store;
+}
+
+/** The loaded store of a server; `undefined` is the default server. */
+async function loadedStore(serverId?: string): Promise<PlayerStore> {
+  const store = storeFor(await resolveServerId(serverId));
+  await loadPlayers(store);
+  return store;
+}
 
 // Blacklist of names that should never be considered players
 const PLAYER_NAME_BLACKLIST = new Set([
@@ -263,87 +302,110 @@ function isValidPlayerName(name: string): boolean {
   return true;
 }
 
-// File path for the unified players.json
-async function getPlayersPath(): Promise<string> {
-  return path.join(config.serverPath, 'players.json');
+// The server's players.json, in its server folder. The game server can write
+// there, so the file is only read and replaced with the link-safe helpers.
+async function getPlayersPath(store: PlayerStore): Promise<{ file: string; root: string }> {
+  const root = (await serverFolders(store.serverId)).server;
+  return { file: path.join(root, 'players.json'), root };
 }
 
 // Load players from file (with race condition protection)
-async function loadPlayers(): Promise<void> {
+async function loadPlayers(store: PlayerStore): Promise<void> {
   // SECURITY: If already loaded, return immediately
-  if (playersLoaded) return;
+  if (store.loaded) return;
 
   // SECURITY: If currently loading, wait for existing load to complete
   // This prevents multiple concurrent loads from corrupting state
-  if (playersLoadPromise) {
-    return playersLoadPromise;
+  if (store.loadPromise) {
+    return store.loadPromise;
   }
 
   // Start the load and store the promise so concurrent calls can wait
-  playersLoadPromise = (async () => {
+  store.loadPromise = (async () => {
+    let file: string | null = null;
     try {
-      const content = await readFile(await getPlayersPath(), 'utf-8');
+      const target = await getPlayersPath(store);
+      file = target.file;
+      const content = (
+        await readRegularFile(target.file, [target.root], { maxBytes: MAX_SERVER_FILE_BYTES })
+      ).toString('utf-8');
       const data: PlayerEntry[] = JSON.parse(content);
       if (Array.isArray(data)) {
         for (const entry of data) {
           if (isValidPlayerName(entry.name)) {
-            players.set(entry.name, entry);
+            store.players.set(entry.name, entry);
           }
         }
-        logger.info(`[Players] Loaded ${players.size} players from players.json`);
+        logger.info(
+          `[Players:${store.serverId}] Loaded ${store.players.size} players from players.json`,
+        );
       }
-    } catch {
-      logger.info('[Players] No players.json found, starting fresh');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        logger.info(`[Players:${store.serverId}] No players.json found, starting fresh`);
+      } else if (err instanceof SyntaxError && file) {
+        // Kept for a look by hand instead of being overwritten by the next save.
+        const aside = `${file}.corrupt-${Date.now()}`;
+        await rename(file, aside).catch(() => undefined);
+        logger.warn(
+          `[Players:${store.serverId}] players.json was not valid JSON; moved it to ${aside} and started fresh`,
+        );
+      } else {
+        // Not readable now (server unknown, folder not visible, no access):
+        // nothing is saved for it until a later load works, so the file is
+        // never replaced by a partial list.
+        if (!store.loadErrorLogged) {
+          store.loadErrorLogged = true;
+          logger.warn(
+            `[Players:${store.serverId}] could not read players.json, not saving it until it can be read:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
+        store.loadPromise = null;
+        return;
+      }
     }
-    playersLoaded = true;
+    store.loaded = true;
   })();
 
-  return playersLoadPromise;
+  return store.loadPromise;
 }
 
 // SECURITY: Debounced save - prevents race conditions and excessive disk I/O
 // Multiple rapid changes will be batched into a single write
-function debouncedSavePlayers(): void {
+function debouncedSavePlayers(store: PlayerStore): void {
+  // A list that could not be loaded is never written over the file.
+  if (!store.loaded) return;
   // Clear existing timeout to reset the debounce
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
+  if (store.saveTimeout) {
+    clearTimeout(store.saveTimeout);
   }
 
-  saveTimeout = setTimeout(() => {
-    saveTimeout = null;
+  store.saveTimeout = setTimeout(() => {
+    store.saveTimeout = null;
     // Perform the actual save
-    savePromise = (async () => {
+    store.savePromise = (async () => {
       try {
-        const data = Array.from(players.values());
-        await writeFile(await getPlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
+        const data = Array.from(store.players.values());
+        const { file, root } = await getPlayersPath(store);
+        await replaceFileContent(file, JSON.stringify(data, null, 2), [root]);
       } catch (err) {
-        logger.error('[Players] Failed to save players:', err);
+        logger.error(`[Players:${store.serverId}] Failed to save players:`, err);
       } finally {
-        savePromise = null;
+        store.savePromise = null;
       }
     })();
   }, SAVE_DEBOUNCE_MS);
 }
 
-// Save players to file (deprecated - use debouncedSavePlayers for normal operations)
-// This is kept for explicit immediate saves (e.g., on shutdown)
-async function savePlayers(): Promise<void> {
-  // If there's a pending debounced save, cancel it and save immediately
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-    saveTimeout = null;
-  }
-  // Wait for any in-progress save to complete
-  if (savePromise) {
-    await savePromise;
-  }
-  const data = Array.from(players.values());
-  await writeFile(await getPlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
-}
-
 // Set player online
-function setPlayerOnline(name: string, extraInfo: { uuid?: string; world?: string } = {}): void {
+function setPlayerOnline(
+  store: PlayerStore,
+  name: string,
+  extraInfo: { uuid?: string; world?: string } = {},
+): void {
   const now = new Date().toISOString();
+  const players = store.players;
   const existing = players.get(name);
 
   if (existing) {
@@ -371,12 +433,12 @@ function setPlayerOnline(name: string, extraInfo: { uuid?: string; world?: strin
   }
 
   // SECURITY: Use debounced save to prevent race conditions
-  debouncedSavePlayers();
+  debouncedSavePlayers(store);
 }
 
 // Set player offline; the session ends `at` (now by default).
-function setPlayerOffline(name: string, at: Date = new Date()): void {
-  const player = players.get(name);
+function setPlayerOffline(store: PlayerStore, name: string, at: Date = new Date()): void {
+  const player = store.players.get(name);
   if (!player || !player.online) return;
 
   player.online = false;
@@ -391,7 +453,7 @@ function setPlayerOffline(name: string, at: Date = new Date()): void {
   }
 
   // SECURITY: Use debounced save to prevent race conditions
-  debouncedSavePlayers();
+  debouncedSavePlayers(store);
 }
 
 function formatDuration(ms: number): string {
@@ -402,40 +464,49 @@ function formatDuration(ms: number): string {
   return `${minutes}m`;
 }
 
-/** Runs fn once players.json is loaded, so the load cannot overwrite the change. */
-function whenLoaded(fn: () => void): void {
-  if (playersLoaded) fn();
-  else void loadPlayers().then(fn);
+/** Runs fn once the store is loaded, so the load cannot overwrite the change. */
+function whenLoaded(store: PlayerStore, fn: () => void): void {
+  if (store.loaded) fn();
+  else void loadPlayers(store).then(fn);
 }
 
 /**
- * A player came online on some server (services/playerPresence.ts, which
+ * A player came online on a server (services/playerPresence.ts, which
  * reports each join once). For someone already online only the details change.
  */
-export function notePlayerOnline(name: string, info: { uuid?: string; world?: string } = {}): void {
+export function notePlayerOnline(
+  serverId: string,
+  name: string,
+  info: { uuid?: string; world?: string } = {},
+): void {
   if (!isValidPlayerName(name)) return;
-  whenLoaded(() => setPlayerOnline(name, info));
+  const store = storeFor(serverId);
+  whenLoaded(store, () => setPlayerOnline(store, name, info));
 }
 
-/** A player is offline on every server now. */
-export function notePlayerOffline(name: string): void {
-  whenLoaded(() => setPlayerOffline(name));
+/** A player left a server. */
+export function notePlayerOffline(serverId: string, name: string): void {
+  const store = storeFor(serverId);
+  whenLoaded(store, () => setPlayerOffline(store, name));
 }
 
 /**
- * The online flags of players.json set to who is online now (panel start).
- * Someone still marked online from before is closed at the time last seen,
- * since when they left is unknown.
+ * The online flags of a server's players.json set to who is online there now
+ * (panel start). Someone still marked online from before is closed at the
+ * time last seen, since when they left is unknown.
  */
-export async function syncOnlinePlayers(online: Set<string>): Promise<void> {
-  await loadPlayers();
-  for (const player of players.values()) {
+export async function syncOnlinePlayers(serverId: string, online: Set<string>): Promise<void> {
+  const store = storeFor(serverId);
+  await loadPlayers(store);
+  for (const player of store.players.values()) {
     if (player.online && !online.has(player.name)) {
-      setPlayerOffline(player.name, new Date(player.lastSeen));
+      setPlayerOffline(store, player.name, new Date(player.lastSeen));
     }
   }
   for (const name of online) {
-    if (isValidPlayerName(name) && !players.get(name)?.online) setPlayerOnline(name);
+    if (isValidPlayerName(name) && !store.players.get(name)?.online) {
+      setPlayerOnline(store, name);
+    }
   }
 }
 
@@ -446,7 +517,8 @@ export async function getOnlinePlayers(serverId?: string): Promise<PlayerInfo[]>
     return getDemoOnlinePlayers();
   }
 
-  await loadPlayers();
+  const store = await loadedStore(serverId);
+  const players = store.players;
   const now = new Date();
 
   // Prefer the KyuubiSoft plugin's authoritative online list when the plugin is
@@ -483,10 +555,8 @@ export async function getOnlinePlayers(serverId?: string): Promise<PlayerInfo[]>
   // Fallback: who the panel saw join on this server (the plugin's events, or
   // the server's join/leave log records while there is no plugin).
   const { onlinePlayers, isWatching } = await import('./playerPresence.js');
-  const { resolveServerId } = await import('./servers.js');
-  const id = await resolveServerId(serverId).catch(() => null);
-  if (id && isWatching(id)) {
-    return onlinePlayers(id).map((p) => {
+  if (isWatching(store.serverId)) {
+    return onlinePlayers(store.serverId).map((p) => {
       const start = players.get(p.name)?.currentSessionStart ?? p.since;
       const durationMs = Math.max(0, now.getTime() - new Date(start).getTime());
       return {
@@ -516,70 +586,99 @@ export async function getOnlinePlayers(serverId?: string): Promise<PlayerInfo[]>
 }
 
 // Get offline players
-export async function getOfflinePlayers(): Promise<PlayerEntry[]> {
+export async function getOfflinePlayers(serverId?: string): Promise<PlayerEntry[]> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoOfflinePlayers();
   }
 
-  await loadPlayers();
+  const { players } = await loadedStore(serverId);
   return Array.from(players.values())
     .filter((p) => !p.online)
     .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
 }
 
 // Get all players
-export async function getAllPlayers(): Promise<PlayerEntry[]> {
+export async function getAllPlayers(serverId?: string): Promise<PlayerEntry[]> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoAllPlayers();
   }
 
-  await loadPlayers();
+  const { players } = await loadedStore(serverId);
   return Array.from(players.values()).sort(
     (a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime(),
   );
 }
 
 // Get player count
-export async function getPlayerCount(): Promise<number> {
+export async function getPlayerCount(serverId?: string): Promise<number> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoPlayerCount();
   }
 
-  await loadPlayers();
+  const { players } = await loadedStore(serverId);
   return Array.from(players.values()).filter((p) => p.online).length;
 }
 
 // Get player history (for backwards compatibility)
-export async function getPlayerHistory(): Promise<PlayerEntry[]> {
-  return getAllPlayers();
+export async function getPlayerHistory(serverId?: string): Promise<PlayerEntry[]> {
+  return getAllPlayers(serverId);
 }
 
-// Remove player
-export function removePlayer(name: string): void {
-  if (players.has(name)) {
-    setPlayerOffline(name);
+/** Marks a player offline on a server (kicked or banned there). */
+export async function removePlayer(name: string, serverId?: string): Promise<void> {
+  const store = await loadedStore(serverId);
+  if (store.players.has(name)) {
+    setPlayerOffline(store, name);
   }
 }
+
+let deleteHookRegistered = false;
 
 // Initialize player tracking. Who is online comes from services/playerPresence.ts.
 export async function initializePlayerTracking(): Promise<void> {
   logger.info('[Players] Initializing player tracking...');
-  await loadPlayers();
-  const onlineCount = Array.from(players.values()).filter((p) => p.online).length;
-  logger.info(`[Players] Initialized with ${players.size} total players, ${onlineCount} online`);
-}
-
-// Clear all online players (server stop/restart)
-export function clearOnlinePlayers(): void {
-  for (const player of players.values()) {
-    if (player.online) {
-      setPlayerOffline(player.name);
+  if (!deleteHookRegistered) {
+    onServerDeleted(forgetPlayerStore);
+    deleteHookRegistered = true;
+  }
+  const ids = await listServers()
+    .then((list) => list.map((s) => s.id))
+    .catch(() => [] as string[]);
+  for (const id of ids.length > 0 ? ids : [await resolveServerId()]) {
+    try {
+      const { players } = await loadedStore(id);
+      const onlineCount = Array.from(players.values()).filter((p) => p.online).length;
+      logger.info(
+        `[Players:${id}] Initialized with ${players.size} total players, ${onlineCount} online`,
+      );
+    } catch (err) {
+      logger.warn(`[Players:${id}] could not load the player list:`, err);
     }
   }
-  logger.info('[Players] Cleared all online players (server stop/restart)');
+}
+
+/**
+ * Marks everyone on one server offline (it stopped or restarted). Other
+ * servers keep their online players. `undefined` is the default server.
+ */
+export async function clearOnlinePlayers(serverId?: string): Promise<void> {
+  const store = await loadedStore(serverId);
+  for (const player of store.players.values()) {
+    if (player.online) {
+      setPlayerOffline(store, player.name);
+    }
+  }
+  logger.info(`[Players:${store.serverId}] Cleared online players (server stop/restart)`);
+}
+
+/** Forgets a removed server's player list (players.json stays with its files). */
+export function forgetPlayerStore(serverId: string): void {
+  const store = stores.get(serverId);
+  if (store?.saveTimeout) clearTimeout(store.saveTimeout);
+  stores.delete(serverId);
 }
 
 // Player statistics
@@ -594,29 +693,27 @@ export interface PlayerStatistics {
   peakOnlineToday: number;
 }
 
-let peakOnlineToday = 0;
-let peakResetDate = new Date().toDateString();
-
-function updatePeakOnline(): void {
+function updatePeakOnline(store: PlayerStore): void {
   const today = new Date().toDateString();
-  if (today !== peakResetDate) {
-    peakOnlineToday = 0;
-    peakResetDate = today;
+  if (today !== store.peakResetDate) {
+    store.peakOnlineToday = 0;
+    store.peakResetDate = today;
   }
-  const onlineCount = Array.from(players.values()).filter((p) => p.online).length;
-  if (onlineCount > peakOnlineToday) {
-    peakOnlineToday = onlineCount;
+  const onlineCount = Array.from(store.players.values()).filter((p) => p.online).length;
+  if (onlineCount > store.peakOnlineToday) {
+    store.peakOnlineToday = onlineCount;
   }
 }
 
-export async function getPlayerStatistics(): Promise<PlayerStatistics> {
+export async function getPlayerStatistics(serverId?: string): Promise<PlayerStatistics> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoPlayerStatistics();
   }
 
-  await loadPlayers();
-  updatePeakOnline();
+  const store = await loadedStore(serverId);
+  const players = store.players;
+  updatePeakOnline(store);
 
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -647,7 +744,7 @@ export async function getPlayerStatistics(): Promise<PlayerStatistics> {
     topPlayers,
     newPlayersLast7Days,
     activePlayersLast7Days,
-    peakOnlineToday,
+    peakOnlineToday: store.peakOnlineToday,
   };
 }
 
@@ -658,13 +755,16 @@ export interface DailyActivity {
   totalSessions: number;
 }
 
-export async function getDailyActivity(days: number = 7): Promise<DailyActivity[]> {
+export async function getDailyActivity(
+  days: number = 7,
+  serverId?: string,
+): Promise<DailyActivity[]> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoDailyActivity(days);
   }
 
-  await loadPlayers();
+  const { players } = await loadedStore(serverId);
 
   const result: DailyActivity[] = [];
   const now = new Date();
@@ -697,10 +797,21 @@ export type PlayerHistoryEntry = PlayerEntry;
 // ============================================================
 
 /**
- * Get path to universe players directory
+ * A server's universe players directory; throws when no location stays
+ * inside the server's folders (callers treat that like a missing folder).
  */
-function getUniversePlayersPath(): string {
-  return path.join(config.serverPath, 'universe', 'players');
+async function getUniversePlayersPath(serverId?: string): Promise<string> {
+  const dir = playersDir(await serverFolders(serverId));
+  if (!dir) throw new Error('The players folder of this server leads outside its folders');
+  return dir;
+}
+
+/** A saved player file, read only when it is a regular file inside `playersDirPath`. */
+async function readPlayerJson(playersDirPath: string, file: string): Promise<PlayerFileData> {
+  const content = await readRegularFile(path.join(playersDirPath, file), [playersDirPath], {
+    maxBytes: MAX_SERVER_FILE_BYTES,
+  });
+  return JSON.parse(content.toString('utf-8'));
 }
 
 /**
@@ -746,8 +857,8 @@ function parseInventoryContainer(
 /**
  * Find player UUID by name from our players list
  */
-async function findPlayerUuidByName(playerName: string): Promise<string | null> {
-  await loadPlayers();
+async function findPlayerUuidByName(playerName: string, serverId?: string): Promise<string | null> {
+  const { players } = await loadedStore(serverId);
   const player = players.get(playerName);
   if (player?.uuid) {
     return player.uuid;
@@ -755,15 +866,14 @@ async function findPlayerUuidByName(playerName: string): Promise<string | null> 
 
   // Try to find by scanning player files
   try {
-    const playersDir = getUniversePlayersPath();
+    const playersDir = await getUniversePlayersPath(serverId);
     const files = await readdir(playersDir);
 
     for (const file of files) {
       if (!file.endsWith('.json')) continue;
 
       try {
-        const content = await readFile(path.join(playersDir, file), 'utf-8');
-        const data: PlayerFileData = JSON.parse(content);
+        const data = await readPlayerJson(playersDir, file);
         const displayName = getPlayerNameFromFile(data);
 
         if (displayName?.toLowerCase() === playerName.toLowerCase()) {
@@ -783,11 +893,9 @@ async function findPlayerUuidByName(playerName: string): Promise<string | null> 
 /**
  * Read raw player data from JSON file
  */
-async function readPlayerFile(uuid: string): Promise<PlayerFileData | null> {
+async function readPlayerFile(uuid: string, serverId?: string): Promise<PlayerFileData | null> {
   try {
-    const filePath = path.join(getUniversePlayersPath(), `${uuid}.json`);
-    const content = await readFile(filePath, 'utf-8');
-    return JSON.parse(content);
+    return await readPlayerJson(await getUniversePlayersPath(serverId), `${uuid}.json`);
   } catch {
     return null;
   }
@@ -807,16 +915,17 @@ function getPlayerNameFromFile(data: PlayerFileData): string | undefined {
  */
 export async function getPlayerInventoryFromFile(
   playerName: string,
+  serverId?: string,
 ): Promise<ParsedPlayerInventory | null> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoPlayerInventory(playerName);
   }
 
-  const uuid = await findPlayerUuidByName(playerName);
+  const uuid = await findPlayerUuidByName(playerName, serverId);
   if (!uuid) return null;
 
-  const data = await readPlayerFile(uuid);
+  const data = await readPlayerFile(uuid, serverId);
   if (!data) return null;
 
   const comps = data.Components;
@@ -882,16 +991,17 @@ export async function getPlayerInventoryFromFile(
  */
 export async function getPlayerDetailsFromFile(
   playerName: string,
+  serverId?: string,
 ): Promise<ParsedPlayerDetails | null> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoPlayerDetails(playerName);
   }
 
-  const uuid = await findPlayerUuidByName(playerName);
+  const uuid = await findPlayerUuidByName(playerName, serverId);
   if (!uuid) return null;
 
-  const data = await readPlayerFile(uuid);
+  const data = await readPlayerFile(uuid, serverId);
   if (!data) return null;
 
   const components = data.Components;
@@ -923,7 +1033,9 @@ export async function getPlayerDetailsFromFile(
     const deathPos = deathData.Transform.Position;
     const world = player?.PlayerData?.World || 'unknown';
     // Record this death position (asynchronously, don't wait)
-    recordDeathPosition(displayName, world, deathPos.X, deathPos.Y, deathPos.Z).catch(() => {});
+    resolveServerId(serverId)
+      .then((id) => recordDeathPosition(id, displayName, world, deathPos.X, deathPos.Y, deathPos.Z))
+      .catch(() => {});
   }
 
   return {
@@ -963,9 +1075,11 @@ export async function getPlayerDetailsFromFile(
 /**
  * Get all available player files (for listing all known players)
  */
-export async function getAllPlayerFiles(): Promise<{ uuid: string; name: string }[]> {
+export async function getAllPlayerFiles(
+  serverId?: string,
+): Promise<{ uuid: string; name: string }[]> {
   try {
-    const playersDir = getUniversePlayersPath();
+    const playersDir = await getUniversePlayersPath(serverId);
     const files = await readdir(playersDir);
     const result: { uuid: string; name: string }[] = [];
 
@@ -973,8 +1087,7 @@ export async function getAllPlayerFiles(): Promise<{ uuid: string; name: string 
       if (!file.endsWith('.json')) continue;
 
       try {
-        const content = await readFile(path.join(playersDir, file), 'utf-8');
-        const data: PlayerFileData = JSON.parse(content);
+        const data = await readPlayerJson(playersDir, file);
         const displayName = getPlayerNameFromFile(data);
 
         if (displayName) {
@@ -1033,16 +1146,17 @@ export interface ParsedDeathPosition {
  */
 export async function getPlayerDeathPositionsFromFile(
   playerName: string,
+  serverId?: string,
 ): Promise<ParsedDeathPosition[]> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoDeathPositions(playerName);
   }
 
-  const uuid = await findPlayerUuidByName(playerName);
+  const uuid = await findPlayerUuidByName(playerName, serverId);
   if (!uuid) return [];
 
-  const data = await readPlayerFile(uuid);
+  const data = await readPlayerFile(uuid, serverId);
   if (!data) return [];
 
   const playerData = data.Components?.Player?.PlayerData;
@@ -1083,13 +1197,14 @@ export async function getPlayerDeathPositionsFromFile(
  * This is the primary source of truth - all players who have ever played
  * Also includes online players who don't have JSON files yet (e.g., after folder deletion)
  */
-export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
+export async function getAllPlayersUnified(serverId?: string): Promise<UnifiedPlayerEntry[]> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoAllPlayersUnified();
   }
 
-  await loadPlayers(); // Load session tracking data
+  const store = await loadedStore(serverId); // Load session tracking data
+  const players = store.players;
 
   const result: UnifiedPlayerEntry[] = [];
   const includedPlayerNames = new Set<string>(); // Track which players we've already added
@@ -1103,15 +1218,14 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
 
   // First, read players from JSON files
   try {
-    const playersDir = getUniversePlayersPath();
+    const playersDir = await getUniversePlayersPath(serverId);
     const files = await readdir(playersDir);
 
     for (const file of files) {
       if (!file.endsWith('.json')) continue;
 
       try {
-        const content = await readFile(path.join(playersDir, file), 'utf-8');
-        const data: PlayerFileData = JSON.parse(content);
+        const data = await readPlayerJson(playersDir, file);
         const displayName = getPlayerNameFromFile(data);
 
         if (!displayName) continue;
@@ -1135,9 +1249,9 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
               players.set(displayName, entry);
               sessionData = entry;
               logger.info(
-                `[Players] Name change detected: "${oldName}" -> "${displayName}" (UUID: ${uuid})`,
+                `[Players:${store.serverId}] Name change detected: "${oldName}" -> "${displayName}" (UUID: ${uuid})`,
               );
-              debouncedSavePlayers();
+              debouncedSavePlayers(store);
               break;
             }
           }

@@ -1,9 +1,9 @@
 import { logger } from '../utils/logger.js';
-import { readFile, writeFile, mkdir, access, constants } from 'fs/promises';
+import { writeFile, mkdir, access, constants } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import { config, reloadConfigFromFile, getConfigFilePath } from '../config.js';
+import { config, reloadConfigFromFile, getConfigFilePath, getManagerDataDir } from '../config.js';
 import { isDemoMode } from './demoData.js';
 import * as dockerService from './docker.js';
 import {
@@ -15,8 +15,12 @@ import { installPlugin as installKyuubiApiPlugin } from './kyuubiApi.js';
 import { saveConfig as saveSchedulerConfig } from './scheduler.js';
 import { restartServerGracefully } from './serverLifecycle.js';
 import { installMod, ensureEasyWebMapConfig } from './modStore.js';
+import { COMPOSE_SERVER_ID } from './servers.js';
+import { getServerContext } from './serverContext.js';
 import { escapeShellArg } from '../utils/sanitize.js';
 import { updateJsonFile } from '../utils/jsonStore.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 import { writePanelConfig } from '../routes/server/shared.js';
 import {
   restartWithWizardConfig,
@@ -181,11 +185,14 @@ async function ensureDataDir(): Promise<void> {
   }
 }
 
-// Read setup config from file
+// setup-config.json lies in the game server's data folder: only read when it
+// is a regular file there, and replaced instead of written through a link.
 async function readSetupConfig(): Promise<SetupConfig> {
   try {
-    const content = await readFile(SETUP_CONFIG_FILE, 'utf-8');
-    return JSON.parse(content) as SetupConfig;
+    const content = await readRegularFile(SETUP_CONFIG_FILE, [DATA_DIR], {
+      maxBytes: MAX_SERVER_FILE_BYTES,
+    });
+    return JSON.parse(content.toString('utf-8')) as SetupConfig;
   } catch {
     // Return default config if file doesn't exist
     return {
@@ -198,7 +205,7 @@ async function readSetupConfig(): Promise<SetupConfig> {
 // Write setup config to file
 async function writeSetupConfig(setupConfig: SetupConfig): Promise<void> {
   await ensureDataDir();
-  await writeFile(SETUP_CONFIG_FILE, JSON.stringify(setupConfig, null, 2), 'utf-8');
+  await replaceFileContent(SETUP_CONFIG_FILE, JSON.stringify(setupConfig, null, 2), [DATA_DIR]);
 }
 
 /**
@@ -516,7 +523,8 @@ function logWizardConfig(result: WizardConfigResult): void {
     logger.info(`[Setup] config.json: ${change.key} ${change.action} (${change.note})`);
   }
   if (result.written) logger.info('[Setup] Wrote the server settings into config.json');
-  else if (result.pending) logger.info('[Setup] Server runs: config.json is written at the restart');
+  else if (result.pending)
+    logger.info('[Setup] Server runs: config.json is written at the restart');
   else if (result.skipped) logger.info(`[Setup] Server config not written (${result.skipped})`);
 }
 
@@ -610,7 +618,7 @@ export async function finalizeSetup(): Promise<{
     // Only a missing file starts fresh; a corrupt one aborts (and is kept)
     // instead of being replaced by a file with just the wizard admin.
     try {
-      const usersFile = path.join(DATA_DIR, 'users.json');
+      const usersFile = path.join(getManagerDataDir(), 'users.json');
       const adminUsername = setupConfig.admin.username;
       await ensureDataDir();
       await updateJsonFile<{ users: Array<Record<string, unknown>> }>(
@@ -658,8 +666,9 @@ export async function finalizeSetup(): Promise<{
       autoUpdate: setupConfig.autoUpdate === true,
     };
     // Merged into the file, atomically: keeps the JVM settings and boot
-    // commands, and the start scripts never read a half-written file.
-    await writePanelConfig(panelConfig);
+    // commands, and the start scripts never read a half-written file. Setup
+    // installs the compose server, whichever server is the default.
+    await writePanelConfig(panelConfig, COMPOSE_SERVER_ID);
     logger.info('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
 
     // Write the server's config.json (only real Hytale 0.7 fields, while
@@ -732,7 +741,11 @@ export async function finalizeSetup(): Promise<{
     if (setupConfig.integrations?.webmap) {
       logger.info('[Setup] Installing EasyWebMap plugin...');
       try {
-        const webmapResult = await installMod('easywebmap');
+        // First-run setup installs the compose server.
+        const webmapResult = await installMod(
+          await getServerContext(COMPOSE_SERVER_ID),
+          'easywebmap',
+        );
         if (webmapResult.success) {
           logger.info('[Setup] EasyWebMap plugin installed successfully:', webmapResult.filename);
           if (webmapResult.configCreated) {
@@ -763,7 +776,7 @@ export async function finalizeSetup(): Promise<{
       try {
         // Convert setup automation format to scheduler format
         const schedulerConfig = convertAutomationToSchedulerConfig(setupConfig.automation);
-        const saved = saveSchedulerConfig(schedulerConfig);
+        const saved = await saveSchedulerConfig(schedulerConfig);
         if (saved) {
           logger.info('[Setup] Scheduler configuration applied successfully');
         } else {
@@ -801,7 +814,9 @@ export async function finalizeSetup(): Promise<{
             logger.info('[Setup] Waiting 10 seconds for mods to initialize...');
             await new Promise((resolve) => setTimeout(resolve, 10000));
             logger.info('[Setup] Ensuring EasyWebMap config has correct port...');
-            const configResult = await ensureEasyWebMapConfig();
+            const configResult = await ensureEasyWebMapConfig(
+              await getServerContext(COMPOSE_SERVER_ID),
+            );
             if (configResult.updated) {
               logger.info('[Setup] EasyWebMap config was updated with correct port');
             } else if (configResult.created) {

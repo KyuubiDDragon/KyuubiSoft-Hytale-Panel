@@ -5,8 +5,7 @@
  */
 import fs from 'fs';
 import { spawn } from 'child_process';
-import { config } from '../config.js';
-import { getDefaultId, getServer } from './servers.js';
+import { getServerContext } from './serverContext.js';
 
 export interface BackupPaths {
   backups: string;
@@ -14,20 +13,12 @@ export interface BackupPaths {
 }
 
 /**
- * Resolve the backup/data paths for a specific server id. Falls back to the
- * default server (or the legacy env-var config if the registry isn't loaded
- * yet on fresh boot). Multi-server callers pass an explicit id; legacy
- * callers omit it.
+ * Backup/data paths of a server id; omitted means the default server. An
+ * unknown id throws instead of falling back to another server's folders.
  */
 export async function resolveBackupPaths(serverId?: string): Promise<BackupPaths> {
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const s = await getServer(id);
-    if (s) return { backups: s.paths.backups, data: s.paths.data };
-  } catch {
-    /* registry not ready */
-  }
-  return { backups: config.backupsPath, data: config.dataPath };
+  const { paths } = await getServerContext(serverId);
+  return { backups: paths.backups, data: paths.data };
 }
 
 /** Free bytes on the filesystem holding `dir`, or null if statfs is unsupported. */

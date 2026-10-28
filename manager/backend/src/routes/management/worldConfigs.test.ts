@@ -19,6 +19,8 @@ import type { PluginCommandAttempt } from '../../services/pluginCommands.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-worldconfig-route-'));
 const worldsRoot = path.join(root, 'worlds');
+// The worlds of a second server, which has its own folders.
+const otherWorldsRoot = path.join(root, 'other-worlds');
 process.env.MANAGER_DATA_PATH = path.join(root, 'manager');
 delete process.env.DEMO_MODE;
 
@@ -53,13 +55,34 @@ vi.mock('../../services/serverLifecycle.js', () => ({
   LifecycleError: class LifecycleError extends Error {},
   LifecycleBusyError: class LifecycleBusyError extends Error {},
 }));
-// Two registered servers; the worlds root belongs to the default one.
+// Two registered servers, each with its own worlds root.
 vi.mock('../../services/servers.js', () => ({
-  resolveServerId: async (id?: string) => id ?? 'default',
+  resolveServerId: async (id?: string) => id || 'default',
   getDefaultId: async () => 'default',
-  getServer: async (id: string) => (id === 'default' || id === 'other' ? { id } : null),
 }));
-vi.mock('../../services/managementHelpers.js', () => ({ getWorldsPaths: () => [worldsRoot] }));
+vi.mock('../../services/serverContext.js', () => {
+  class UnknownServerError extends Error {
+    readonly code = 'unknown_server';
+    constructor(readonly serverId: string) {
+      super(`Unknown server id: ${serverId}`);
+    }
+  }
+  const servers: Record<string, { kind: string; worlds: () => string }> = {
+    default: { kind: 'compose', worlds: () => worldsRoot },
+    other: { kind: 'managed', worlds: () => otherWorldsRoot },
+  };
+  return {
+    UnknownServerError,
+    getServerContext: async (id?: string | null) => {
+      const key = id || 'default';
+      const entry = servers[key];
+      if (!entry) throw new UnknownServerError(key);
+      return { id: key, kind: entry.kind, name: key, worlds: entry.worlds() };
+    },
+    worldRoots: (ctx: { worlds: string }) => [ctx.worlds],
+    checkServerFiles: () => ({ available: true }),
+  };
+});
 const runCommandViaPlugin =
   vi.fn<(command: string, serverId?: string) => Promise<PluginCommandAttempt>>();
 vi.mock('../../services/pluginCommands.js', () => ({
@@ -80,12 +103,15 @@ vi.mock('../../middleware/auth.js', () => ({
 }));
 vi.mock('../../middleware/permissions.js', () => ({
   requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+  mayAccessServer: async () => true,
+  serverNotAllowed: (serverId: string) => ({ code: 'SERVER_NOT_ALLOWED', serverId }),
 }));
 
 const express = (await import('express')).default;
 const { default: worldConfigsRouter } = await import('./worldConfigs.js');
 const { forgetLiveValues } = await import('../../services/worldSettings.js');
 const { serverScopeMiddleware } = await import('../../middleware/serverScope.js');
+const { config } = await import('../../config.js');
 
 // As the server writes it: a seed beyond 2^53 and keys the editor does not know.
 const WORLD_TEXT = `{
@@ -141,6 +167,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   fs.rmSync(worldsRoot, { recursive: true, force: true });
+  fs.rmSync(otherWorldsRoot, { recursive: true, force: true });
   fs.mkdirSync(path.join(worldDir, 'resources'), { recursive: true });
   fs.writeFileSync(worldFile, WORLD_TEXT);
   fs.writeFileSync(path.join(worldDir, 'resources', 'Time.json'), '{"Now":"x"}');
@@ -394,28 +421,67 @@ describe('two servers', () => {
     expect(ids(runWhileServerStopped)).toEqual(['default']);
   });
 
-  it('refuses another server instead of reading, changing or restarting the default one', async () => {
-    state.running = true;
-    runCommandViaPlugin.mockResolvedValue(
-      reply(['server.universe.setpvp.info'], 'PvP is now true'),
-    );
-    const requests: Array<[string, string, unknown?]> = [
-      ['GET', '/worlds/default/config'],
-      ['PUT', '/worlds/default/config', { isPvpEnabled: true }],
-      ['PUT', '/worlds/default/config', { isSpawningNPC: false, restart: true }],
-      ['GET', '/worlds/default/files/resources/Time.json'],
-      ['PUT', '/worlds/default/files/resources/Time.json', { content: '{}', restart: true }],
-    ];
-    for (const [method, url, body] of requests) {
-      const r = await send(method, scoped('other', url), body);
-      expect(r.status, `${method} ${url}`).toBe(409);
-      expect(r.json.reason).toBe('default_server_only');
+  it("works on another server's own worlds and never on the default server's", async () => {
+    // A world of the same name on the other server, with its own content.
+    const otherFile = path.join(otherWorldsRoot, 'default', 'config.json');
+    const otherTime = path.join(otherWorldsRoot, 'default', 'resources', 'Time.json');
+    fs.mkdirSync(path.dirname(otherTime), { recursive: true });
+    fs.writeFileSync(otherFile, WORLD_TEXT.replace('9007199254740993', '42'));
+    fs.writeFileSync(otherTime, '{"Now":"other"}');
+
+    // Without multiserver the other server is not reachable at all.
+    const disabled = await send('GET', scoped('other', '/worlds/default/config'));
+    expect(disabled.status).toBe(403);
+    expect(disabled.json.code).toBe('MULTISERVER_DISABLED');
+
+    config.multiserverEnabled = true;
+    try {
+      const read = await send('GET', scoped('other', '/worlds/default/config'));
+      expect(read.status).toBe(200);
+      expect(read.json.seed).toBe('42');
+
+      state.running = true;
+      runCommandViaPlugin.mockResolvedValue(
+        reply(['server.universe.setpvp.info'], 'PvP is now true'),
+      );
+      const live = await send('PUT', scoped('other', '/worlds/default/config'), {
+        isPvpEnabled: true,
+      });
+      expect(live.json.applied).toBe('live');
+      expect(ids(runCommandViaPlugin, 1)).toEqual(['other']);
+      // The live value is remembered for the other server only.
+      const defaultRead = await send('GET', `${baseUrl}/worlds/default/config`);
+      expect(defaultRead.json.isPvpEnabled).toBe(false);
+      getContainerState.mockClear();
+
+      const restarted = await send('PUT', scoped('other', '/worlds/default/config'), {
+        isSpawningNPC: false,
+        restart: true,
+      });
+      expect(restarted.json).toMatchObject({ applied: 'restart', restarted: true });
+      expect(ids(withServerStopped)).toEqual(['other']);
+      expect(JSON.parse(fs.readFileSync(otherFile, 'utf-8')).IsSpawningNPC).toBe(false);
+
+      state.running = false;
+      const file = await send('GET', scoped('other', '/worlds/default/files/resources/Time.json'));
+      expect(file.json.content).toEqual({ Now: 'other' });
+      const written = await send(
+        'PUT',
+        scoped('other', '/worlds/default/files/resources/Time.json'),
+        { content: '{"Now":"y"}' },
+      );
+      expect(written.status).toBe(200);
+      expect(fs.readFileSync(otherTime, 'utf-8')).toBe('{"Now":"y"}');
+      expect(ids(runWhileServerStopped)).toEqual(['other']);
+    } finally {
+      config.multiserverEnabled = false;
     }
+    // The default server's world is untouched.
     expect(fs.readFileSync(worldFile, 'utf-8')).toBe(WORLD_TEXT);
-    expect(runCommandViaPlugin).not.toHaveBeenCalled();
-    expect(withServerStopped).not.toHaveBeenCalled();
-    expect(runWhileServerStopped).not.toHaveBeenCalled();
-    expect(getContainerState).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(worldDir, 'resources', 'Time.json'), 'utf-8')).toBe(
+      '{"Now":"x"}',
+    );
+    expect(new Set(ids(getContainerState))).toEqual(new Set(['other']));
   });
 
   it('answers an unknown server with 404 before any world code runs', async () => {

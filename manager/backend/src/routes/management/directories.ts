@@ -6,7 +6,6 @@ import { unlink } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
-import { config } from '../../config.js';
 import {
   logActivity,
   getActivityLog,
@@ -27,7 +26,9 @@ import {
   uploadPlugin,
   scanDirectory,
   statsHistory,
+  onServer,
 } from '../../services/managementHelpers.js';
+import { getServerContext, type ServerContext } from '../../services/serverContext.js';
 import { getModRegistry, checkModUpdate } from '../../services/modStore.js';
 import {
   getInstalledModtaleInfo,
@@ -51,33 +52,33 @@ const router = Router();
 
 // Helper function to clean up all source tracking when a mod is deleted.
 // Lives here because it composes services with no other consumers.
-async function cleanupModTracking(filename: string): Promise<void> {
+async function cleanupModTracking(server: ServerContext, filename: string): Promise<void> {
   try {
     // 1. Check and remove from CFWidget
-    const cfwidgetData = await cfwidgetStatus();
+    const cfwidgetData = await cfwidgetStatus(server);
     const cfwidgetMod = cfwidgetData.mods.find(
       (m: { filename: string }) => m.filename === filename,
     );
     if (cfwidgetMod) {
-      await cfwidgetUntrackMod(filename);
+      await cfwidgetUntrackMod(server, filename);
       console.log(`[Cleanup] Removed ${filename} from CFWidget tracking`);
     }
 
     // 2. Check and remove from Modtale
-    const modtaleInstalled = await getInstalledModtaleInfo();
+    const modtaleInstalled = await getInstalledModtaleInfo(server);
     for (const [projectId, info] of Object.entries(modtaleInstalled)) {
       if (info.filename === filename) {
-        await modtaleUntrack(projectId);
+        await modtaleUntrack(server, projectId);
         console.log(`[Cleanup] Removed ${filename} from Modtale tracking (project: ${projectId})`);
         break;
       }
     }
 
     // 3. Check and remove from StackMart
-    const stackmartInstalled = await getInstalledStackMartInfo();
+    const stackmartInstalled = await getInstalledStackMartInfo(server);
     for (const [resourceId, info] of Object.entries(stackmartInstalled)) {
       if (info.filename === filename) {
-        await stackmartUntrack(resourceId);
+        await stackmartUntrack(server, resourceId);
         console.log(
           `[Cleanup] Removed ${filename} from StackMart tracking (resource: ${resourceId})`,
         );
@@ -86,10 +87,10 @@ async function cleanupModTracking(filename: string): Promise<void> {
     }
 
     // 4. Check and remove from CurseForge API
-    const curseforgeInstalled = await getInstalledCurseForgeInfo();
+    const curseforgeInstalled = await getInstalledCurseForgeInfo(server);
     for (const [modIdStr, info] of Object.entries(curseforgeInstalled)) {
       if (info.filename === filename) {
-        await curseforgeUntrack(parseInt(modIdStr));
+        await curseforgeUntrack(server, parseInt(modIdStr));
         console.log(`[Cleanup] Removed ${filename} from CurseForge tracking (mod: ${modIdStr})`);
         break;
       }
@@ -109,7 +110,7 @@ router.get(
   '/mods',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return mock mods
     if (isDemoMode()) {
       const demoMods = getDemoMods();
@@ -128,7 +129,8 @@ router.get(
     }
 
     try {
-      const mods = await scanDirectory(config.modsPath, 'mod');
+      const server = await getServerContext(req.serverId);
+      const mods = await scanDirectory(server.paths.mods, 'mod');
 
       // Get mod registry to check for updates
       const registry = await getModRegistry();
@@ -146,7 +148,7 @@ router.get(
 
           if (registryEntry) {
             try {
-              const updateInfo = await checkModUpdate(registryEntry.id);
+              const updateInfo = await checkModUpdate(server, registryEntry.id);
               return {
                 ...mod,
                 storeId: registryEntry.id,
@@ -162,7 +164,7 @@ router.get(
         }),
       );
 
-      res.json({ mods: enrichedMods, path: config.modsPath });
+      res.json({ mods: enrichedMods, path: server.paths.mods });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read mods' });
     }
@@ -174,7 +176,7 @@ router.get(
   '/mods/all-updates',
   authMiddleware,
   requirePermission('mods.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return mock status
     if (isDemoMode()) {
       res.json({
@@ -188,7 +190,7 @@ router.get(
     }
 
     try {
-      const status = await getUnifiedUpdateStatus();
+      const status = await getUnifiedUpdateStatus(await getServerContext(req.serverId));
       res.json(status);
     } catch (error) {
       console.error('All mods update status error:', error);
@@ -202,7 +204,7 @@ router.get(
   '/plugins',
   authMiddleware,
   requirePermission('plugins.view'),
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     // Demo mode: return mock plugins
     if (isDemoMode()) {
       const demoPlugins = getDemoPlugins();
@@ -221,8 +223,9 @@ router.get(
     }
 
     try {
-      const plugins = await scanDirectory(config.pluginsPath, 'plugin');
-      res.json({ plugins, path: config.pluginsPath });
+      const { paths } = await getServerContext(req.serverId);
+      const plugins = await scanDirectory(paths.plugins, 'plugin');
+      res.json({ plugins, path: paths.plugins });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read plugins' });
     }
@@ -246,10 +249,11 @@ router.put(
       }
 
       const username = req.user || 'system';
-      const filePath = path.join(config.modsPath, safeFilename);
+      const { paths } = await getServerContext(req.serverId);
+      const filePath = path.join(paths.mods, safeFilename);
 
       // SECURITY: Verify path is within mods directory
-      if (!isPathSafe(filePath, [config.modsPath])) {
+      if (!isPathSafe(filePath, [paths.mods])) {
         res.status(400).json({ error: 'Invalid path' });
         return;
       }
@@ -267,10 +271,18 @@ router.put(
           'mod',
           true,
           safeFilename.replace('.disabled', ''),
+          onServer(req.serverId).trim() || undefined,
         );
       } else {
         await rename(filePath, disabledPath);
-        await logActivity(username, 'disable_mod', 'mod', true, safeFilename);
+        await logActivity(
+          username,
+          'disable_mod',
+          'mod',
+          true,
+          safeFilename,
+          onServer(req.serverId).trim() || undefined,
+        );
       }
 
       res.json({ success: true });
@@ -297,10 +309,11 @@ router.put(
       }
 
       const username = req.user || 'system';
-      const filePath = path.join(config.pluginsPath, safeFilename);
+      const { paths } = await getServerContext(req.serverId);
+      const filePath = path.join(paths.plugins, safeFilename);
 
       // SECURITY: Verify path is within plugins directory
-      if (!isPathSafe(filePath, [config.pluginsPath])) {
+      if (!isPathSafe(filePath, [paths.plugins])) {
         res.status(400).json({ error: 'Invalid path' });
         return;
       }
@@ -318,10 +331,18 @@ router.put(
           'mod',
           true,
           safeFilename.replace('.disabled', ''),
+          onServer(req.serverId).trim() || undefined,
         );
       } else {
         await rename(filePath, disabledPath);
-        await logActivity(username, 'disable_plugin', 'mod', true, safeFilename);
+        await logActivity(
+          username,
+          'disable_plugin',
+          'mod',
+          true,
+          safeFilename,
+          onServer(req.serverId).trim() || undefined,
+        );
       }
 
       res.json({ success: true });
@@ -381,7 +402,7 @@ router.post(
         'mod',
         true,
         req.file.originalname,
-        `Uploaded mod: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)`,
+        `Uploaded mod: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)${onServer(req.serverId)}`,
       );
 
       res.json({
@@ -436,7 +457,7 @@ router.post(
         'mod',
         true,
         req.file.originalname,
-        `Uploaded plugin: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)`,
+        `Uploaded plugin: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)${onServer(req.serverId)}`,
       );
 
       res.json({
@@ -471,10 +492,11 @@ router.delete(
         return;
       }
 
-      const filePath = path.join(config.modsPath, safeFilename);
+      const server = await getServerContext(req.serverId);
+      const filePath = path.join(server.paths.mods, safeFilename);
 
       // SECURITY: Verify path is within mods directory
-      if (!isPathSafe(filePath, [config.modsPath])) {
+      if (!isPathSafe(filePath, [server.paths.mods])) {
         res.status(400).json({ error: 'Invalid path' });
         return;
       }
@@ -482,7 +504,7 @@ router.delete(
       await unlink(filePath);
 
       // Clean up tracking from all sources (Modtale, StackMart, CurseForge, CFWidget)
-      await cleanupModTracking(safeFilename);
+      await cleanupModTracking(server, safeFilename);
 
       await logActivity(
         req.user || 'unknown',
@@ -490,7 +512,7 @@ router.delete(
         'mod',
         true,
         safeFilename,
-        `Deleted mod: ${safeFilename}`,
+        `Deleted mod: ${safeFilename}${onServer(server.id)}`,
       );
 
       res.json({ success: true });
@@ -516,10 +538,11 @@ router.delete(
         return;
       }
 
-      const filePath = path.join(config.pluginsPath, safeFilename);
+      const server = await getServerContext(req.serverId);
+      const filePath = path.join(server.paths.plugins, safeFilename);
 
       // SECURITY: Verify path is within plugins directory
-      if (!isPathSafe(filePath, [config.pluginsPath])) {
+      if (!isPathSafe(filePath, [server.paths.plugins])) {
         res.status(400).json({ error: 'Invalid path' });
         return;
       }
@@ -527,7 +550,7 @@ router.delete(
       await unlink(filePath);
 
       // Clean up tracking from all sources (Modtale, StackMart, CurseForge, CFWidget)
-      await cleanupModTracking(safeFilename);
+      await cleanupModTracking(server, safeFilename);
 
       await logActivity(
         req.user || 'unknown',
@@ -535,7 +558,7 @@ router.delete(
         'mod',
         true,
         safeFilename,
-        `Deleted plugin: ${safeFilename}`,
+        `Deleted plugin: ${safeFilename}${onServer(server.id)}`,
       );
 
       res.json({ success: true });

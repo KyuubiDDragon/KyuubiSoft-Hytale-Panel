@@ -1,7 +1,10 @@
 /**
- * Routes for the auto-wiki (V3.1.3).
+ * Routes for the auto-wiki (V3.1.3). Mounted per server like the other
+ * server-bound routers (legacy /api/wiki: the default server); the config
+ * endpoints are panel-wide.
  *
- * GET /api/wiki[?public=true]   – list (may be public per panel config)
+ * GET /api/wiki[?public=true]   – list (may be public per panel config; the
+ *                                  default server's wiki only)
  * GET /api/wiki/:slug            – single page (markdown + metadata)
  * GET /api/wiki/config           – wiki config
  * PUT /api/wiki/config           – update wiki config
@@ -9,22 +12,32 @@
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/permissions.js';
+import { requirePermission, requireAllServerAccess } from '../middleware/permissions.js';
+import { requireServerFiles } from '../middleware/serverScope.js';
 import * as wiki from '../services/wiki.js';
+import { getServerContext } from '../services/serverContext.js';
+import { getDefaultId } from '../services/servers.js';
 import { logActivity } from '../services/activityLog.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 const router = Router();
 
-// Bypass auth ONLY for read endpoints when wiki.publicAccess is enabled.
+// Bypass auth ONLY for read endpoints when wiki.publicAccess is enabled, and
+// only for the default server's wiki: the setting dates from single-server
+// panels, and a public answer per server id would tell which ids exist.
 async function authOrPublicRead(req: Request, res: Response, next: NextFunction): Promise<void> {
   const isReadRequest = req.method === 'GET' && !req.path.endsWith('/config');
-  if (isReadRequest && req.query.public === 'true') {
-    const cfg = await wiki.getWikiConfig();
-    if (cfg.publicAccess) {
-      next();
-      return;
+  try {
+    if (isReadRequest && req.query.public === 'true' && req.serverId === (await getDefaultId())) {
+      const cfg = await wiki.getWikiConfig();
+      if (cfg.publicAccess) {
+        next();
+        return;
+      }
     }
+  } catch (err) {
+    next(err);
+    return;
   }
   // Fall through to standard auth + permission middleware.
   authMiddleware(req as AuthenticatedRequest, res, () => {
@@ -32,9 +45,13 @@ async function authOrPublicRead(req: Request, res: Response, next: NextFunction)
   });
 }
 
-router.get('/', authOrPublicRead, async (_req: Request, res: Response) => {
-  const index = await wiki.loadWikiIndex();
-  res.json(index);
+router.get('/', authOrPublicRead, async (req: Request, res: Response) => {
+  try {
+    res.json(await wiki.loadWikiIndex(await getServerContext(req.serverId)));
+  } catch (err) {
+    console.error('[wiki] Could not load the wiki:', err);
+    res.status(500).json({ error: 'Failed to load the wiki' });
+  }
 });
 
 router.get(
@@ -50,6 +67,8 @@ router.put(
   '/config',
   authMiddleware,
   requirePermission('wiki.manage'),
+  // Public access covers the whole panel's wiki, not just this server.
+  requireAllServerAccess(),
   async (req: AuthenticatedRequest, res: Response) => {
     const { publicAccess } = req.body ?? {};
     const next = await wiki.setWikiConfig({
@@ -71,9 +90,11 @@ router.post(
   '/regenerate',
   authMiddleware,
   requirePermission('wiki.manage'),
+  // The scan reads the server's mods and plugins folders.
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const index = await wiki.regenerateWiki();
+      const index = await wiki.regenerateWiki(await getServerContext(req.serverId));
       await logActivity(
         req.user || 'system',
         'wiki.regenerated',
@@ -98,12 +119,17 @@ router.post(
 );
 
 router.get('/:slug', authOrPublicRead, async (req: Request, res: Response) => {
-  const page = await wiki.loadWikiPage(req.params.slug);
-  if (!page) {
-    res.status(404).json({ error: 'Page not found' });
-    return;
+  try {
+    const page = await wiki.loadWikiPage(await getServerContext(req.serverId), req.params.slug);
+    if (!page) {
+      res.status(404).json({ error: 'Page not found' });
+      return;
+    }
+    res.json(page);
+  } catch (err) {
+    console.error('[wiki] Could not load a wiki page:', err);
+    res.status(500).json({ error: 'Failed to load the wiki page' });
   }
-  res.json(page);
 });
 
 export default router;

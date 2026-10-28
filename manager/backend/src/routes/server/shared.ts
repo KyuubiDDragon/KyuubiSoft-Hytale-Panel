@@ -2,12 +2,14 @@
 //
 // Extracted from the previously monolithic routes/server.ts to keep behavior
 // identical while splitting the router into smaller, focused modules.
-import { readFile, access, constants } from 'fs/promises';
+import { lstat } from 'fs/promises';
 import path from 'path';
-import { config } from '../../config.js';
 import * as dockerService from '../../services/docker.js';
+import { getServerContext, type ServerContext } from '../../services/serverContext.js';
 import { escapeShellArg } from '../../utils/sanitize.js';
 import { withFileLock, writeJsonAtomic } from '../../utils/jsonStore.js';
+import { readRegularFile, UnsafeFileError } from '../../utils/noFollowFs.js';
+import { resolveRealPathWithin } from '../../utils/pathSecurity.js';
 import { DEFAULT_TARGET_TPS } from '../../services/tpsState.js';
 
 // Allowed config file extensions
@@ -22,9 +24,56 @@ export const CONFIG_EXTENSIONS = [
   '.ini',
 ];
 
-// Panel config file (patchline, start flags, JVM tuning). Read by the game
-// container's entrypoint.sh / start-server.sh at every start.
-export const PANEL_CONFIG_PATH = path.join(config.dataPath, 'panel-config.json');
+// Panel config file (patchline, start flags, JVM tuning) of one server. It
+// lies in the server's data folder, where its container's entrypoint.sh /
+// start-server.sh read it at every start.
+const PANEL_CONFIG_FILE = 'panel-config.json';
+const PANEL_CONFIG_MAX_BYTES = 1024 * 1024;
+
+async function panelConfigLocation(
+  serverId?: string | null,
+): Promise<{ file: string; dir: string }> {
+  const { paths } = await getServerContext(serverId);
+  return { file: path.join(paths.data, PANEL_CONFIG_FILE), dir: paths.data };
+}
+
+/**
+ * The stored object, or null when there is none, it is no JSON object, or it
+ * is not a regular file in the data folder: that folder belongs to the game
+ * server, and a link planted there is neither followed nor kept. Any other
+ * read error (permissions, I/O) is thrown.
+ */
+async function readStoredPanelConfig(
+  file: string,
+  dir: string,
+): Promise<Record<string, unknown> | null> {
+  let raw: Buffer;
+  try {
+    raw = await readRegularFile(file, [dir], { maxBytes: PANEL_CONFIG_MAX_BYTES });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    if (!(error instanceof UnsafeFileError)) throw error;
+    console.warn(`[Server] Ignoring ${file}: ${error.why}`);
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw.toString('utf-8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether `file` is a regular file inside `roots`, without following a link
+ * in its place: used for token files in folders the game server can write.
+ */
+export async function isRegularFileWithin(file: string, roots: string[]): Promise<boolean> {
+  const st = await lstat(file).catch(() => null);
+  return !!st?.isFile() && resolveRealPathWithin(file, roots) !== null;
+}
 
 // Defaults for the native backup retention flags (same as the server's own).
 export const DEFAULT_NATIVE_BACKUP_MAX_COUNT = 5;
@@ -59,31 +108,17 @@ const optionalBool = (v: unknown): boolean | undefined => (typeof v === 'boolean
 const optionalInt = (v: unknown): number | undefined =>
   Number.isInteger(v) ? (v as number) : undefined;
 
-// Helper to read panel config
-export async function readPanelConfig(): Promise<PanelConfig> {
-  try {
-    const content = await readFile(PANEL_CONFIG_PATH, 'utf-8');
-    const cfg = JSON.parse(content);
-    // Ensure all fields have defaults
-    return {
-      patchline: cfg.patchline || process.env.HYTALE_PATCHLINE || 'release',
-      acceptEarlyPlugins: cfg.acceptEarlyPlugins ?? false,
-      disableSentry: cfg.disableSentry ?? false,
-      allowOp: cfg.allowOp ?? false,
-      javaMinRam: optionalString(cfg.javaMinRam),
-      javaMaxRam: optionalString(cfg.javaMaxRam),
-      extraJavaArgs: optionalString(cfg.extraJavaArgs),
-      extraServerArgs: optionalString(cfg.extraServerArgs),
-      bootCommands: Array.isArray(cfg.bootCommands)
-        ? cfg.bootCommands.filter((c: unknown): c is string => typeof c === 'string')
-        : undefined,
-      aotCache: optionalBool(cfg.aotCache),
-      autoUpdate: optionalBool(cfg.autoUpdate),
-      nativeBackupMaxCount: optionalInt(cfg.nativeBackupMaxCount),
-      nativeBackupArchiveMaxCount: optionalInt(cfg.nativeBackupArchiveMaxCount),
-    };
-  } catch {
-    // Return defaults if file doesn't exist
+/**
+ * panel-config.json of a server (`undefined` = the default server). A missing
+ * or unreadable file gives the defaults; an unknown server id throws.
+ */
+export async function readPanelConfig(serverId?: string | null): Promise<PanelConfig> {
+  const { file, dir } = await panelConfigLocation(serverId);
+  const cfg = await readStoredPanelConfig(file, dir).catch((error: unknown) => {
+    console.warn(`[Server] Could not read ${file}, showing the defaults:`, error);
+    return null;
+  });
+  if (!cfg) {
     return {
       patchline: process.env.HYTALE_PATCHLINE || 'release',
       acceptEarlyPlugins: false,
@@ -91,44 +126,89 @@ export async function readPanelConfig(): Promise<PanelConfig> {
       allowOp: false,
     };
   }
+  // Ensure all fields have defaults
+  return {
+    patchline:
+      (typeof cfg.patchline === 'string' && cfg.patchline) ||
+      process.env.HYTALE_PATCHLINE ||
+      'release',
+    acceptEarlyPlugins: optionalBool(cfg.acceptEarlyPlugins) ?? false,
+    disableSentry: optionalBool(cfg.disableSentry) ?? false,
+    allowOp: optionalBool(cfg.allowOp) ?? false,
+    javaMinRam: optionalString(cfg.javaMinRam),
+    javaMaxRam: optionalString(cfg.javaMaxRam),
+    extraJavaArgs: optionalString(cfg.extraJavaArgs),
+    extraServerArgs: optionalString(cfg.extraServerArgs),
+    bootCommands: Array.isArray(cfg.bootCommands)
+      ? cfg.bootCommands.filter((c: unknown): c is string => typeof c === 'string')
+      : undefined,
+    aotCache: optionalBool(cfg.aotCache),
+    autoUpdate: optionalBool(cfg.autoUpdate),
+    nativeBackupMaxCount: optionalInt(cfg.nativeBackupMaxCount),
+    nativeBackupArchiveMaxCount: optionalInt(cfg.nativeBackupArchiveMaxCount),
+  };
 }
 
 // Helper to write panel config. Merges into the file so keys this version of
 // the panel does not model are kept; `undefined` values leave a key as it is.
 // Atomic (tmp + rename) under a per-file lock: the start scripts read the file
 // at any moment and must never see it half-written.
-export async function writePanelConfig(cfg: PanelConfig): Promise<void> {
-  await withFileLock(PANEL_CONFIG_PATH, async () => {
-    let existing: Record<string, unknown> = {};
-    try {
-      const parsed = JSON.parse(await readFile(PANEL_CONFIG_PATH, 'utf-8'));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed;
-    } catch {
-      // missing or unreadable: start from the given values
-    }
+export async function writePanelConfig(cfg: PanelConfig, serverId?: string | null): Promise<void> {
+  const { file, dir } = await panelConfigLocation(serverId);
+  await withFileLock(file, async () => {
+    // Missing, no JSON object or a link: start from the given values. A file
+    // that cannot be read is not replaced (its other keys would be lost).
+    const existing = (await readStoredPanelConfig(file, dir)) ?? {};
     const defined = Object.fromEntries(Object.entries(cfg).filter(([, v]) => v !== undefined));
-    await writeJsonAtomic(PANEL_CONFIG_PATH, { ...existing, ...defined }, { mode: 0o644 });
+    await writeJsonAtomic(file, { ...existing, ...defined }, { mode: 0o644 });
   });
 }
 
-export const DOWNLOADER_CREDENTIALS_PATH =
-  '/opt/hytale/downloader/.hytale-downloader-credentials.json';
+const DOWNLOADER_CREDENTIALS_FILE = '.hytale-downloader-credentials.json';
+// Where the game container keeps the downloader and its token.
+const CONTAINER_DOWNLOADER_DIR = '/opt/hytale/downloader';
+export const DOWNLOADER_CREDENTIALS_PATH = `${CONTAINER_DOWNLOADER_DIR}/${DOWNLOADER_CREDENTIALS_FILE}`;
+// The compose file mounts the compose server's downloader folder read-only
+// into the manager at the same path (DOWNLOADER_PATH for other layouts).
+const COMPOSE_DOWNLOADER_DIR = process.env.DOWNLOADER_PATH || CONTAINER_DOWNLOADER_DIR;
+
+/**
+ * The downloader token of a server as the manager sees it: the compose
+ * server's in the downloader folder the compose file mounts, an additional
+ * server's next to its server folder in the instance folder.
+ */
+export function downloaderCredentialsFile(ctx: Pick<ServerContext, 'kind' | 'paths'>): {
+  file: string;
+  dir: string;
+} {
+  if (ctx.kind === 'compose') {
+    const file =
+      COMPOSE_DOWNLOADER_DIR === CONTAINER_DOWNLOADER_DIR
+        ? DOWNLOADER_CREDENTIALS_PATH
+        : path.join(COMPOSE_DOWNLOADER_DIR, DOWNLOADER_CREDENTIALS_FILE);
+    return { file, dir: COMPOSE_DOWNLOADER_DIR };
+  }
+  const dir = path.join(path.dirname(ctx.paths.server), 'downloader');
+  return { file: path.join(dir, DOWNLOADER_CREDENTIALS_FILE), dir };
+}
 
 // Helper to check if downloader credentials exist. The token lives in the
-// downloader volume of the game container. The default compose mounts that
-// volume read-only into the manager; setups without the mount are answered
-// by the game container itself. (The game entrypoint no longer copies the
-// token into the auth volume.)
-export async function checkDownloaderCredentials(): Promise<{ exists: boolean; error?: string }> {
-  try {
-    await access(DOWNLOADER_CREDENTIALS_PATH, constants.R_OK);
-    return { exists: true };
-  } catch {
-    // Not visible from the manager - ask the game container.
-  }
+// downloader folder of the server's game container. The default compose
+// mounts the compose server's folder read-only into the manager, the
+// instances mount holds those of additional servers; setups without the
+// mount are answered by the game container itself. (The game entrypoint no
+// longer copies the token into the auth volume.)
+export async function checkDownloaderCredentials(
+  serverId?: string | null,
+): Promise<{ exists: boolean; error?: string }> {
+  const ctx = await getServerContext(serverId);
+  const { file, dir } = downloaderCredentialsFile(ctx);
+  if (await isRegularFileWithin(file, [dir])) return { exists: true };
+  // Not visible from the manager - ask the game container.
 
   const probe = await dockerService.execInContainer(
     `test -f ${escapeShellArg(DOWNLOADER_CREDENTIALS_PATH)} && echo present || echo missing`,
+    ctx.id,
   );
   if (probe.success && probe.output?.trim().endsWith('present')) {
     return { exists: true };
@@ -146,6 +226,8 @@ const VERSION_PROBE_TIMEOUT_SECONDS = 30;
 export interface VersionCheckResult {
   version: string;
   authRequired?: boolean;
+  /** Another downloader call (e.g. the container's own download) holds the lock. */
+  busy?: boolean;
   error?: string;
 }
 
@@ -173,16 +255,21 @@ export function downloaderShellCommand(args: string, timeoutSeconds: number): st
   );
 }
 
-export async function getLatestVersion(patchline: string): Promise<VersionCheckResult> {
+/** Latest version on `patchline`, asked through the downloader of the server's container. */
+export async function getLatestVersion(
+  patchline: string,
+  serverId?: string | null,
+): Promise<VersionCheckResult> {
   // SECURITY: Validate patchline to prevent command injection
   if (!VALID_PATCHLINES.includes(patchline as (typeof VALID_PATCHLINES)[number])) {
     console.error(`Invalid patchline attempted: ${patchline}`);
     return { version: 'unknown', error: 'Invalid patchline' };
   }
+  const { id } = await getServerContext(serverId);
 
   // Without saved credentials -print-version starts a device login and waits
   // for it until the time limit; there is nothing to probe.
-  const credentials = await checkDownloaderCredentials();
+  const credentials = await checkDownloaderCredentials(id);
   if (!credentials.exists) {
     return { version: 'unknown', authRequired: true, error: credentials.error };
   }
@@ -202,7 +289,7 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
       `-patchline ${escapeShellArg(patchline)} -print-version -skip-update-check`,
       VERSION_PROBE_TIMEOUT_SECONDS,
     ),
-    undefined,
+    id,
     { timeoutMs: (VERSION_PROBE_TIMEOUT_SECONDS + 5) * 1000 },
   );
 
@@ -215,6 +302,7 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   if (output.includes(DOWNLOADER_BUSY_MARKER)) {
     return {
       version: 'unknown',
+      busy: true,
       error: 'The downloader is busy (download in progress). Try again later.',
     };
   }
@@ -265,7 +353,7 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
 
   // If no version found but also no auth error, credentials might be missing
   // Check if credentials exist
-  const credCheck = await checkDownloaderCredentials();
+  const credCheck = await checkDownloaderCredentials(id);
   if (!credCheck.exists) {
     return { version: 'unknown', authRequired: true, error: credCheck.error };
   }
@@ -275,25 +363,93 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   return { version: 'unknown', error: 'Could not fetch version. Check network connection.' };
 }
 
-// In-memory state for downloader OAuth flow - shared across auth endpoints
-export const downloaderOAuthState: {
-  active: boolean;
-  verificationUrl?: string;
-  userCode?: string;
-  expiresAt?: Date;
-} = { active: false };
+// A device login the downloader started on its own (the entrypoint of a
+// container with USE_HYTALE_DOWNLOADER=true and no token yet) prints its link
+// and code into the container log and waits there for the login.
+const DEVICE_LOGIN_URL_RE = /https:\/\/oauth\.accounts\.hytale\.com\/[^\s\])}]+/i;
+const DEVICE_LOGIN_CODE_RE = /(?:enter|authorization)\s+code:\s*([A-Za-z0-9]{4,12})\b/i;
+const URL_USER_CODE_RE = /[?&]user_code=([A-Za-z0-9]{4,12})\b/i;
+// Lines after which a prompt above them is no longer waiting.
+const DEVICE_LOGIN_DONE_RE =
+  /download successful|already up to date|extracting game files|authentication successful/i;
+const LOG_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s/;
+// Lines of one prompt (links and code) around its last link: the server puts
+// the code before the direct link, the downloader after the plain one.
+const DEVICE_LOGIN_PROMPT_BEFORE = 5;
+const DEVICE_LOGIN_PROMPT_AFTER = 2;
+export const DEVICE_LOGIN_LIFETIME_MS = 15 * 60 * 1000;
 
-// Helpers for resetting/updating shared OAuth state from auth submodule
-export function setDownloaderOAuthState(next: {
+export interface PendingDeviceLogin {
+  verificationUrl: string;
+  userCode: string | null;
+  /** When the prompt was logged (Docker log timestamp), if known. */
+  shownAt: string | null;
+}
+
+// eslint-disable-next-line no-control-regex
+const stripAnsi = (text: string): string => text.replace(/\x1B\[[0-9;]*[A-Za-z]/g, '');
+
+const logLineTime = (line: string): number | null => {
+  const stamp = LOG_TIMESTAMP_RE.exec(line)?.[1];
+  const at = stamp ? Date.parse(stamp) : NaN;
+  return Number.isFinite(at) ? at : null;
+};
+
+/**
+ * The newest device login prompt in a container log that nothing after it
+ * finished, or null. Prompts older than a device code lives count as gone;
+ * with `notBefore` (e.g. the container's start), so do lines logged before it.
+ */
+export function findPendingDeviceLogin(
+  logs: string,
+  now: number = Date.now(),
+  notBefore?: number,
+): PendingDeviceLogin | null {
+  const lines = stripAnsi(logs)
+    .split('\n')
+    .filter((line) => notBefore === undefined || (logLineTime(line) ?? notBefore) >= notBefore);
+  let last = -1;
+  for (let i = lines.length - 1; i >= 0 && last < 0; i--) {
+    if (DEVICE_LOGIN_DONE_RE.test(lines[i])) return null;
+    if (DEVICE_LOGIN_URL_RE.test(lines[i])) last = i;
+  }
+  if (last < 0) return null;
+  // Nearest to the last link first, so an earlier prompt above it never wins.
+  const prompt = lines
+    .slice(Math.max(0, last - DEVICE_LOGIN_PROMPT_BEFORE), last + DEVICE_LOGIN_PROMPT_AFTER + 1)
+    .reverse();
+  const urls = prompt
+    .map((line) => DEVICE_LOGIN_URL_RE.exec(line)?.[0])
+    .filter((url): url is string => !!url);
+  const verificationUrl = urls.find((url) => URL_USER_CODE_RE.test(url)) ?? urls[0];
+  const userCode =
+    prompt.map((line) => DEVICE_LOGIN_CODE_RE.exec(line)?.[1]).find((code) => !!code) ??
+    URL_USER_CODE_RE.exec(verificationUrl)?.[1] ??
+    null;
+  const shownTime = logLineTime(lines[last]);
+  if (shownTime !== null && now - shownTime > DEVICE_LOGIN_LIFETIME_MS) return null;
+  const shownAt = shownTime !== null ? (LOG_TIMESTAMP_RE.exec(lines[last])?.[1] ?? null) : null;
+  return { verificationUrl, userCode, shownAt };
+}
+
+export interface DownloaderOAuthState {
   active: boolean;
   verificationUrl?: string;
   userCode?: string;
   expiresAt?: Date;
-}): void {
-  downloaderOAuthState.active = next.active;
-  downloaderOAuthState.verificationUrl = next.verificationUrl;
-  downloaderOAuthState.userCode = next.userCode;
-  downloaderOAuthState.expiresAt = next.expiresAt;
+}
+
+// In-memory state of the downloader OAuth flow, one per server (resolved id):
+// every game container has its own downloader and token.
+const downloaderOAuthStates = new Map<string, Readonly<DownloaderOAuthState>>();
+
+export function getDownloaderOAuthState(serverId: string): Readonly<DownloaderOAuthState> {
+  return downloaderOAuthStates.get(serverId) ?? { active: false };
+}
+
+export function setDownloaderOAuthState(serverId: string, next: DownloaderOAuthState): void {
+  if (next.active) downloaderOAuthStates.set(serverId, { ...next });
+  else downloaderOAuthStates.delete(serverId);
 }
 
 // Helper function to parse Prometheus text format

@@ -1,26 +1,59 @@
-// Hytale downloader OAuth flow + auth status endpoints.
-import { Router, Request, Response } from 'express';
+// Hytale downloader OAuth flow + auth status endpoints, per server: every game
+// container has its own downloader and token, so the request's server is the
+// one that is checked and logged in.
+import { Router, Response } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import * as dockerService from '../../services/docker.js';
 import { isDemoMode, getDemoDownloaderStatus } from '../../services/demoData.js';
+import { resolveServerId } from '../../services/servers.js';
+import type { AuthenticatedRequest } from '../../types/index.js';
 import {
   checkDownloaderCredentials,
   getLatestVersion,
-  downloaderOAuthState,
+  getDownloaderOAuthState,
   setDownloaderOAuthState,
   downloaderShellCommand,
+  findPendingDeviceLogin,
+  DEVICE_LOGIN_LIFETIME_MS,
   DOWNLOADER_BUSY_MARKER,
+  type PendingDeviceLogin,
 } from './shared.js';
 
 const router = Router();
+
+// Log lines searched for a device login the container started itself.
+const LOGIN_PROMPT_LOG_LINES = 200;
+
+/**
+ * A device login the server's container waits for (its own downloader run),
+ * or null. Only read from the current container run, and only while the game
+ * server is not running: then the entrypoint's downloader wrote the log, not
+ * the server or one of its mods.
+ */
+async function pendingContainerLogin(serverId: string): Promise<PendingDeviceLogin | null> {
+  const state = await dockerService.getContainerState(serverId).catch(() => null);
+  if (!state?.running) return null;
+  if ((await dockerService.isServerProcessRunning(serverId)) !== false) return null;
+  const startedAt = Date.parse(state.startedAt);
+  return findPendingDeviceLogin(
+    await dockerService.getLogs(LOGIN_PROMPT_LOG_LINES, serverId),
+    Date.now(),
+    Number.isFinite(startedAt) ? startedAt : undefined,
+  );
+}
+
+function expiryOf(login: PendingDeviceLogin): Date {
+  const shown = login.shownAt ? Date.parse(login.shownAt) : Date.now();
+  return new Date(shown + DEVICE_LOGIN_LIFETIME_MS);
+}
 
 // GET /api/server/downloader/auth-status - Check downloader authentication status
 router.get(
   '/downloader/auth-status',
   authMiddleware,
   requirePermission('server.view_status'),
-  async (_req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     // Demo mode: return demo downloader status
     if (isDemoMode()) {
       const demoStatus = getDemoDownloaderStatus();
@@ -35,11 +68,12 @@ router.get(
     }
 
     try {
-      const credCheck = await checkDownloaderCredentials();
+      const serverId = await resolveServerId(req.serverId);
+      const credCheck = await checkDownloaderCredentials(serverId);
 
       // Try to get version as a test
       if (credCheck.exists) {
-        const testResult = await getLatestVersion('release');
+        const testResult = await getLatestVersion('release', serverId);
         res.json({
           authenticated: testResult.version !== 'unknown' && !testResult.authRequired,
           credentialsExist: true,
@@ -52,6 +86,8 @@ router.get(
           credentialsExist: false,
           authRequired: true,
           error: 'No credentials found',
+          // A new server's container waits for this login before it downloads.
+          pendingLogin: await pendingContainerLogin(serverId),
         });
       }
     } catch (error) {
@@ -68,13 +104,41 @@ router.post(
   '/downloader/initiate-auth',
   authMiddleware,
   requirePermission('server.restart'),
-  async (_req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
-      console.log('[Server] Initiating downloader OAuth flow...');
+      const serverId = await resolveServerId(req.serverId);
+      console.log(`[Server] Initiating downloader OAuth flow for ${serverId}...`);
+
+      // The container's own download may already wait for a login (a new
+      // server with USE_HYTALE_DOWNLOADER): that login is the one to finish.
+      // It holds the downloader lock, so a second run could not start anyway.
+      if (!(await checkDownloaderCredentials(serverId)).exists) {
+        const waiting = await pendingContainerLogin(serverId);
+        if (waiting) {
+          setDownloaderOAuthState(serverId, {
+            active: true,
+            verificationUrl: waiting.verificationUrl,
+            userCode: waiting.userCode ?? undefined,
+            expiresAt: expiryOf(waiting),
+          });
+          const expiresIn = Math.max(
+            0,
+            Math.round((expiryOf(waiting).getTime() - Date.now()) / 1000),
+          );
+          return res.json({
+            success: true,
+            source: 'container',
+            verificationUrl: waiting.verificationUrl,
+            userCode: waiting.userCode,
+            expiresIn,
+          });
+        }
+      }
 
       // First, delete existing credentials to force re-authentication
       await dockerService.execInContainer(
         `rm -f /opt/hytale/downloader/.hytale-downloader-credentials.json 2>/dev/null || true`,
+        serverId,
       );
 
       // Run the downloader - it will start OAuth flow when credentials are missing.
@@ -89,6 +153,7 @@ router.post(
       // Shares the downloader lock with the entrypoint and the version probes.
       const authResult = await dockerService.execInContainer(
         downloaderShellCommand('-skip-update-check', 60),
+        serverId,
       );
 
       const output = authResult.output || '';
@@ -158,18 +223,18 @@ router.post(
       }
 
       // Store state
-      setDownloaderOAuthState({
+      setDownloaderOAuthState(serverId, {
         active: true,
         verificationUrl,
         userCode: userCode || undefined,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        expiresAt: new Date(Date.now() + DEVICE_LOGIN_LIFETIME_MS),
       });
 
       res.json({
         success: true,
         verificationUrl,
         userCode,
-        expiresIn: 900, // 15 minutes
+        expiresIn: DEVICE_LOGIN_LIFETIME_MS / 1000,
       });
     } catch (error) {
       res.status(500).json({
@@ -185,9 +250,11 @@ router.get(
   '/downloader/auth-poll',
   authMiddleware,
   requirePermission('server.restart'),
-  async (_req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
-      if (!downloaderOAuthState.active) {
+      const serverId = await resolveServerId(req.serverId);
+      const state = getDownloaderOAuthState(serverId);
+      if (!state.active) {
         return res.json({
           completed: false,
           error: 'No active auth flow',
@@ -195,8 +262,8 @@ router.get(
       }
 
       // Check if expired
-      if (downloaderOAuthState.expiresAt && new Date() > downloaderOAuthState.expiresAt) {
-        setDownloaderOAuthState({ active: false });
+      if (state.expiresAt && new Date() > state.expiresAt) {
+        setDownloaderOAuthState(serverId, { active: false });
         return res.json({
           completed: false,
           expired: true,
@@ -205,22 +272,28 @@ router.get(
       }
 
       // Check if credentials now exist and work
-      const credCheck = await checkDownloaderCredentials();
+      const credCheck = await checkDownloaderCredentials(serverId);
       if (credCheck.exists) {
-        const testResult = await getLatestVersion('release');
+        const testResult = await getLatestVersion('release', serverId);
         if (testResult.version !== 'unknown' && !testResult.authRequired) {
-          setDownloaderOAuthState({ active: false });
+          setDownloaderOAuthState(serverId, { active: false });
           return res.json({
             completed: true,
             version: testResult.version,
           });
         }
+        // The token is there and the container's own download holds the
+        // downloader: the login worked, the files are on their way.
+        if (testResult.busy) {
+          setDownloaderOAuthState(serverId, { active: false });
+          return res.json({ completed: true, downloading: true });
+        }
       }
 
       res.json({
         completed: false,
-        verificationUrl: downloaderOAuthState.verificationUrl,
-        userCode: downloaderOAuthState.userCode,
+        verificationUrl: state.verificationUrl,
+        userCode: state.userCode,
       });
     } catch (error) {
       res.status(500).json({

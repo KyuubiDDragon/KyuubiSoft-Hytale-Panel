@@ -29,6 +29,9 @@ for (const dir of [
 const noSymlinks = process.platform === 'win32';
 process.env.MANAGER_DATA_PATH = tmpDir;
 delete process.env.DEMO_MODE;
+// The compose server ("default") takes its folders from the env.
+process.env.SERVER_PATH = serverDir;
+process.env.MODS_PATH = modsDir;
 
 const DATA_DIR = 'KyuubiDDragon_KyuubiSoftAPI';
 

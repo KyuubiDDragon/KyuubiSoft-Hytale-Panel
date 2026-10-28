@@ -8,13 +8,16 @@ import {
   type Stats,
 } from 'fs';
 import type { ReadStream } from 'fs';
-import { config } from '../config.js';
 import { resolveRealPath } from '../utils/pathSecurity.js';
 import { ACCESS_FILE_NAMES, banStorageFile } from './accessFormats.js';
+import type { ServerPaths } from './servers.js';
 
 // ============================================================
 // Types
 // ============================================================
+
+/** The folders of the server the file manager works on (its ServerContext.paths). */
+export type FileManagerFolders = Pick<ServerPaths, 'mods' | 'plugins' | 'server' | 'data'>;
 
 export interface FileManagerRoot {
   id: string;
@@ -122,55 +125,61 @@ export function accessFilePatterns(configRaw: unknown): RegExp[] {
 }
 
 // Read again only when the file changed: getRoots() runs on every request.
-let peeked: { key: string; raw: unknown } | null = null;
+// One entry per server folder, so switching servers doesn't re-read each time.
+const peeked = new Map<string, { key: string; raw: unknown }>();
 
 /** config.json of the server folder as far as it can be read; null when it cannot. */
 function peekServerConfig(serverPath: string): unknown {
+  const file = path.join(serverPath, 'config.json');
   try {
-    const file = path.join(serverPath, 'config.json');
     const st = lstatSync(file);
     if (!st.isFile() || st.size > MAX_CONFIG_PEEK_BYTES) return null;
-    const key = `${file}:${st.size}:${st.mtimeMs}`;
-    if (peeked?.key !== key) peeked = { key, raw: JSON.parse(readFileSync(file, 'utf-8')) };
-    return peeked.raw;
+    const key = `${st.size}:${st.mtimeMs}`;
+    let entry = peeked.get(file);
+    if (entry?.key !== key) {
+      entry = { key, raw: JSON.parse(readFileSync(file, 'utf-8')) };
+      peeked.set(file, entry);
+    }
+    return entry.raw;
   } catch {
+    peeked.delete(file);
     return null;
   }
 }
 
 // ============================================================
-// Roots configuration (from config.ts paths)
+// Roots configuration (the requested server's folders)
 // ============================================================
 
-export function getRoots(): FileManagerRoot[] {
+export function getRoots(folders: FileManagerFolders): FileManagerRoot[] {
   return [
     {
       id: 'mods',
-      path: config.modsPath,
+      path: folders.mods,
       rw: true,
       permission: 'files.write',
       label: 'Mods',
     },
     {
       id: 'plugins',
-      path: config.pluginsPath,
+      path: folders.plugins,
       rw: true,
       permission: 'files.write',
       label: 'Plugins',
     },
     {
       id: 'server',
-      path: config.serverPath,
+      path: folders.server,
       rw: true,
       permission: 'files.write',
       // Hytale config.json has its own editor + auth/ is sensitive
       deny: ['config.json', 'auth/', 'auth'],
-      denyPatterns: accessFilePatterns(peekServerConfig(config.serverPath)),
+      denyPatterns: accessFilePatterns(peekServerConfig(folders.server)),
       label: 'Server',
     },
     {
       id: 'data',
-      path: config.dataPath,
+      path: folders.data,
       rw: false,
       permission: 'files.read',
       label: 'Data',
@@ -178,8 +187,8 @@ export function getRoots(): FileManagerRoot[] {
   ];
 }
 
-export function getRoot(rootId: string): FileManagerRoot {
-  const root = getRoots().find((r) => r.id === rootId);
+export function getRoot(folders: FileManagerFolders, rootId: string): FileManagerRoot {
+  const root = getRoots(folders).find((r) => r.id === rootId);
   if (!root) {
     throw new FileManagerError(`Unknown root: ${rootId}`, 404, 'ROOT_NOT_FOUND');
   }
@@ -342,7 +351,11 @@ export function isDenied(root: FileManagerRoot, relPath: string, isDir = false):
  * The owning root and the deny rules are decided on the REAL path (symlinks
  * resolved), and the requested name must not be a denied one either.
  */
-export function isAbsolutePathAllowed(absPath: string, mode: 'read' | 'write'): boolean {
+export function isAbsolutePathAllowed(
+  folders: FileManagerFolders,
+  absPath: string,
+  mode: 'read' | 'write',
+): boolean {
   let resolved: string;
   try {
     resolved = path.resolve(absPath);
@@ -352,7 +365,7 @@ export function isAbsolutePathAllowed(absPath: string, mode: 'read' | 'write'): 
   const real = resolveRealPath(resolved);
   if (!real) return false; // broken/looping symlink
   const isDir = isDirectorySync(real);
-  for (const root of getRoots()) {
+  for (const root of getRoots(folders)) {
     const rootAbs = path.resolve(root.path);
     const rootReal = resolveRealPath(rootAbs) ?? rootAbs;
     const relative = path.relative(rootReal, real);
@@ -423,6 +436,7 @@ function isLikelyBinary(filePath: string, sample?: Buffer): boolean {
 // ============================================================
 
 export async function listDir(
+  folders: FileManagerFolders,
   rootId: string,
   relPath: string,
 ): Promise<{
@@ -430,7 +444,7 @@ export async function listDir(
   path: string;
   entries: DirEntry[];
 }> {
-  const root = getRoot(rootId);
+  const root = getRoot(folders, rootId);
   // Work on the resolved directory so entries are read where the path really
   // points (resolveTarget already confirmed that is inside the root).
   const { real: dir, rootReal } = resolveTarget(root, relPath);
@@ -489,11 +503,12 @@ export async function listDir(
 }
 
 export async function readFile(
+  folders: FileManagerFolders,
   rootId: string,
   relPath: string,
   maxBytes: number = MAX_READ_BYTES,
 ): Promise<ReadResult> {
-  const root = getRoot(rootId);
+  const root = getRoot(folders, rootId);
   // Read the resolved file, never whatever a link at `abs` points to by then.
   const { real: abs } = resolveTarget(root, relPath);
 
@@ -542,13 +557,14 @@ export async function readFile(
 }
 
 export async function writeFile(
+  folders: FileManagerFolders,
   rootId: string,
   relPath: string,
   content: string,
   encoding: 'utf-8' | 'base64' = 'utf-8',
   ifMatchMtime?: number,
 ): Promise<WriteResult> {
-  const root = getRoot(rootId);
+  const root = getRoot(folders, rootId);
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
@@ -649,8 +665,12 @@ async function assertNoSymlinkOnPath(rootDir: string, target: string): Promise<v
   }
 }
 
-export async function deleteFile(rootId: string, relPath: string): Promise<void> {
-  const root = getRoot(rootId);
+export async function deleteFile(
+  folders: FileManagerFolders,
+  rootId: string,
+  relPath: string,
+): Promise<void> {
+  const root = getRoot(folders, rootId);
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
@@ -676,8 +696,13 @@ export async function deleteFile(rootId: string, relPath: string): Promise<void>
   }
 }
 
-export async function moveFile(rootId: string, from: string, to: string): Promise<void> {
-  const root = getRoot(rootId);
+export async function moveFile(
+  folders: FileManagerFolders,
+  rootId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  const root = getRoot(folders, rootId);
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
@@ -713,11 +738,12 @@ export interface UploadFileLike {
 }
 
 export async function uploadFile(
+  folders: FileManagerFolders,
   rootId: string,
   relPath: string,
   file: UploadFileLike,
 ): Promise<WriteResult> {
-  const root = getRoot(rootId);
+  const root = getRoot(folders, rootId);
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
@@ -758,10 +784,11 @@ export async function uploadFile(
 }
 
 export async function openDownloadStream(
+  folders: FileManagerFolders,
   rootId: string,
   relPath: string,
 ): Promise<{ stream: ReadStream; size: number; filename: string }> {
-  const root = getRoot(rootId);
+  const root = getRoot(folders, rootId);
   const { abs, real } = resolveTarget(root, relPath);
 
   let stat: Stats;

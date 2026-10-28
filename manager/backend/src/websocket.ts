@@ -16,9 +16,11 @@ import { IncomingMessage } from 'http';
 import { verifyToken, verifyWsTicket } from './services/auth.js';
 import { execCommand } from './services/docker.js';
 import { hasPermission } from './services/roles.js';
+import { getActiveApiKeyGrant } from './services/apiKeys.js';
 import { authorizeCommand, scopeAllows } from './services/commandPolicy.js';
 import type { LogEntry, WsMessage } from './types/index.js';
-import { getDefaultId, getServer } from './services/servers.js';
+import { getDefaultId, getServer, isComposeServer } from './services/servers.js';
+import { config } from './config.js';
 import {
   subscribeServerLogWithHistory,
   type LogHistoryOptions,
@@ -48,8 +50,10 @@ interface ClientContext {
   serverId: string;
   /** Scopes of the API key the socket's ticket was issued for (absent = normal login). */
   apiKeyScopes?: string[];
-  /** Opened on /api/servers/:id/console/ws (rights of that server) or the legacy path. */
-  scoped: boolean;
+  /** Server list of that API key (absent = no list). */
+  apiKeyServerIds?: string[];
+  /** That API key, when the ticket names it: its current state replaces the two above. */
+  apiKeyId?: string;
 }
 
 interface ConsoleClient {
@@ -144,11 +148,21 @@ async function runConsoleCommand(
   const reply = (body: Record<string, unknown>) =>
     send(client, { type: 'command_response', requestId, command, ...body });
   try {
+    // A key revoked or changed since the last heartbeat counts right away.
+    if (!refreshKeyGrant(ctx)) {
+      reply({ success: false, error: 'API key revoked or expired' });
+      client.ws.close(4003, 'Permission denied: API key revoked');
+      return;
+    }
     // Same check as the HTTP console: whitelist, then the command's
     // tier on the SAME server it will run on (so a per-server operator
     // role is honoured), limited by the API key's scopes if any.
     const auth = await authorizeCommand(
-      { username: ctx.username, apiKeyScopes: ctx.apiKeyScopes },
+      {
+        username: ctx.username,
+        apiKeyScopes: ctx.apiKeyScopes,
+        apiKeyServerIds: ctx.apiKeyServerIds,
+      },
       command,
       ctx.serverId,
     );
@@ -252,6 +266,8 @@ export async function resolveSocketServerId(reqUrl: string): Promise<string | nu
     const id = match[1];
     const server = await getServer(id);
     if (!server) return null;
+    // Like the scoped HTTP routes: with multiserver off only the compose server.
+    if (!config.multiserverEnabled && !isComposeServer(server)) return null;
     return id;
   }
   if (reqUrl.startsWith('/api/console/ws')) {
@@ -281,13 +297,15 @@ async function authenticate(ws: WebSocket, req: IncomingMessage): Promise<Client
 
   // The scoped path /api/servers/:id/console/ws carries the id in the
   // URL; the legacy /api/console/ws path resolves to the default-server.
-  // Only the scoped path passes expectedServerId so legacy tickets
-  // (unscoped) still work for legacy clients.
+  // The scoped path needs a ticket issued for its server, the legacy path an
+  // unscoped ticket.
   const scoped = url.pathname.startsWith('/api/servers/');
   const expectedServerId = scoped ? serverId : undefined;
 
   let username: string;
   let apiKeyScopes: string[] | undefined;
+  let apiKeyServerIds: string[] | undefined;
+  let apiKeyId: string | undefined;
 
   if (ticket) {
     const ticketResult = verifyWsTicket(ticket, expectedServerId);
@@ -297,6 +315,8 @@ async function authenticate(ws: WebSocket, req: IncomingMessage): Promise<Client
     }
     username = ticketResult.username;
     apiKeyScopes = ticketResult.apiKeyScopes;
+    apiKeyServerIds = ticketResult.apiKeyServerIds;
+    apiKeyId = ticketResult.apiKeyId;
   } else if (token) {
     console.warn(
       'WebSocket: Client using deprecated token auth. Should use /api/auth/ws-ticket instead.',
@@ -312,7 +332,7 @@ async function authenticate(ws: WebSocket, req: IncomingMessage): Promise<Client
     return null;
   }
 
-  const ctx: ClientContext = { username, serverId, apiKeyScopes, scoped };
+  const ctx: ClientContext = { username, serverId, apiKeyScopes, apiKeyServerIds, apiKeyId };
   // A ticket requested with an API key carries the key's scopes; the key must
   // cover console.view itself, not just its owner. A failing rights lookup
   // (unreadable users file) closes the socket instead of leaving it hanging.
@@ -331,10 +351,27 @@ async function authenticate(ws: WebSocket, req: IncomingMessage): Promise<Client
   return ctx;
 }
 
+/**
+ * Take over the key's current scopes and servers. False when the key was
+ * revoked or has expired since the ticket was issued.
+ */
+function refreshKeyGrant(ctx: ClientContext): boolean {
+  if (ctx.apiKeyId === undefined) return true;
+  const grant = getActiveApiKeyGrant(ctx.apiKeyId);
+  if (!grant) return false;
+  ctx.apiKeyScopes = grant.scopes;
+  ctx.apiKeyServerIds = grant.serverIds ?? undefined;
+  return true;
+}
+
+// Checked against the server the socket streams, also on the legacy path
+// (the default server): server lists and per-server roles apply to both.
 async function mayViewConsole(ctx: ClientContext): Promise<boolean> {
   return (
+    refreshKeyGrant(ctx) &&
     scopeAllows(ctx.apiKeyScopes, 'console.view') &&
-    (await hasPermission(ctx.username, 'console.view', ctx.scoped ? ctx.serverId : undefined))
+    (ctx.apiKeyServerIds === undefined || ctx.apiKeyServerIds.includes(ctx.serverId)) &&
+    (await hasPermission(ctx.username, 'console.view', ctx.serverId))
   );
 }
 

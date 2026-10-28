@@ -67,3 +67,46 @@ describe('apiKeys service', () => {
     expect(await verifyApiKey(token)).toBeNull();
   });
 });
+
+describe('apiKeys server lists', () => {
+  it('creates keys without a list and reports serverIds: null', async () => {
+    const { createApiKey, verifyApiKey } = await import('./apiKeys.js');
+    const { key, token } = await createApiKey({ ownerUsername: 'bob', name: 'k', scopes: [] });
+    expect(key.serverIds).toBeNull();
+    expect((await verifyApiKey(token))?.serverIds).toBeNull();
+  });
+
+  it('stores a list, hands it to verifyApiKey and lifts it again', async () => {
+    const { createApiKey, verifyApiKey, setApiKeyServerIds, listApiKeys } =
+      await import('./apiKeys.js');
+    const { key, token } = await createApiKey({ ownerUsername: 'bob', name: 'l', scopes: [] });
+    expect(setApiKeyServerIds('bob', key.id, ['b1', 'b1', 'c2'])).toBe(true);
+    expect((await verifyApiKey(token))?.serverIds).toEqual(['b1', 'c2']);
+    expect(listApiKeys('bob').find((k) => k.id === key.id)?.serverIds).toEqual(['b1', 'c2']);
+    expect(setApiKeyServerIds('bob', key.id, [])).toBe(true);
+    expect((await verifyApiKey(token))?.serverIds).toEqual([]);
+    expect(setApiKeyServerIds('bob', key.id, null)).toBe(true);
+    expect((await verifyApiKey(token))?.serverIds).toBeNull();
+  });
+
+  it("does not touch another owner's or a revoked key", async () => {
+    const { createApiKey, setApiKeyServerIds, revokeApiKey, getOwnApiKey } =
+      await import('./apiKeys.js');
+    const { key } = await createApiKey({ ownerUsername: 'bob', name: 'm', scopes: [] });
+    expect(setApiKeyServerIds('mallory', key.id, ['b1'])).toBe(false);
+    expect(getOwnApiKey('mallory', key.id)).toBeNull();
+    revokeApiKey('bob', key.id);
+    expect(setApiKeyServerIds('bob', key.id, ['b1'])).toBe(false);
+    expect(getOwnApiKey('bob', key.id)?.serverIds).toBeNull();
+  });
+
+  it('limits a key with a damaged list to no server', async () => {
+    const { createApiKey, verifyApiKey } = await import('./apiKeys.js');
+    const { getDb } = await import('../db/index.js');
+    const { key, token } = await createApiKey({ ownerUsername: 'bob', name: 'n', scopes: [] });
+    for (const raw of ['not json', '"b1"', '[1,2]', '{"b1":true}']) {
+      getDb().prepare('UPDATE api_keys SET server_ids = ? WHERE id = ?').run(raw, key.id);
+      expect((await verifyApiKey(token))?.serverIds).toEqual([]);
+    }
+  });
+});

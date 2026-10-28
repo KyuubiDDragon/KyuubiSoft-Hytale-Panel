@@ -11,7 +11,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
-import { config } from '../config.js';
+import { serverContextIn } from '../test/serverContextStub.js';
+import type { ServerContext } from './serverContext.js';
 import {
   resolveTrackedModFile,
   trackMod,
@@ -26,7 +27,7 @@ let base: string;
 let modsDir: string;
 let dataDir: string;
 let victim: string;
-const saved = { modsPath: config.modsPath, dataPath: config.dataPath };
+let server: ServerContext;
 
 function trackedFile(): string {
   return path.join(dataDir, 'cfwidget-tracked.json');
@@ -49,13 +50,10 @@ beforeAll(() => {
   fs.mkdirSync(modsDir);
   fs.mkdirSync(dataDir);
   victim = path.join(dataDir, 'users.json');
-  config.modsPath = modsDir;
-  config.dataPath = dataDir;
+  server = serverContextIn(base);
 });
 
 afterAll(() => {
-  config.modsPath = saved.modsPath;
-  config.dataPath = saved.dataPath;
   fs.rmSync(base, { recursive: true, force: true });
 });
 
@@ -77,24 +75,28 @@ const TRAVERSAL_NAMES = [
 
 describe('resolveTrackedModFile', () => {
   it('accepts plain .jar/.zip names (also disabled ones) inside the mods folder', () => {
-    expect(resolveTrackedModFile('Mod-1.0.2.jar')).toBe(path.join(modsDir, 'Mod-1.0.2.jar'));
-    expect(resolveTrackedModFile('Pack.zip')).toBe(path.join(modsDir, 'Pack.zip'));
-    expect(resolveTrackedModFile('Mod.jar.disabled')).toBe(path.join(modsDir, 'Mod.jar.disabled'));
+    expect(resolveTrackedModFile(server, 'Mod-1.0.2.jar')).toBe(
+      path.join(modsDir, 'Mod-1.0.2.jar'),
+    );
+    expect(resolveTrackedModFile(server, 'Pack.zip')).toBe(path.join(modsDir, 'Pack.zip'));
+    expect(resolveTrackedModFile(server, 'Mod.jar.disabled')).toBe(
+      path.join(modsDir, 'Mod.jar.disabled'),
+    );
   });
 
   it('rejects traversal, absolute paths, backslash variants and foreign extensions', () => {
     for (const name of [...TRAVERSAL_NAMES, 'users.json', 'panel.sqlite', '..', '', 'evil\0.jar']) {
-      expect(resolveTrackedModFile(name), JSON.stringify(name)).toBeNull();
+      expect(resolveTrackedModFile(server, name), JSON.stringify(name)).toBeNull();
     }
-    expect(resolveTrackedModFile(undefined)).toBeNull();
-    expect(resolveTrackedModFile({ filename: 'x.jar' })).toBeNull();
+    expect(resolveTrackedModFile(server, undefined)).toBeNull();
+    expect(resolveTrackedModFile(server, { filename: 'x.jar' })).toBeNull();
   });
 });
 
 describe('trackMod', () => {
   it('refuses traversal filenames before any lookup and stores nothing', async () => {
     for (const name of TRAVERSAL_NAMES) {
-      const result = await trackMod(name, 'some-mod');
+      const result = await trackMod(server, name, 'some-mod');
       expect(result.success, name).toBe(false);
       expect(result.error).toMatch(/Invalid mod filename/);
     }
@@ -117,7 +119,7 @@ describe('stored tracking entries', () => {
         lastGlobalCheck: null,
       }),
     );
-    const tracked = await getTrackedMods();
+    const tracked = await getTrackedMods(server);
     expect(Object.keys(tracked.mods).sort()).toEqual(['Good.jar', '[wishlist]some-mod']);
   });
 
@@ -129,7 +131,7 @@ describe('stored tracking entries', () => {
         lastGlobalCheck: null,
       }),
     );
-    const result = await uninstallTrackedMod('../data/users.json');
+    const result = await uninstallTrackedMod(server, '../data/users.json');
     expect(result.success).toBe(false);
     expect(fs.existsSync(victim)).toBe(true);
   });
@@ -143,11 +145,11 @@ describe('stored tracking entries', () => {
         lastGlobalCheck: null,
       }),
     );
-    const result = await uninstallTrackedMod('Good.jar');
+    const result = await uninstallTrackedMod(server, 'Good.jar');
     expect(result.success).toBe(true);
     expect(fs.existsSync(path.join(modsDir, 'Good.jar'))).toBe(false);
     expect(fs.existsSync(victim)).toBe(true);
-    expect(Object.keys((await getTrackedMods()).mods)).toEqual([]);
+    expect(Object.keys((await getTrackedMods(server)).mods)).toEqual([]);
   });
 });
 
@@ -160,13 +162,13 @@ describe('lookup keys from the route', () => {
         lastGlobalCheck: null,
       }),
     );
-    expect(await checkModUpdate('__proto__')).toBeNull();
-    expect(await updateInstalledVersion('__proto__', '9.9.9', 1)).toBe(false);
-    expect(await untrackMod('constructor')).toBe(false);
-    expect((await uninstallTrackedMod('__proto__')).success).toBe(false);
+    expect(await checkModUpdate(server, '__proto__')).toBeNull();
+    expect(await updateInstalledVersion(server, '__proto__', '9.9.9', 1)).toBe(false);
+    expect(await untrackMod(server, 'constructor')).toBe(false);
+    expect((await uninstallTrackedMod(server, '__proto__')).success).toBe(false);
     const probe: Record<string, unknown> = {};
     expect(probe.installed).toBeUndefined();
     expect(probe.installedVersion).toBeUndefined();
-    expect(Object.keys((await getTrackedMods()).mods)).toEqual(['Good.jar']);
+    expect(Object.keys((await getTrackedMods(server)).mods)).toEqual(['Good.jar']);
   });
 });

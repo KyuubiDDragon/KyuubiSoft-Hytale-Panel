@@ -124,3 +124,65 @@ describe('built-in role permission migration', () => {
     expect(migrateSystemRolePermissions(data)).toBe(false);
   });
 });
+
+describe('servers.manage split off servers.create', () => {
+  /** A custom fleet role from before servers.manage existed. */
+  function withFleetRole(): RolesData {
+    const data = legacyRoles();
+    data.roles.push(
+      role(
+        'fleet',
+        'Fleet admins',
+        ['servers.list', 'servers.create'],
+        false,
+      ) as RolesData['roles'][number],
+    );
+    return data;
+  }
+
+  it('gives every role with servers.create, custom ones too, servers.manage once', async () => {
+    await fsp.writeFile(rolesFile, JSON.stringify(withFleetRole()), 'utf-8');
+    const { initializeRoles } = await import('./roles.js');
+    await initializeRoles();
+
+    const data = await readFileData();
+    expect(permsOf(data, 'fleet')).toEqual(['servers.list', 'servers.create', 'servers.manage']);
+    expect(permsOf(data, 'custom-1')).toEqual(['players.view']);
+    expect(permsOf(data, 'operator')).not.toContain('servers.manage');
+    expect(permsOf(data, 'admin')).toEqual(['*']);
+    expect(data.appliedMigrations).toContain('servers-manage-permission');
+    expect(data.version).toBe(8);
+  });
+
+  it('does not bring servers.manage back after an admin removed it', async () => {
+    await fsp.writeFile(rolesFile, JSON.stringify(withFleetRole()), 'utf-8');
+    const { initializeRoles } = await import('./roles.js');
+    await initializeRoles();
+    const once = await readFileData();
+    const edited = {
+      ...once,
+      roles: once.roles.map((r) =>
+        r.id === 'fleet' ? { ...r, permissions: ['servers.list', 'servers.create'] } : r,
+      ),
+    };
+    await fsp.writeFile(rolesFile, JSON.stringify(edited), 'utf-8');
+    await initializeRoles();
+    const after = await readFileData();
+    expect(permsOf(after, 'fleet')).toEqual(['servers.list', 'servers.create']);
+    expect(after.version).toBe(once.version);
+  });
+
+  it('records the split for new installs', async () => {
+    const { initializeRoles } = await import('./roles.js');
+    await initializeRoles();
+    expect((await readFileData()).appliedMigrations).toContain('servers-manage-permission');
+  });
+
+  it('is idempotent on the data itself', async () => {
+    const { migrateImpliedPermissions } = await import('./roles.js');
+    const data = withFleetRole();
+    expect(migrateImpliedPermissions(data)).toBe(true);
+    expect(migrateImpliedPermissions(data)).toBe(false);
+    expect(permsOf(data, 'fleet')?.filter((p) => p === 'servers.manage')).toHaveLength(1);
+  });
+});

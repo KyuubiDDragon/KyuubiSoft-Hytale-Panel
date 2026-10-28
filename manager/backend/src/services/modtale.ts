@@ -5,11 +5,14 @@ import { logger } from '../utils/logger.js';
  * API Documentation: https://api.modtale.net
  */
 
-import { writeFile, mkdir, access, readFile, unlink } from 'fs/promises';
+import { mkdir, access, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
 import { sanitizeFileName, isPathSafe, resolveFileInDir } from '../utils/pathSecurity.js';
+import type { ServerContext } from './serverContext.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 
 // Security: Regex pattern for validating project IDs
 const PROJECT_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -163,57 +166,82 @@ interface InstalledModsData {
   mods: Record<string, InstalledModInfo>;
 }
 
+// Kept in each server's data folder: every server has its own install list.
 const INSTALLED_MODS_FILE = 'modtale-installed.json';
 
-function getInstalledModsPath(): string {
-  return path.join(config.dataPath, INSTALLED_MODS_FILE);
+function getInstalledModsPath(server: ServerContext): string {
+  return path.join(server.paths.data, INSTALLED_MODS_FILE);
 }
 
-async function loadInstalledMods(): Promise<InstalledModsData> {
+async function loadInstalledMods(server: ServerContext): Promise<InstalledModsData> {
   try {
-    const filePath = getInstalledModsPath();
-    const data = await readFile(filePath, 'utf-8');
-    return JSON.parse(data);
+    // In the server's data folder: only a regular file there is read.
+    const data = await readRegularFile(getInstalledModsPath(server), [server.paths.data], {
+      maxBytes: MAX_SERVER_FILE_BYTES,
+    });
+    return JSON.parse(data.toString('utf-8'));
   } catch {
     return { mods: {} };
   }
 }
 
-async function saveInstalledMods(data: InstalledModsData): Promise<void> {
+async function saveInstalledMods(server: ServerContext, data: InstalledModsData): Promise<void> {
   try {
-    const filePath = getInstalledModsPath();
+    const filePath = getInstalledModsPath(server);
     // Ensure data directory exists
     await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, JSON.stringify(data, null, 2));
+    await replaceFileContent(filePath, JSON.stringify(data, null, 2), [server.paths.data]);
   } catch (e) {
     logger.error('Failed to save installed mods tracking:', e);
   }
 }
 
-export async function getInstalledModtaleInfo(): Promise<Record<string, InstalledModInfo>> {
-  const data = await loadInstalledMods();
+export async function getInstalledModtaleInfo(
+  server: ServerContext,
+): Promise<Record<string, InstalledModInfo>> {
+  const data = await loadInstalledMods(server);
   return data.mods;
 }
 
-export async function isModtaleModInstalled(projectId: string): Promise<InstalledModInfo | null> {
-  const data = await loadInstalledMods();
+export async function isModtaleModInstalled(
+  server: ServerContext,
+  projectId: string,
+): Promise<InstalledModInfo | null> {
+  const data = await loadInstalledMods(server);
   return data.mods[projectId] || null;
 }
 
-async function trackInstalledMod(info: InstalledModInfo): Promise<void> {
-  const data = await loadInstalledMods();
+async function trackInstalledMod(server: ServerContext, info: InstalledModInfo): Promise<void> {
+  const data = await loadInstalledMods(server);
   data.mods[info.projectId] = info;
-  await saveInstalledMods(data);
+  await saveInstalledMods(server, data);
 }
 
-export async function untrackInstalledMod(projectId: string): Promise<boolean> {
-  const data = await loadInstalledMods();
+export async function untrackInstalledMod(
+  server: ServerContext,
+  projectId: string,
+): Promise<boolean> {
+  const data = await loadInstalledMods(server);
   if (data.mods[projectId]) {
     delete data.mods[projectId];
-    await saveInstalledMods(data);
+    await saveInstalledMods(server, data);
     return true;
   }
   return false;
+}
+
+/** Folder a project of this classification goes to; Hytale loads plugins from mods/ too. */
+function folderFor(server: ServerContext, classification: ModtaleClassification): string {
+  switch (classification) {
+    case 'DATA':
+    case 'ART':
+    case 'SAVE':
+      return server.paths.data;
+    case 'PLUGIN':
+    case 'MODPACK':
+    default:
+      return server.paths.mods;
+  }
 }
 
 // ============== Security Validation ==============
@@ -401,7 +429,10 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
           res.on('end', async () => {
             try {
               const buffer = Buffer.concat(chunks);
-              await writeFile(destPath, buffer);
+              // destPath is <folder>/<plain name>. The game server can write
+              // to that folder: the file is replaced, never written through
+              // a link planted under its name.
+              await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
               resolve(true);
             } catch (e) {
               logger.error('Failed to write file:', e);
@@ -570,6 +601,7 @@ export async function getGameVersions(): Promise<string[]> {
  * Install a mod from Modtale
  */
 export async function installModFromModtale(
+  server: ServerContext,
   projectId: string,
   versionId?: string,
 ): Promise<ModtaleInstallResult> {
@@ -628,9 +660,6 @@ export async function installModFromModtale(
     downloadUrl = `${MODTALE_API_BASE}/api/v1/projects/${encodeURIComponent(projectId)}/versions/${encodeURIComponent(safeVersion)}/download`;
   }
 
-  // Determine target path based on classification
-  let targetPath: string;
-
   // Generate filename from sanitized project title and version
   const extension = project.classification === 'PLUGIN' ? 'jar' : 'zip';
   const filename = `${safeTitle}-${safeVersion}.${extension}`;
@@ -642,22 +671,7 @@ export async function installModFromModtale(
   }
 
   // Choose target directory based on classification
-  // Note: Hytale server loads all mods from /mods directory, so PLUGIN also goes there
-  switch (project.classification) {
-    case 'PLUGIN':
-      targetPath = config.modsPath; // Plugins also go to mods folder - Hytale loads from /mods
-      break;
-    case 'DATA':
-    case 'ART':
-    case 'SAVE':
-      targetPath = config.dataPath;
-      break;
-    case 'MODPACK':
-      targetPath = config.modsPath;
-      break;
-    default:
-      targetPath = config.modsPath;
-  }
+  const targetPath = folderFor(server, project.classification);
 
   // Ensure target directory exists
   try {
@@ -667,25 +681,9 @@ export async function installModFromModtale(
   }
 
   // Check if this mod is already installed (for updates) and remove old file
-  const existingInstall = await isModtaleModInstalled(projectId);
+  const existingInstall = await isModtaleModInstalled(server, projectId);
   if (existingInstall && existingInstall.filename) {
-    // Determine path based on classification
-    let oldBasePath: string;
-    switch (existingInstall.classification) {
-      case 'PLUGIN':
-        oldBasePath = config.modsPath;
-        break;
-      case 'DATA':
-      case 'ART':
-      case 'SAVE':
-        oldBasePath = config.dataPath;
-        break;
-      case 'MODPACK':
-        oldBasePath = config.modsPath;
-        break;
-      default:
-        oldBasePath = config.modsPath;
-    }
+    const oldBasePath = folderFor(server, existingInstall.classification);
     // The stored filename is untrusted (shared data dir): only a bare name in the base folder.
     const oldFilePath = resolveFileInDir(oldBasePath, existingInstall.filename);
     try {
@@ -716,7 +714,7 @@ export async function installModFromModtale(
   }
 
   // Track the installed mod
-  await trackInstalledMod({
+  await trackInstalledMod(server, {
     projectId: project.id,
     projectTitle: project.title,
     version: safeVersion,
@@ -790,6 +788,7 @@ export async function getRecentMods(limit: number = 10): Promise<ModtaleProject[
  * Uninstall a Modtale mod
  */
 export async function uninstallModtale(
+  server: ServerContext,
   projectId: string,
 ): Promise<{ success: boolean; error?: string }> {
   // Security: Validate projectId
@@ -797,27 +796,12 @@ export async function uninstallModtale(
     return { success: false, error: 'Invalid project ID format' };
   }
 
-  const installed = await isModtaleModInstalled(projectId);
+  const installed = await isModtaleModInstalled(server, projectId);
   if (!installed) {
     return { success: false, error: 'Mod is not installed' };
   }
 
-  // Determine the file path based on classification
-  // Note: Hytale server loads all mods from /mods directory, so PLUGIN also goes there
-  let basePath: string;
-  switch (installed.classification) {
-    case 'PLUGIN':
-      basePath = config.modsPath; // Plugins also in mods folder - Hytale loads from /mods
-      break;
-    case 'DATA':
-    case 'ART':
-    case 'SAVE':
-      basePath = config.dataPath;
-      break;
-    case 'MODPACK':
-    default:
-      basePath = config.modsPath;
-  }
+  const basePath = folderFor(server, installed.classification);
 
   // Security: the stored filename (shared data dir) must be a bare name in the base folder -
   // "sub/x.jar" through a symlinked sub folder would pass a plain prefix check.
@@ -833,7 +817,7 @@ export async function uninstallModtale(
     // Continue to untrack even if file doesn't exist
   }
 
-  await untrackInstalledMod(projectId);
+  await untrackInstalledMod(server, projectId);
 
   return { success: true };
 }

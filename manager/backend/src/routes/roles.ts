@@ -1,14 +1,51 @@
 import { logger } from '../utils/logger.js';
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/permissions.js';
+import { requirePermission, effectivePermissions } from '../middleware/permissions.js';
 import { getAllRoles, getRole, createRole, updateRole, deleteRole } from '../services/roles.js';
-import { PERMISSIONS, Permission } from '../types/permissions.js';
+import {
+  checkPermissionsWithinCaller,
+  coversPermissions,
+  readPermissionList,
+  refuse,
+  type Refusal,
+} from '../services/accountPolicy.js';
+import { PERMISSIONS, PermissionEntry, type Role } from '../types/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoRoles } from '../services/demoData.js';
 
 const router = Router();
+
+/**
+ * May the caller change or delete this role? System roles only by an admin,
+ * any other role only by someone holding all of its permissions — so nobody
+ * reshapes a role more powerful than their own.
+ */
+function checkRoleChange(callerPerms: readonly string[], role: Role): Refusal | null {
+  if (role.isSystem && !callerPerms.includes('*')) {
+    return refuse(403, 'Only an admin can change system roles', 'SYSTEM_ROLE_PROTECTED');
+  }
+  if (!coversPermissions(callerPerms, role.permissions)) {
+    return refuse(
+      403,
+      'Cannot change a role with more permissions than your own',
+      'ROLE_EXCEEDS_YOURS',
+    );
+  }
+  return null;
+}
+
+/** The permissions of a role body: catalog only, none beyond the caller's own. */
+function checkNewPermissions(
+  callerPerms: readonly string[],
+  value: unknown,
+): { ok: true; value: PermissionEntry[] } | ({ ok: false } & Refusal) {
+  const list = readPermissionList(value);
+  if (!list.ok) return list;
+  const refusal = checkPermissionsWithinCaller(callerPerms, list.value);
+  return refusal ? { ok: false, ...refusal } : { ok: true, value: list.value as PermissionEntry[] };
+}
 
 // GET / - List all roles
 router.get(
@@ -120,15 +157,17 @@ router.post(
         return;
       }
 
-      if (!permissions || !Array.isArray(permissions)) {
-        res.status(400).json({ error: 'Permissions must be an array' });
+      // SECURITY: only catalog permissions, and none the creator lacks ('*' only an admin).
+      const checked = checkNewPermissions(await effectivePermissions(req), permissions);
+      if (!checked.ok) {
+        res.status(checked.status).json(checked.body);
         return;
       }
 
       const role = await createRole({
         name,
         description,
-        permissions,
+        permissions: checked.value,
         color,
       });
 
@@ -174,16 +213,46 @@ router.put(
       const { id } = req.params;
       const { name, description, permissions, color } = req.body;
 
+      const existing = await getRole(id);
+      if (!existing) {
+        res.status(404).json({ error: 'Role not found' });
+        return;
+      }
+      // SECURITY: no reshaping a system role (unless admin) or a role beyond
+      // the caller's own rights, and no granting permissions the caller lacks —
+      // which also rules out widening one's own role.
+      const callerPerms = await effectivePermissions(req);
+      const refusal = checkRoleChange(callerPerms, existing);
+      if (refusal) {
+        res.status(refusal.status).json(refusal.body);
+        return;
+      }
+
       const updates: {
         name?: string;
         description?: string;
-        permissions?: Permission[];
+        permissions?: PermissionEntry[];
         color?: string;
       } = {};
 
       if (name !== undefined) updates.name = name;
       if (description !== undefined) updates.description = description;
-      if (permissions !== undefined) updates.permissions = permissions;
+      if (permissions !== undefined) {
+        const checked = checkNewPermissions(callerPerms, permissions);
+        if (!checked.ok) {
+          res.status(checked.status).json(checked.body);
+          return;
+        }
+        // The administrator role always keeps every permission.
+        if (existing.id === 'admin' && !checked.value.includes('*')) {
+          res.status(400).json({
+            error: 'The administrator role always keeps every permission',
+            code: 'SYSTEM_ROLE_PROTECTED',
+          });
+          return;
+        }
+        updates.permissions = checked.value;
+      }
       if (color !== undefined) updates.color = color;
 
       const role = await updateRole(id, updates);
@@ -241,6 +310,12 @@ router.delete(
 
       if (role.isSystem) {
         res.status(400).json({ error: 'Cannot delete system roles' });
+        return;
+      }
+      // SECURITY: no deleting a role beyond the caller's own rights.
+      const refusal = checkRoleChange(await effectivePermissions(req), role);
+      if (refusal) {
+        res.status(refusal.status).json(refusal.body);
         return;
       }
 

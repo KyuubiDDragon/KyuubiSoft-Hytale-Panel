@@ -528,3 +528,11 @@ export function isSetupRequired(): boolean {
 export function getConfigFilePath(): string {
   return CONFIG_FILE_PATH;
 }
+
+/**
+ * Folder of the manager volume: config.json and users.json live here, not in
+ * DATA_PATH (the game server's data folder).
+ */
+export function getManagerDataDir(): string {
+  return DATA_PATH;
+}

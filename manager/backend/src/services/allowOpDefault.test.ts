@@ -23,6 +23,7 @@ const prevEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 
 let root: string;
 let dataDir: string;
+let managerDir: string;
 
 type SetupService = typeof import('./setupService.js');
 type Migration = typeof import('./migration.js');
@@ -32,9 +33,10 @@ let migration: Migration;
 beforeAll(async () => {
   root = await fsp.mkdtemp(path.join(os.tmpdir(), 'allow-op-test-'));
   dataDir = path.join(root, 'data');
+  managerDir = path.join(root, 'manager');
   // config.ts resolves these paths at import time.
   process.env.DATA_PATH = dataDir;
-  process.env.MANAGER_DATA_PATH = path.join(root, 'manager');
+  process.env.MANAGER_DATA_PATH = managerDir;
   process.env.SERVER_PATH = path.join(root, 'server');
   process.env.MANAGER_USERNAME = 'envadmin';
   process.env.MANAGER_PASSWORD = 'Env-Admin-Pass-2026!';
@@ -51,12 +53,14 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await fsp.rm(dataDir, { recursive: true, force: true });
-  await fsp.mkdir(dataDir, { recursive: true });
+  for (const dir of [dataDir, managerDir]) {
+    await fsp.rm(dir, { recursive: true, force: true });
+    await fsp.mkdir(dir, { recursive: true });
+  }
 });
 
-async function readJson(name: string): Promise<Record<string, any>> {
-  return JSON.parse(await fsp.readFile(path.join(dataDir, name), 'utf-8'));
+async function readJson(name: string, dir = dataDir): Promise<Record<string, any>> {
+  return JSON.parse(await fsp.readFile(path.join(dir, name), 'utf-8'));
 }
 
 describe('allowOp default', () => {
@@ -93,9 +97,10 @@ describe('allowOp default', () => {
   });
 });
 
+// users.json lives on the manager volume (MANAGER_DATA_PATH), not in DATA_PATH.
 describe('env migration and users.json', () => {
   it('leaves an unreadable users.json untouched instead of replacing it with the env admin', async () => {
-    const usersFile = path.join(dataDir, 'users.json');
+    const usersFile = path.join(managerDir, 'users.json');
     const broken = '{"users": [{"username": "alice", "passwordHash": "$2b$12$abc"';
     await fsp.writeFile(usersFile, broken, 'utf-8');
     expect(await migration.runMigration()).toBe(true);
@@ -103,7 +108,7 @@ describe('env migration and users.json', () => {
   });
 
   it('leaves valid JSON with an unexpected structure untouched', async () => {
-    const usersFile = path.join(dataDir, 'users.json');
+    const usersFile = path.join(managerDir, 'users.json');
     await fsp.writeFile(usersFile, '{"accounts": [{"username": "alice"}]}', 'utf-8');
     expect(await migration.runMigration()).toBe(true);
     expect(await fsp.readFile(usersFile, 'utf-8')).toBe('{"accounts": [{"username": "alice"}]}');
@@ -112,7 +117,19 @@ describe('env migration and users.json', () => {
   it('still creates users.json from the env when none exists', async () => {
     expect(await migration.runMigration()).toBe(true);
     expect(
-      (await readJson('users.json')).users.map((u: { username: string }) => u.username),
+      (await readJson('users.json', managerDir)).users.map((u: { username: string }) => u.username),
     ).toEqual(['envadmin']);
+    await expect(fsp.access(path.join(dataDir, 'users.json'))).rejects.toThrow();
+  });
+
+  it('takes over a users.json an earlier version wrote into DATA_PATH instead of adding the env admin', async () => {
+    const legacy = JSON.stringify({
+      users: [{ username: 'alice', passwordHash: `$2b$12$${'x'.repeat(53)}`, roleId: 'admin' }],
+    });
+    await fsp.writeFile(path.join(dataDir, 'users.json'), legacy, 'utf-8');
+    expect(await migration.checkAndRunMigration()).toBe(true);
+    expect(await fsp.readFile(path.join(managerDir, 'users.json'), 'utf-8')).toBe(legacy);
+    // Taken over, so it no longer lies in the game server's data folder.
+    await expect(fsp.access(path.join(dataDir, 'users.json'))).rejects.toThrow();
   });
 });

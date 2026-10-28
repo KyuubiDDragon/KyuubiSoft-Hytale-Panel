@@ -21,6 +21,7 @@ import {
   getResourceDetails as getStackMartDetails,
 } from './stackmart.js';
 import { getModRegistry, isModInstalled, getLatestRelease } from './modStore.js';
+import type { ServerContext } from './serverContext.js';
 import { sanitizeExternalHtml } from '../utils/htmlSanitizer.js';
 
 /**
@@ -64,15 +65,15 @@ export interface UnifiedUpdateStatus {
 }
 
 /**
- * Get unified update status from all sources
+ * Get unified update status from all sources, for the mods of one server
  */
-export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
+export async function getUnifiedUpdateStatus(server: ServerContext): Promise<UnifiedUpdateStatus> {
   const allMods: UnifiedModUpdate[] = [];
   let updatesAvailable = 0;
 
   // 1. Get CFWidget tracked mods (includes CurseForge installs)
   try {
-    const cfwidgetStatus = await getCFWidgetStatus();
+    const cfwidgetStatus = await getCFWidgetStatus(server);
     for (const mod of cfwidgetStatus.mods) {
       allMods.push({
         filename: mod.filename,
@@ -94,8 +95,8 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
 
   // 2. Get CurseForge API installed mods (not already in CFWidget)
   try {
-    const curseforgeInstalled = await getInstalledCurseForgeInfo();
-    const curseforgeUpdates = await checkCurseForgeUpdates();
+    const curseforgeInstalled = await getInstalledCurseForgeInfo(server);
+    const curseforgeUpdates = await checkCurseForgeUpdates(server);
 
     for (const [modIdStr, info] of Object.entries(curseforgeInstalled)) {
       // Skip if already tracked in CFWidget (by filename)
@@ -137,7 +138,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
 
   // 3. Get Modtale installed mods (not already tracked)
   try {
-    const modtaleInstalled = await getInstalledModtaleInfo();
+    const modtaleInstalled = await getInstalledModtaleInfo(server);
     for (const [, info] of Object.entries(modtaleInstalled)) {
       // Skip if already tracked in CFWidget (by filename)
       if (allMods.some((m) => m.filename === info.filename)) continue;
@@ -182,7 +183,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
 
   // 3. Get StackMart installed resources
   try {
-    const stackmartInstalled = await getInstalledStackMartInfo();
+    const stackmartInstalled = await getInstalledStackMartInfo(server);
     for (const [, info] of Object.entries(stackmartInstalled)) {
       // Skip if already tracked in CFWidget (by filename)
       if (allMods.some((m) => m.filename === info.filename)) continue;
@@ -221,7 +222,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
   try {
     const registry = await getModRegistry();
     for (const mod of registry) {
-      const installed = await isModInstalled(mod.id, registry);
+      const installed = await isModInstalled(server, mod.id, registry);
       if (!installed.installed || !installed.filename) continue;
 
       // Skip if already tracked in CFWidget (by filename)
