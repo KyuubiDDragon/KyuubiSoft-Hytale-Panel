@@ -753,6 +753,260 @@ KyuubiSoft API **2.1.1**. See **Upgrade notes** at the end of this section.
   default answer `409` (`default_server_only`); a temporary ban on a banned
   player answers `409` (`already_banned`).
 
+### Multi-server: server-scoped panel, per-server data and server access lists
+
+Multiserver is still experimental and stays off by default
+(`MULTISERVER_ENABLED=false`). With it on, every server-bound page, route and
+background job acts on the selected server, and accounts and API keys can be
+limited to some servers. With it off, the panel works on the primary server as
+before; the security fixes below apply either way. Rebuild both images and
+re-create the stack (`docker compose up -d`). See **Upgrade notes** at the end
+of this section.
+
+**Servers and containers**
+- Server registry schema v2: the per-server plugin port is gone (the
+  KyuubiSoft API plugin always listens on 18085 inside its container), and
+  additional servers record their host folder. Existing `servers.json` files
+  are migrated on start; the original is kept as `servers.json.v1.bak`.
+- A damaged `servers.json` is no longer replaced by a fresh single-server
+  registry. The panel keeps a copy (`servers.json.corrupt-<time>`), logs what
+  is wrong and refuses to start.
+- Every service resolves a server's container, folders and plugin endpoint
+  through one server context. An unknown server id is an error instead of
+  silently acting on the default server.
+- Additional servers are created from the primary game container: the exact
+  image it runs (not a tag that may have moved on), its network, memory and
+  CPU limits and log rotation, plus an allowlist of its settings. Secrets such
+  as the auth key file, download URLs or the primary's plugin token are never
+  copied. `HYTALE_IMAGE` is the only way to pick another image.
+- Host ports for new servers are checked against every Docker container,
+  running or stopped, and the registry. A taken port answers `409` with its
+  owner, and game ports stay below 32768. The plugin port is no longer
+  published, and map ports only when requested (bound to `WEBMAP_BIND`).
+- New servers report `waiting_for_files` until their game files are present,
+  and the create response says how to get them there. A server that waits for
+  its Hytale downloader login reports the login link and code
+  (`pendingLogin`); the Servers page and the dashboard show both with the
+  remaining time.
+- On start the panel matches additional servers with their containers:
+  entries stuck in "creating" become ready or broken, and foreign panel
+  containers are reported, never removed (also on demand via
+  `POST /api/servers/_reconcile`). A server whose container is found again
+  does not re-run the "server added" steps, so account and key server lists
+  keep it and scheduled jobs do not run twice.
+- Deleting a server with its data moves its folder to `instances/.trash`;
+  only an explicit purge, confirmed by typing the server's name, deletes it.
+- Memory and CPU limits can be set per server when it is created and changed
+  later without a restart; a limit the server's heap does not fit is refused.
+- The default server can be any registered server (with Multiserver on and
+  the new `servers.manage` permission); legacy `/api/<resource>` routes follow
+  it. Setup and first-run installs stay on the primary server. The default
+  pointer moved to `/api/servers/_default` (`/default` keeps working).
+- New permission `servers.manage` for editing servers, changing the default
+  server and reconciling; roles with `servers.create` receive it
+  automatically.
+- The game container links `universe`, `mods`, `plugins`, `.auth` and
+  `prefabs` in its server folder with relative targets and replaces the
+  absolute links of older images on start.
+- The manager reaches the Docker socket through a group of its own
+  (`dockersock`) carrying the socket's GID, also where that GID belongs to
+  another group (Docker Desktop: GID 0, with a note in the log pointing to a
+  socket proxy).
+
+**Data and settings per server**
+- Patchline, start flags (early plugins, Sentry, OP), JVM settings and the
+  auto-update switch are stored per server in that server's own
+  `panel-config.json`. A patchline switch removes the game files of the
+  selected server only. The Update Center checks each server's own patchline
+  with its own downloader, and the update history is kept per server.
+- The Hytale downloader login and the Hytale server sign-in work per server
+  (`/api/servers/:id/server/hytale-auth/*`; `/api/auth/hytale/*` stays for the
+  default server). The sign-in reports how long the server says its device
+  code lives.
+- Worlds and world configs work for every server: list, details, backups,
+  import, restore, pre-generation and the world editor use the selected
+  server's world folders. Live world settings are remembered per server.
+- The JVM page shows the heap defaults of the selected server's container.
+  KyuubiSoft API plugin pages, memory stats, player files and crash reports
+  belong to the selected server.
+- Mods, plugins and the mod stores (Mod Store, Modtale, StackMart,
+  CurseForge, CFWidget) act on the selected server, including the "installed"
+  lists. The primary server keeps its existing lists where they always were;
+  additional servers start empty. The store catalogs stay shared, and the
+  hourly CFWidget check runs for every server the panel can see.
+- The file manager and the mod and plugin config editor work on the selected
+  server's folders; a path of another server is refused. Installing
+  EasyWebMap configures the map port of the server it is installed on.
+- Every server has its own auto wiki (`/api/servers/:id/wiki`); public wiki
+  access still covers only the default server.
+- The Asset Explorer cache stays shared by all servers. Its status says which
+  server the cache was extracted from (`cacheSource`), and the panel asks
+  before replacing another server's cache.
+- Players, sessions, playtime, statistics and player notes are kept per
+  server; each server keeps its own `players.json` and reads its own universe.
+  Stopping one server only marks its own players offline.
+- Chat log and death positions are stored per server (`servers/<id>/` in the
+  manager data folder; the primary server keeps its existing folders), and
+  chat messages carry their `serverId`.
+- Live map positions, replay recording, performance history (TPS, MSPT, CPU,
+  memory) and map sessions are kept per server, and the WebMap proxy follows
+  the server a session was opened for. The live map socket accepts
+  `/api/servers/:id/players/locations/ws` and keeps serving the default server
+  to older clients.
+- Punishments always store the server they were issued on; lists, unbans and
+  unmutes only touch that server. One-time database migrations assign
+  punishments, crash reports and play sessions from single-server installs to
+  the primary server, and existing player notes to the default server.
+- Scheduler settings are written per server, one save after another, and
+  saved before they take effect.
+- Event actions count their run limit per server; a rule for one server no
+  longer fires for another server's events or for panel-wide events.
+- Webhooks take an optional `serverIds` filter (empty means all servers, as
+  before); payloads include `serverId` and `serverName`, and the Discord and
+  Slack footer names the server.
+- Prometheus reports `kp_online_players{server}` and `kp_servers_registered`.
+- The audit log names the real server for start, stop and restart, and
+  activity log entries about additional servers name the server.
+- The Discord bot bridges the default server only (chat, relay and slash
+  commands).
+
+**Server access per account and API key**
+- Accounts (`allowedServers`) and API keys (`serverIds`) can be limited to a
+  list of servers. No list means every server, so existing accounts and keys
+  behave as before; admins ignore their own list. A new account gets at most
+  its creator's servers, and a new API key takes its list in the same request.
+- Server lists are enforced on every server-bound route (scoped
+  `/api/servers/:id/...` and legacy), in the server registry, for console
+  commands including stored ones, for WebSocket tickets, and on the console
+  and live map sockets at connect and on every heartbeat. Refusals answer
+  `403 SERVER_NOT_ALLOWED`.
+- New endpoints: `GET /api/auth/me/servers`,
+  `GET/PUT /api/auth/users/:username/servers` and
+  `GET/PUT /api/auth/api-keys/:id/servers`.
+- `GET /api/servers` lists only the servers the caller may use. Adding
+  servers, moving the default, reconcile, the trash, replay retention, public
+  wiki access and Asset Explorer cache actions need access to every server.
+- Accounts with a server list do not get panel-wide rights (`users.*`,
+  `roles.manage`, `apikeys.manage.all`, `webhooks.manage`, `settings.edit`,
+  `audit.view`, `audit.export`, the activity log); API keys with a server list
+  cannot manage keys. Webhooks and event action rules of limited accounts
+  only show and touch their servers.
+- In-app and push notifications only reach accounts that may see the event's
+  server; panel-wide events only reach unrestricted accounts with the
+  matching right.
+- Every event action, announcements and backups included, only runs while
+  its creator may still use the target server. Rules the panel keeps itself
+  (the scheduler's welcome message) only run for their own server.
+- Player data export and erasure cover the server they are requested for,
+  matched by name and by that player's UUIDs on that server. Every server at
+  once is an explicit option (`?allServers=true`) for accounts with access to
+  every server. Punishments still in effect are kept, so a running temp-ban
+  still ends.
+- A deleted server is removed from every account and key server list, and a
+  server added later under the same id starts without those grants.
+
+**Panel**
+- Requests for server-bound areas go to `/api/servers/:id/...` for the
+  selected server; panel-wide areas (accounts, roles, settings, webhooks,
+  audit) are unchanged. With Multiserver off, nothing changes.
+- Switching servers cancels open requests, clears the console, re-creates the
+  current page and reconnects live sockets, so no data of the previous server
+  stays visible. Download links, item icons, player avatars, the replay
+  stream, the allow-op banner and the web map entry follow the selected
+  server.
+- The server picker shows whether a server is running, is hidden for
+  accounts without `servers.list` and is available on phones. When the active
+  server is deleted or no longer allowed, the panel falls back to an allowed
+  one.
+- The Servers page shows the server state (including "waiting for files"),
+  whether the game files are present, the limits, the trash and the notes
+  from creating a server; the plugin port and image fields are gone.
+- Accounts and API keys can be limited to chosen servers in the account and
+  key editors; "all servers" is stated explicitly, the editor notes that a
+  list removes panel-wide rights, and it is hidden while Multiserver is off.
+  The webhook form has a server selection.
+- Stopping or restarting a server from the command palette asks first.
+- The frontend has a test runner (`npm test`, vitest).
+
+**Security**
+- Additional servers never read or write another server's files through
+  links in their folders. For an additional server, the image's
+  `server/universe` link pointed at the primary server's data inside the
+  panel, so its world list, world configs, world backups and saved players
+  showed (and could change) the primary server's. World, player and config
+  folders are now used only when they really lie inside the server's own
+  folders.
+- Files the panel writes into folders a game server can write to are
+  replaced instead of written through a link placed under their name, and are
+  only read when they are regular files: mod store downloads, install lists,
+  `players.json`, scheduler settings, setup and panel config, the config
+  editor, `panel-config.json`, the sign-in state and token files. A downloader
+  login is only shown from a container whose game server is not running.
+- `config.json` and `users.json` are kept on the manager volume. Copies older
+  versions left in the game data folder are taken over once, only when they
+  have the panel's format, and removed from the game data folder after the
+  copy is checked, so the JWT secret and password hashes no longer end up in
+  game backups. This also stops a migrated or freshly created stack from
+  falling back into the setup wizard.
+- No privilege escalation through account or role management: creating an
+  account, changing its password or role and deleting it require all of that
+  account's rights, and admin accounts can only be changed by admins. Roles
+  only take catalog permissions the caller holds (`*` only for admins),
+  system roles can only be changed by admins, the administrator role always
+  keeps `*`, and role names are unique regardless of case.
+- User listings and user create and update responses no longer include other
+  modules' per-user data (TOTP secrets, pending TOTP secrets, backup-code
+  hashes), which anyone with `users.view` could read before.
+- The request log no longer records credentials: authorization, cookie and
+  API key headers, the login's `Set-Cookie`, and tokens or tickets in URLs
+  are written as `[redacted]`.
+- WebSocket tickets are strictly bound: a ticket for a server only opens that
+  server's scoped console, an unscoped ticket only the legacy sockets.
+  Sockets opened with an API key close once the key is revoked or loses the
+  server.
+- The CSP no longer needs to allow the theme init script; it is an external
+  file now.
+
+**Fixed**
+- Updating a webhook without sending `events` failed.
+- Config changes saved through the panel (Discord bot, replay switch,
+  integrations, auto-mod, web push, wiki) take effect immediately instead of
+  after a restart.
+- A damaged `players.json` is moved aside instead of being overwritten, and a
+  player list that could not be read is never saved over the file.
+- `roles.json` is written atomically and one write at a time, so concurrent
+  first starts no longer collide.
+- A failed save of scheduler settings reports an error instead of success.
+
+**Upgrade notes**
+- Re-create the stack with the new `docker-compose.yml`. The manager now
+  mounts `${HOST_DATA_PATH}/instances` at `/opt/hytale-instances`; custom
+  compose files need this mount, or the file-based pages of additional
+  servers answer `409`. `STACK_NAME`, `HYTALE_IMAGE` and `WEBMAP_BIND` reach
+  the manager, and the map ports are published on `WEBMAP_BIND` (default
+  `0.0.0.0`, unchanged).
+- Rebuild the game image. Additional servers created from an older image keep
+  their absolute links until their container is re-created; the panel no
+  longer follows them either way.
+- If the log reports that a JWT secret was taken over from the game data
+  folder and is the active one, replace it (all sessions sign in again).
+- Accounts and API keys with a server list lose the panel-wide rights listed
+  above, even if their role grants them.
+- Event action rules only run while their creator may still use the target
+  server, so rules of deleted or limited accounts stop running.
+- The Discord bot only bridges the default server.
+- Player data export and erasure act on one server; use `?allServers=true`
+  for every server.
+- API changes: `POST /api/servers` answers `201`, and `502`/`503` on
+  failures; `status` and `image` can no longer be set and `pluginPort` is
+  gone. Server-scoped routes for additional servers answer `403` while
+  Multiserver is off, unknown server ids `404`, and pages whose files the
+  panel cannot see `409`. World config routes now serve every server instead
+  of answering `409` (`default_server_only`). `GET /api/servers/_default`
+  needs `servers.list`. The config editor refuses links (`403`) and content
+  that is not a string (`400`). Webhook payloads carry `serverId` and
+  `serverName`.
+
 ### New features
 
 - **Update Center** (`/updates`): a dedicated view over the native Hytale update

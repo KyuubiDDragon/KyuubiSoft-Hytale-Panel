@@ -1,325 +1,366 @@
 # V3 API Cheatsheet
 
-> ⚠️ **HISTORISCH.** Die meisten hier als „anzulegen" beschriebenen Routen
-> **existieren bereits** (siehe `manager/backend/src/routes/`). Dieses
-> Cheatsheet dokumentiert die ursprüngliche Planung, nicht den Ist-Stand.
->
-> Alle in [V3_ROADMAP.md](./V3_ROADMAP.md) genannten neuen Endpoints + Datenmodelle in einer Übersicht.
+> **Stand: Ist-Zustand des Codes** (`manager/backend/src/routes/`, gemountet in `manager/backend/src/index.ts`).
+> Was hier mit **(geplant)** markiert ist, gibt es noch nicht. Die ursprüngliche Planung steht in [V3_ROADMAP.md](./V3_ROADMAP.md).
+> Im Zweifel gilt der Code: Diese Datei ist eine Übersicht, keine Spezifikation.
 
 ---
 
-## Bestand heute (V2.2)
+## Top-Level-Routen
 
-Kurzliste der existierenden Top-Level-Routen — alles unter `/api/`:
+Alles unter `/api/`:
 
 ```
-/api/auth/*           login, refresh, logout, me, ws-ticket, users, hytale/*, sso/* (kommt)
-/api/server/*         status, stats, start, stop, restart, quick-settings, config, ...
-/api/console/*        legacy console exec
-/api/backups/*        CRUD + restore
-/api/players/*        list, kick, ban, ...
-/api/management/*     worlds, configs, cache
-/api/scheduler/*      tasks, backup, restart
-/api/assets/*         asset explorer, item icons, player avatars
-/api/roles/*          CRUD + permission list
-/api/setup/*          status, save step, detect-existing, ...
-/api/webmap/*         proxy zu EasyWebMap (intransparent)
+/api/auth/*           login, refresh, logout, me, ws-ticket, 2fa/*, api-keys, users, hytale/*, Server-Zugriff (s. u.)
+/api/auth/sso/*       providers, :providerId/start, :providerId/callback
+/api/server/*         status, stats, start, stop, restart, quick-settings, config, ...   (serverbezogen)
+/api/console/*        Konsole, Logs                                                       (serverbezogen)
+/api/backups/*        CRUD, Restore, Jobs, native Backups                                 (serverbezogen)
+/api/players/*        Liste, Aktionen, Statistik, Strafen, Notizen, bulk                   (serverbezogen)
+/api/players/locations   Live-Positionen (REST + WS)
+/api/management/*     Welten, Mods/Plugins, Configs, Mod-Stores                          (serverbezogen)
+/api/scheduler/*      Aufgaben, Backups, Neustarts                                       (serverbezogen)
+/api/assets/*         Asset-Explorer, Item-Icons, Spieler-Avatare                          (serverbezogen)
+/api/files/*          Datei-Manager                                                      (serverbezogen)
+/api/mod-panel/*      Mod-Panels des KyuubiSoft-API-Plugins                               (serverbezogen)
+/api/servers/*        Server-Registry (Multi-Server)
+/api/roles/*          CRUD + Permission-Liste
+/api/webhooks/*       Webhook-Engine
+/api/event-actions/*  Event-Aktionen
+/api/audit-log/*      Audit-Log
+/api/me/notifications/*  Benachrichtigungen
+/api/push/*           Web-Push
+/api/replay/*         Replay-Recorder
+/api/wiki/*           Auto-Wiki
+/api/webmap/*         Sitzungen für die eingebettete Karte
+/api/settings/*       Panel-Einstellungen
+/api/metrics          Prometheus-Metriken
+/api/setup/*          Einrichtungsassistent
+/api/public/status    öffentliche Statusseite (abschaltbar)
 /api/health, /api/health/permissions
 ```
 
+**Serverbezogen** heißt: Die Route gibt es zweimal, siehe [Multi-Server](#multi-server).
+
 ---
 
-## V2.5
+## Auth
 
 ### 2FA / TOTP
 
 ```
-POST /api/auth/2fa/setup                   → { secret, qrDataUrl }            (auth required)
-POST /api/auth/2fa/verify-enable           ← { code }                          → activates, returns { backupCodes[] }
+POST /api/auth/2fa/setup                   → { secret, otpauthUrl, qrDataUrl }        (eingeloggt)
+POST /api/auth/2fa/verify-enable           ← { code }                                  → aktiviert, { backupCodes[] }
 POST /api/auth/2fa/disable                 ← { password, code }
-POST /api/auth/2fa/regenerate-backup-codes ← { password }                      → { backupCodes[] }
+POST /api/auth/2fa/regenerate-backup-codes ← { password }                              → { backupCodes[] }
+GET  /api/auth/2fa/status                  → { enabled }
 
 POST /api/auth/login                       ← { username, password, totpCode? }
-                                              if 2FA active and totpCode missing → 401 { code: '2FA_REQUIRED' }
+                                              2FA aktiv und totpCode fehlt → 401 { code: '2FA_REQUIRED' }
 ```
 
-**`User`-Erweiterung** (`services/users.ts`):
-```ts
-interface User {
-  // ...existing fields
-  totpSecret?: string;          // encrypted
-  totpEnabled: boolean;
-  backupCodeHashes?: string[];  // bcrypt'd, single-use
-}
-```
+TOTP-Geheimnis und Backup-Code-Hashes liegen in `users.json`. Sie werden über keine API ausgeliefert.
 
 ### REST-API-Keys
 
 ```
-GET    /api/auth/api-keys
-POST   /api/auth/api-keys             ← { name, scopes[], expiresAt? }   → { id, token: 'kp_<base32>', ... }
-                                         token is shown ONCE, never persisted plaintext
-DELETE /api/auth/api-keys/:id         → revokes
-GET    /api/auth/api-keys/:id/usage   → last 100 audit events for this key
+GET    /api/auth/api-keys             → { keys[] }   (eigene Keys; jedes Objekt mit scopes[] und serverIds)
+POST   /api/auth/api-keys             ← { name, scopes[], expiresAt? }   → { key, token: 'kp_…' }
+                                         token wird EINMAL gezeigt, gespeichert ist nur der bcrypt-Hash
+DELETE /api/auth/api-keys/:id         → widerruft
+GET    /api/auth/api-keys/:id/usage   (geplant)
 ```
 
-**Header:** `Authorization: ApiKey kp_<base32>` (alternative zu Bearer-JWT)
+**Header:** `Authorization: ApiKey kp_…` (Alternative zum Bearer-JWT).
+Ein Key darf höchstens, was **seine Scopes und die aktuellen Rechte des Owners** gemeinsam erlauben, auf höchstens den Servern, die **Owner und Key** gemeinsam haben (siehe [Server-Zugriff](#server-zugriff-pro-nutzer-und-api-key)).
 
-### Audit-Log V2
+### WebSocket-Tickets
 
 ```
-GET /api/audit-log                    ?actor=&action=&from=&to=&limit=50&cursor=
-                                       → { events[], nextCursor, total }
-GET /api/audit-log/export             ?format=csv|json&filter=… → stream
-GET /api/audit-log/actions            → distinct action names (für Filter-UI)
+POST /api/auth/ws-ticket              ← { serverId? }   → { ticket, expiresIn: 30, serverId }
 ```
 
-**Permission:** `audit.view` (admin-default).
+Einmal-Ticket, 30 s gültig. Bindung:
+- Ticket **mit** `serverId` öffnet nur den Socket genau dieses Servers: `/api/servers/:serverId/console/ws`.
+- Ticket **ohne** `serverId` öffnet nur die Legacy-Sockets `/api/console/ws` und `/api/players/locations/ws`. Sie gehören zum Default-Server.
 
-### Command-Palette
+Ausgestellt wird nur, wer auf dem Ziel-Server (ohne `serverId`: dem Default-Server) `console.view` oder `players.view` hat; sonst 403 (außerhalb der Server-Liste `SERVER_NOT_ALLOWED`). Ein Ticket, das per API-Key angefordert wurde, trägt dessen Scopes, Server-Liste und ID. Der Socket prüft beim Verbindungsaufbau und bei jedem Heartbeat die Rechte auf dem Server, den er streamt, bei einem Key mit dessen aktuellem Stand. Ein widerrufener Key schließt den Socket. Bei abgeschaltetem Multi-Server öffnet der gescopte Socket nur den Compose-Server (sonst 4004).
 
-Kein dedizierter Endpoint nötig — die Palette indexiert client-seitig. Falls dynamische Daten (Player-Liste, Backups) gesucht werden, nutzt sie die existierenden Listen-Endpoints.
+### Nutzerverwaltung
+
+```
+GET    /api/auth/users                → { users[] }   (users.view; nur öffentliche Felder, inkl. allowedServers)
+POST   /api/auth/users                ← { username, password, roleId?, allowedServers? }        (users.create)
+PUT    /api/auth/users/:username      ← { password?, roleId? }                                  (users.edit)
+DELETE /api/auth/users/:username                                                                (users.delete)
+POST   /api/auth/users/bulk           (geplant)
+```
+
+Regeln (gegen Rechteausweitung):
+- Ein Konto anlegen, sein Passwort oder seine Rolle ändern oder es löschen darf nur, wer **alle Rechte dieses Kontos** selbst hat. Ein Admin-Konto nur ein Admin. Sonst 403 `TARGET_OUTRANKS_YOU`.
+- Eine Rolle vergibt nur, wer alle ihre Rechte hat (403 `ROLE_EXCEEDS_YOURS`). Nur bestehende Rollen und nur als ID-String (400 `UNKNOWN_ROLE`).
+- Ein neues Konto bekommt höchstens die Server seines Erstellers: dessen Liste oder eine darin enthaltene aus `allowedServers`.
+- Maßgeblich sind die Rechte der Anfrage. Bei einem API-Key sind das die Key-Scopes, auch wenn der Owner Admin ist.
+- Die eigene Rolle lässt sich nicht ändern, das eigene Konto nicht löschen.
+
+### Rollen
+
+```
+GET    /api/roles | /api/roles/:id | /api/roles/permissions                                    (roles.view)
+POST   /api/roles                     ← { name, description, permissions[], color? }            (roles.manage)
+PUT    /api/roles/:id                 ← { name?, description?, permissions?, color? }           (roles.manage)
+DELETE /api/roles/:id                                                                           (roles.manage)
+```
+
+Regeln:
+- Nur Rechte aus dem Katalog (`/api/roles/permissions`) oder `*`. Sonst 400 `UNKNOWN_PERMISSION` bzw. `INVALID_PERMISSIONS`.
+- Niemand vergibt Rechte, die er selbst nicht hat. `*` nur ein Admin. Damit ist auch die eigene Rolle nicht erweiterbar (403 `PERMISSIONS_EXCEED_YOURS`).
+- Eine Rolle ändern oder löschen darf nur, wer alle ihre aktuellen Rechte hat (403 `ROLE_EXCEEDS_YOURS`).
+- System-Rollen ändert nur ein Admin (403 `SYSTEM_ROLE_PROTECTED`), löschen lassen sie sich nicht. Die Administrator-Rolle behält immer `*`.
+- Rollennamen sind ohne Rücksicht auf Groß- und Kleinschreibung eindeutig. Reserviert sind die Legacy-Namen (`Administrator`, `admin`, `Moderator`, `Operator`, `Viewer`; nur die jeweilige System-Rolle darf ihn tragen) und jede Rollen-ID, die eine Rolle oder ein Konto trägt (400).
+- Gespeicherte Rollen werden nicht umgeschrieben. Geprüft wird nur, was eine Änderung neu setzt.
 
 ---
 
-## V3.0
+## Server-Zugriff pro Nutzer und API-Key
 
-### Webhook-Engine
+Jeder Nutzer kann eine Liste erlaubter Server haben (`allowedServers`), jeder API-Key ebenso (`serverIds`).
+- **Fehlt die Liste** (`null`), gelten alle Server.
+- Eine Liste **schränkt nur ein**. Rechte vergibt weiterhin die Rolle.
+- Admins (`*`) ignorieren ihre eigene Liste. Ein Key mit Liste bleibt auch bei einem Admin-Owner auf seine Liste beschränkt.
+- Ein Key ohne Liste folgt seinem Owner.
+
+```
+GET /api/auth/me/servers               → { allowedServers: string[] | null, unrestricted }
+                                         Server des Aufrufers (Liste des Nutzers, eingeschränkt durch die des Keys)
+GET /api/auth/users/:username/servers  → { username, allowedServers: string[] | null, unrestricted }      (users.view)
+PUT /api/auth/users/:username/servers  ← { allowedServers: string[] | null }                            (users.edit)
+GET /api/auth/api-keys/:id/servers     → { id, serverIds: string[] | null }               (apikeys.manage, eigene Keys)
+PUT /api/auth/api-keys/:id/servers     ← { serverIds: string[] | null }                   (apikeys.manage, eigene Keys)
+```
+
+**Durchsetzung:**
+- Auf jeder serverbezogenen Route, gescopt und Legacy (dort gilt der Default-Server). Außerdem in der Server-Registry, bei WS-Tickets, auf den Konsolen-Sockets und bei Konsolenbefehlen, auch gespeicherten.
+- Außerhalb der Liste hat der Aufrufer auf diesem Server **keine** Rechte. Per-Server-Rollen wirken nur innerhalb der Liste.
+
+**Grenzen:**
+- Niemand vergibt Server, die er selbst nicht hat.
+- Ein Nutzer mit Liste hat die panelweiten Rechte nicht, egal was seine Rolle sagt: `users.view`, `users.create`, `users.edit`, `users.delete`, `roles.manage`, `apikeys.manage.all`, `webhooks.manage`, `settings.edit`, `audit.view`, `audit.export`. Diese Funktionen zeigen oder betreffen alle Server; das ist bewusst grob, bis sie Server kennen. `roles.view`, `webhooks.view`, `settings.view` (Geheimnisse dort maskiert) und eigene Keys bleiben.
+- Ein Key mit Liste hat diese Rechte ebenfalls nicht und verwaltet zusätzlich keine Keys.
+- Die Server eines Kontos ändert nur, wer alle Rechte dieses Kontos selbst hat.
+
+**Fehlercodes:**
+
+| Status | `code` | Bedeutung |
+|---|---|---|
+| 403 | `SERVER_NOT_ALLOWED` | Server liegt außerhalb der Liste (Feld `serverId`) |
+| 403 | `ALL_SERVERS_REQUIRED` | Aktion verlangt Zugriff auf alle Server |
+| 403 | `SERVERS_NOT_HELD` | Es sollen Server vergeben werden, die der Aufrufer nicht hat (Feld `serverIds`, `null` = „alle“) |
+| 403 | `TARGET_OUTRANKS_YOU` | Das Zielkonto hat Rechte, die der Aufrufer nicht hat |
+| 403 | `TARGET_OUTSIDE_YOUR_SERVERS` | Das Zielkonto reicht über die Server des Aufrufers hinaus |
+| 400 | `INVALID_SERVER_LIST` | Feld fehlt oder ist keine Liste von IDs bzw. `null` |
+| 400 | `UNKNOWN_SERVER` | ID nicht in der Registry (Feld `serverIds`) |
+
+Weitere Codes der Konten- und Rollenverwaltung: `ROLE_EXCEEDS_YOURS`, `UNKNOWN_ROLE`, `PERMISSIONS_EXCEED_YOURS` (Feld `permissions`), `SYSTEM_ROLE_PROTECTED`, `UNKNOWN_PERMISSION`, `INVALID_PERMISSIONS`; siehe oben.
+
+---
+
+## Audit-Log
+
+```
+GET /api/audit-log                    ?actor=&action=&from=&to=&limit=&cursor=  → { events[], nextCursor, … }
+GET /api/audit-log/export             ?format=csv|json&actor=&action=&from=&to= → Download
+GET /api/audit-log/actions            → verschiedene Aktionsnamen (für Filter)
+```
+
+**Permission:** `audit.view` bzw. `audit.export`.
+
+---
+
+## Webhooks und Event-Aktionen
 
 ```
 GET    /api/webhooks
-POST   /api/webhooks                  ← { name, url, type: 'discord'|'slack'|'generic',
-                                          events: ['server.started', ...], secret?, enabled: true }
-PUT    /api/webhooks/:id              ← partial update
+POST   /api/webhooks                  ← { name, url, type: 'discord'|'slack'|'generic', events[], secret?, enabled?, serverIds? }
+                                         serverIds leer/fehlt = Ereignisse aller Server
+PUT    /api/webhooks/:id              ← Teilupdate
 DELETE /api/webhooks/:id
-POST   /api/webhooks/:id/test         → posts a synthetic event, returns delivery status
-GET    /api/webhooks/:id/deliveries   ?status=&limit=&cursor= → paginated delivery log
-POST   /api/webhooks/deliveries/:deliveryId/retry → force-retry a failed delivery
+POST   /api/webhooks/:id/test         → synthetisches Ereignis, liefert den Zustellstatus
+GET    /api/webhooks/:id/deliveries   → Zustellprotokoll
+POST   /api/webhooks/deliveries/:deliveryId/retry   (geplant)
+
+GET    /api/event-actions             → { rules[], events[], actionTypes[] }
+POST   /api/event-actions             ← { name, serverId|null, eventPattern, actionType, actionPayload, enabled }
+PUT    /api/event-actions/:id
+DELETE /api/event-actions/:id
+POST   /api/event-actions/:id/approve → Befehlsregel als eigene übernehmen
 ```
 
-**Event-Katalog** (Single Source: `schemas/events.ts`):
-```
-server.starting | server.started | server.stopping | server.stopped | server.crashed
-player.joined  | player.left    | player.banned    | player.kicked  | player.death
-backup.started | backup.completed | backup.failed
-update.available | update.applied
-mod.installed | mod.uninstalled | mod.enabled | mod.disabled
-auth.login_success | auth.login_failed | auth.2fa_failed
-user.created | user.deleted | role.changed
-panel.update_available
-```
+**Event-Katalog:** `manager/backend/src/schemas/events.ts` (einzige Quelle).
 
 **Generic-HTTP-Header:**
 ```
-POST <user-supplied URL>
-Content-Type: application/json
-X-KyuubiSoft-Event: server.started
-X-KyuubiSoft-Delivery: <delivery-uuid>
-X-KyuubiSoft-Signature: sha256=<hmac of body using webhook.secret>
-User-Agent: KyuubiSoft-Panel/2.5.x
-```
-
-### File-Manager
-
-```
-GET    /api/files/list                ?path=/mods       → { entries: [{name, type, size, mtime, mode}] }
-GET    /api/files/read                ?path=/mods/x.json
-                                       text/plain bis 5 MB, sonst 413
-PUT    /api/files/write               ← { path, content, encoding: 'utf-8'|'base64',
-                                          etag?: <mtime from last read> }
-POST   /api/files/upload              multipart, query: ?path=…  → { path, size }
-DELETE /api/files                     ← { path, confirmToken } (Token aus separatem /confirm)
-POST   /api/files/move                ← { from, to }
-GET    /api/files/download            ?path=… → stream
-```
-
-**Whitelist-Roots** (in `config.ts`):
-```ts
-fileManagerRoots: [
-  { id: 'mods',    path: '/opt/hytale/mods',    rw: true,  permission: 'mods.config' },
-  { id: 'plugins', path: '/opt/hytale/plugins', rw: true,  permission: 'plugins.config' },
-  { id: 'configs', path: '/opt/hytale/server',  rw: true,  permission: 'config.edit',
-    deny: ['config.json'] /* hat eigenen Editor */ },
-  { id: 'worlds',  path: '/opt/hytale/data',    rw: false, permission: 'worlds.view' },
-]
-```
-
-### Notifications-Center
-
-```
-GET    /api/me/notifications          ?unreadOnly=&limit=50
-POST   /api/me/notifications/:id/read
-POST   /api/me/notifications/dismiss-all
-GET    /api/me/notifications/preferences
-PUT    /api/me/notifications/preferences  ← { [eventName]: { inApp: bool, email: bool, webhook: bool } }
-```
-
-**Push-Channel:** über bestehenden Console-WS-Endpoint multiplexen:
-```js
-ws.send({ type: 'subscribe', channels: ['console.logs', 'notifications'] })
-// Server pushes:
-{ type: 'notification', payload: { id, title, body, level, link } }
-```
-
-### OIDC / SSO
-
-```
-GET  /api/auth/sso/providers          → public list of enabled providers (for login page buttons)
-GET  /api/auth/sso/:providerId/start  → 302 to OIDC authorization endpoint, sets state cookie
-GET  /api/auth/sso/:providerId/callback  ← code + state → JWT issue + refresh cookie like password login
-POST /api/me/sso/link                 ← { providerId } (authenticated, initiates link flow)
-DELETE /api/me/sso/link/:providerId   → unlinks
-```
-
-**`User`-Erweiterung:**
-```ts
-interface User {
-  // ...
-  linkedAccounts?: Array<{
-    providerId: string;       // 'discord', 'google', ...
-    subject: string;          // OIDC `sub` claim
-    linkedAt: string;
-  }>;
-}
-```
-
-### Bulk-Aktionen
-
-```
-POST /api/players/bulk          ← { ids: ['player-uuid-1', ...], action: 'kick'|'ban'|'unban', params? }
-POST /api/backups/bulk          ← { ids: [...], action: 'delete'|'export' }
-POST /api/mods/bulk             ← { ids: [...], action: 'enable'|'disable'|'uninstall' }
-POST /api/auth/users/bulk       ← { usernames: [...], action: 'delete'|'reset-2fa'|'change-role', params? }
-```
-
-Antwort einheitlich:
-```ts
-{
-  results: Array<{ id: string; success: boolean; error?: string }>,
-  summary: { total: number; success: number; failed: number }
-}
+X-KyuubiSoft-Event: <event>
+X-KyuubiSoft-Delivery: <delivery-id>
+X-KyuubiSoft-Signature: sha256=<HMAC des Bodys mit webhook.secret>
 ```
 
 ---
 
-## V3.1 (Hytale-USPs)
-
-### Live-Player-Map
+## Datei-Manager
 
 ```
-WS    /api/servers/:id/playerlocations/ws    → stream of { timestamp, players: [{name, uuid, x, y, z, world, ping}] }
-GET   /api/servers/:id/playerlocations/history  ?from=&to=&playerUuid=
-                                              → JSON-Lines stream (für Heatmap-Replay)
+GET    /api/files/roots               → freigegebene Wurzeln
+GET    /api/files/list                ?rootId=&path=
+GET    /api/files/read                ?rootId=&path=
+PUT    /api/files/write               ← { rootId, path, content, … }
+POST   /api/files/upload              multipart
+DELETE /api/files                     ← { rootId, path, confirmToken }
+POST   /api/files/move                ← { rootId, from, to }
+GET    /api/files/download            ?rootId=&path=
 ```
 
-### Replay-Recorder
+Die Wurzeln und ihre Permissions stehen in `manager/backend/src/services/fileManager.ts`.
+
+---
+
+## Benachrichtigungen und Push
 
 ```
-GET    /api/replay                    ?from=&to=  → list of available replay segments
-GET    /api/replay/:segmentId/manifest         → metadata: duration, players, world, file-size
-GET    /api/replay/:segmentId/stream          → server-sent events stream of recorded ticks
-POST   /api/replay/:segmentId/export          → returns a zip download
-DELETE /api/replay/:segmentId
-GET    /api/replay/config             → current retention + recording-active flag
-PUT    /api/replay/config             ← { recordingEnabled, retentionDays, intervalSeconds }
+GET  /api/me/notifications            ?unreadOnly=&limit=
+POST /api/me/notifications/:id/read
+POST /api/me/notifications/dismiss-all
+GET  /api/me/notifications/preferences
+PUT  /api/me/notifications/preferences
+
+POST /api/push/subscribe | /unsubscribe | /test
 ```
 
-### Auto-Wiki
+Benachrichtigungen über den Konsolen-WS zu multiplexen (`subscribe`-Kanäle) ist **(geplant)**.
+
+---
+
+## OIDC / SSO
 
 ```
-POST /api/wiki/regenerate              → scans mods/, rebuilds /api/wiki output  (permission: 'wiki.manage')
-GET  /api/wiki                         → public read-only (configurable: requires-auth toggle)
-GET  /api/wiki/:slug                   → single mod page
-GET  /api/wiki/config
-PUT  /api/wiki/config                  ← { publicAccess: bool, includeOptionalMods: bool }
+GET /api/auth/sso/providers               → aktivierte Anbieter (für die Login-Seite)
+GET /api/auth/sso/:providerId/start       → 302 zum Anbieter, setzt State-Cookie
+GET /api/auth/sso/:providerId/callback    → JWT + Refresh-Cookie wie beim Passwort-Login
+POST   /api/me/sso/link                   (geplant)
+DELETE /api/me/sso/link/:providerId       (geplant)
 ```
 
 ---
 
-## V3.x — Multi-Server
-
-### Server-Management
+## Bulk-Aktionen
 
 ```
-GET    /api/servers                                → list of all ServerInstance
-GET    /api/servers/:id
-POST   /api/servers                                ← { name, version?, ports?, autoCreatePaths: true }
-                                                    → creates Docker container, registers in servers.json
-PUT    /api/servers/:id                            ← { name, network?, capabilities? }
-DELETE /api/servers/:id                            ← { confirmToken, keepData: bool }
-POST   /api/servers/:id/clone                      ← { newName }  → deep-copy data + new container
-GET    /api/servers/default                        → returns the ID treated as default (for backward-compat proxy)
-PUT    /api/servers/default                        ← { id }
+POST /api/players/bulk          ← { names[], action: 'kick'|'ban'|'unban', reason? }
+POST /api/backups/bulk          (geplant)
+POST /api/mods/bulk             (geplant)
+POST /api/auth/users/bulk       (geplant)
 ```
 
-### Verlegung aller Server-Routes
+Die Permission wird pro Aktion geprüft (`players.kick` / `players.ban` / `players.unban`), gescopt auch für den jeweiligen Server.
 
-| Heute | Nachher | Backward-Compat |
-|---|---|---|
-| `GET /api/server/status` | `GET /api/servers/:id/status` | `/api/server/*` → 307 redirect zu `/api/servers/<default>/*` |
-| `POST /api/server/start` | `POST /api/servers/:id/start` | dito |
-| `GET /api/backups` | `GET /api/servers/:id/backups` | dito |
-| `GET /api/players` | `GET /api/servers/:id/players` | dito |
-| `/api/console/ws?ticket=…` | `/api/servers/:id/console/ws?ticket=…` | alt bleibt, mappt auf default |
-| `GET /api/server/config` | `GET /api/servers/:id/config` | dito |
+---
 
-**Implementierung Backward-Compat-Proxy** (in `index.ts`):
-```ts
-app.use('/api/server', (req, res) => {
-  const defaultId = serversService.getDefaultId()
-  req.url = `/api/servers/${defaultId}${req.url}`
-  app.handle(req, res)
-})
-```
-
-### Permissions-API
+## Live-Karte, Replay, Wiki
 
 ```
-GET  /api/auth/users/:username/permissions?serverId=… → effective permission set
-PUT  /api/auth/users/:username/server-roles            ← { [serverId]: roleId }
+GET /api/players/locations              → letzte Positionen
+GET /api/players/locations/history      ?from=&to=&playerUuid=
+WS  /api/players/locations/ws?ticket=…  → snapshot + sample-Stream (Default-Server)
+
+GET    /api/replay                      → Segmente
+GET    /api/replay/config | PUT /api/replay/config
+GET    /api/replay/:id/manifest
+GET    /api/replay/:id/stream           → Server-Sent Events
+POST   /api/replay/:id/export           → { downloadUrl, expiresAt }
+GET    /api/replay/download/:token
+DELETE /api/replay/:id
+
+GET  /api/wiki | /api/wiki/:slug
+GET  /api/wiki/config | PUT /api/wiki/config
+POST /api/wiki/regenerate               (wiki.manage)
+```
+
+Diese Routen sind nur unter `/api/…` gemountet, nicht unter `/api/servers/:serverId/…`. Ohne Server-Bezug arbeiten sie mit dem Default-Server. Eigene Routen pro Server sind **(geplant)**.
+
+---
+
+## Multi-Server
+
+Experimentell, hinter `MULTISERVER_ENABLED` (Default aus). Ohne Flag ist über die gescopten Routen nur der Compose-Server erreichbar.
+
+### Server-Registry
+
+```
+GET    /api/servers                     → { servers[], defaultId, multiserverEnabled }   (servers.list; nur erlaubte Server)
+GET    /api/servers/:id                                                                  (servers.list; nur erlaubte Server)
+POST   /api/servers                     ← { name, serverPort?, webMapPort?, webMapWsPort?, autoStart?, limits? }
+                                          legt Registry-Eintrag und Container an                (servers.create)
+PUT    /api/servers/:id                 ← { name?, limits? }                                     (servers.manage)
+DELETE /api/servers/:id                 ?removeData=true | ?keepContainer=true                     (servers.delete)
+                                          removeData verschiebt den Ordner in den Papierkorb
+GET    /api/servers/_default            → { defaultId }   (servers.list; Alias: GET /api/servers/default)
+PUT    /api/servers/_default            ← { id }          (servers.manage; Alias: PUT /api/servers/default)
+POST   /api/servers/_reconcile          → Abgleich Registry ↔ Container                          (servers.manage)
+GET    /api/servers/_trash | DELETE /api/servers/_trash/:entry                                    (servers.delete)
+POST   /api/servers/:id/clone           (geplant)
+```
+
+Die genauen Felder und Fehlercodes stehen in `manager/backend/src/routes/servers.ts`. Mit Server-Liste gilt: `/:id` nur für erlaubte Server (403 `SERVER_NOT_ALLOWED`); Anlegen, Default setzen, Reconcile und Papierkorb nur mit Zugriff auf alle Server (403 `ALL_SERVERS_REQUIRED`).
+
+### Serverbezogene Routen
+
+Jede serverbezogene Ressource ist **zweimal gemountet**:
+
+| Legacy (Default-Server) | Gescopt |
+|---|---|
+| `/api/server/*` | `/api/servers/:serverId/server/*` |
+| `/api/console/*` | `/api/servers/:serverId/console/*` |
+| `/api/backups/*` | `/api/servers/:serverId/backups/*` |
+| `/api/players/*` | `/api/servers/:serverId/players/*` |
+| `/api/management/*` | `/api/servers/:serverId/management/*` |
+| `/api/scheduler/*` | `/api/servers/:serverId/scheduler/*` |
+| `/api/assets/*` | `/api/servers/:serverId/assets/*` |
+| `/api/files/*` | `/api/servers/:serverId/files/*` |
+| `/api/mod-panel/*` | `/api/servers/:serverId/mod-panel/*` |
+| WS `/api/console/ws?ticket=…` | WS `/api/servers/:serverId/console/ws?ticket=…` |
+
+Es gibt **keine** Redirects. Die Legacy-Routen setzen den Default-Server als Ziel. Rechte, Server-Listen und Per-Server-Rollen gelten auf beiden Wegen gleich. Unbekannte Server-ID → 404, Server ohne sichtbare Dateien → 409 `server_files_unavailable`.
+
+### Per-Server-Rollen
+
+Intern kann ein Nutzer pro Server eine zusätzliche Rolle haben (`serverScopes`). Sie **ergänzt** die globale Rolle auf diesem Server, und zwar nur innerhalb von `allowedServers`.
+
+```
+GET /api/auth/users/:username/permissions?serverId=…   (geplant)
+PUT /api/auth/users/:username/server-roles             (geplant)
 ```
 
 ---
 
 ## Konventionen
 
-- **Auth:** `Authorization: Bearer <jwt>` für Browser, `Authorization: ApiKey kp_<base32>` für Skripte.
-- **Cookies:** `kp_refresh` (HttpOnly, SameSite=Strict, Path=/api/auth) — wird von cookie-parser automatisch ausgewertet.
-- **Errors:** einheitlich
-  ```jsonc
-  {
-    "error": "Short machine-readable name",
-    "detail": "Human-readable explanation",
-    "code": "OPTIONAL_ENUM_CODE",      // z.B. 'TOKEN_INVALIDATED', 'USER_DELETED', '2FA_REQUIRED'
-    "issues": ["zod issue strings"]    // bei Validation-Errors
-  }
-  ```
-- **Pagination:** cursor-basiert, niemals offset.
-  ```
-  GET /api/...?limit=50&cursor=<opaque>
-  → { items[], nextCursor: string | null }
-  ```
-- **Rate-Limits:** dokumentiert via `RateLimit-*` Header (`express-rate-limit` macht das schon).
-- **Audit-Log:** **jeder** mutierende Endpoint MUSS `audit(req, action, target?, metadata?)` aufrufen.
+- **Auth:** `Authorization: Bearer <jwt>` für den Browser, `Authorization: ApiKey kp_…` für Skripte.
+- **Cookies:** `kp_refresh` (HttpOnly, SameSite=Strict); wird von cookie-parser ausgewertet.
+- **Fehler:** JSON mit `error` und/oder `detail`, bei maschinenlesbaren Fällen zusätzlich `code` (z. B. `TOKEN_INVALIDATED`, `USER_DELETED`, `2FA_REQUIRED`, `SERVER_NOT_ALLOWED`, `MULTISERVER_DISABLED`). Fehlende Rechte: 403 `{ error: 'Insufficient permissions', required[] }`.
+- **Rate-Limits:** über `RateLimit-*`-Header (`express-rate-limit`).
+- **Audit-Log:** mutierende Endpoints rufen `audit(req, action, { target?, metadata? })` auf.
 
 ---
 
-## Datenmodell-Schnellübersicht (neue Stores)
+## Datenablage (Manager-Volume `/app/data/`)
 
 ```
 /app/data/
-├── users.json                # bestehend
-├── roles.json                # bestehend
-├── api-keys.json             # V2.5
-├── audit.sqlite              # V2.5 — auch home für webhooks, deliveries, notifications
-│   ├── audit_events
-│   ├── webhooks              # V3.0
-│   ├── webhook_deliveries    # V3.0
-│   ├── notifications         # V3.0
-│   └── notification_prefs    # V3.0
-├── servers.json              # V3.x
-└── replay/                   # V3.1
-    └── <uuid>/
-        ├── manifest.json
-        └── ticks.ndjson.gz
+├── users.json          # Konten, Rollen-Zuordnung, 2FA, allowedServers
+├── roles.json          # Rollen und Permissions
+├── servers.json        # Server-Registry
+├── panel.sqlite        # audit_events, api_keys (inkl. server_ids), webhooks, webhook_deliveries,
+│                       # notifications, notification_prefs, punishments, event_actions, play_sessions,
+│                       # crash_reports, player_notes, push_subscriptions, schema_migrations
+└── replay/             # Replay-Segmente
 ```
