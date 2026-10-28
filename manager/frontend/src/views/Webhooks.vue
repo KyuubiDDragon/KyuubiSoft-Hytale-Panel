@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
+import { useServersStore } from '@/stores/servers'
+import { apiErrorMessage } from '@/utils/apiErrors'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
 import Card from '@/components/ui/Card.vue'
@@ -18,10 +20,13 @@ interface Webhook {
   type: 'discord' | 'slack' | 'generic'
   events: string[]
   enabled: boolean
+  /** Empty = events of every server. */
+  serverIds?: string[]
   createdAt: string
 }
 
-const { t } = useI18n()
+const { t, te } = useI18n()
+const serversStore = useServersStore()
 
 const hooks = ref<Webhook[]>([])
 const availableEvents = ref<string[]>([])
@@ -29,9 +34,13 @@ const loading = ref(true)
 const error = ref('')
 
 const showAdd = ref(false)
-const form = ref<{ name: string; url: string; type: Webhook['type']; events: string[]; secret?: string }>({
-  name: '', url: '', type: 'discord', events: [],
+const form = ref<{ name: string; url: string; type: Webhook['type']; events: string[]; serverIds: string[]; secret?: string }>({
+  name: '', url: '', type: 'discord', events: [], serverIds: [],
 })
+const saveError = ref('')
+
+// Only worth choosing when there is more than one server.
+const serverChoices = computed(() => serversStore.servers)
 
 const testResult = ref<Record<string, { success: boolean; code: number | null; body: string | null } | null>>({})
 
@@ -58,9 +67,15 @@ async function load() {
 
 async function save() {
   if (!form.value.name || !form.value.url || form.value.events.length === 0) return
-  await api.post('/webhooks', form.value)
+  saveError.value = ''
+  try {
+    await api.post('/webhooks', form.value)
+  } catch (err) {
+    saveError.value = apiErrorMessage(err, t, te, t('webhooks.saveFailed'))
+    return
+  }
   showAdd.value = false
-  form.value = { name: '', url: '', type: 'discord', events: [] }
+  form.value = { name: '', url: '', type: 'discord', events: [], serverIds: [] }
   await load()
 }
 
@@ -160,6 +175,26 @@ onMounted(load)
             </label>
           </div>
         </div>
+        <div v-if="serverChoices.length > 1">
+          <div class="text-sm text-ink-muted mb-1">{{ t('webhooks.servers') }}</div>
+          <p class="text-xs text-ink-muted mb-2">{{ t('webhooks.serversHint') }}</p>
+          <div class="flex flex-wrap gap-2">
+            <label
+              v-for="s in serverChoices"
+              :key="s.id"
+              :class="[
+                'text-xs px-2 py-1 rounded-full cursor-pointer transition-colors',
+                form.serverIds.includes(s.id)
+                  ? 'bg-hytale-orange text-ink-inverse'
+                  : 'bg-surface-overlay text-ink-muted hover:text-ink',
+              ]"
+            >
+              <input type="checkbox" class="sr-only" :value="s.id" v-model="form.serverIds" />
+              {{ s.name }}
+            </label>
+          </div>
+        </div>
+        <p v-if="saveError" class="text-sm text-status-error" role="alert">{{ saveError }}</p>
         <div class="flex justify-end gap-2">
           <Button variant="secondary" size="sm" @click="showAdd = false">{{ t('common.cancel') }}</Button>
           <Button size="sm" @click="save">{{ t('webhooks.create') }}</Button>

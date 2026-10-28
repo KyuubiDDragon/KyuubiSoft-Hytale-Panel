@@ -1,9 +1,11 @@
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useConsoleStore } from '@/stores/console'
 import { consoleApi, type LiveLogEntry, type LogsResponse } from '@/api/console'
 import { authApi } from '@/api/auth'
+import { useServersStore } from '@/stores/servers'
+import { scopedWsUrl } from '@/api/scope'
 
 // Commands typed while the console (re)connects are sent once it is open;
 // at most this many, for at most QUEUED_COMMAND_MS.
@@ -22,6 +24,7 @@ export function useWebSocket() {
   const { t } = useI18n()
   const authStore = useAuthStore()
   const consoleStore = useConsoleStore()
+  const serversStore = useServersStore()
 
   const ws = ref<WebSocket | null>(null)
   const reconnectAttempts = ref(0)
@@ -123,8 +126,10 @@ export function useWebSocket() {
     // Get a single-use ticket for WebSocket authentication
     // This is more secure than putting the JWT in the URL
     let ticket: string
+    // The ticket belongs to the server the socket is opened for.
+    const ticketServerId = serversStore.scopeId
     try {
-      const ticketResponse = await authApi.getWsTicket()
+      const ticketResponse = await authApi.getWsTicket(ticketServerId)
       ticket = ticketResponse.ticket
     } catch (error) {
       console.error('Failed to get WebSocket ticket:', error)
@@ -135,9 +140,13 @@ export function useWebSocket() {
     // A disconnect or another connect while the ticket was on its way wins.
     if (isManualDisconnect || ws.value) return
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    const url = `${protocol}//${host}/api/console/ws?ticket=${ticket}`
+    // The server changed while the ticket was on its way: it would not open.
+    if (serversStore.scopeId !== ticketServerId) {
+      connecting = false
+      void connect()
+      return
+    }
+    const url = scopedWsUrl('console/ws', ticket)
 
     const socket = new WebSocket(url)
     ws.value = socket
@@ -339,6 +348,15 @@ export function useWebSocket() {
   // Keep-alive ping
   let pingInterval: ReturnType<typeof setInterval> | null = null
 
+  // Switching servers: leave the old console, open the new one.
+  const stopScopeWatch = watch(
+    () => serversStore.scopeId,
+    () => {
+      queuedCommands.length = 0
+      void reconnect()
+    },
+  )
+
   onMounted(() => {
     void connect()
     pingInterval = setInterval(ping, 30000)
@@ -347,6 +365,7 @@ export function useWebSocket() {
   })
 
   onUnmounted(() => {
+    stopScopeWatch()
     if (pingInterval) {
       clearInterval(pingInterval)
       pingInterval = null

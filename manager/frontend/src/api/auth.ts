@@ -76,34 +76,38 @@ export const authApi = {
 
   // Hytale Server Authentication
   async getHytaleAuthStatus(): Promise<HytaleAuthStatus> {
-    const response = await api.get<HytaleAuthStatus>('/auth/hytale/status')
+    const response = await api.get<HytaleAuthStatus>('/server/hytale-auth/status')
     return response.data
   },
 
   async initiateHytaleLogin(): Promise<HytaleDeviceCodeResponse> {
-    const response = await api.post<HytaleDeviceCodeResponse>('/auth/hytale/initiate')
+    const response = await api.post<HytaleDeviceCodeResponse>('/server/hytale-auth/initiate')
     return response.data
   },
 
   async checkHytaleAuthCompletion(): Promise<HytaleAuthCheckResponse> {
-    const response = await api.post<HytaleAuthCheckResponse>('/auth/hytale/check')
+    const response = await api.post<HytaleAuthCheckResponse>('/server/hytale-auth/check')
     return response.data
   },
 
   async resetHytaleAuth(): Promise<HytaleAuthCheckResponse> {
-    const response = await api.post<HytaleAuthCheckResponse>('/auth/hytale/reset')
+    const response = await api.post<HytaleAuthCheckResponse>('/server/hytale-auth/reset')
     return response.data
   },
 
   async setHytalePersistence(type: 'Memory' | 'Encrypted'): Promise<HytaleAuthCheckResponse> {
-    const response = await api.post<HytaleAuthCheckResponse>('/auth/hytale/persistence', { type })
+    const response = await api.post<HytaleAuthCheckResponse>('/server/hytale-auth/persistence', { type })
     return response.data
   },
 
   // WebSocket Authentication
-  // Get a single-use ticket for WebSocket connection (more secure than token in URL)
-  async getWsTicket(): Promise<WsTicketResponse> {
-    const response = await api.post<WsTicketResponse>('/auth/ws-ticket')
+  // Get a single-use ticket for WebSocket connection (more secure than token in URL).
+  // With a server id the ticket only opens that server's sockets.
+  async getWsTicket(serverId?: string | null): Promise<WsTicketResponse> {
+    const response = await api.post<WsTicketResponse>(
+      '/auth/ws-ticket',
+      serverId ? { serverId } : undefined,
+    )
     return response.data
   },
 }

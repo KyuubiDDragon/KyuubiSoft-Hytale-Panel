@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
-    "lint": "eslint src --ext .ts,.vue"
+    "lint": "eslint src --ext .ts,.vue",
+    "test": "vitest run"
   },
   "engines": {
     "node": ">=24 <25"
@@ -39,6 +40,7 @@
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
     "vite-plugin-pwa": "^0.20.5",
+    "vitest": "^2.1.9",
     "vue-eslint-parser": "^9.4.3",
     "vue-tsc": "^2.2.0"
   }

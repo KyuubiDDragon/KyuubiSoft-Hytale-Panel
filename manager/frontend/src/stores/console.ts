@@ -198,6 +198,16 @@ export const useConsoleStore = defineStore('console', () => {
     maxLogs.value = DEFAULT_MAX_LOGS
   }
 
+  /** Back to the empty state, e.g. when the panel switches to another server. */
+  function reset() {
+    logs.value = []
+    maxLogs.value = DEFAULT_MAX_LOGS
+    lastCursor.stdout = null
+    lastCursor.stderr = null
+    connected.value = false
+    updateCounter.value++
+  }
+
   function setConnected(value: boolean) {
     connected.value = value
   }
@@ -224,6 +234,7 @@ export const useConsoleStore = defineStore('console', () => {
     failPendingCommands,
     isCommandPending,
     clearLogs,
+    reset,
     setConnected,
     toggleAutoScroll,
   }

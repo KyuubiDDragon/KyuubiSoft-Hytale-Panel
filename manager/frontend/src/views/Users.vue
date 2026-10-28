@@ -2,6 +2,9 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useServersStore } from '@/stores/servers'
+import { apiErrorMessage } from '@/utils/apiErrors'
+import ServerAccessEditor from '@/components/access/ServerAccessEditor.vue'
 import { usersApi, type User } from '@/api/users'
 import { rolesApi, type Role } from '@/api/roles'
 import Card from '@/components/ui/Card.vue'
@@ -13,8 +16,12 @@ import ErrorState from '@/components/ui/ErrorState.vue'
 import EmptyTableState from '@/components/ui/EmptyTableState.vue'
 import ResponsiveTable, { type TableColumn } from '@/components/ui/ResponsiveTable.vue'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const authStore = useAuthStore()
+const serversStore = useServersStore()
+
+// Without users.view the backend refuses the list; say so instead of an error.
+const canView = computed(() => authStore.hasPermission('users.view'))
 
 const users = ref<User[]>([])
 const roles = ref<Role[]>([])
@@ -30,11 +37,14 @@ const deletingUser = ref<User | null>(null)
 const formUsername = ref('')
 const formPassword = ref('')
 const formRoleId = ref<string>('')
+// null = every server
+const formServers = ref<string[] | null>(null)
 const formError = ref('')
 
 const columns = computed<TableColumn[]>(() => [
   { key: 'username', label: t('users.username') },
   { key: 'role', label: t('users.role') },
+  { key: 'servers', label: t('serverAccess.column') },
   { key: 'created', label: t('users.created'), hideOnMobile: false, nowrap: true },
   { key: 'lastLogin', label: t('users.lastLogin'), hideOnMobile: false, nowrap: true },
 ])
@@ -70,6 +80,10 @@ function getRoleBadgeStyle(roleId: string): { bg: string; text: string } {
 }
 
 async function loadUsers() {
+  if (!canView.value) {
+    loading.value = false
+    return
+  }
   loading.value = true
   error.value = ''
   try {
@@ -83,6 +97,7 @@ async function loadUsers() {
 }
 
 async function loadRoles() {
+  if (!canView.value) return
   try {
     const response = await rolesApi.getAll()
     roles.value = response.roles
@@ -95,6 +110,7 @@ function openAddModal() {
   formUsername.value = ''
   formPassword.value = ''
   formRoleId.value = defaultRoleId.value
+  formServers.value = null
   formError.value = ''
   showAddModal.value = true
 }
@@ -103,6 +119,7 @@ function openEditModal(user: User) {
   editingUser.value = user
   formPassword.value = ''
   formRoleId.value = user.roleId || ''
+  formServers.value = user.allowedServers ? [...user.allowedServers] : null
   formError.value = ''
   showEditModal.value = true
 }
@@ -114,11 +131,16 @@ async function addUser() {
     return
   }
   try {
-    await usersApi.create(formUsername.value.trim(), formPassword.value, formRoleId.value)
+    await usersApi.create(
+      formUsername.value.trim(),
+      formPassword.value,
+      formRoleId.value,
+      formServers.value ?? undefined,
+    )
     showAddModal.value = false
     await loadUsers()
-  } catch (e: any) {
-    formError.value = e.response?.data?.error || t('errors.serverError')
+  } catch (e: unknown) {
+    formError.value = apiErrorMessage(e, t, te, t('errors.serverError'))
   }
 }
 
@@ -134,16 +156,35 @@ async function updateUser() {
     if (formRoleId.value !== currentRoleId) {
       updates.roleId = formRoleId.value
     }
-    if (Object.keys(updates).length === 0) {
-      showEditModal.value = false
-      return
+    if (Object.keys(updates).length > 0) {
+      await usersApi.update(editingUser.value.username, updates)
     }
-    await usersApi.update(editingUser.value.username, updates)
+    if (!sameServers(formServers.value, editingUser.value.allowedServers ?? null)) {
+      await usersApi.setServers(editingUser.value.username, formServers.value)
+    }
     showEditModal.value = false
     await loadUsers()
-  } catch (e: any) {
-    formError.value = e.response?.data?.error || t('errors.serverError')
+  } catch (e: unknown) {
+    formError.value = apiErrorMessage(e, t, te, t('errors.serverError'))
+    // A first step may already have been saved.
+    await loadUsers()
   }
+}
+
+function sameServers(a: string[] | null, b: string[] | null): boolean {
+  if (a === null || b === null) return a === b
+  const sortedB = [...b].sort()
+  return a.length === b.length && [...a].sort().every((id, i) => id === sortedB[i])
+}
+
+function serverName(id: string): string {
+  return serversStore.servers.find((s) => s.id === id)?.name ?? id
+}
+
+function serversSummary(user: User): string {
+  if (!user.allowedServers) return t('serverAccess.allShort')
+  if (user.allowedServers.length === 0) return t('serverAccess.noneShort')
+  return user.allowedServers.map(serverName).join(', ')
 }
 
 function deleteUser(user: User) {
@@ -156,8 +197,8 @@ async function confirmDeleteUser() {
   try {
     await usersApi.delete(deletingUser.value.username)
     await loadUsers()
-  } catch (e: any) {
-    error.value = e.response?.data?.error || t('errors.serverError')
+  } catch (e: unknown) {
+    error.value = apiErrorMessage(e, t, te, t('errors.serverError'))
   } finally {
     showDeleteConfirm.value = false
     deletingUser.value = null
@@ -171,6 +212,7 @@ function formatDate(dateStr: string): string {
 onMounted(() => {
   loadUsers()
   loadRoles()
+  void serversStore.init()
 })
 </script>
 
@@ -197,13 +239,17 @@ onMounted(() => {
       </div>
     </div>
 
+    <div v-if="!canView" class="p-4 bg-surface-raised border border-border rounded-lg text-ink-muted" role="alert">
+      {{ t('serverAccess.noViewPermission') }}
+    </div>
+
     <!-- Error Banner -->
     <div v-if="error && users.length > 0" class="p-4 bg-status-error/10 border border-status-error/20 rounded-lg">
       <p class="text-status-error">{{ error }}</p>
     </div>
 
     <!-- Info Card -->
-    <Card>
+    <Card v-if="canView">
       <div class="flex items-start gap-4">
         <div class="p-3 bg-hytale-orange/20 rounded-lg flex-shrink-0">
           <Icon name="users" class="w-6 h-6 text-hytale-orange" />
@@ -222,7 +268,7 @@ onMounted(() => {
     </Card>
 
     <!-- Users list -->
-    <div>
+    <div v-if="canView">
       <h2 class="text-lg font-semibold text-ink mb-3">
         {{ t('users.usersList') }} <span class="text-ink-muted font-normal">({{ users.length }})</span>
       </h2>
@@ -282,6 +328,15 @@ onMounted(() => {
             }"
           >
             {{ getRoleName(row.roleId) }}
+          </span>
+        </template>
+        <template #cell:servers="{ row }">
+          <span
+            class="text-sm"
+            :class="row.allowedServers ? 'text-ink' : 'text-ink-muted'"
+            :title="serversSummary(row)"
+          >
+            {{ row.allowedServers ? t('serverAccess.count', { count: row.allowedServers.length }) : t('serverAccess.allShort') }}
           </span>
         </template>
         <template #cell:created="{ row }">
@@ -359,6 +414,8 @@ onMounted(() => {
             </select>
           </div>
 
+          <ServerAccessEditor v-model="formServers" />
+
           <div class="flex gap-3 pt-2">
             <Button variant="secondary" type="button" @click="showAddModal = false" class="flex-1">{{ t('common.cancel') }}</Button>
             <Button type="submit" class="flex-1">{{ t('common.add') }}</Button>
@@ -399,6 +456,8 @@ onMounted(() => {
               </option>
             </select>
           </div>
+
+          <ServerAccessEditor v-model="formServers" :disabled="!authStore.hasPermission('users.edit')" />
 
           <div class="flex gap-3 pt-2">
             <Button variant="secondary" type="button" @click="showEditModal = false" class="flex-1">{{ t('common.cancel') }}</Button>

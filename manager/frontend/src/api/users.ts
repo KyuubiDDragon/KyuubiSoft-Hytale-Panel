@@ -8,6 +8,8 @@ export interface User {
   createdAt: string
   lastLogin?: string
   tokenVersion?: number
+  /** Servers the account may use; missing = every server. */
+  allowedServers?: string[]
 }
 
 export const usersApi = {
@@ -20,11 +22,13 @@ export const usersApi = {
     username: string,
     password: string,
     roleId: string = 'viewer',
+    allowedServers?: string[],
   ): Promise<{ success: boolean; user: User }> {
     const response = await api.post<{ success: boolean; user: User }>('/auth/users', {
       username,
       password,
       roleId,
+      ...(allowedServers ? { allowedServers } : {}),
     })
     return response.data
   },
@@ -37,6 +41,19 @@ export const usersApi = {
       `/auth/users/${encodeURIComponent(username)}`,
       data,
     )
+    return response.data
+  },
+
+  /** `null` = every server. */
+  async setServers(
+    username: string,
+    allowedServers: string[] | null,
+  ): Promise<{ success: boolean; username: string; allowedServers: string[] | null }> {
+    const response = await api.put<{
+      success: boolean
+      username: string
+      allowedServers: string[] | null
+    }>(`/auth/users/${encodeURIComponent(username)}/servers`, { allowedServers })
     return response.data
   },
 

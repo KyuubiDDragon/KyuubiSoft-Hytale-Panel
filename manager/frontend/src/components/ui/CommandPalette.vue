@@ -4,6 +4,10 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+import { useServersStore } from '@/stores/servers'
+import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
+import { apiErrorMessage } from '@/utils/apiErrors'
 import api from '@/api/client'
 import { LIFECYCLE_TIMEOUT_MS } from '@/api/server'
 
@@ -12,13 +16,18 @@ interface Command {
   title: string
   hint?: string
   group: 'Action' | 'Navigation' | 'Theme'
+  /** Asked before running; for actions that interrupt the server. */
+  confirm?: { title: string; message: string; confirmText: string }
   run: () => void | Promise<void>
 }
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
+const serversStore = useServersStore()
+const { ask } = useConfirm()
+const toast = useToast()
 
 const open = ref(false)
 const query = ref('')
@@ -46,6 +55,16 @@ const navigationCommands = computed<Command[]>(() => {
     }))
 })
 
+// The confirmation names the server the action will hit.
+function interruptConfirm(kind: 'stop' | 'restart'): NonNullable<Command['confirm']> {
+  const server = serversStore.activeServer?.name ?? t('cmd.thisServer', 'the server')
+  return {
+    title: t(`cmd.${kind}ConfirmTitle`),
+    message: t(`cmd.${kind}ConfirmMessage`, { server }),
+    confirmText: t(`cmd.${kind}ConfirmButton`),
+  }
+}
+
 // Quick actions hit the existing backend endpoints. We don't surface ones
 // the user isn't allowed to call.
 const actionCommands = computed<Command[]>(() => {
@@ -59,13 +78,15 @@ const actionCommands = computed<Command[]>(() => {
   if (authStore.hasPermission('server.stop')) {
     c.push({
       id: 'action:stop', title: t('cmd.stopServer', 'Stop server'),
-      group: 'Action', run: () => api.post('/server/stop', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
+      group: 'Action', confirm: interruptConfirm('stop'),
+      run: () => api.post('/server/stop', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
     })
   }
   if (authStore.hasPermission('server.restart')) {
     c.push({
       id: 'action:restart', title: t('cmd.restartServer', 'Restart server'),
-      group: 'Action', run: () => api.post('/server/restart', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
+      group: 'Action', confirm: interruptConfirm('restart'),
+      run: () => api.post('/server/restart', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
     })
   }
   if (authStore.hasPermission('backups.create')) {
@@ -104,7 +125,15 @@ async function runSelected() {
   const cmd = results.value[selectedIndex.value]
   if (!cmd) return
   close()
-  await cmd.run()
+  if (cmd.confirm) {
+    const ok = await ask({ ...cmd.confirm, variant: 'danger' })
+    if (!ok) return
+  }
+  try {
+    await cmd.run()
+  } catch (err) {
+    toast.error(apiErrorMessage(err, t, te, t('cmd.failed', 'The action failed')))
+  }
 }
 
 function onKey(e: KeyboardEvent) {

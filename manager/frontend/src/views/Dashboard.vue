@@ -12,6 +12,8 @@ import { tpsLevel, tpsPercent } from '@/utils/tps'
 import QuickActions from '@/components/dashboard/QuickActions.vue'
 import PluginBanner from '@/components/dashboard/PluginBanner.vue'
 import DashboardBanner from '@/components/dashboard/DashboardBanner.vue'
+import DeviceLoginCode from '@/components/servers/DeviceLoginCode.vue'
+import { loginExpiry, type PendingLogin } from '@/utils/deviceLogin'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 
@@ -40,6 +42,12 @@ const enablingPersistence = ref(false)
 // Downloader Auth status (for auto-updates)
 const downloaderAuthStatus = ref<DownloaderAuthStatus | null>(null)
 const showDownloaderAuthWarning = ref(false)
+// A login the container waits for (new server without game files); shown without any click.
+const pendingLogin = ref<PendingLogin | null>(null)
+const pendingSeenAt = ref<number | null>(null)
+const pendingExpiresAt = computed(() =>
+  pendingLogin.value ? loginExpiry(pendingLogin.value, pendingSeenAt.value ?? Date.now()) : null,
+)
 
 // Restart grace period — suppresses auth banners for 120 s after a restart
 const RESTART_GRACE_MS = 120_000
@@ -277,6 +285,10 @@ async function checkDownloaderAuth() {
     downloaderAuthStatus.value = status
     // Show warning if auth is required (credentials missing or expired)
     showDownloaderAuthWarning.value = status.authRequired || !status.authenticated
+    const pending = status.pendingLogin ?? null
+    if (!pending) pendingSeenAt.value = null
+    else if (pendingSeenAt.value === null) pendingSeenAt.value = Date.now()
+    pendingLogin.value = pending
   } catch {
     // Silently fail - don't show warning if we can't check
     showDownloaderAuthWarning.value = false
@@ -599,6 +611,13 @@ async function tickDashboard() {
       border-color="border-status-error"
       @dismiss="showDownloaderAuthWarning = false"
     >
+      <DeviceLoginCode
+        v-if="pendingLogin && !(reAuthenticating && reAuthCode)"
+        class="mb-3"
+        :verification-url="pendingLogin.verificationUrl"
+        :user-code="pendingLogin.userCode"
+        :expires-at="pendingExpiresAt"
+      />
       <div v-if="reAuthenticating && reAuthCode" class="mb-3 p-3 bg-surface-muted rounded-lg border border-border">
         <p class="text-xs text-ink-muted mb-1">{{ t('dashboard.enterCodeOnHytale') }}:</p>
         <p class="text-xl font-mono text-ink tracking-wider">{{ reAuthCode }}</p>

@@ -1,4 +1,5 @@
 import api from './client'
+import type { PendingLogin } from '@/utils/deviceLogin'
 
 /** Stop/restart wait for a clean shutdown: up to 120 s, then 30 s forced, then the start. */
 export const LIFECYCLE_TIMEOUT_MS = 200_000
@@ -143,11 +144,15 @@ export interface DownloaderAuthStatus {
   credentialsExist: boolean
   authRequired: boolean
   error?: string
+  /** A login the server's container waits for (a new server without game files). */
+  pendingLogin?: PendingLogin | null
 }
 
 export interface DownloaderAuthInitResponse {
   success: boolean
   alreadyAuthenticated?: boolean
+  /** 'container': the login the container already waits for was handed on. */
+  source?: 'container'
   verificationUrl?: string
   userCode?: string
   expiresIn?: number
@@ -157,6 +162,8 @@ export interface DownloaderAuthInitResponse {
 
 export interface DownloaderAuthPollResponse {
   completed: boolean
+  /** The login worked and the container is downloading the game files. */
+  downloading?: boolean
   expired?: boolean
   version?: string
   verificationUrl?: string

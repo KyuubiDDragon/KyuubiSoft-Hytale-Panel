@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, inject, onMounted } from 'vue'
+import { ref, computed, inject, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useServersStore } from '@/stores/servers'
 import { authApi } from '@/api/auth'
 import { setLocale, getLocale } from '@/i18n'
 import { modStoreApi } from '@/api/management'
@@ -15,6 +16,7 @@ const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const serversStore = useServersStore()
 const { theme, toggle: toggleTheme } = useTheme()
 
 const showUserMenu = ref(false)
@@ -71,17 +73,22 @@ async function checkWebMapStatus() {
   try {
     const result = await modStoreApi.getAvailable()
     const webMap = result.mods.find(m => m.id === 'easywebmap')
-    if (webMap && webMap.installed) {
-      webMapInstalled.value = true
-    }
+    webMapInstalled.value = !!(webMap && webMap.installed)
   } catch (e) {
     // Silently fail
   }
 }
 
-onMounted(() => {
-  checkWebMapStatus()
-})
+// The map mod is installed per server: ask once the server list is known and
+// again whenever another server becomes the target.
+watch(
+  () => [serversStore.loaded, serversStore.epoch] as const,
+  ([loaded]) => {
+    webMapInstalled.value = false
+    if (loaded) checkWebMapStatus()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

@@ -1,4 +1,5 @@
 import api from './client'
+import { scopedApiUrl } from './scope'
 
 // ============================================================
 // Types
@@ -113,7 +114,7 @@ export const filesApi = {
 
   getDownloadUrl(rootId: string, path: string): string {
     const params = new URLSearchParams({ rootId, path })
-    return `/api/files/download?${params.toString()}`
+    return scopedApiUrl(`/files/download?${params.toString()}`)
   },
 }
 
