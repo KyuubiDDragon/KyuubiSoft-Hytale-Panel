@@ -394,11 +394,14 @@ describe('countdown', () => {
   });
 
   it('makes free text safe for the console and the command parser', () => {
+    // An apostrophe inside a word is plain text for the parser and stays.
     expect(toConsoleText('Don\'t "panic"\n/op add Evil [now]')).toBe(
-      'Don’t ”panic” /op add Evil (now)',
+      "Don't ”panic” /op add Evil (now)",
     );
     expect(toConsoleText('{"text":"x"}')).toMatch(/^\(/);
     expect(toConsoleText('x'.repeat(500))).toHaveLength(200);
+    // An option word or two commas would make the server refuse the command.
+    expect(toConsoleText('Restart --now,, really')).toBe('Restart –now, really');
   });
 
   it('announces on schedule and then stops', async () => {

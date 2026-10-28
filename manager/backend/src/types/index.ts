@@ -72,15 +72,14 @@ export interface ActionResponse {
 
 // Console Types
 export interface LogEntry {
+  /** ISO 8601 in UTC (with `Z`). */
   timestamp: string;
   level: string;
+  /** May span several lines (a stack trace, a multi-line answer). */
   message: string;
+  /** The server's logger name, e.g. `Universe|P`, for formatted records. */
+  logger?: string;
   raw?: string;
-}
-
-export interface LogsResponse {
-  logs: LogEntry[];
-  count: number;
 }
 
 // Backup Types
@@ -123,18 +122,4 @@ export interface WsMessage {
   payload?: string;
   /** Client-chosen id of a 'command' message, echoed in its command_response. */
   requestId?: unknown;
-}
-
-export interface WsLogMessage {
-  type: 'log';
-  timestamp: string;
-  level: string;
-  message: string;
-}
-
-export interface WsPlayerEvent {
-  type: 'player_event';
-  event: 'join' | 'leave';
-  player: string;
-  timestamp: string;
 }

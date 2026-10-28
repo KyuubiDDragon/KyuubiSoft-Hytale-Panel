@@ -4,7 +4,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import * as schedulerService from '../services/scheduler.js';
 import * as dockerService from '../services/docker.js';
-import { stripControlChars } from '../utils/sanitize.js';
+import { toCommandText } from '../utils/sanitize.js';
 import { actorFromRequest, authorizeCommand } from '../services/commandPolicy.js';
 import { audit } from '../services/audit.js';
 import { asyncRoute } from '../utils/asyncRoute.js';
@@ -27,19 +27,8 @@ const DEMO_SCHEDULER_CONFIG = {
   announcements: [],
 };
 
-// Demo quick commands
-const DEMO_QUICK_COMMANDS = [
-  { id: 'qc-1', name: 'Weather Clear', command: '/weather clear', icon: 'sun', category: 'world' },
-  {
-    id: 'qc-2',
-    name: 'Weather Rain',
-    command: '/weather rain',
-    icon: 'cloud-rain',
-    category: 'world',
-  },
-  { id: 'qc-3', name: 'Save World', command: '/save-all', icon: 'save', category: 'server' },
-  { id: 'qc-4', name: 'List Players', command: '/list', icon: 'users', category: 'info' },
-];
+// Demo quick commands: the Hytale 0.7 defaults of a new install.
+const DEMO_QUICK_COMMANDS = schedulerService.defaultQuickCommands();
 
 // GET /api/scheduler/config - Get scheduler configuration
 router.get(
@@ -396,8 +385,8 @@ router.post(
     }
 
     const { message } = req.body;
-    // One console line: line breaks and other control characters become spaces.
-    const text = typeof message === 'string' ? stripControlChars(message).trim() : '';
+    // One line of plain text for the server's command parser.
+    const text = typeof message === 'string' ? toCommandText(message, 500) : '';
     if (!text) {
       res.status(400).json({ error: 'Message is required' });
       return;

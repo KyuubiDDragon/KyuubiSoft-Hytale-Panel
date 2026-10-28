@@ -9,6 +9,7 @@
 import { getDb } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 import { publish } from './eventBus.js';
+import { resolveServerId } from './servers.js';
 
 export type PunishmentType = 'ban' | 'tempban' | 'kick' | 'mute' | 'tempmute' | 'warn';
 
@@ -165,7 +166,40 @@ export function revokePunishment(id: number, byUser: string): boolean {
   return info.changes > 0;
 }
 
-/** Lift all active stateful punishments for a player (used on a manual /unban). */
+/**
+ * Closes a player's open entries of `types` on one server, matched by UUID or
+ * by any of the names: after an unban, or after a permanent ban (then only
+ * the temp-bans), so the expiry loop does not lift that ban later. Entries
+ * without a server belong to the default one.
+ */
+export async function closeBanRecords(
+  target: { serverId?: string; names: readonly (string | undefined)[]; uuid?: string | null },
+  types: PunishmentType[],
+  byUser: string,
+): Promise<number> {
+  const names = [...new Set(target.names.filter((n): n is string => !!n))];
+  const uuid = target.uuid?.toLowerCase() ?? null;
+  if (names.length === 0 && !uuid) return 0;
+  const who = [
+    ...names.map(() => 'player_name = ? COLLATE NOCASE'),
+    ...(uuid ? ['lower(uuid) = ?'] : []),
+  ].join(' OR ');
+  const rows = getDb()
+    .prepare(
+      `SELECT id, server_id FROM punishments
+     WHERE active = 1 AND type IN (${types.map(() => '?').join(',')}) AND (${who})`,
+    )
+    .all(...types, ...names, ...(uuid ? [uuid] : [])) as { id: number; server_id: string | null }[];
+  const server = await resolveServerId(target.serverId);
+  let closed = 0;
+  for (const row of rows) {
+    if ((await resolveServerId(row.server_id ?? undefined)) !== server) continue;
+    if (revokePunishment(row.id, byUser)) closed++;
+  }
+  return closed;
+}
+
+/** Lift all active stateful punishments for a player (used to close old mute records). */
 export function deactivateActiveForPlayer(
   playerName: string,
   type: PunishmentType | PunishmentType[],
@@ -198,21 +232,121 @@ function consumeDuePunishments(): Punishment[] {
     "UPDATE punishments SET active = 0, revoked_at = ?, revoked_by = 'system:expiry' WHERE id = ? AND active = 1",
   );
   for (const row of due) {
+    // A lift that failed waits for its next try.
+    if ((liftRetries.get(row.id)?.nextAt ?? 0) > Date.now()) continue;
     if (upd.run(now, row.id).changes > 0) lifted.push(rowToPunishment(row));
   }
   return lifted;
 }
 
-let expiryTimer: NodeJS.Timeout | null = null;
+// Lifts that did not go through yet, by entry: tried again after a growing
+// pause. Kept in memory; after a panel restart the next run tries at once.
+const liftRetries = new Map<number, { attempts: number; nextAt: number }>();
+const RETRY_FIRST_MS = 60_000;
+const RETRY_MAX_MS = 60 * 60_000;
+
+/** Puts the next try off (1, 2, 4, ... minutes, at most an hour); returns the failures so far. */
+function deferLift(id: number): { attempts: number; minutes: number } {
+  const attempts = (liftRetries.get(id)?.attempts ?? 0) + 1;
+  const delay = Math.min(RETRY_FIRST_MS * 2 ** (attempts - 1), RETRY_MAX_MS);
+  liftRetries.set(id, { attempts, nextAt: Date.now() + delay });
+  return { attempts, minutes: Math.round(delay / 60_000) };
+}
+
+/** Logs the 1st, 2nd, 4th, 8th, ... failure only. */
+const worthLogging = (attempts: number) => (attempts & (attempts - 1)) === 0;
 
 /**
- * Background loop: every minute, lift expired temp bans/mutes by issuing the
- * matching un-command and emitting an event. `execCommand` is imported lazily
- * to avoid a module cycle (docker → players → … ).
+ * Undo consumeDuePunishments for one row: `retry` keeps the end date, so the
+ * next run tries again; otherwise the ban stays without one (as it does on
+ * the server) until someone lifts it.
+ */
+function reactivatePunishment(id: number, retry: boolean): void {
+  getDb()
+    .prepare(
+      `UPDATE punishments SET active = 1, revoked_at = NULL, revoked_by = NULL${retry ? '' : ', expires_at = NULL'}
+     WHERE id = ? AND revoked_by = 'system:expiry'`,
+    )
+    .run(id);
+}
+
+/** Keeps an entry whose lift did not go through open, with its end date, for a later try. */
+function retryLift(p: Punishment, why: string): void {
+  reactivatePunishment(p.id, true);
+  const { attempts, minutes } = deferLift(p.id);
+  if (!worthLogging(attempts)) return;
+  logger.warn(
+    `[Punishments] could not lift the tempban of ${p.playerName} yet (${why}); trying again in ${minutes} min (attempt ${attempts})`,
+  );
+}
+
+let expiryTimer: NodeJS.Timeout | null = null;
+let expiryRunning = false;
+
+// Lift failures that can pass: the server or Docker cannot be reached, a
+// start/stop is under way, or the running server refused the unban (one that
+// is not signed in finds no offline player; stopped, the panel lifts it in the
+// file). Anything else (an unknown player, a broken bans.json) would only fail again.
+const RETRY_LIFT_CODES = new Set(['unreachable', 'docker_unavailable', 'busy', 'rejected']);
+
+// How far the server's ban may lie from a temp-ban entry and still be the ban
+// the panel issued for it: the entry is written right after that ban went
+// through, so the server's time is a little earlier, never later.
+const OWN_BAN_BEFORE_MS = 5 * 60_000;
+const OWN_BAN_AFTER_MS = 5_000;
+
+/** Whether a ban the server has (banned at `bannedAt`) is the one temp-ban `p` was recorded for. */
+export function isOwnBan(p: Pick<Punishment, 'createdAt'>, bannedAt: string | undefined): boolean {
+  const at = bannedAt ? Date.parse(bannedAt) : NaN;
+  const recorded = Date.parse(p.createdAt);
+  return (
+    Number.isFinite(at) && at >= recorded - OWN_BAN_BEFORE_MS && at <= recorded + OWN_BAN_AFTER_MS
+  );
+}
+
+/**
+ * Lifts the ban behind an expired temp-ban, by UUID, but only while it is
+ * still that ban: one lifted meanwhile is left alone ('gone'), and so is a
+ * ban issued since (a permanent one, or a new ban after an unban: 'replaced').
+ * An unban the server did not confirm (over the console) counts only once the
+ * ban is gone; otherwise it is 'unconfirmed' and tried again.
+ */
+async function liftTempban(p: Punishment): Promise<'lifted' | 'gone' | 'replaced' | 'unconfirmed'> {
+  const { currentBan, unbanPlayer } = await import('./accessBans.js');
+  const serverId = p.serverId ?? undefined;
+  const ban = await currentBan(serverId, p.uuid ?? p.playerName);
+  if (!ban) return 'gone';
+  if (!isOwnBan(p, ban.bannedAt)) return 'replaced';
+  const outcome = await unbanPlayer(serverId, ban.target);
+  if (outcome.verified) return 'lifted';
+  return (await currentBan(serverId, ban.target)) ? 'unconfirmed' : 'lifted';
+}
+
+/**
+ * Background loop: every minute, lift expired temp bans and emit an event.
+ * Hytale 0.7 bans have no end date, so the panel lifts them itself (by UUID
+ * while the server runs, in bans.json while it is stopped), and only while
+ * the server's ban is still the one the panel issued. A lift that fails for
+ * a reason that can pass (server unreachable, busy, refused, or an unban the
+ * server did not confirm) keeps the entry with its end date and is tried
+ * again after a growing pause; otherwise the ban stays and the error is
+ * logged. Expired temp mutes
+ * (recorded by older panel versions, 0.7 has no mute) are only closed. The
+ * access services are imported lazily to avoid a module cycle.
  */
 export function startPunishmentExpiry(): void {
   if (expiryTimer) return;
   const run = async (): Promise<void> => {
+    // A lift can wait on the server; the next tick must not start a second run.
+    if (expiryRunning) return;
+    expiryRunning = true;
+    try {
+      await liftDue();
+    } finally {
+      expiryRunning = false;
+    }
+  };
+  const liftDue = async (): Promise<void> => {
     let lifted: Punishment[];
     try {
       lifted = consumeDuePunishments();
@@ -221,21 +355,37 @@ export function startPunishmentExpiry(): void {
       return;
     }
     if (lifted.length === 0) return;
-    const { execCommand } = await import('./docker.js');
+    const { describeAccessError } = await import('./accessContext.js');
     for (const p of lifted) {
-      const cmd =
-        p.type === 'tempban'
-          ? `/unban ${p.playerName}`
-          : p.type === 'tempmute'
-            ? `/unmute ${p.playerName}`
-            : null;
-      if (cmd) {
+      if (p.type === 'tempban') {
+        let result: Awaited<ReturnType<typeof liftTempban>>;
         try {
-          await execCommand(cmd, p.serverId ?? undefined, { actor: 'punishments' });
+          result = await liftTempban(p);
         } catch (err) {
+          const { error, code } = describeAccessError(err);
+          if (RETRY_LIFT_CODES.has(code)) {
+            retryLift(p, error);
+          } else {
+            liftRetries.delete(p.id);
+            reactivatePunishment(p.id, false);
+            logger.error(
+              `[Punishments] could not lift the tempban of ${p.playerName}: ${error}. The ban stays until it is lifted by hand.`,
+            );
+          }
+          continue;
+        }
+        if (result === 'unconfirmed') {
+          retryLift(p, 'the server did not confirm the unban');
+          continue;
+        }
+        liftRetries.delete(p.id);
+        if (result !== 'lifted') {
           logger.warn(
-            `[Punishments] failed to lift ${p.type} for ${p.playerName}: ${err instanceof Error ? err.message : err}`,
+            result === 'gone'
+              ? `[Punishments] tempban of ${p.playerName} ended; it had already been lifted`
+              : `[Punishments] tempban of ${p.playerName} ended, but the player was banned again since; that ban stays`,
           );
+          continue;
         }
       }
       publish(

@@ -17,8 +17,17 @@ import { restartServerGracefully } from './serverLifecycle.js';
 import { installMod, ensureEasyWebMapConfig } from './modStore.js';
 import { escapeShellArg } from '../utils/sanitize.js';
 import { updateJsonFile } from '../utils/jsonStore.js';
-import { applyUpdateSettings } from './updateSettings.js';
 import { writePanelConfig } from '../routes/server/shared.js';
+import {
+  restartWithWizardConfig,
+  validateSecurityStep,
+  validateServerStep,
+  validateViewRadius,
+  writeWizardServerConfig,
+  type WizardConfigInput,
+  type WizardConfigResult,
+  type WizardServerSettings,
+} from './setupServerConfig.js';
 
 // Re-export system check types and function
 export type { SystemCheck, SystemCheckResult };
@@ -32,15 +41,8 @@ export interface SetupConfig {
   admin?: {
     username: string;
   };
-  server?: {
-    name: string;
-    motd: string;
-    maxPlayers: number;
-    gameMode: string;
-    password: string;
-    whitelist: boolean;
-    allowOp: boolean;
-  };
+  /** Written to config.json at the end (see services/setupServerConfig.ts). */
+  server?: WizardServerSettings;
   performance?: {
     minRam: string;
     maxRam: string;
@@ -363,17 +365,13 @@ export async function saveStepData(
         }
         break;
 
-      case 'server-config':
-        // Frontend sends 'name' and 'gameMode', support both naming conventions
-        setupConfig.server = {
-          name: (data.name as string) || (data.serverName as string) || 'Hytale Server',
-          motd: (data.motd as string) || 'Welcome to Hytale!',
-          maxPlayers: (data.maxPlayers as number) || 20,
-          gameMode: (data.gameMode as string) || (data.defaultGamemode as string) || 'Adventure',
-          password: (data.password as string) || '',
-          whitelist: data.whitelist === true,
-          allowOp: data.allowOp === true,
-        };
+      case 'server-config': {
+        // Checked against what the server accepts (Hytale 0.7 has only the
+        // Adventure and Creative game modes); password, whitelist and the OP
+        // switch of an earlier save are kept.
+        const server = validateServerStep(data, setupConfig.server);
+        if (!server.ok) return { success: false, nextStep: stepId, error: server.error };
+        setupConfig.server = server.value;
         // Advanced settings
         if (data.acceptEarlyPlugins !== undefined) {
           setupConfig.acceptEarlyPlugins = data.acceptEarlyPlugins === true;
@@ -382,14 +380,18 @@ export async function saveStepData(
           setupConfig.disableSentry = data.disableSentry === true;
         }
         break;
+      }
 
-      case 'performance':
+      case 'performance': {
+        const viewRadius = validateViewRadius(data.viewRadius);
+        if (!viewRadius.ok) return { success: false, nextStep: stepId, error: viewRadius.error };
         setupConfig.performance = {
           minRam: (data.minRam as string) || '3G',
           maxRam: (data.maxRam as string) || '4G',
-          viewRadius: (data.viewRadius as number) || 16,
+          viewRadius: viewRadius.value,
         };
         break;
+      }
 
       case 'automation': {
         // Frontend sends nested objects: { backups: {...}, restart: {...} }
@@ -475,32 +477,14 @@ export async function saveStepData(
         // Server auth is handled by hytaleAuth service
         break;
 
-      case 'security-settings':
-        // Update server config with security settings
-        if (!setupConfig.server) {
-          setupConfig.server = {
-            name: 'Hytale Server',
-            motd: 'Welcome to Hytale!',
-            maxPlayers: 20,
-            gameMode: 'Adventure',
-            password: '',
-            whitelist: false,
-            // Off unless explicitly chosen: --allow-op lets ANY player run
-            // `/op self` and take full admin rights (Hytale 0.7).
-            allowOp: false,
-          };
-        }
-        // Apply security settings from frontend
-        if (data.password !== undefined) {
-          setupConfig.server.password = (data.password as string) || '';
-        }
-        if (data.whitelist !== undefined) {
-          setupConfig.server.whitelist = data.whitelist === true;
-        }
-        if (data.allowOp !== undefined) {
-          setupConfig.server.allowOp = data.allowOp === true;
-        }
+      case 'security-settings': {
+        // The OP switch stays off unless explicitly chosen: --allow-op lets
+        // ANY player run `/op self` and take full admin rights (Hytale 0.7).
+        const security = validateSecurityStep(data, setupConfig.server);
+        if (!security.ok) return { success: false, nextStep: stepId, error: security.error };
+        setupConfig.server = security.value;
         break;
+      }
 
       case 'summary':
         // Summary doesn't store data
@@ -525,6 +509,15 @@ export async function saveStepData(
       error: error instanceof Error ? error.message : 'Failed to save step data',
     };
   }
+}
+
+function logWizardConfig(result: WizardConfigResult): void {
+  for (const change of result.changes) {
+    logger.info(`[Setup] config.json: ${change.key} ${change.action} (${change.note})`);
+  }
+  if (result.written) logger.info('[Setup] Wrote the server settings into config.json');
+  else if (result.pending) logger.info('[Setup] Server runs: config.json is written at the restart');
+  else if (result.skipped) logger.info(`[Setup] Server config not written (${result.skipped})`);
 }
 
 /**
@@ -589,6 +582,8 @@ export async function finalizeSetup(): Promise<{
   success: boolean;
   error?: string;
   jwtSecret?: string;
+  /** How the wizard's server settings reached config.json. */
+  serverConfig?: WizardConfigResult;
 }> {
   try {
     const setupConfig = await readSetupConfig();
@@ -667,78 +662,23 @@ export async function finalizeSetup(): Promise<{
     await writePanelConfig(panelConfig);
     logger.info('[Setup] Wrote panel config with patchline:', panelConfig.patchline);
 
-    // Write server config.json if server path exists.
-    // When downloadMethod === 'existing' we treat the on-disk config as the
-    // source of truth: any setting the wizard collected that the existing
-    // config already specifies is left alone, so people adopting an existing
-    // Hytale install with worlds don't lose their server name, MOTD,
-    // gamemode or whitelist on first panel boot.
-    const isExisting = setupConfig.downloadMethod === 'existing';
-    if (setupConfig.server) {
-      const serverConfigPath = path.join(config.serverPath, 'config.json');
-      try {
-        // Check if server directory exists
-        await access(config.serverPath, constants.W_OK);
-
-        // Read existing config or create new
-        let serverConfig: any = {};
-        let hadExistingConfig = false;
-        try {
-          const existing = await readFile(serverConfigPath, 'utf-8');
-          serverConfig = JSON.parse(existing);
-          hadExistingConfig = true;
-        } catch {
-          // File doesn't exist, start fresh
+    // Write the server's config.json (only real Hytale 0.7 fields, while
+    // the server is stopped; it is restarted when it runs). When
+    // downloadMethod === 'existing' the on-disk config is the source of
+    // truth: settings it already has are left alone, so people adopting an
+    // existing install with worlds keep their server name, MOTD and game mode.
+    let serverConfig: WizardConfigResult | undefined;
+    const wizardConfig: WizardConfigInput | null = setupConfig.server
+      ? {
+          server: setupConfig.server,
+          viewRadius: setupConfig.performance?.viewRadius,
+          autoUpdate: setupConfig.autoUpdate === true,
+          preserveExisting: setupConfig.downloadMethod === 'existing',
         }
-
-        // Helper: write field only if we don't already have a value, or if
-        // we're doing a fresh install (no existing config).
-        const preserveExisting = isExisting && hadExistingConfig;
-        const setIfMissing = <T>(key: string, value: T | undefined): void => {
-          if (value === undefined) return;
-          if (preserveExisting && serverConfig[key] !== undefined && serverConfig[key] !== '')
-            return;
-          serverConfig[key] = value;
-        };
-
-        setIfMissing('ServerName', setupConfig.server.name);
-        setIfMissing('MOTD', setupConfig.server.motd);
-        setIfMissing('MaxPlayers', setupConfig.server.maxPlayers);
-        // Password is special: even on 'existing' we honor an explicit
-        // value the operator typed in the wizard (they may want to rotate
-        // it). Empty strings still defer to the existing config.
-        if (setupConfig.server.password) {
-          serverConfig.Password = setupConfig.server.password;
-        } else if (!preserveExisting) {
-          serverConfig.Password = '';
-        }
-        setIfMissing('Whitelist', setupConfig.server.whitelist ?? false);
-        setIfMissing('AllowOp', setupConfig.server.allowOp ?? false);
-        if (!serverConfig.Defaults) serverConfig.Defaults = {};
-        if (!(preserveExisting && serverConfig.Defaults.GameMode)) {
-          serverConfig.Defaults.GameMode = setupConfig.server.gameMode;
-        }
-
-        // Performance settings
-        if (setupConfig.performance?.viewRadius) {
-          setIfMissing('ViewRadius', setupConfig.performance.viewRadius);
-        }
-
-        // Native update system: the server reads the PascalCase `Update` block.
-        // The wizard's "Auto-updates" switch lets the server download updates
-        // and apply them while nobody is online; the patchline stays with the
-        // panel setting (see updateSettings.ts).
-        serverConfig = applyUpdateSettings(serverConfig, {
-          enabled: true,
-          autoApplyMode: setupConfig.autoUpdate ? 'WHEN_EMPTY' : 'DISABLED',
-        });
-
-        await writeFile(serverConfigPath, JSON.stringify(serverConfig, null, 2), 'utf-8');
-        logger.info('[Setup] Wrote server config.json with all settings including Update');
-      } catch {
-        // Server directory might not exist yet, skip
-        logger.info('Note: Server config not written (server directory not ready)');
-      }
+      : null;
+    if (wizardConfig) {
+      serverConfig = await writeWizardServerConfig(wizardConfig);
+      logWizardConfig(serverConfig);
     }
 
     // Mark setup as complete
@@ -844,7 +784,14 @@ export async function finalizeSetup(): Promise<{
     setTimeout(async () => {
       try {
         logger.info('[Setup] Restarting server container now...');
-        const restartResult = await restartServerGracefully(undefined, { reason: 'setup' });
+        // A running server got no config.json yet: it is written between stop and start.
+        const restartResult =
+          wizardConfig && serverConfig?.pending
+            ? await restartWithWizardConfig(wizardConfig).then((r) => {
+                logWizardConfig(r);
+                return r.error ? { ok: false, error: r.error } : { ok: true };
+              })
+            : await restartServerGracefully(undefined, { reason: 'setup' });
         if (restartResult.ok) {
           logger.info('[Setup] Server restart completed successfully');
 
@@ -873,7 +820,7 @@ export async function finalizeSetup(): Promise<{
       }
     }, 3000); // 3 second delay to ensure config files are written and HTTP response completes
 
-    return { success: true, jwtSecret };
+    return { success: true, jwtSecret, serverConfig };
   } catch (error) {
     return {
       success: false,

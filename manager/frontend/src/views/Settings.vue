@@ -628,7 +628,12 @@ async function setAllowOp(enabled: boolean) {
       }
     }
   } catch (e) {
-    allowOpError.value = t('settings.errors.updateSettingFailed')
+    // Turning --allow-op on also needs players.op.
+    const status = (e as { response?: { status?: number } }).response?.status
+    allowOpError.value =
+      status === 403 && enabled
+        ? t('settings.errors.allowOpNeedsOp')
+        : t('settings.errors.updateSettingFailed')
   } finally {
     allowOpLoading.value = false
   }
@@ -1669,17 +1674,16 @@ onUnmounted(() => {
             <select v-model="automod.action" :disabled="!canEditIntegrations"
                     class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink">
               <option value="warn">{{ t('settings.automod.actionWarn') }}</option>
-              <option value="mute">{{ t('settings.automod.actionMute') }}</option>
+              <!-- Hytale 0.7 has no chat mute; kept so an older setting still shows -->
+              <option value="mute" disabled>{{ t('settings.automod.actionMute') }}</option>
               <option value="kick">{{ t('settings.automod.actionKick') }}</option>
             </select>
+            <p class="text-xs text-ink-subtle">{{ t('settings.automod.kickHint') }}</p>
           </div>
 
-          <!-- Mute duration (only relevant for mute) -->
+          <!-- A "mute" saved by an older panel version warns instead -->
           <div class="space-y-1.5" v-if="automod.action === 'mute'">
-            <label class="text-sm font-medium text-ink">{{ t('settings.automod.muteDuration') }}</label>
-            <input type="number" min="0" max="86400" v-model.number="automod.muteDurationSec" :disabled="!canEditIntegrations"
-                   class="w-full px-3 py-2 bg-surface-overlay border border-edge rounded-lg text-sm text-ink" />
-            <p class="text-xs text-ink-subtle">{{ t('settings.automod.muteDurationHint') }}</p>
+            <p class="text-xs text-amber-400">{{ t('settings.automod.muteUnavailable') }}</p>
           </div>
         </div>
 

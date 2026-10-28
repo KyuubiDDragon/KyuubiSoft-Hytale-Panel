@@ -3,7 +3,13 @@
  * Docker frames stdout/stderr; the frames arrive split at arbitrary points.
  */
 import { describe, it, expect } from 'vitest';
-import { createDockerOutputDecoder, decodeDockerOutput } from './dockerStream.js';
+import {
+  createDockerLineDecoder,
+  createDockerOutputDecoder,
+  decodeDockerLines,
+  decodeDockerOutput,
+  type DockerLine,
+} from './dockerStream.js';
 
 function frame(stream: 1 | 2, payload: string | Buffer): Buffer {
   const body = typeof payload === 'string' ? Buffer.from(payload, 'utf8') : payload;
@@ -65,5 +71,59 @@ describe('docker output decoding', () => {
   it('keeps the payload of a frame cut off at the end of the stream', () => {
     const cut = frame(1, 'complete\n').subarray(0, 8 + 4);
     expect(decodeDockerOutput(cut)).toBe('comp');
+  });
+});
+
+describe('docker line decoding', () => {
+  function linesInPieces(buf: Buffer, size: number, maxLineChars?: number): DockerLine[] {
+    const decoder = createDockerLineDecoder(maxLineChars);
+    const lines: DockerLine[] = [];
+    for (let i = 0; i < buf.length; i += size)
+      lines.push(...decoder.push(buf.subarray(i, i + size)));
+    return [...lines, ...decoder.end()];
+  }
+
+  it('joins a line that spans several frames and chunks, per stream', () => {
+    // stdout and stderr frames interleave; each stream's half lines wait for their rest.
+    const buf = Buffer.concat([
+      frame(1, 'out: first ha'),
+      frame(2, 'err: whole line\r\nerr: sec'),
+      frame(1, 'lf\nout: second\n'),
+      frame(2, 'ond\n'),
+    ]);
+    const expected = [
+      { stream: 'stderr', text: 'err: whole line' },
+      { stream: 'stdout', text: 'out: first half' },
+      { stream: 'stdout', text: 'out: second' },
+      { stream: 'stderr', text: 'err: second' },
+    ];
+    for (const size of [1, 2, 5, 8, 11, 64]) expect(linesInPieces(buf, size)).toEqual(expected);
+  });
+
+  it('passes an endless line on in pieces instead of holding it', () => {
+    // Docker cuts a long line into several frames without a line break between them.
+    const parts = ['xxxxxx', 'xxxxxx', 'xxxxxx', 'xxxxxx', 'x\n'].map((p) => frame(1, p));
+    const lines = linesInPieces(Buffer.concat(parts), 4, 10);
+    expect(lines.map((l) => l.text)).toEqual(['x'.repeat(10), 'x'.repeat(10), 'x'.repeat(5)]);
+  });
+
+  it('hands out what is left of each stream at the end', () => {
+    const decoder = createDockerLineDecoder();
+    expect(decoder.push(Buffer.concat([frame(1, 'no newline'), frame(2, 'neither')]))).toEqual([]);
+    expect(decoder.end()).toEqual([
+      { stream: 'stdout', text: 'no newline' },
+      { stream: 'stderr', text: 'neither' },
+    ]);
+  });
+
+  it('splits plain text and a complete buffer alike', () => {
+    expect(decodeDockerLines('a\r\nb\n')).toEqual([
+      { stream: 'stdout', text: 'a' },
+      { stream: 'stdout', text: 'b' },
+    ]);
+    expect(decodeDockerLines(Buffer.concat([frame(1, 'a\n'), frame(2, 'b\n')]))).toEqual([
+      { stream: 'stdout', text: 'a' },
+      { stream: 'stderr', text: 'b' },
+    ]);
   });
 });

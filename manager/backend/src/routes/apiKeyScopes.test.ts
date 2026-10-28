@@ -211,8 +211,8 @@ describe('ws-ticket and WS console honour API-key scopes', () => {
         ws.terminate();
         reject(new Error('timeout'));
       }, 5000);
-      // The server attaches its message handler only after the auth checks and
-      // the initial log replay, so resend until it answers.
+      // Messages sent during the auth checks are held and answered afterwards;
+      // resending only covers a slow test machine.
       let resend: NodeJS.Timeout | undefined;
       const done = () => {
         clearTimeout(timer);
@@ -270,7 +270,7 @@ describe('ws-ticket and WS console honour API-key scopes', () => {
       if (msg.type === 'command_response') replies.push(msg);
     });
     await new Promise<void>((resolve) => ws.on('open', () => resolve()));
-    // The handler is attached after the log replay: probe until it answers.
+    // Probe until the console answers, so the auth checks are done.
     await vi.waitFor(
       () => {
         ws.send(JSON.stringify({ type: 'command', payload: '/say probe' }));

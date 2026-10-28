@@ -50,6 +50,8 @@ import { metricsMiddleware } from './services/metrics.js';
 // Services
 import { startSchedulers } from './services/scheduler.js';
 import { initializePlayerTracking } from './services/players.js';
+import { startPlayerPresence } from './services/playerPresence.js';
+import { stopAllServerLogStreams } from './services/serverLogStream.js';
 import { initializePluginEvents, disconnectFromPluginWebSocket } from './services/pluginEvents.js';
 import { initializePluginAuth } from './services/pluginAuth.js';
 import { initializePlayerLocations } from './services/playerLocations.js';
@@ -96,7 +98,8 @@ if (config.trustProxy) {
 }
 
 // WebSocket server - use noServer mode so we can handle multiple WebSocket paths
-const wss = new WebSocketServer({ noServer: true });
+// Console messages are small JSON frames (a command line, a ping).
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 setupWebSocket(wss);
 
 // Secondary WSS for live player-location broadcasts. Kept separate so the
@@ -691,6 +694,19 @@ server.listen(config.port, '0.0.0.0', async () => {
     console.log('[Startup] Migrated to native update system');
   }
 
+  // Clean up settings older panel versions wrote into config.json and the
+  // world configs under names Hytale never read. Same rule: only while the
+  // game server is stopped, otherwise right before its next start.
+  const { installLegacyConfigHook, migrateLegacyConfigKeysAtStartup } =
+    await import('./services/serverConfigMigration.js');
+  installLegacyConfigHook();
+  const configMigration = await migrateLegacyConfigKeysAtStartup();
+  if (configMigration.deferred) {
+    console.log('[Startup] Server config cleanup deferred until the next server start');
+  } else if (configMigration.notes.length > 0) {
+    console.log(`[Startup] Cleaned up ${configMigration.notes.length} old server setting(s)`);
+  }
+
   // Check panel version and new features
   const versionCheck = await checkPanelVersionAndFeatures();
   if (versionCheck.newFeatures.length > 0) {
@@ -714,6 +730,10 @@ server.listen(config.port, '0.0.0.0', async () => {
   // Initialize player tracking (load persisted data)
   initializePlayerTracking().catch((err) => {
     console.error('Failed to initialize player tracking:', err);
+  });
+  // Follow who is online on each server (plugin events, else the server's log).
+  startPlayerPresence().catch((err) => {
+    console.error('Failed to start the join/leave tracking:', err);
   });
 
   // Keep each installed plugin's config on the panel's token (plugin 2.0 requires it)
@@ -783,6 +803,7 @@ server.listen(config.port, '0.0.0.0', async () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down...');
   disconnectFromPluginWebSocket();
+  stopAllServerLogStreams();
   shutdownReplay().catch((err) => console.error('[replay] shutdown failed:', err));
   server.close(() => {
     process.exit(0);
@@ -792,6 +813,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down...');
   disconnectFromPluginWebSocket();
+  stopAllServerLogStreams();
   shutdownReplay().catch((err) => console.error('[replay] shutdown failed:', err));
   server.close(() => {
     process.exit(0);

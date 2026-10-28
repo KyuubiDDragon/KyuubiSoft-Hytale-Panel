@@ -4,6 +4,7 @@
 import { Router } from 'express';
 
 import directoriesRoutes from './directories.js';
+import accessRoutes from './access.js';
 import worldsRoutes from './worlds.js';
 import worldConfigsRoutes from './worldConfigs.js';
 import configsRoutes from './configs.js';
@@ -19,6 +20,7 @@ const router = Router();
 // All submodules are mounted at root so each route keeps its original
 // /api/management/* URL exactly as it was before the split.
 router.use('/', directoriesRoutes);
+router.use('/', accessRoutes);
 router.use('/', worldsRoutes);
 router.use('/', worldConfigsRoutes);
 router.use('/', configsRoutes);

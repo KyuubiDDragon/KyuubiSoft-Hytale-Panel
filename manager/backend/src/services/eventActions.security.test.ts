@@ -31,6 +31,7 @@ vi.mock('./docker.js', () => ({ execCommand }));
 
 const ea = await import('./eventActions.js');
 const { publish } = await import('./eventBus.js');
+const { logger } = await import('../utils/logger.js');
 
 type Draft = import('./eventActions.js').EventActionDraft;
 const draft = (over: Partial<Draft> = {}): Draft => ({
@@ -107,6 +108,39 @@ describe('event actions: saving', () => {
     expect(srv).toMatchObject({ ok: false, status: 400 });
   });
 
+  it('warns about free-text placeholders in a command template, but still saves it', async () => {
+    expect(ea.eventActionWarnings(draft())).toEqual([]);
+    expect(
+      ea.eventActionWarnings(
+        draft({
+          actionPayload: { command: '/kick {player} {username} {uuid} {serverId} {event}' },
+        }),
+      ),
+    ).toEqual([]);
+    const warnings = ea.eventActionWarnings(
+      draft({ actionPayload: { command: '/give {player} {message} {message} {reason}' } }),
+    );
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        code: 'free_text_placeholder',
+        placeholders: ['message', 'reason'],
+      }),
+    ]);
+    expect(warnings[0].message).toContain('{message}, {reason}');
+    // Announcements are free text by design.
+    expect(
+      ea.eventActionWarnings(
+        draft({ actionType: 'announce', actionPayload: { message: '{message}' } }),
+      ),
+    ).toEqual([]);
+    const review = await ea.reviewEventAction(
+      draft({ actionPayload: { command: '/say {message}' } }),
+      null,
+      operator,
+    );
+    expect(review.ok).toBe(true);
+  });
+
   it('lets an operator rename or disable an admin rule but not change what it runs', async () => {
     const rule = ea.createEventAction({
       ...draft({ actionPayload: { command: '/kick {player}' } }),
@@ -148,6 +182,25 @@ describe('event actions: firing', () => {
     });
   });
 
+  it('does not put a name that starts with a hyphen into a command, where it would be an option', async () => {
+    ea.createEventAction({
+      ...draft({
+        eventPattern: 'auth.login_failed',
+        actionPayload: { command: '/kick {username}' },
+      }),
+      createdBy: 'admin',
+    });
+    for (const username of ['--confirm', '--help', '-x']) {
+      publish('auth.login_failed', { username, reason: 'invalid_credentials' });
+    }
+    await flush();
+    expect(execCommand).not.toHaveBeenCalled();
+
+    publish('auth.login_failed', { username: 'Bob-1', reason: 'invalid_credentials' });
+    await flush();
+    expect(execCommand).toHaveBeenCalledWith('/kick Bob-1', undefined, { actor: 'event/admin' });
+  });
+
   it('runs an admin rule for its admin creator, but not a stored /stop from an operator', async () => {
     ea.createEventAction({
       ...draft({ actionPayload: { command: '/kick {player}' } }),
@@ -181,6 +234,23 @@ describe('event actions: firing', () => {
       '/broadcast Backup failed: disk full /stop',
       'default',
       { actor: expect.stringMatching(/^event\//) },
+    );
+  });
+
+  it('keeps free-text placeholders from adding --options or quotes to the command', async () => {
+    ea.createEventAction({
+      ...draft({
+        eventPattern: 'backup.failed',
+        actionPayload: { command: '/say Backup failed: {error}' },
+      }),
+      createdBy: 'admin',
+    });
+    publish('backup.failed', { name: 'b1', error: 'x --quantity=99 "y [z] a\\b' }, 'default');
+    await flush();
+    expect(execCommand).toHaveBeenCalledWith(
+      '/say Backup failed: x –quantity=99 ”y (z) a/b',
+      'default',
+      { actor: 'event/admin' },
     );
   });
 
@@ -233,6 +303,79 @@ describe('event actions: events from outside and throttling', () => {
     publish('player.left', { player: 'Steve' }, 'default');
     await flush();
     expect(execCommand).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE + 1);
+  });
+});
+
+describe('event actions: joins and leaves read from the server log', () => {
+  const sent = () => execCommand.mock.calls.map((c) => c[0]);
+
+  beforeEach(() => {
+    for (const eventPattern of ['player.joined', 'player.left']) {
+      ea.createEventAction({
+        ...draft({ eventPattern, actionPayload: { command: `/say cmd ${eventPattern} {player}` } }),
+        createdBy: 'admin',
+      });
+      ea.createEventAction({
+        ...draft({
+          eventPattern,
+          actionType: 'announce',
+          actionPayload: { message: `hello ${eventPattern} {player}` },
+        }),
+        createdBy: 'admin',
+      });
+    }
+  });
+
+  it('run no command rule, but still announce', async () => {
+    publish('player.joined', { player: 'Bob', uuid: 'u-1', source: 'log' }, 'default');
+    await flush();
+    publish('player.left', { player: 'Bob', uuid: 'u-1', source: 'log' }, 'default');
+    await flush();
+    expect(sent()).toEqual([
+      '/broadcast hello player.joined Bob',
+      '/broadcast hello player.left Bob',
+    ]);
+  });
+
+  it('a join reported by the plugin runs the command rule as before', async () => {
+    publish('player.joined', { player: 'Bob', uuid: 'u-1' }, 'default');
+    await flush();
+    expect([...sent()].sort()).toEqual([
+      '/broadcast hello player.joined Bob',
+      '/say cmd player.joined Bob',
+    ]);
+  });
+
+  it('logs the skip at most once a minute per rule and event', async () => {
+    const info = vi.spyOn(logger, 'info');
+    try {
+      for (let i = 0; i < 3; i++) {
+        publish('player.joined', { player: `Bob${i}`, uuid: `u-${i}`, source: 'log' }, 'default');
+        await flush();
+      }
+      const skips = info.mock.calls.filter((c) =>
+        String(c[0]).includes('read from the server log'),
+      );
+      expect(skips).toHaveLength(1);
+      expect(String(skips[0][0])).toContain('player.joined');
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it('warns when saving a command rule on joins or leaves for a server without the plugin', () => {
+    const codes = (rule: Draft, withoutPlugin: boolean) =>
+      ea.eventActionWarnings(rule, { withoutPlugin }).map((w) => w.code);
+    for (const eventPattern of ['player.joined', 'player.left', 'player.*']) {
+      expect(codes(draft({ eventPattern }), true), eventPattern).toEqual([
+        'log_events_run_no_commands',
+      ]);
+      expect(codes(draft({ eventPattern }), false), eventPattern).toEqual([]);
+    }
+    expect(codes(draft({ eventPattern: 'server.*' }), true)).toEqual([]);
+    expect(
+      codes(draft({ actionType: 'announce', actionPayload: { message: 'hi {player}' } }), true),
+    ).toEqual([]);
   });
 });
 

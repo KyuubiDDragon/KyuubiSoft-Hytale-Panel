@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { HYTALE_COMMANDS, type CommandTierLabel } from '@/utils/hytaleCommands'
 
 const { t } = useI18n()
 
 const isOpen = ref(false)
-const activeCategory = ref('player')
+const activeCategory = ref('players')
 
 interface Command {
   command: string
   description: string
   usage: string
+  tier: CommandTierLabel
 }
 
 interface Category {
@@ -19,70 +21,20 @@ interface Category {
   commands: Command[]
 }
 
-const categories = computed<Category[]>(() => [
-  {
-    id: 'player',
-    label: t('commands.categories.player'),
-    commands: [
-      { command: '/kick', description: t('commands.kick.desc'), usage: '/kick <player> [reason]' },
-      { command: '/ban', description: t('commands.ban.desc'), usage: '/ban <player> [reason]' },
-      { command: '/unban', description: t('commands.unban.desc'), usage: '/unban <player>' },
-      { command: '/op add', description: t('commands.op.desc'), usage: '/op add <player>' },
-      { command: '/op remove', description: t('commands.deop.desc'), usage: '/op remove <player>' },
-      { command: '/whitelist add', description: t('commands.whitelistAdd.desc'), usage: '/whitelist add <player>' },
-      { command: '/whitelist remove', description: t('commands.whitelistRemove.desc'), usage: '/whitelist remove <player>' },
-      { command: '/kill', description: t('commands.kill.desc'), usage: '/kill <player>' },
-      { command: '/gamemode', description: t('commands.gamemode.desc'), usage: '/gamemode <mode> [player]' },
-      { command: '/give', description: t('commands.give.desc'), usage: '/give <player> <item> [amount]' },
-      { command: '/player stats settomax', description: t('commands.heal.desc'), usage: '/player stats settomax <player> health' },
-      { command: '/player effect apply', description: t('commands.effectApply.desc'), usage: '/player effect apply <player> <effect>' },
-      { command: '/player effect clear', description: t('commands.effectClear.desc'), usage: '/player effect clear <player>' },
-      { command: '/inventory clear', description: t('commands.inventoryClear.desc'), usage: '/inventory clear <player>' },
-    ]
-  },
-  {
-    id: 'teleport',
-    label: t('commands.categories.teleport'),
-    commands: [
-      { command: '/tp', description: t('commands.tpPlayer.desc'), usage: '/tp <player> <target>' },
-      { command: '/tp', description: t('commands.tpCoords.desc'), usage: '/tp <player> <x> <y> <z>' },
-      { command: '/tp', description: t('commands.tpSelf.desc'), usage: '/tp <target>' },
-      { command: '/top', description: t('commands.top.desc'), usage: '/top' },
-      { command: '/spawn', description: t('commands.spawn.desc'), usage: '/spawn [player]' },
-      { command: '/home', description: t('commands.home.desc'), usage: '/home [player]' },
-      { command: '/sethome', description: t('commands.sethome.desc'), usage: '/sethome [player]' },
-      { command: '/warp', description: t('commands.warp.desc'), usage: '/warp <name> [player]' },
-    ]
-  },
-  {
-    id: 'server',
-    label: t('commands.categories.server'),
-    commands: [
-      { command: '/stop', description: t('commands.stop.desc'), usage: '/stop' },
-      { command: '/restart', description: t('commands.restart.desc'), usage: '/restart' },
-      { command: '/save', description: t('commands.save.desc'), usage: '/save' },
-      { command: '/reload', description: t('commands.reload.desc'), usage: '/reload' },
-      { command: '/say', description: t('commands.say.desc'), usage: '/say <message>' },
-      { command: '/broadcast', description: t('commands.broadcast.desc'), usage: '/broadcast <message>' },
-      { command: '/list', description: t('commands.list.desc'), usage: '/list' },
-      { command: '/server stats memory', description: t('commands.memory.desc'), usage: '/server stats memory' },
-      { command: '/tps', description: t('commands.tps.desc'), usage: '/tps' },
-      { command: '/gc', description: t('commands.gc.desc'), usage: '/gc' },
-    ]
-  },
-  {
-    id: 'world',
-    label: t('commands.categories.world'),
-    commands: [
-      { command: '/world list', description: t('commands.worldList.desc'), usage: '/world list' },
-      { command: '/world create', description: t('commands.worldCreate.desc'), usage: '/world create <name>' },
-      { command: '/world load', description: t('commands.worldLoad.desc'), usage: '/world load <name>' },
-      { command: '/time set', description: t('commands.timeSet.desc'), usage: '/time set <day|night|noon|value>' },
-      { command: '/weather', description: t('commands.weather.desc'), usage: '/weather <clear|rain|storm>' },
-      { command: '/difficulty', description: t('commands.difficulty.desc'), usage: '/difficulty <peaceful|easy|normal|hard>' },
-    ]
-  },
-])
+// Hytale 0.7 commands with the syntax the server accepts; the help page lists
+// every command of the server.
+const categories = computed<Category[]>(() =>
+  HYTALE_COMMANDS.map((category) => ({
+    id: category.id,
+    label: t(`commands.categories.${category.id}`),
+    commands: category.commands.map((cmd) => ({
+      command: cmd.command,
+      usage: cmd.usage,
+      tier: cmd.tier,
+      description: t(`help.commands.${cmd.key}`),
+    })),
+  })),
+)
 
 const activeCommands = computed(() => {
   return categories.value.find(c => c.id === activeCategory.value)?.commands || []
@@ -153,7 +105,16 @@ defineExpose({ toggle, isOpen })
         >
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
-              <code class="text-hytale-orange font-mono text-sm">{{ cmd.command }}</code>
+              <div class="flex items-center gap-2">
+                <code class="text-hytale-orange font-mono text-sm">{{ cmd.command }}</code>
+                <span
+                  v-if="cmd.tier === 'admin'"
+                  class="px-1.5 py-0.5 text-[10px] rounded bg-red-500/15 text-red-400"
+                  :title="t('help.tierAdminHint')"
+                >
+                  {{ t('help.tierAdmin') }}
+                </span>
+              </div>
               <p class="text-ink-muted text-xs mt-1">{{ cmd.description }}</p>
             </div>
             <button
@@ -173,8 +134,9 @@ defineExpose({ toggle, isOpen })
       </div>
 
       <!-- Footer -->
-      <div class="p-3 border-t border-border/60 text-center">
+      <div class="p-3 border-t border-border/60 text-center space-y-1">
         <p class="text-xs text-ink-subtle">{{ t('commands.clickToCopy') }}</p>
+        <p class="text-xs text-ink-subtle">{{ t('help.notInHytale') }}</p>
       </div>
     </div>
   </Transition>

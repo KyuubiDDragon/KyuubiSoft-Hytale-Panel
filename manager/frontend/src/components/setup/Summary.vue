@@ -76,7 +76,7 @@ const configSummary = computed(() => {
     language: data.language?.language || 'en',
     plugin: {
       installed: pluginData?.installPlugin ?? true,
-      version: (pluginData?.version as string) || '2.0.0',
+      version: (pluginData?.version as string) || '2.1.1',
     },
     integrations: {
       modtale: !!integrationsData?.modtaleApiKey,
@@ -156,6 +156,30 @@ function copyToClipboard(text: string) {
         </div>
         <h2 class="text-2xl font-bold text-ink mb-2">{{ t('setup.summary.successTitle') }}</h2>
         <p class="text-ink-muted">{{ t('setup.summary.successDescription') }}</p>
+      </div>
+
+      <!-- How the server settings reached the server's config.json -->
+      <div
+        v-if="setupStore.serverConfigResult"
+        class="p-4 rounded-lg border"
+        :class="setupStore.serverConfigResult.error
+          ? 'bg-status-warning/10 border-status-warning/30'
+          : 'bg-surface-muted border-border/60'"
+      >
+        <p
+          class="text-sm"
+          :class="setupStore.serverConfigResult.error ? 'text-status-warning' : 'text-ink-muted'"
+        >
+          {{
+            setupStore.serverConfigResult.error
+              ? t('setup.summary.serverConfigFailed', { error: setupStore.serverConfigResult.error })
+              : setupStore.serverConfigResult.skipped
+                ? t('setup.summary.serverConfigSkipped')
+                : setupStore.serverConfigResult.pending
+                  ? t('setup.summary.serverConfigPending')
+                  : t('setup.summary.serverConfigWritten')
+          }}
+        </p>
       </div>
 
       <!-- Server Ready Banner -->

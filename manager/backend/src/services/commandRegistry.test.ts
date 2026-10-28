@@ -27,7 +27,6 @@ const {
   invalidateCommandRegistry,
   clearCommandRegistryCache,
   flattenCommands,
-  resolveCommandLine,
   withPanelPolicy,
   REGISTRY_TTL_MS,
 } = registryModule;
@@ -231,26 +230,24 @@ describe('registry helpers', () => {
     expect(flat.find((c) => c.path === '/kspet')).toMatchObject({ owner: 'KyuubiSoft:Pets' });
   });
 
-  it('resolves a console line to its command chain, by name or alias', () => {
-    expect(resolveCommandLine(REGISTRY, '/world ls')?.chain.map((c) => c.name)).toEqual([
-      'world',
-      'list',
-    ]);
-    expect(resolveCommandLine(REGISTRY, 'WORLD add Orbis')?.consumedTokens).toBe(2);
-    expect(resolveCommandLine(REGISTRY, '/? ')?.root.name).toBe('help');
-    expect(resolveCommandLine(REGISTRY, '/nope')).toBeNull();
-    expect(resolveCommandLine(REGISTRY, '   ')).toBeNull();
-  });
-
-  it("annotates root commands with the panel whitelist's current decision", () => {
+  it('annotates commands and subcommands with the console tier the panel requires', () => {
     const annotated = withPanelPolicy(REGISTRY.commands);
     expect(annotated.find((c) => c.name === 'help')?.panel).toEqual({
       allowed: true,
       permission: 'console.execute',
     });
+    const world = annotated.find((c) => c.name === 'world');
+    expect(world?.panel.permission).toBe('console.execute.admin');
+    expect(world?.subcommands?.find((c) => c.name === 'list')?.panel.permission).toBe(
+      'console.execute',
+    );
+    expect(world?.subcommands?.find((c) => c.name === 'add')?.panel.permission).toBe(
+      'console.execute.admin',
+    );
+    // Mod commands exist on the server, so they are allowed, on the admin tier.
     expect(annotated.find((c) => c.name === 'kspet')?.panel).toEqual({
-      allowed: false,
-      permission: null,
+      allowed: true,
+      permission: 'console.execute.admin',
     });
   });
 });

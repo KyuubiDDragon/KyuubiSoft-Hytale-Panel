@@ -1,24 +1,16 @@
-// Server config endpoints: quick-settings, panel toggles (patchline, accept-early-plugins,
-// disable-sentry, allow-op), and arbitrary config file read/write.
-import { Router, Request, Response } from 'express';
-import { readdir, readFile, writeFile, stat, rm } from 'fs/promises';
+// Panel start settings in panel-config.json: patchline, start flags
+// (accept-early-plugins, disable-sentry, allow-op) and JVM tuning. The
+// server's own config.json is edited through serverConfig.ts.
+import { Router, Request, Response, type NextFunction } from 'express';
+import { rm } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import * as dockerService from '../../services/docker.js';
 import { config } from '../../config.js';
 import { escapeShellArg } from '../../utils/sanitize.js';
-import { resolveRealPathWithin } from '../../utils/pathSecurity.js';
+import { isDemoMode, getDemoPatchlineConfig } from '../../services/demoData.js';
 import {
-  isDemoMode,
-  getDemoQuickSettings,
-  getDemoConfigFiles,
-  getDemoServerConfig,
-  getDemoPatchlineConfig,
-} from '../../services/demoData.js';
-import {
-  CONFIG_EXTENSIONS,
-  QuickSettings,
   readPanelConfig,
   writePanelConfig,
   DEFAULT_NATIVE_BACKUP_MAX_COUNT,
@@ -49,83 +41,6 @@ const patchlineSwitchFiles = () =>
   ['HytaleServer.jar', 'Assets.zip', '.hytale-version'].map((name) =>
     path.join(config.serverPath, name),
   );
-
-// GET /api/server/quick-settings - Get quick settings from config.json
-router.get(
-  '/quick-settings',
-  authMiddleware,
-  requirePermission('config.view'),
-  async (_req: Request, res: Response) => {
-    // Demo mode: return mock settings
-    if (isDemoMode()) {
-      res.json(getDemoQuickSettings());
-      return;
-    }
-
-    try {
-      const configPath = path.join(config.serverPath, 'config.json');
-      const content = await readFile(configPath, 'utf-8');
-      const configData = JSON.parse(content);
-
-      const quickSettings: QuickSettings = {
-        serverName: configData.ServerName || 'Hytale Server',
-        motd: configData.MOTD || '',
-        password: configData.Password || '',
-        maxPlayers: configData.MaxPlayers || 100,
-        maxViewRadius: configData.MaxViewRadius || 32,
-        defaultGameMode: configData.Defaults?.GameMode || 'Adventure',
-      };
-
-      res.json(quickSettings);
-    } catch (error) {
-      res.status(500).json({
-        error: 'Failed to load quick settings',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  },
-);
-
-// PUT /api/server/quick-settings - Save quick settings to config.json
-router.put(
-  '/quick-settings',
-  authMiddleware,
-  requirePermission('config.edit'),
-  async (req: Request, res: Response) => {
-    // Demo mode: simulate save
-    if (isDemoMode()) {
-      res.json({ success: true, message: '[DEMO] Quick settings saved (simulated)' });
-      return;
-    }
-
-    try {
-      const { serverName, motd, password, maxPlayers, maxViewRadius, defaultGameMode } = req.body;
-
-      const configPath = path.join(config.serverPath, 'config.json');
-      const content = await readFile(configPath, 'utf-8');
-      const configData = JSON.parse(content);
-
-      // Update only the quick settings fields
-      if (serverName !== undefined) configData.ServerName = serverName;
-      if (motd !== undefined) configData.MOTD = motd;
-      if (password !== undefined) configData.Password = password;
-      if (maxPlayers !== undefined) configData.MaxPlayers = Number(maxPlayers);
-      if (maxViewRadius !== undefined) configData.MaxViewRadius = Number(maxViewRadius);
-      if (defaultGameMode !== undefined) {
-        if (!configData.Defaults) configData.Defaults = {};
-        configData.Defaults.GameMode = defaultGameMode;
-      }
-
-      await writeFile(configPath, JSON.stringify(configData, null, 2), 'utf-8');
-      res.json({ success: true, message: 'Quick settings saved' });
-    } catch (error) {
-      res.status(500).json({
-        error: 'Failed to save quick settings',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  },
-);
 
 // GET /api/server/patchline - Get current patchline setting
 router.get(
@@ -451,11 +366,26 @@ router.get(
   },
 );
 
-// PUT /api/server/allow-op - Set allowOp setting
+const operatorPermission = requirePermission('players.op');
+
+/**
+ * Middleware: with --allow-op every player can make themselves an operator
+ * (/op self), so turning it on also needs players.op; turning it off does not.
+ */
+function requireOpToAllowOp(req: Request, res: Response, next: NextFunction): void {
+  if ((req.body as { allowOp?: unknown } | undefined)?.allowOp === true) {
+    void operatorPermission(req as AuthenticatedRequest, res, next);
+    return;
+  }
+  next();
+}
+
+// PUT /api/server/allow-op - Set allowOp setting (on: also players.op)
 router.put(
   '/allow-op',
   authMiddleware,
   requirePermission('config.edit'),
+  requireOpToAllowOp,
   async (req: Request, res: Response) => {
     // Demo mode: simulate setting change
     if (isDemoMode()) {
@@ -700,158 +630,6 @@ router.put(
     } catch (error) {
       res.status(500).json({
         error: 'Failed to save JVM settings',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  },
-);
-
-// GET /api/server/config/files - List config files
-router.get(
-  '/config/files',
-  authMiddleware,
-  requirePermission('config.view'),
-  async (_req: Request, res: Response) => {
-    // Demo mode: return demo config files
-    if (isDemoMode()) {
-      const demoFiles = getDemoConfigFiles();
-      res.json({
-        files: demoFiles.map((f) => ({
-          name: f.name,
-          size: f.size,
-          modified: f.lastModified,
-        })),
-      });
-      return;
-    }
-
-    try {
-      const files = await readdir(config.serverPath);
-      const configFiles = files.filter((f) =>
-        CONFIG_EXTENSIONS.some((ext) => f.toLowerCase().endsWith(ext)),
-      );
-
-      const fileInfos = await Promise.all(
-        configFiles.map(async (filename) => {
-          try {
-            const filePath = path.join(config.serverPath, filename);
-            const stats = await stat(filePath);
-            return {
-              name: filename,
-              size: stats.size,
-              modified: stats.mtime.toISOString(),
-            };
-          } catch {
-            return { name: filename, size: 0, modified: null };
-          }
-        }),
-      );
-
-      res.json({ files: fileInfos });
-    } catch (error) {
-      res.status(500).json({
-        error: 'Failed to list config files',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  },
-);
-
-// Resolve a top-level server config file and make sure it REALLY lives in the
-// server dir: a config file that is a symlink to a panel file (users.json, the
-// JWT secret) must be neither readable nor writable through these routes.
-function resolveServerConfigFile(filename: string): string | null {
-  return resolveRealPathWithin(path.join(config.serverPath, filename), [config.serverPath]);
-}
-
-// GET /api/server/config/:filename - Read config file
-router.get(
-  '/config/:filename',
-  authMiddleware,
-  requirePermission('config.view'),
-  async (req: Request, res: Response) => {
-    const { filename } = req.params;
-
-    // Demo mode: return demo config content
-    if (isDemoMode()) {
-      res.json({ filename, content: getDemoServerConfig() });
-      return;
-    }
-
-    // Security: prevent path traversal
-    if (filename.includes('..') || filename.includes('/')) {
-      res.status(400).json({ error: 'Invalid filename' });
-      return;
-    }
-
-    // Check extension
-    if (!CONFIG_EXTENSIONS.some((ext) => filename.toLowerCase().endsWith(ext))) {
-      res.status(400).json({ error: 'File type not allowed' });
-      return;
-    }
-
-    try {
-      const filePath = resolveServerConfigFile(filename);
-      if (!filePath) {
-        console.warn(`[SECURITY] Blocked server config read via symlink: ${filename}`);
-        res.status(403).json({ error: 'Access denied - invalid path' });
-        return;
-      }
-      const content = await readFile(filePath, 'utf-8');
-      res.json({ filename, content });
-    } catch (error) {
-      res.status(404).json({
-        error: 'File not found',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  },
-);
-
-// PUT /api/server/config/:filename - Write config file
-router.put(
-  '/config/:filename',
-  authMiddleware,
-  requirePermission('config.edit'),
-  async (req: Request, res: Response) => {
-    const { filename } = req.params;
-    const { content } = req.body;
-
-    // Demo mode: simulate config save
-    if (isDemoMode()) {
-      res.json({ success: true, filename, message: '[DEMO] Config saved (simulated)' });
-      return;
-    }
-
-    // Security: prevent path traversal
-    if (filename.includes('..') || filename.includes('/')) {
-      res.status(400).json({ error: 'Invalid filename' });
-      return;
-    }
-
-    // Check extension
-    if (!CONFIG_EXTENSIONS.some((ext) => filename.toLowerCase().endsWith(ext))) {
-      res.status(400).json({ error: 'File type not allowed' });
-      return;
-    }
-
-    if (typeof content !== 'string') {
-      res.status(400).json({ error: 'Content must be a string' });
-      return;
-    }
-
-    try {
-      const filePath = resolveServerConfigFile(filename);
-      if (!filePath) {
-        console.warn(`[SECURITY] Blocked server config write via symlink: ${filename}`);
-        res.status(403).json({ error: 'Access denied - invalid path' });
-        return;
-      }
-      await writeFile(filePath, content, 'utf-8');
-      res.json({ success: true, message: 'Config saved' });
-    } catch (error) {
-      res.status(500).json({
-        error: 'Failed to save config',
         message: error instanceof Error ? error.message : 'Unknown error',
       });
     }

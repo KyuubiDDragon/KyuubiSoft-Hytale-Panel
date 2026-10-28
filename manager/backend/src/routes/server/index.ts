@@ -11,6 +11,7 @@ import { getPerfHistory } from '../../services/perfHistory.js';
 
 import lifecycleRoutes from './lifecycle.js';
 import configRoutes from './config.js';
+import serverConfigRoutes from './serverConfig.js';
 import updatesRoutes from './updates.js';
 import authRoutes from './auth.js';
 import panelRoutes from './panel.js';
@@ -40,6 +41,7 @@ router.get(
 // Mount submodules at root so all original /api/server/* paths still resolve
 router.use('/', lifecycleRoutes);
 router.use('/', configRoutes);
+router.use('/', serverConfigRoutes);
 router.use('/', updatesRoutes);
 router.use('/', authRoutes);
 router.use('/', panelRoutes);

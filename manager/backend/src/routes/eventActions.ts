@@ -11,6 +11,7 @@ import {
   updateEventAction,
   deleteEventAction,
   availableEvents,
+  eventActionWarnings,
   reviewEventAction,
   ACTION_TYPES,
   type EventAction,
@@ -18,9 +19,22 @@ import {
   type EventActionType,
 } from '../services/eventActions.js';
 import { actorFromRequest } from '../services/commandPolicy.js';
+import { isConnectedToPlugin } from '../services/pluginEvents.js';
+import { listServers } from '../services/servers.js';
 import { asyncRoute } from '../utils/asyncRoute.js';
 
 const router = Router();
+
+/** Whether the rule's server, or one of them for a rule on every server, lacks a plugin connection. */
+async function withoutPlugin(serverId: string | null): Promise<boolean> {
+  if (serverId) return !isConnectedToPlugin(serverId);
+  const servers = await listServers().catch(() => []);
+  return servers.length === 0 || servers.some((s) => !isConnectedToPlugin(s.id));
+}
+
+async function warningsFor(rule: EventAction) {
+  return eventActionWarnings(rule, { withoutPlugin: await withoutPlugin(rule.serverId) });
+}
 
 type DraftInput = Partial<Record<keyof EventActionDraft, unknown>>;
 
@@ -111,7 +125,7 @@ router.post(
       target: `event_action:${rule.id}`,
       metadata: { eventPattern: draft.eventPattern, actionType: draft.actionType },
     });
-    res.json({ rule });
+    res.json({ rule, warnings: await warningsFor(rule) });
   },
 );
 
@@ -147,7 +161,7 @@ router.put(
       return;
     }
     audit(req, 'event_action.updated', { target: `event_action:${req.params.id}` });
-    res.json({ rule: updated });
+    res.json({ rule: updated, warnings: await warningsFor(updated) });
   },
 );
 

@@ -16,7 +16,9 @@ const emit = defineEmits<{
 // Form state
 const serverPassword = ref('')
 const showPassword = ref(false)
-const whitelistEnabled = ref(true)
+// Written as RequireJoinPermission: once on, only players on the whitelist
+// (and admins) get in, so it stays off unless chosen.
+const whitelistEnabled = ref(false)
 // Off by default: --allow-op lets ANY player take full admin rights via
 // `/op self`. Admins are made from the console with `/op add`, which works
 // without the flag.
@@ -149,12 +151,12 @@ onMounted(() => {
           <div class="flex-1">
             <div class="flex items-center gap-2">
               <span class="font-medium text-ink">{{ t('setup.whitelistEnabled') }}</span>
-              <span class="text-xs px-2 py-0.5 rounded-full bg-status-success/20 text-status-success">
-                {{ t('setup.recommended') }}
-              </span>
             </div>
             <p class="mt-1 text-sm text-ink-muted">
               {{ t('setup.whitelistDescription') }}
+            </p>
+            <p v-if="whitelistEnabled" class="mt-2 text-sm text-status-warning">
+              {{ t('setup.whitelistAddYourself') }}
             </p>
           </div>
           <div class="flex-shrink-0">

@@ -3,15 +3,22 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { playersApi, type UnifiedPlayerEntry, type DeathPosition } from '@/api/players'
+import {
+  playersApi,
+  type ActionResponse,
+  type UnifiedPlayerEntry,
+  type DeathPosition,
+} from '@/api/players'
 import { serverApi, type PluginPlayer } from '@/api/server'
+import { accessError } from '@/api/management'
+import { accessErrorText } from '@/components/access/accessText'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Modal from '@/components/ui/Modal.vue'
 import ItemAutocomplete from '@/components/ui/ItemAutocomplete.vue'
 import { formatItemPath } from '@/utils/formatItemPath'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -172,6 +179,23 @@ function showSuccess(msg: string) {
   setTimeout(() => { successMessage.value = '' }, 3000)
 }
 
+// A refusal of the access services (ban, whitelist) in the page's language,
+// otherwise the server's own answer (e.g. "No such player") instead of a generic error.
+function actionError(err: unknown): string {
+  const { status, code, detail } = accessError(err)
+  if (code ? te(`access.errors.${code}`) : status === 403) return accessErrorText(err, t)
+  return detail || t('errors.serverError')
+}
+
+// Without the KyuubiSoft API plugin a command only reaches the console; say so.
+function showActionDone(res: ActionResponse, action: string, player: string) {
+  showSuccess(
+    res.confirmed === false
+      ? t('players.actionSent', { action, player })
+      : t('players.actionSuccess', { action, player }),
+  )
+}
+
 function toggleDropdown(name: string) {
   openDropdown.value = openDropdown.value === name ? null : name
 }
@@ -264,10 +288,9 @@ function openPlayerDetailModal(name: string, _uuid?: string) {
 async function handleWhitelist(name: string) {
   closeDropdown()
   try {
-    await playersApi.addToWhitelist(name)
-    showSuccess(t('players.actionSuccess', { action: t('players.addToWhitelist'), player: name }))
+    showActionDone(await playersApi.addToWhitelist(name), t('players.addToWhitelist'), name)
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   }
 }
 
@@ -294,30 +317,27 @@ async function handleDeop(name: string) {
 async function handleHeal(name: string) {
   closeDropdown()
   try {
-    await playersApi.heal(name)
-    showSuccess(t('players.actionSuccess', { action: t('players.heal'), player: name }))
+    showActionDone(await playersApi.heal(name), t('players.heal'), name)
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   }
 }
 
 async function handleRespawn(name: string) {
   closeDropdown()
   try {
-    await playersApi.respawn(name)
-    showSuccess(t('players.actionSuccess', { action: t('players.respawn'), player: name }))
+    showActionDone(await playersApi.respawn(name), t('players.respawn'), name)
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   }
 }
 
 async function handleClearEffects(name: string) {
   closeDropdown()
   try {
-    await playersApi.clearEffects(name)
-    showSuccess(t('players.actionSuccess', { action: t('players.clearEffects'), player: name }))
+    showActionDone(await playersApi.clearEffects(name), t('players.clearEffects'), name)
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   }
 }
 
@@ -326,12 +346,12 @@ async function confirmKick() {
   if (!selectedPlayer.value) return
   actionLoading.value = true
   try {
-    await playersApi.kick(selectedPlayer.value)
+    const res = await playersApi.kick(selectedPlayer.value)
     showKickModal.value = false
-    showSuccess(t('players.actionSuccess', { action: t('players.kick'), player: selectedPlayer.value }))
+    showActionDone(res, t('players.kick'), selectedPlayer.value)
     await fetchPlayers()
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   } finally {
     actionLoading.value = false
   }
@@ -341,13 +361,13 @@ async function confirmBan() {
   if (!selectedPlayer.value) return
   actionLoading.value = true
   try {
-    await playersApi.ban(selectedPlayer.value, banReason.value || undefined)
+    const res = await playersApi.ban(selectedPlayer.value, banReason.value || undefined)
     showBanModal.value = false
-    showSuccess(t('players.actionSuccess', { action: t('players.ban'), player: selectedPlayer.value }))
+    showActionDone(res, t('players.ban'), selectedPlayer.value)
     banReason.value = ''
     await fetchPlayers()
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   } finally {
     actionLoading.value = false
   }
@@ -357,11 +377,11 @@ async function confirmKill() {
   if (!selectedPlayer.value) return
   actionLoading.value = true
   try {
-    await playersApi.kill(selectedPlayer.value)
+    const res = await playersApi.kill(selectedPlayer.value)
     showKillModal.value = false
-    showSuccess(t('players.actionSuccess', { action: t('players.kill'), player: selectedPlayer.value }))
+    showActionDone(res, t('players.kill'), selectedPlayer.value)
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   } finally {
     actionLoading.value = false
   }
@@ -375,7 +395,7 @@ async function confirmClearInventory() {
     showClearInventoryModal.value = false
     showSuccess(t('players.actionSuccess', { action: t('players.clearInventory'), player: selectedPlayer.value }))
   } catch (err) {
-    error.value = t('errors.serverError')
+    error.value = actionError(err)
   } finally {
     actionLoading.value = false
   }

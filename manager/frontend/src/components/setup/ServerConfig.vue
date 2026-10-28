@@ -36,12 +36,14 @@ const maxPlayersOptions = [
   { value: 100, label: '100' },
 ]
 
+// The game modes Hytale 0.7 has (the server refuses to start with any other).
 const gameModeOptions = [
-  { value: 'Adventure', labelKey: 'setup.gameModeAdventure' },
-  { value: 'Creative', labelKey: 'setup.gameModeCreative' },
-  { value: 'Survival', labelKey: 'setup.gameModeSurvival' },
-  { value: 'Spectator', labelKey: 'setup.gameModeSpectator' },
+  { value: 'Adventure', labelKey: 'setup.gameModeAdventure', hintKey: 'setup.gameModeAdventureHint' },
+  { value: 'Creative', labelKey: 'setup.gameModeCreative', hintKey: 'setup.gameModeCreativeHint' },
 ]
+const gameModeHint = computed(
+  () => gameModeOptions.find((o) => o.value === gameMode.value)?.hintKey ?? 'setup.gameModeHint',
+)
 
 // Validation functions
 function validateServerName(): boolean {
@@ -131,7 +133,10 @@ onMounted(() => {
     if (savedData.maxPlayers) maxPlayers.value = savedData.maxPlayers
     // Support both old format (gameMode) and new format (defaultGamemode)
     const savedGameMode = (savedData as Record<string, unknown>).gameMode as string || savedData.defaultGamemode
-    if (savedGameMode) gameMode.value = savedGameMode
+    // An older wizard offered Survival and Spectator, which Hytale does not have.
+    if (savedGameMode && gameModeOptions.some((o) => o.value === savedGameMode)) {
+      gameMode.value = savedGameMode
+    }
     // Load advanced settings
     if (savedData.acceptEarlyPlugins !== undefined) acceptEarlyPlugins.value = savedData.acceptEarlyPlugins
     if (savedData.disableSentry !== undefined) disableSentry.value = savedData.disableSentry
@@ -174,8 +179,11 @@ onMounted(() => {
       <div>
         <label class="label">{{ t('setup.motd') }}</label>
         <div class="relative">
+          <!-- One line: the server takes no line breaks in the MOTD. -->
           <textarea
             v-model="motd"
+            @keydown.enter.prevent
+            @input="motd = motd.replace(/[\r\n]+/g, ' ')"
             :placeholder="t('setup.motdPlaceholder')"
             class="input min-h-[100px] resize-none"
             :class="{ 'input-error': motdError }"
@@ -241,7 +249,7 @@ onMounted(() => {
           </div>
         </div>
         <p class="mt-1 text-xs text-ink-subtle">
-          {{ t('setup.gameModeHint') }}
+          {{ t(gameModeHint) }}
         </p>
       </div>
 

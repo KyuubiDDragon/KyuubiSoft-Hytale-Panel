@@ -15,6 +15,7 @@ import {
   type PluginInstallData,
   type IntegrationsData,
   type NetworkConfigData,
+  type CompleteSetupResponse,
 } from '@/api/setup'
 
 // Step definitions
@@ -166,6 +167,8 @@ export const useSetupStore = defineStore('setup', () => {
   const totalSteps = ref(SETUP_STEPS.length)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  /** What happened with the server's config.json when the setup was finished. */
+  const serverConfigResult = ref<CompleteSetupResponse['serverConfig'] | null>(null)
   const setupRequired = ref(true)
   const completedSteps = ref<string[]>([])
   const skippedSteps = ref<string[]>([])
@@ -650,6 +653,7 @@ export const useSetupStore = defineStore('setup', () => {
     try {
       const result = await setupApi.completeSetup()
       if (result.success) {
+        serverConfigResult.value = result.serverConfig ?? null
         setupRequired.value = false
         return result.redirectUrl || '/login'
       }
@@ -704,6 +708,7 @@ export const useSetupStore = defineStore('setup', () => {
     totalSteps,
     isLoading,
     error,
+    serverConfigResult,
     setupRequired,
     completedSteps,
     skippedSteps,

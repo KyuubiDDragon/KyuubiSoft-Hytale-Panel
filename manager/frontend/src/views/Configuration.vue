@@ -4,12 +4,23 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import ConfigFormEditor from '@/components/config/ConfigFormEditor.vue'
-import { serverApi, type ConfigFile, type QuickSettings, type UpdateConfig } from '@/api/server'
+import ApplyBadge from '@/components/config/ApplyBadge.vue'
+import {
+  serverApi,
+  type ConfigFile,
+  type ConfigMigrationNote,
+  type QuickSettings,
+  type QuickSettingsResponse,
+  type ServerFileSaveResponse,
+  type UpdateConfig,
+} from '@/api/server'
 import { useConfirm } from '@/composables/useConfirm'
+import { useServerFileSave } from '@/composables/useServerFileSave'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const authStore = useAuthStore()
 const { ask } = useConfirm()
+const { saveWithRestartPrompt, saveErrorMessage } = useServerFileSave()
 
 type EditorMode = 'form' | 'json'
 
@@ -35,8 +46,53 @@ const quickSettings = reactive<QuickSettings>({
 const originalQuickSettings = ref<QuickSettings | null>(null)
 const quickSettingsLoading = ref(false)
 const quickSettingsSaving = ref(false)
+const quickSettingsError = ref<string | null>(null)
+const quickMeta = ref<Omit<QuickSettingsResponse, keyof QuickSettings> | null>(null)
+const fileWarnings = ref<string[]>([])
 
-const gameModes = ['Adventure', 'Creative']
+const QUICK_KEYS = [
+  'serverName',
+  'motd',
+  'password',
+  'maxPlayers',
+  'maxViewRadius',
+  'defaultGameMode',
+] as const satisfies readonly (keyof QuickSettings)[]
+
+const gameModes = computed(() => quickMeta.value?.limits.gameModes ?? ['Adventure', 'Creative'])
+const limits = computed(() => quickMeta.value?.limits)
+const serverRunning = computed(() => quickMeta.value?.serverRunning === true)
+const migrationNotes = computed<ConfigMigrationNote[]>(() => quickMeta.value?.notes ?? [])
+const pendingLegacyKeys = computed(() =>
+  migrationNotes.value.length > 0 ? [] : (quickMeta.value?.legacyKeys ?? []),
+)
+
+/** How a field takes effect right now: live only while the plugin can run the command. */
+function applyMode(field: keyof QuickSettings): 'live' | 'restart' {
+  const mode = quickMeta.value?.fields[field] ?? 'restart'
+  return mode === 'live' && (!serverRunning.value || quickMeta.value?.liveAvailable) ? 'live' : 'restart'
+}
+
+function quickFieldLabel(field: string): string {
+  return te(`config.${field}`) ? t(`config.${field}`) : field
+}
+
+function noteText(note: ConfigMigrationNote): string {
+  const key = note.key === 'Whitelist' && note.value === true ? 'WhitelistOn' : note.key.replace('.', '')
+  return te(`config.legacy.notes.${key}`) ? t(`config.legacy.notes.${key}`) : note.note
+}
+
+function appliedMessage(result: ServerFileSaveResponse): string {
+  if (result.changed === false) return t('config.saved')
+  if (result.applied === 'live') return t('serverFiles.appliedLive')
+  if (result.restarted || result.applied === 'restart') return t('serverFiles.savedRestarted')
+  return t('serverFiles.savedForStart')
+}
+
+function showSuccess(message: string) {
+  successMessage.value = message
+  setTimeout(() => { successMessage.value = null }, 4000)
+}
 
 // Update Config (Native Hytale Update System)
 const updateConfig = reactive<UpdateConfig>({
@@ -57,42 +113,63 @@ const updateConfigSupported = ref(true)
 async function loadQuickSettings() {
   try {
     quickSettingsLoading.value = true
-    const settings = await serverApi.getQuickSettings()
+    quickSettingsError.value = null
+    const response = await serverApi.getQuickSettings({ live: true })
+    const settings = Object.fromEntries(QUICK_KEYS.map((k) => [k, response[k]])) as unknown as QuickSettings
+    // A running server saves a live change about a minute later; show what it uses.
+    Object.assign(settings, response.liveValues ?? {})
     Object.assign(quickSettings, settings)
     originalQuickSettings.value = { ...settings }
+    const meta = { ...response } as Partial<QuickSettingsResponse>
+    for (const k of QUICK_KEYS) delete meta[k]
+    quickMeta.value = meta as Omit<QuickSettingsResponse, keyof QuickSettings>
   } catch (e) {
-    console.error('Failed to load quick settings:', e)
+    const reason = (e as { response?: { data?: { reason?: string } } })?.response?.data?.reason
+    quickSettingsError.value =
+      reason === 'config_missing' ? t('config.configMissing') : saveErrorMessage(e)
   } finally {
     quickSettingsLoading.value = false
   }
+}
+
+/** Only the fields that differ, so the panel knows which need a restart. */
+function changedQuickSettings(): Partial<QuickSettings> {
+  const original = originalQuickSettings.value
+  if (!original) return {}
+  return Object.fromEntries(
+    QUICK_KEYS.filter((k) => quickSettings[k] !== original[k]).map((k) => [k, quickSettings[k]]),
+  ) as Partial<QuickSettings>
 }
 
 async function saveQuickSettings() {
   try {
     quickSettingsSaving.value = true
     error.value = null
-    await serverApi.saveQuickSettings(quickSettings)
+    const patch = changedQuickSettings()
+    const saved = await saveWithRestartPrompt(
+      (restart) => serverApi.saveQuickSettings(patch, { restart }),
+      quickFieldLabel,
+    )
+    if (!saved) return
     originalQuickSettings.value = { ...quickSettings }
-    successMessage.value = t('config.saved')
-    setTimeout(() => { successMessage.value = null }, 3000)
+    showSuccess(appliedMessage(saved.result))
   } catch (e) {
-    error.value = t('errors.serverError')
+    error.value = saveErrorMessage(e)
   } finally {
     quickSettingsSaving.value = false
   }
 }
 
-const quickSettingsChanged = computed(() => {
-  if (!originalQuickSettings.value) return false
-  return (
-    quickSettings.serverName !== originalQuickSettings.value.serverName ||
-    quickSettings.motd !== originalQuickSettings.value.motd ||
-    quickSettings.password !== originalQuickSettings.value.password ||
-    quickSettings.maxPlayers !== originalQuickSettings.value.maxPlayers ||
-    quickSettings.maxViewRadius !== originalQuickSettings.value.maxViewRadius ||
-    quickSettings.defaultGameMode !== originalQuickSettings.value.defaultGameMode
-  )
-})
+async function dismissNotes() {
+  try {
+    await serverApi.dismissConfigNotes()
+    if (quickMeta.value) quickMeta.value = { ...quickMeta.value, notes: [] }
+  } catch (e) {
+    error.value = saveErrorMessage(e)
+  }
+}
+
+const quickSettingsChanged = computed(() => Object.keys(changedQuickSettings()).length > 0)
 
 // Update Config functions
 async function loadUpdateConfig() {
@@ -192,16 +269,23 @@ async function selectFile(filename: string) {
 async function saveFile() {
   if (!selectedFile.value) return
 
+  const filename = selectedFile.value
+  const content = fileContent.value
   try {
     saving.value = true
     error.value = null
     successMessage.value = null
-    await serverApi.saveConfigContent(selectedFile.value, fileContent.value)
-    originalContent.value = fileContent.value
-    successMessage.value = t('config.saved')
-    setTimeout(() => { successMessage.value = null }, 3000)
+    fileWarnings.value = []
+    const saved = await saveWithRestartPrompt((restart) =>
+      serverApi.saveConfigContent(filename, content, { restart }),
+    )
+    if (!saved) return
+    originalContent.value = content
+    fileWarnings.value = saved.result.warnings ?? []
+    showSuccess(saved.restarted ? t('serverFiles.savedRestarted') : t('serverFiles.savedForStart'))
+    if (filename === 'config.json') void loadQuickSettings()
   } catch (e) {
-    error.value = t('errors.serverError')
+    error.value = saveErrorMessage(e)
   } finally {
     saving.value = false
   }
@@ -211,6 +295,7 @@ function closeEditor() {
   selectedFile.value = null
   fileContent.value = ''
   originalContent.value = ''
+  fileWarnings.value = []
 }
 
 function switchMode(mode: EditorMode) {
@@ -265,35 +350,88 @@ onMounted(() => {
       <div v-if="quickSettingsLoading" class="text-center py-8 text-ink-muted">
         {{ t('common.loading') }}
       </div>
+      <div v-else-if="quickSettingsError" class="p-4 bg-status-warning/10 border border-status-warning/20 rounded-lg">
+        <p class="text-sm text-status-warning">{{ quickSettingsError }}</p>
+      </div>
       <div v-else class="space-y-4">
+        <!-- When changes take effect -->
+        <div class="flex items-start gap-3 p-3 bg-surface-overlay rounded-lg">
+          <svg class="w-5 h-5 text-ink-muted flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-sm text-ink-muted">
+            {{
+              !serverRunning
+                ? t('serverFiles.stoppedInfo')
+                : quickMeta?.liveAvailable
+                  ? t('serverFiles.runningInfo')
+                  : t('serverFiles.runningNoPluginInfo')
+            }}
+          </p>
+        </div>
+
+        <!-- Settings older panel versions stored under names Hytale never read -->
+        <div v-if="migrationNotes.length > 0" class="p-3 bg-hytale-orange/10 border border-hytale-orange/30 rounded-lg space-y-2">
+          <p class="text-sm font-medium text-ink">{{ t('config.legacy.cleanedTitle') }}</p>
+          <ul class="text-sm text-ink-muted list-disc pl-5 space-y-1">
+            <li v-for="note in migrationNotes" :key="`${note.at}-${note.file}-${note.key}`">
+              <span class="font-mono text-xs">{{ note.file }} · {{ note.key }}{{ note.to ? ` › ${note.to}` : '' }}</span>
+              – {{ noteText(note) }}
+            </li>
+          </ul>
+          <button
+            v-if="authStore.hasPermission('config.edit')"
+            class="text-xs text-hytale-orange hover:underline"
+            @click="dismissNotes"
+          >
+            {{ t('config.legacy.dismiss') }}
+          </button>
+        </div>
+        <div v-else-if="pendingLegacyKeys.length > 0" class="p-3 bg-hytale-orange/10 border border-hytale-orange/30 rounded-lg">
+          <p class="text-sm text-ink-muted">
+            {{ t('config.legacy.pending', { keys: pendingLegacyKeys.join(', ') }) }}
+          </p>
+        </div>
+
         <!-- Server Name -->
         <div>
-          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.serverName') }}</label>
+          <label class="block text-sm font-medium text-ink-muted mb-2">
+            {{ t('config.serverName') }}<ApplyBadge :mode="applyMode('serverName')" />
+          </label>
           <input
             v-model="quickSettings.serverName"
             type="text"
+            :maxlength="limits?.serverName"
             class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.serverNamePlaceholder')"
           />
+          <p class="text-xs text-ink-subtle mt-1">{{ t('config.help.serverName') }}</p>
         </div>
 
         <!-- MOTD -->
         <div>
-          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.motd') }}</label>
+          <label class="block text-sm font-medium text-ink-muted mb-2">
+            {{ t('config.motd') }}<ApplyBadge :mode="applyMode('motd')" />
+          </label>
           <input
             v-model="quickSettings.motd"
             type="text"
+            :maxlength="limits?.motd"
             class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.motdPlaceholder')"
           />
+          <p class="text-xs text-ink-subtle mt-1">{{ t('config.help.motd') }}</p>
         </div>
 
         <!-- Password -->
         <div>
-          <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.password') }}</label>
+          <label class="block text-sm font-medium text-ink-muted mb-2">
+            {{ t('config.password') }}<ApplyBadge :mode="applyMode('password')" />
+          </label>
           <input
             v-model="quickSettings.password"
             type="password"
+            :maxlength="limits?.password"
             class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             :placeholder="t('config.passwordPlaceholder')"
           />
@@ -304,31 +442,41 @@ onMounted(() => {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <!-- Max Players -->
           <div>
-            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.maxPlayers') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">
+              {{ t('config.maxPlayers') }}<ApplyBadge :mode="applyMode('maxPlayers')" />
+            </label>
             <input
               v-model.number="quickSettings.maxPlayers"
               type="number"
-              min="1"
-              max="1000"
+              min="0"
+              :max="limits?.maxPlayers ?? 10000"
               class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
+            <p class="text-xs text-ink-subtle mt-1">{{ t('config.help.maxPlayers') }}</p>
           </div>
 
           <!-- Max View Radius -->
           <div>
-            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.maxViewRadius') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">
+              {{ t('config.maxViewRadius') }}<ApplyBadge :mode="applyMode('maxViewRadius')" />
+            </label>
             <input
               v-model.number="quickSettings.maxViewRadius"
               type="number"
-              min="1"
-              max="64"
+              :min="limits?.minViewRadius ?? 1"
+              :max="limits?.maxViewRadius ?? 32"
               class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
             />
+            <p class="text-xs text-ink-subtle mt-1">
+              {{ t('config.help.maxViewRadius', { max: limits?.maxViewRadius ?? 32 }) }}
+            </p>
           </div>
 
           <!-- Default GameMode -->
           <div>
-            <label class="block text-sm font-medium text-ink-muted mb-2">{{ t('config.defaultGameMode') }}</label>
+            <label class="block text-sm font-medium text-ink-muted mb-2">
+              {{ t('config.defaultGameMode') }}<ApplyBadge :mode="applyMode('defaultGameMode')" />
+            </label>
             <select
               v-model="quickSettings.defaultGameMode"
               class="w-full bg-surface text-ink px-4 py-2.5 rounded-lg border border-border focus:border-hytale-orange focus:outline-none"
@@ -337,6 +485,7 @@ onMounted(() => {
                 {{ t(`players.gamemodes.${mode.toLowerCase()}`) }}
               </option>
             </select>
+            <p class="text-xs text-ink-subtle mt-1">{{ t('config.help.defaultGameMode') }}</p>
           </div>
         </div>
 
@@ -684,7 +833,18 @@ onMounted(() => {
         <svg class="w-5 h-5 text-status-warning flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
-        <p class="text-sm text-status-warning">{{ t('config.warning') }}</p>
+        <div class="space-y-1">
+          <p class="text-sm text-status-warning">{{ t('config.warning') }}</p>
+          <p class="text-sm text-status-warning">{{ t('serverFiles.editorHint') }}</p>
+        </div>
+      </div>
+
+      <!-- Accepted, but the server changes or ignores these values -->
+      <div v-if="fileWarnings.length > 0" class="p-4 bg-status-warning/10 border border-status-warning/20 rounded-lg">
+        <p class="text-sm font-medium text-status-warning mb-1">{{ t('serverFiles.warningsTitle') }}</p>
+        <ul class="text-sm text-status-warning list-disc pl-5">
+          <li v-for="w in fileWarnings" :key="w" class="font-mono text-xs">{{ w }}</li>
+        </ul>
       </div>
     </template>
   </div>

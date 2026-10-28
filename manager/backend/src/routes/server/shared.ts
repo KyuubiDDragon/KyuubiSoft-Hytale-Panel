@@ -22,16 +22,6 @@ export const CONFIG_EXTENSIONS = [
   '.ini',
 ];
 
-// Quick settings interface
-export interface QuickSettings {
-  serverName: string;
-  motd: string;
-  password: string;
-  maxPlayers: number;
-  maxViewRadius: number;
-  defaultGameMode: string;
-}
-
 // Panel config file (patchline, start flags, JVM tuning). Read by the game
 // container's entrypoint.sh / start-server.sh at every start.
 export const PANEL_CONFIG_PATH = path.join(config.dataPath, 'panel-config.json');

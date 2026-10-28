@@ -1,11 +1,92 @@
 import api from './client'
 import type { BackupJob } from './backup'
 
+// ============== ACCESS (whitelist, bans, permissions) ==============
+// Hytale 0.7 keeps them in memory while it runs: the panel then reads them
+// live from the server (KyuubiSoft API plugin) and changes them with the
+// server's commands; with the server stopped it uses the files.
+
+/** Where a page's data came from. */
+export type AccessSource = 'live' | 'file'
+
+/** Something in the server's files the server cannot read. `fatal`: it will not start. */
+export interface AccessProblem {
+  fatal: boolean
+  where: string
+  detail: string
+}
+
+export interface AccessViewBase {
+  source: AccessSource
+  /** null: Docker could not tell. */
+  serverRunning: boolean | null
+  problems: AccessProblem[]
+}
+
+/** What a change reports besides the new state. */
+export interface AccessWriteMeta {
+  success: boolean
+  via: 'plugin' | 'stdin' | 'file' | 'demo'
+  /** The new state was read back; false: the command was sent, the result is not confirmed yet. */
+  verified: boolean
+  /** false: it already was that way. */
+  changed: boolean
+  message?: string
+}
+
+export type AccessErrorCode =
+  | 'invalid_input'
+  | 'unknown_player'
+  | 'ambiguous_player'
+  | 'rejected'
+  | 'unreachable'
+  | 'busy'
+  | 'needs_stopped_server'
+  | 'file_missing'
+  | 'file_broken'
+  | 'unsupported'
+  | 'docker_unavailable'
+  | 'already_banned'
+  | 'internal'
+
+/** The refusal of an access route: its code, the server's own words, a missing right. */
+export function accessError(err: unknown): {
+  status?: number
+  code?: AccessErrorCode
+  detail?: string
+  required?: string[]
+} {
+  const response = (
+    err as {
+      response?: { status?: number; data?: { code?: string; error?: string; required?: unknown } }
+    }
+  ).response
+  const required = response?.data?.required
+  return {
+    status: response?.status,
+    code: response?.data?.code as AccessErrorCode | undefined,
+    detail: response?.data?.error,
+    required: Array.isArray(required) ? required.filter((r) => typeof r === 'string') : undefined,
+  }
+}
+
 // ============== WHITELIST ==============
 
-export interface WhitelistData {
+export interface WhitelistEntry {
+  uuid: string
+  name?: string
+  online?: boolean
+}
+
+export interface WhitelistData extends AccessViewBase {
   enabled: boolean
+  entries: WhitelistEntry[]
+  /** Names (the UUID where no name is known). */
   list: string[]
+  /** Groups whose members may join without an entry. */
+  openGroups: string[]
+  /** A whitelist.json from before 0.7 the server has not applied yet. */
+  legacy?: { enabled: boolean; entries: number; unresolved: string[] }
 }
 
 export const whitelistApi = {
@@ -14,24 +95,24 @@ export const whitelistApi = {
     return response.data
   },
 
-  async setEnabled(enabled: boolean): Promise<{ success: boolean; enabled: boolean }> {
-    const response = await api.put<{ success: boolean; enabled: boolean }>(
+  async setEnabled(enabled: boolean): Promise<WhitelistData & AccessWriteMeta> {
+    const response = await api.put<WhitelistData & AccessWriteMeta>(
       '/management/whitelist/enabled',
       { enabled },
     )
     return response.data
   },
 
-  async addPlayer(player: string): Promise<{ success: boolean; list: string[] }> {
-    const response = await api.post<{ success: boolean; list: string[] }>(
-      '/management/whitelist/add',
-      { player },
-    )
+  /** `player`: a name or a UUID. */
+  async addPlayer(player: string): Promise<WhitelistData & AccessWriteMeta> {
+    const response = await api.post<WhitelistData & AccessWriteMeta>('/management/whitelist/add', {
+      player,
+    })
     return response.data
   },
 
-  async removePlayer(player: string): Promise<{ success: boolean; list: string[] }> {
-    const response = await api.delete<{ success: boolean; list: string[] }>(
+  async removePlayer(player: string): Promise<WhitelistData & AccessWriteMeta> {
+    const response = await api.delete<WhitelistData & AccessWriteMeta>(
       `/management/whitelist/${encodeURIComponent(player)}`,
     )
     return response.data
@@ -41,29 +122,46 @@ export const whitelistApi = {
 // ============== BANS ==============
 
 export interface BanEntry {
+  /** The name where it is known, else the UUID. */
   player: string
-  target?: string // UUID from Hytale
+  /** The banned player's UUID. */
+  target?: string
+  name?: string
   reason?: string
-  bannedAt: string
+  bannedAt?: string
+  /** "Console", a name or a UUID. */
   bannedBy?: string
+  expiresOn?: string
+  permanent: boolean
+  /** false: expired (the server removes it at its next save). */
+  inEffect: boolean
+  /** false: the server cannot read the entry; it still keeps the player out. */
+  readable: boolean
+}
+
+export interface BansData extends AccessViewBase {
+  bans: BanEntry[]
+  /** Why the panel cannot read the bans (config.json keeps them elsewhere). */
+  unsupported?: string
 }
 
 export const bansApi = {
-  async get(): Promise<{ bans: BanEntry[] }> {
-    const response = await api.get<{ bans: BanEntry[] }>('/management/bans')
+  async get(): Promise<BansData> {
+    const response = await api.get<BansData>('/management/bans')
     return response.data
   },
 
-  async add(player: string, reason?: string): Promise<{ success: boolean; bans: BanEntry[] }> {
-    const response = await api.post<{ success: boolean; bans: BanEntry[] }>(
-      '/management/bans/add',
-      { player, reason },
-    )
+  /** `player`: a name or a UUID. */
+  async add(player: string, reason?: string): Promise<BansData & AccessWriteMeta> {
+    const response = await api.post<BansData & AccessWriteMeta>('/management/bans/add', {
+      player,
+      reason,
+    })
     return response.data
   },
 
-  async remove(player: string): Promise<{ success: boolean; bans: BanEntry[] }> {
-    const response = await api.delete<{ success: boolean; bans: BanEntry[] }>(
+  async remove(player: string): Promise<BansData & AccessWriteMeta> {
+    const response = await api.delete<BansData & AccessWriteMeta>(
       `/management/bans/${encodeURIComponent(player)}`,
     )
     return response.data
@@ -74,20 +172,36 @@ export const bansApi = {
 
 export interface PermissionGroup {
   name: string
+  /** The group it inherits from. */
+  parent?: string
+  /** Own permissions, the built-in ones included. */
   permissions: string[]
-  inherits?: string[]
+  /** Permissions the server always gives a built-in group. */
+  builtinPermissions: string[]
+  effectivePermissions: string[]
+  /** Built into the server: cannot be deleted, its parent is fixed. */
+  builtin: boolean
 }
 
 export interface PermissionUser {
   uuid: string
-  name: string
+  name?: string
   groups: string[]
+  /** Own permissions (the join permission of the whitelist among them). */
+  permissions: string[]
+  /** No groups are stored: the server's default group applies. */
+  defaultGroup: boolean
+  /** Holds the join permission itself (is on the whitelist). */
+  joinGrant: boolean
+  online?: boolean
+  operator?: boolean
 }
 
-export interface PermissionsData {
+export interface PermissionsData extends AccessViewBase {
   users: PermissionUser[]
   groups: PermissionGroup[]
-  availablePermissions?: { name: string; description?: string }[]
+  defaultGroup: string
+  operatorGroup: string
 }
 
 export const permissionsApi = {
@@ -96,39 +210,80 @@ export const permissionsApi = {
     return response.data
   },
 
-  async addUser(
-    name: string,
-    groups: string[],
-  ): Promise<{ success: boolean; users: PermissionUser[] }> {
-    const response = await api.post<{ success: boolean; users: PermissionUser[] }>(
+  /**
+   * Sets a player's groups and/or own permissions; what is left out stays.
+   * `player`: a name or a UUID. `groups: []` means the server's default group.
+   */
+  async saveUser(
+    player: string,
+    groups?: string[],
+    permissions?: string[],
+  ): Promise<PermissionsData & AccessWriteMeta> {
+    const response = await api.post<PermissionsData & AccessWriteMeta>(
       '/management/permissions/users',
-      { name, groups },
+      { player, ...(groups ? { groups } : {}), ...(permissions ? { permissions } : {}) },
     )
     return response.data
   },
 
-  async removeUser(name: string): Promise<{ success: boolean; users: PermissionUser[] }> {
-    const response = await api.delete<{ success: boolean; users: PermissionUser[] }>(
-      `/management/permissions/users/${encodeURIComponent(name)}`,
+  /** Takes a player's groups and own permissions away (the join permission stays). */
+  async removeUser(player: string): Promise<PermissionsData & AccessWriteMeta> {
+    const response = await api.delete<PermissionsData & AccessWriteMeta>(
+      `/management/permissions/users/${encodeURIComponent(player)}`,
     )
     return response.data
   },
 
-  async addGroup(
+  /** `parent`: undefined keeps it, null removes it. */
+  async saveGroup(
     name: string,
     permissions: string[],
-    inherits?: string[],
-  ): Promise<{ success: boolean; groups: PermissionGroup[] }> {
-    const response = await api.post<{ success: boolean; groups: PermissionGroup[] }>(
+    parent?: string | null,
+  ): Promise<PermissionsData & AccessWriteMeta> {
+    const response = await api.post<PermissionsData & AccessWriteMeta>(
       '/management/permissions/groups',
-      { name, permissions, inherits },
+      { name, permissions, ...(parent !== undefined ? { parent } : {}) },
     )
     return response.data
   },
 
-  async removeGroup(name: string): Promise<{ success: boolean; groups: PermissionGroup[] }> {
-    const response = await api.delete<{ success: boolean; groups: PermissionGroup[] }>(
+  async removeGroup(name: string): Promise<PermissionsData & AccessWriteMeta> {
+    const response = await api.delete<PermissionsData & AccessWriteMeta>(
       `/management/permissions/groups/${encodeURIComponent(name)}`,
+    )
+    return response.data
+  },
+}
+
+// ============== ACCESS FILES FROM BEFORE 0.7 ==============
+
+export interface AccessMigrationReport {
+  serverId: string | null
+  ranAt: string
+  serverStopped: boolean
+  backups: string[]
+  changes: string[]
+  removed: { key: string; value: unknown }[]
+  unresolved: string[]
+  pending: string[]
+  errors: string[]
+}
+
+export interface AccessMigrationStatus {
+  needed: boolean
+  items: string[]
+  lastReport: AccessMigrationReport | null
+}
+
+export const accessMigrationApi = {
+  async get(): Promise<AccessMigrationStatus> {
+    const response = await api.get<AccessMigrationStatus>('/management/access/migration')
+    return response.data
+  },
+
+  async run(): Promise<{ success: boolean; report: AccessMigrationReport | null }> {
+    const response = await api.post<{ success: boolean; report: AccessMigrationReport | null }>(
+      '/management/access/migrate',
     )
     return response.data
   },
@@ -161,14 +316,16 @@ export interface WorldClientEffects {
 
 export interface WorldConfig {
   name: string
-  displayName?: string
-  seed?: number
+  /** null: the world folder name is shown */
+  displayName?: string | null
+  /** Text: the server stores it as a Java long, beyond what a JS number holds. */
+  seed?: string | null
   isTicking: boolean
   isBlockTicking: boolean
   isPvpEnabled: boolean
   isFallDamageEnabled: boolean
   isGameTimePaused: boolean
-  gameTime?: string
+  gameTime?: string | null
   isSpawningNPC: boolean
   isAllNPCFrozen: boolean
   isSpawnMarkersEnabled: boolean
@@ -181,11 +338,39 @@ export interface WorldConfig {
   gameplayConfig?: string
   deleteOnUniverseStart: boolean
   deleteOnRemove: boolean
-  daytimeDurationSecondsOverride?: number | null
-  nighttimeDurationSecondsOverride?: number | null
+  isBlockSpawnersEnabled: boolean
+  /** null: the server's default game mode */
+  gameMode?: 'Adventure' | 'Creative' | null
+  /** null: the length the game's day cycle defines */
+  daytimeDurationSeconds?: number | null
+  nighttimeDurationSeconds?: number | null
   clientEffects?: WorldClientEffects
   raw?: Record<string, unknown>
 }
+
+/** The editor's view of a world config, with how each field takes effect. */
+export interface WorldConfigResponse extends WorldConfig {
+  /** The file as it is, for the text editor (JSON.parse would round a big seed). */
+  rawText?: string
+  fields: Record<string, 'live' | 'restart'>
+  limits: { maxDurationSeconds: number; gameModes: string[] }
+  issues: string[]
+  warnings: string[]
+  serverRunning: boolean
+  liveAvailable: boolean
+}
+
+export interface WorldSaveResponse {
+  success: boolean
+  changed?: boolean
+  applied?: 'live' | 'file' | 'restart'
+  restarted?: boolean
+  warnings?: string[]
+  message?: string
+}
+
+// Saving with a restart waits for the server to stop and start again.
+const WORLD_RESTART_TIMEOUT_MS = 200_000
 
 export interface WorldFileContent {
   worldName: string
@@ -201,8 +386,8 @@ export const worldsApi = {
     return response.data
   },
 
-  async getConfig(worldName: string): Promise<WorldConfig> {
-    const response = await api.get<WorldConfig>(
+  async getConfig(worldName: string): Promise<WorldConfigResponse> {
+    const response = await api.get<WorldConfigResponse>(
       `/management/worlds/${encodeURIComponent(worldName)}/config`,
     )
     return response.data
@@ -211,10 +396,12 @@ export const worldsApi = {
   async updateConfig(
     worldName: string,
     updates: Partial<WorldConfig>,
-  ): Promise<{ success: boolean; message?: string }> {
-    const response = await api.put<{ success: boolean; message?: string }>(
+    options: { restart?: boolean } = {},
+  ): Promise<WorldSaveResponse> {
+    const response = await api.put<WorldSaveResponse>(
       `/management/worlds/${encodeURIComponent(worldName)}/config`,
-      updates,
+      { ...updates, ...(options.restart ? { restart: true } : {}) },
+      options.restart ? { timeout: WORLD_RESTART_TIMEOUT_MS } : undefined,
     )
     return response.data
   },
@@ -231,10 +418,12 @@ export const worldsApi = {
     worldName: string,
     filePath: string,
     content: Record<string, unknown> | string,
-  ): Promise<{ success: boolean; message?: string }> {
-    const response = await api.put<{ success: boolean; message?: string }>(
+    options: { restart?: boolean } = {},
+  ): Promise<WorldSaveResponse> {
+    const response = await api.put<WorldSaveResponse>(
       `/management/worlds/${encodeURIComponent(worldName)}/files/${filePath}`,
-      { content },
+      { content, ...(options.restart ? { restart: true } : {}) },
+      options.restart ? { timeout: WORLD_RESTART_TIMEOUT_MS } : undefined,
     )
     return response.data
   },

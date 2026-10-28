@@ -9,7 +9,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import CommandReplyBlock from '@/components/console/CommandReplyBlock.vue'
 import { useCommandAutocomplete, type CommandSuggestion } from '@/composables/useCommandAutocomplete'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const consoleStore = useConsoleStore()
 const { sendCommand, reconnect, loadAllLogs, isLoadingLogs } = useWebSocket()
@@ -20,6 +20,32 @@ const commandInput = ref('')
 const searchFilter = ref('')
 const levelFilter = ref<'all' | 'error' | 'warn' | 'info' | 'debug'>('all')
 const showClearConfirm = ref(false)
+// Outcome of the last "load all", shown next to the button.
+const loadAllNote = ref<{ text: string; error: boolean } | null>(null)
+
+// Log times are UTC; they are shown in the viewer's time zone.
+function formatTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const tag = locale.value === 'pt_br' ? 'pt-BR' : locale.value
+  return date.toLocaleTimeString(tag, { hour12: false })
+}
+
+async function loadAll() {
+  loadAllNote.value = null
+  try {
+    const response = await loadAllLogs(0)
+    const parts = [
+      response.source === 'files' && response.files?.length
+        ? t('console.loadAllFiles', { count: response.count, files: response.files.length })
+        : t('console.loadAllDone', { count: response.count }),
+    ]
+    if (response.truncated) parts.push(t('console.loadAllTruncated'))
+    loadAllNote.value = { text: parts.join(' · '), error: false }
+  } catch {
+    loadAllNote.value = { text: t('console.loadAllFailed'), error: true }
+  }
+}
 
 // Command auto-complete: the server's real command list via the KyuubiSoft
 // API plugin (vanilla + mod commands, syntax, argument values), otherwise a
@@ -108,6 +134,7 @@ const filteredLogs = computed(() => {
     const search = searchFilter.value.toLowerCase()
     logs = logs.filter(log =>
       log.message.toLowerCase().includes(search) ||
+      (log.logger && log.logger.toLowerCase().includes(search)) ||
       (log.level && log.level.toLowerCase().includes(search))
     )
   }
@@ -287,6 +314,15 @@ watch(
         >
           {{ t('console.showInfo') }}
         </button>
+        <button
+          @click="levelFilter = 'debug'"
+          :class="[
+            'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+            levelFilter === 'debug' ? 'bg-gray-500 text-white' : 'bg-surface-overlay text-ink-muted hover:text-ink'
+          ]"
+        >
+          {{ t('console.showDebug') }}
+        </button>
       </div>
     </div>
 
@@ -305,7 +341,7 @@ watch(
         class="cv-auto"
         :class="getLogClass(log.level)"
       >
-        <span class="text-ink-subtle mr-2">[{{ log.timestamp.split('T')[1]?.split('.')[0] || log.timestamp }}]</span>
+        <span class="text-ink-subtle mr-2" :title="log.timestamp">[{{ formatTime(log.timestamp) }}]</span>
         <span
           v-if="log.level && log.level !== 'INFO'"
           :class="{
@@ -315,6 +351,7 @@ watch(
           }"
           class="px-1.5 py-0.5 rounded text-xs font-medium mr-2"
         >{{ log.level }}</span>
+        <span v-if="log.logger" class="text-ink-subtle mr-2">[{{ log.logger }}]</span>
         <span :class="{
           'text-status-error font-medium': log.level === 'ERROR' || log.level === 'SEVERE',
           'text-status-warning': log.level === 'WARN' || log.level === 'WARNING',
@@ -417,7 +454,7 @@ watch(
 
           <!-- Load All Logs Button -->
           <button
-            @click="loadAllLogs(0)"
+            @click="loadAll"
             :disabled="isLoadingLogs"
             class="text-sm text-ink-muted hover:text-ink flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -430,6 +467,10 @@ watch(
             </svg>
             {{ t('console.loadAll') }}
           </button>
+          <span
+            v-if="loadAllNote"
+            :class="['text-xs', loadAllNote.error ? 'text-status-error' : 'text-ink-subtle']"
+          >{{ loadAllNote.text }}</span>
 
           <label class="flex items-center gap-2 text-sm text-ink-muted cursor-pointer">
             <input

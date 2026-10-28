@@ -58,7 +58,14 @@ const fakeContainer = {
   restart: vi.fn(async () => {
     running = true;
   }),
-  attach: vi.fn(async () => ({ write: vi.fn(), on: vi.fn() })),
+  // Like a socket: the write callback runs once the data is handed off.
+  attach: vi.fn(async () => ({
+    write: vi.fn((_data: string, cb?: (error?: Error | null) => void) => {
+      queueMicrotask(() => cb?.());
+      return true;
+    }),
+    on: vi.fn(),
+  })),
 };
 
 const publish = vi.fn();
@@ -75,6 +82,8 @@ vi.mock('../utils/sanitize.js', () => ({
   validateCommand: () => ({ valid: true }),
   containsControlChars: () => false,
   stripControlChars: (s: string) => s,
+  toCommandText: (s: string) => s,
+  PLAYER_NAME_SOURCE: '[A-Za-z0-9_][A-Za-z0-9_-]{0,31}',
 }));
 vi.mock('./serverLifecycle.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./serverLifecycle.js')>()),

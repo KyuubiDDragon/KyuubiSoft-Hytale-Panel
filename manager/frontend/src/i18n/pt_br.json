@@ -1,4 +1,31 @@
 {
+  "serverFiles": {
+    "restartTitle": "Reinício necessário",
+    "restartConfirm": "O servidor está rodando e mantém este arquivo na memória. Ele sobrescreveria a alteração na próxima vez que salvar. Salvar agora e reiniciar o servidor? Os jogadores conectados serão desconectados.",
+    "restartConfirmFields": "O servidor só lê estas configurações ao iniciar: {fields}. Salvar agora e reiniciar o servidor? Os jogadores conectados serão desconectados.",
+    "liveUnavailableConfirm": "O plugin KyuubiSoft API não está acessível, então a alteração não pode ser aplicada na hora. Salvar agora e reiniciar o servidor? Os jogadores conectados serão desconectados.",
+    "saveAndRestart": "Salvar e reiniciar",
+    "stillRunning": "O salvamento com reinício ainda está em andamento. Recarregue a página em um minuto para ver o resultado.",
+    "notConfirmed": "O servidor não confirmou a alteração: {detail}",
+    "busy": "Outra operação do servidor (parar, iniciar, atualizar, restaurar) está em andamento. Tente novamente em instantes.",
+    "rejected": "Não salvo: {detail}",
+    "restartForbidden": "Não salvo: salvar com reinício também exige a permissão de reiniciar o servidor (server.restart). Pare o servidor antes, ou peça a alguém que tenha essa permissão.",
+    "forbidden": "Não salvo: você não tem permissão para isso.",
+    "appliedLive": "Aplicado na hora no servidor em execução. O próprio servidor salva o valor.",
+    "savedRestarted": "Salvo, o servidor foi reiniciado.",
+    "savedForStart": "Salvo. Vale a partir do próximo início do servidor.",
+    "stoppedInfo": "O servidor está parado: as alterações são salvas na hora e valem no próximo início.",
+    "runningInfo": "O servidor está rodando. Configurações marcadas com “Na hora” valem imediatamente, as marcadas com “Reinício” são salvas com um reinício.",
+    "runningNoPluginInfo": "O servidor está rodando, mas o plugin KyuubiSoft API não está acessível. Por isso toda alteração é salva com um reinício.",
+    "editorHint": "O servidor lê estes arquivos ao iniciar e os grava de volta por conta própria. Com o servidor rodando, salvar reinicia o servidor; o conteúdo antigo fica guardado como .bak.",
+    "warningsTitle": "Salvo, mas o servidor altera ou ignora estes valores:",
+    "apply": {
+      "live": "Na hora",
+      "liveHint": "Vale imediatamente no servidor em execução (por comando).",
+      "restart": "Reinício",
+      "restartHint": "O servidor só lê este valor ao iniciar."
+    }
+  },
   "demo": {
     "banner": "MODO DEMO",
     "description": "Todos os dados sao simulados. Nenhum servidor real conectado.",
@@ -563,13 +590,23 @@
     "syntax": "Sintaxe",
     "suggestionBlocked": "não permitido no painel",
     "suggestionAdmin": "admin",
+    "showDebug": "Debug",
+    "droppedSlow": "{count} entradas de log foram omitidas: a conexão não acompanhou.",
+    "droppedBurst": "{count} entradas de log foram omitidas: o servidor as escreveu mais rápido do que o painel conseguiu repassar.",
+    "loadAllDone": "{count} entradas carregadas",
+    "loadAllFiles": "{count} entradas carregadas de {files} arquivos de log do servidor",
+    "loadAllTruncated": "entradas mais antigas omitidas (limite atingido)",
+    "loadAllFailed": "Não foi possível carregar o log completo. Tente novamente em instantes.",
+    "permissionLost": "O console foi fechado: você não tem mais permissão para visualizá-lo.",
+    "unknownServer": "O console foi fechado: este servidor não existe (mais).",
     "reply": {
       "pending": "Aguardando o servidor…",
       "running": "Ainda em execução no servidor; saídas posteriores aparecem apenas no log.",
       "noOutput": "Concluído, sem saída.",
       "sentOnly": "Enviado ao console do servidor. A resposta aparece no log acima; com o plugin KyuubiSoft API ela é exibida aqui.",
       "noAnswer": "Ainda sem resposta. O comando pode ter sido executado; verifique o log.",
-      "connectionLost": "Conexão perdida antes da resposta. O comando pode ter sido executado; verifique o log."
+      "connectionLost": "Conexão perdida antes da resposta. O comando pode ter sido executado; verifique o log.",
+      "notSent": "Não enviado: o console não conectou a tempo. Envie o comando novamente."
     }
   },
   "backups": {
@@ -657,6 +694,8 @@
     "banReason": "Motivo do banimento (opcional)",
     "noReason": "Sem motivo",
     "actionSuccess": "{action}: {player}",
+    "actionSent": "{action} para {player} enviado ao console do servidor; sem o plugin KyuubiSoft API o resultado não é confirmado",
+    "noPrivateMessages": "O Hytale 0.7 não tem mensagens privadas; /say e /notify alcançam todos os jogadores.",
     "noPlayers": "Nenhum jogador online",
     "noOfflinePlayers": "Nenhum jogador offline no histórico",
     "playerCount": "{count} jogadores online",
@@ -791,8 +830,22 @@
     "whitelist": "Lista de Permissões",
     "bans": "Banimentos",
     "enabled": "Lista de Permissões Ativada",
-    "enabledDescription": "Apenas jogadores na lista de permissões podem entrar no servidor",
+    "enabledDescription": "Apenas jogadores com a permissão de entrada podem entrar no servidor (RequireJoinPermission)",
     "addPlayer": "Adicionar Jogador",
+    "addHint": "Um UUID sempre funciona. Um nome funciona para jogadores que já entraram neste servidor; com o servidor rodando, também para jogadores online agora.",
+    "unknownName": "Nome desconhecido",
+    "openGroups": "Membros destes grupos podem entrar sem uma entrada: {groups}",
+    "legacyPending": "Um whitelist.json antigo ({count} entradas, {state}) ainda está pendente; ele é aplicado na próxima inicialização.",
+    "legacyUnresolved": "Nenhum UUID conhecido para: {names}. Esses jogadores não estarão na lista de permissões.",
+    "banHint": "Com o servidor rodando, ele mesmo procura o jogador: jogadores online pelo nome, os outros só se o servidor estiver autenticado. Com o servidor parado, o painel altera a lista de banimentos diretamente.",
+    "bannedBy": "Banido por",
+    "expires": "Expira",
+    "permanent": "Permanente",
+    "expired": "Expirado",
+    "unreadable": "Ilegível",
+    "unreadableHint": "O servidor não consegue ler esta entrada, mas continua bloqueando o jogador.",
+    "bansUnsupported": "O painel não consegue ler a lista de banimentos: {reason}",
+    "confirmEnableEmpty": "Ainda não há ninguém na lista de permissões. Ativada, só membros destes grupos podem entrar: {groups}. Ativar mesmo assim?",
     "playerName": "Nome do Jogador",
     "players": "Jogadores",
     "noPlayers": "Nenhum jogador na lista de permissões",
@@ -804,13 +857,68 @@
     "confirmRemove": "Remover \"{player}\" da whitelist?",
     "confirmUnban": "Desbanir jogador \"{player}\"?",
     "noBans": "Nenhum jogador banido",
-    "noPlayersSubtitle": "Adicione nomes de jogadores para permitir o acesso ao servidor.",
+    "noPlayersSubtitle": "Adicione jogadores por nome ou UUID para permitir o acesso ao servidor.",
     "noBansSubtitle": "Jogadores banidos aparecem aqui.",
     "bannedAt": "Banido em"
   },
+  "access": {
+    "live": "Ao vivo",
+    "file": "Arquivo",
+    "sourceLive": "Lido ao vivo do servidor em execução.",
+    "sourceFile": "O servidor está parado: lido dos seus arquivos. As alterações vão para os arquivos e valem a partir da próxima inicialização.",
+    "sourceFileRunning": "Lido dos arquivos do servidor porque o plugin KyuubiSoft API não responde. As alterações vão para o console do servidor.",
+    "serverUnknown": "O Docker não consegue dizer se o servidor está rodando; lido dos seus arquivos.",
+    "problemsFatal": "O servidor não consegue ler estas entradas e não inicia até que sejam corrigidas:",
+    "problemsMinor": "O servidor ignora {count} entradas que não consegue ler",
+    "migrationNeeded": "Foram encontrados arquivos de acesso de antes do Hytale 0.7:",
+    "migrationHint": "O painel os converte antes da próxima inicialização que ele fizer (uma cópia de cada arquivo é mantida). Você também pode convertê-los agora.",
+    "migrationRun": "Converter agora",
+    "migrationDone": "Arquivos de acesso verificados: {count} alterações",
+    "migrationPending": "Aguardando um servidor parado:",
+    "migrationUnresolved": "Nenhum UUID conhecido para: {names}",
+    "migrationErrors": "Precisa de atenção:",
+    "notConfirmed": "Enviado ao servidor; o resultado ainda não foi confirmado. Atualize em instantes.",
+    "unchanged": "Nada mudou: já estava assim.",
+    "saved": "Salvo",
+    "playerOrUuid": "Nome do jogador ou UUID",
+    "online": "online",
+    "errors": {
+      "invalid_input": "Entrada inválida: {detail}",
+      "unknown_player": "Nenhum UUID é conhecido para este jogador. Use o UUID ou um jogador que já entrou neste servidor.",
+      "ambiguous_player": "O jogador não é único: {detail}",
+      "rejected": "O servidor recusou a alteração: {detail}",
+      "unreachable": "O servidor não respondeu: {detail}",
+      "busy": "O servidor está sendo iniciado ou parado agora. Tente novamente em instantes.",
+      "needs_stopped_server": "Só é possível com o servidor parado: {detail}",
+      "file_missing": "O servidor ainda não criou este arquivo. Inicie-o uma vez e tente novamente.",
+      "file_broken": "Um arquivo do servidor não pode ser lido: {detail}",
+      "unsupported": "Não suportado pelo painel: {detail}",
+      "docker_unavailable": "O Docker não consegue dizer se o servidor está rodando, então nada foi alterado.",
+      "already_banned": "O jogador já está banido. Um banimento temporário não encerraria esse banimento; desbana-o primeiro para definir um novo fim.",
+      "forbidden": "Você não tem permissão para isso.",
+      "operatorRight": "Alterações nos direitos do próprio servidor (permissões hytale.* e curingas sobre elas, grupos com esses direitos, o grupo de operador, o grupo padrão) também precisam da permissão players.op.",
+      "internal": "Os arquivos de acesso não puderam ser lidos ou gravados. Os detalhes estão no log do painel."
+    }
+  },
   "permissions": {
-    "confirmDeleteUser": "Excluir usuário de permissões \"{name}\"?",
+    "confirmDeleteUser": "Remover todos os grupos e permissões próprias de \"{name}\"? A entrada na lista de permissões permanece.",
     "confirmDeleteGroup": "Excluir grupo de permissões \"{name}\"?",
+    "ownPermissions": "Permissões próprias",
+    "ownPermissionsPlaceholder": "Uma permissão por linha\nex: hytale.command.kick",
+    "joinKept": "A entrada na lista de permissões (hytale.server.join) é mantida; altere-a na página da lista de permissões.",
+    "noGroupHint": "Sem grupo vale o grupo padrão do servidor ({group}).",
+    "defaultGroup": "padrão",
+    "defaultGroupHint": "Nenhum grupo salvo: vale o grupo padrão do servidor",
+    "joinGrant": "Lista de permissões",
+    "operator": "Operador",
+    "operatorNeedsOp": "O grupo de operador e as permissões curinga precisam da permissão players.op.",
+    "usersIncomplete": "O servidor em execução só lista jogadores online, na lista de permissões ou com curinga; os demais vêm do permissions.json.",
+    "noParent": "Nenhum",
+    "builtin": "Embutido",
+    "builtinHint": "Embutido no servidor: não pode ser excluído, sempre herda de {parent}.",
+    "builtinPermissions": "Sempre concedidas pelo servidor: {permissions}",
+    "parentNeedsStop": "De qual grupo um grupo herda só pode ser alterado com o servidor parado.",
+    "effective": "{count} permissões com as herdadas",
     "title": "Permissões",
     "users": "Usuários",
     "groups": "Grupos",
@@ -832,6 +940,19 @@
     "more": "mais"
   },
   "worlds": {
+    "timePaused": "Tempo pausado",
+    "blockSpawners": "Spawners de blocos ativos",
+    "gameMode": "Modo de jogo do mundo",
+    "gameModeInherit": "Padrão do servidor",
+    "gameModeHint": "Sem escolha vale o modo de jogo padrão do servidor.",
+    "daytimeDuration": "Duração do dia (segundos)",
+    "nighttimeDuration": "Duração da noite (segundos)",
+    "durationDefault": "Padrão",
+    "durationHint": "Deixe vazio para a duração do jogo. São permitidos de 1 a 86400 segundos.",
+    "restartFieldsHint": "PvP e a pausa do tempo valem na hora com o servidor rodando, todas as outras configurações do mundo após um reinício.",
+    "runningInfo": "O servidor está rodando. PvP e a pausa do tempo são aplicados na hora, outras alterações são salvas com um reinício.",
+    "fileEditorInfo": "O servidor salva os arquivos de um mundo a cada poucos segundos por conta própria. Com o servidor rodando, salvar reinicia o servidor; o conteúdo antigo fica guardado como .bak.",
+    "legacyKeys": "Este mundo contém entradas de versões antigas do painel que o servidor não lê. Elas serão renomeadas no próximo início do servidor pelo painel:",
     "defaultPlaceholder": "Padrão",
     "title": "Mundos",
     "world": "Mundo",
@@ -919,6 +1040,28 @@
     }
   },
   "config": {
+    "configMissing": "O config.json ainda não existe. O servidor o cria ao iniciar pela primeira vez.",
+    "help": {
+      "serverName": "Nome do servidor que os jogadores veem ao conectar.",
+      "motd": "Mensagem do dia, uma linha sem quebras.",
+      "maxPlayers": "0 = sem limite. Aplicado na hora com o servidor rodando (/maxplayers).",
+      "maxViewRadius": "Limite da distância de visão em chunks (1 a {max}). Aplicado na hora com o servidor rodando (/maxviewradius).",
+      "defaultGameMode": "Modo de jogo para mundos sem modo próprio. O Hytale tem Aventura e Criativo."
+    },
+    "legacy": {
+      "cleanedTitle": "Configurações antigas do painel limpas",
+      "dismiss": "Ocultar avisos",
+      "pending": "O config.json contém entradas de versões antigas do painel que o Hytale não conhece ({keys}). Elas serão limpas no próximo início do servidor pelo painel.",
+      "notes": {
+        "WhitelistOn": "O assistente de configuração guardou “whitelist ligada” com um nome que o Hytale nunca leu, então a whitelist nunca esteve ativa. Você pode ligá-la na página da whitelist.",
+        "Whitelist": "Não é uma configuração do Hytale, removida.",
+        "AllowOp": "Não é uma configuração do Hytale. A opção de OP é uma opção de início do painel (Configurações).",
+        "ViewRadius": "O Hytale lê a distância de visão de MaxViewRadius.",
+        "DefaultsGameMode": "O Hytale só tem Aventura e Criativo; com este valor o servidor não conseguia iniciar. Agora Aventura.",
+        "DaytimeDurationSecondsOverride": "O servidor lê a duração do dia de DaytimeDurationSeconds.",
+        "NighttimeDurationSecondsOverride": "O servidor lê a duração da noite de NighttimeDurationSeconds."
+      }
+    },
     "title": "Configuração",
     "subtitle": "Editar arquivos de configuração do servidor",
     "files": "Arquivos de Configuração",
@@ -1214,10 +1357,10 @@
       "enabled": "Ativar automoderação",
       "action": "Ação ao infringir",
       "actionWarn": "Avisar (lembrete público)",
-      "actionMute": "Silenciar o jogador",
+      "actionMute": "Silenciar (indisponível no Hytale 0.7)",
       "actionKick": "Expulsar o jogador",
-      "muteDuration": "Duração do silêncio (segundos)",
-      "muteDurationHint": "0 = permanente até ser removido manualmente.",
+      "kickHint": "O Hytale 0.7 expulsa sem motivo; o motivo fica no histórico de punições do painel.",
+      "muteUnavailable": "O Hytale 0.7 não tem mute de chat. Esta configuração salva avisa em vez disso; escolha Avisar ou Expulsar.",
       "bannedWords": "Palavras proibidas",
       "bannedWordsPlaceholder": "palavra1, palavra2, palavra3",
       "bannedWordsHint": "Separadas por vírgula, sem distinção de maiúsculas, palavras inteiras.",
@@ -1401,6 +1544,7 @@
       "saveConfigFailed": "Failed to save config",
       "loadSettingFailed": "Failed to load setting",
       "updateSettingFailed": "Failed to update setting",
+      "allowOpNeedsOp": "Para ativar isto você também precisa da permissão players.op: com isso qualquer jogador pode se tornar operador. Para desativar, não.",
       "restartFailed": "Failed to restart server",
       "initAuthFailed": "Failed to initiate authentication",
       "authError": "An error occurred while initiating authentication",
@@ -1558,124 +1702,11 @@
     "title": "Referência de Comandos",
     "clickToCopy": "Clique no botão copiar para copiar o comando",
     "categories": {
-      "player": "Jogador",
-      "teleport": "Teleporte",
+      "players": "Jogadores",
+      "access": "Acesso",
       "server": "Servidor",
-      "world": "Mundo"
-    },
-    "kick": {
-      "desc": "Expulsar um jogador do servidor"
-    },
-    "ban": {
-      "desc": "Banir um jogador do servidor"
-    },
-    "unban": {
-      "desc": "Desbanir um jogador"
-    },
-    "op": {
-      "desc": "Dar permissões de operador"
-    },
-    "deop": {
-      "desc": "Remover permissões de operador"
-    },
-    "whitelistAdd": {
-      "desc": "Adicionar jogador à lista de permissões"
-    },
-    "whitelistRemove": {
-      "desc": "Remover jogador da lista de permissões"
-    },
-    "kill": {
-      "desc": "Matar um jogador"
-    },
-    "gamemode": {
-      "desc": "Alterar modo de jogo do jogador"
-    },
-    "give": {
-      "desc": "Dar itens a um jogador"
-    },
-    "heal": {
-      "desc": "Curar um jogador completamente"
-    },
-    "effectApply": {
-      "desc": "Aplicar um efeito a um jogador"
-    },
-    "effectClear": {
-      "desc": "Limpar todos os efeitos de um jogador"
-    },
-    "inventoryClear": {
-      "desc": "Limpar o inventário de um jogador"
-    },
-    "tpPlayer": {
-      "desc": "Teleportar jogador para outro jogador"
-    },
-    "tpCoords": {
-      "desc": "Teleportar jogador para coordenadas"
-    },
-    "tpSelf": {
-      "desc": "Teleportar você para um jogador"
-    },
-    "top": {
-      "desc": "Teleportar para o topo do mundo"
-    },
-    "spawn": {
-      "desc": "Teleportar para o spawn"
-    },
-    "home": {
-      "desc": "Teleportar para casa"
-    },
-    "sethome": {
-      "desc": "Definir localização de casa"
-    },
-    "warp": {
-      "desc": "Teleportar para um ponto de teleporte"
-    },
-    "stop": {
-      "desc": "Parar o servidor"
-    },
-    "restart": {
-      "desc": "Reiniciar o servidor"
-    },
-    "save": {
-      "desc": "Salvar todos os mundos"
-    },
-    "reload": {
-      "desc": "Recarregar configuração do servidor"
-    },
-    "say": {
-      "desc": "Transmitir uma mensagem"
-    },
-    "broadcast": {
-      "desc": "Transmissão para todo o servidor"
-    },
-    "list": {
-      "desc": "Listar jogadores online"
-    },
-    "memory": {
-      "desc": "Mostrar estatísticas de uso de memória"
-    },
-    "tps": {
-      "desc": "Mostrar ticks por segundo"
-    },
-    "gc": {
-      "desc": "Executar coleta de lixo"
-    },
-    "worldList": {
-      "desc": "Listar todos os mundos"
-    },
-    "worldCreate": {
-      "desc": "Criar um novo mundo"
-    },
-    "worldLoad": {
-      "desc": "Carregar um mundo"
-    },
-    "timeSet": {
-      "desc": "Definir horário do mundo"
-    },
-    "weather": {
-      "desc": "Definir clima"
-    },
-    "difficulty": {
-      "desc": "Definir dificuldade do jogo"
+      "world": "Mundo, hora e clima",
+      "chat": "Anúncios"
     }
   },
   "scheduler": {
@@ -2076,122 +2107,84 @@
   },
   "help": {
     "title": "Referência de Comandos",
-    "subtitle": "{count} comandos disponíveis",
+    "subtitle": "{count} comandos do Hytale 0.7",
     "categoriesTitle": "Categorias",
     "searchPlaceholder": "Buscar comandos...",
     "noResults": "Nenhum comando encontrado",
     "usage": "Uso",
-    "permission": "Permissão",
+    "permission": "Permissão no servidor",
     "copyCommand": "Copiar comando",
     "commandsShown": "Mostrando {shown} de {total} comandos",
     "tipPrefix": "Dica",
-    "tipRelative": "= coordenadas relativas",
-    "tipSelectors": "= seletores de alvo",
+    "tipHelpFlag": "após um comando mostra a sintaxe",
+    "notInHytale": "O Hytale 0.7 não tem mensagens privadas, mute de chat nem /save ou /list.",
+    "panelTier": "Painel",
+    "tierPlain": "Console",
+    "tierAdmin": "Console (admin)",
+    "tierPlainHint": "Precisa da permissão console.execute no painel",
+    "tierAdminHint": "Precisa da permissão console.execute.admin no painel",
     "categories": {
-      "all": "Todos os Comandos",
-      "player": "Jogador",
-      "admin": "Administração",
-      "world": "Mundo",
-      "teleport": "Teleporte",
-      "entities": "Entidades e NPCs",
-      "blocks": "Blocos e Construção",
-      "xp": "Experiência e Níveis",
-      "debug": "Debug e Sistema"
+      "all": "Todos os comandos",
+      "players": "Jogadores",
+      "access": "Acesso",
+      "server": "Servidor",
+      "world": "Mundo, hora e clima",
+      "chat": "Anúncios",
+      "live": "Este servidor"
     },
     "commands": {
-      "kick": "Expulsar um jogador do servidor",
-      "ban": "Banir um jogador do servidor",
-      "unban": "Remover banimento de um jogador",
-      "opAdd": "Dar permissões de operador a um jogador",
-      "opRemove": "Remover permissões de operador de um jogador",
-      "whitelistAdd": "Adicionar um jogador à whitelist",
-      "whitelistRemove": "Remover um jogador da whitelist",
-      "kill": "Matar um jogador",
-      "statsSettomax": "Definir stat do jogador ao máximo",
-      "statsSet": "Definir valor específico de stat para um jogador",
-      "effectApply": "Aplicar um efeito a um jogador",
-      "effectClear": "Limpar todos os efeitos de um jogador",
-      "respawn": "Forçar respawn de um jogador",
-      "give": "Dar itens a um jogador",
-      "inventoryClear": "Limpar inventário de um jogador",
-      "inventoryOpen": "Abrir gerenciamento de inventário para um jogador",
-      "gamemodeCreative": "Definir modo criativo",
-      "gamemodeAdventure": "Definir modo aventura",
-      "stop": "Parar o servidor",
-      "restart": "Reiniciar o servidor",
-      "save": "Forçar salvamento de todos os mundos",
-      "reload": "Recarregar configuração do servidor",
-      "say": "Transmitir uma mensagem para todos os jogadores",
-      "tell": "Enviar uma mensagem privada para um jogador",
-      "broadcast": "Enviar uma mensagem de broadcast do servidor",
-      "list": "Listar todos os jogadores online",
-      "info": "Mostrar informações do servidor",
-      "help": "Mostrar ajuda de comandos",
-      "version": "Mostrar versão do servidor",
-      "status": "Mostrar status do servidor",
-      "performance": "Mostrar estatísticas de desempenho",
-      "worldList": "Listar todos os mundos",
-      "worldCreate": "Criar um novo mundo",
-      "worldDelete": "Deletar um mundo",
-      "worldLoad": "Carregar um mundo",
-      "worldUnload": "Descarregar um mundo",
-      "timeSet": "Definir tempo do mundo",
-      "timeAdd": "Adicionar tempo ao mundo",
-      "weatherClear": "Definir tempo limpo",
-      "weatherRain": "Definir tempo chuvoso",
-      "weatherStorm": "Definir tempestade",
-      "difficulty": "Definir dificuldade do jogo",
-      "gamerule": "Definir uma regra de jogo",
-      "tpPlayer": "Teleportar um jogador para outro jogador",
-      "tpCoords": "Teleportar um jogador para coordenadas",
-      "tpSelf": "Teleportar você mesmo para um jogador",
-      "tpWorld": "Teleportar um jogador para coordenadas em um mundo específico",
-      "top": "Teleportar para o bloco mais alto na posição atual",
-      "spawn": "Teleportar para o spawn do mundo",
-      "home": "Teleportar para localização de casa",
-      "sethome": "Definir localização de casa",
-      "warp": "Teleportar para um ponto de warp",
-      "setwarp": "Criar um novo ponto de warp",
-      "delwarp": "Deletar um ponto de warp",
-      "summon": "Spawnar uma entidade em uma localização",
-      "entityKill": "Matar entidades por tipo ou todas",
-      "entityCount": "Contar entidades no mundo",
-      "npcCreate": "Criar um novo NPC",
-      "npcRemove": "Remover um NPC",
-      "setblock": "Colocar um bloco nas coordenadas",
-      "fill": "Preencher uma área com blocos",
-      "clone": "Clonar uma área para outra localização",
-      "xpAdd": "Adicionar pontos de experiência a um jogador",
-      "xpSet": "Definir pontos de experiência para um jogador",
-      "levelAdd": "Adicionar níveis a um jogador",
-      "levelSet": "Definir nível para um jogador",
-      "debug": "Alternar modo de debug",
-      "tps": "Mostrar ticks por segundo",
-      "gc": "Executar coleta de lixo",
-      "memory": "Mostrar uso de memória",
-      "chunkLoad": "Forçar carregamento de chunks",
-      "chunkUnload": "Descarregar chunks",
-      "logLevel": "Definir nível de log",
-      "gamemodeSurvival": "Definir modo sobrevivência",
-      "gamemodeSpectator": "Definir modo espectador",
-      "pardon": "Remover um banimento (alias de /unban)",
-      "mute": "Silenciar um jogador no chat",
-      "unmute": "Remover o silêncio de um jogador",
-      "heal": "Restaurar a vida de um jogador ao máximo",
-      "effect": "Aplicar ou modificar um efeito de status",
-      "clear": "Limpar o inventário de um jogador",
-      "saveAll": "Salvar todos os mundos imediatamente",
-      "saveOn": "Ativar o salvamento automático",
-      "saveOff": "Desativar o salvamento automático",
-      "update": "Verificar ou aplicar uma atualização do servidor",
-      "msg": "Enviar mensagem privada a um jogador",
-      "me": "Transmitir uma mensagem de ação",
-      "seed": "Mostrar a seed do mundo",
-      "worldborder": "Configurar a borda do mundo",
-      "setspawn": "Definir o ponto de spawn do mundo"
+      "who": "Lista os jogadores online por mundo",
+      "whoami": "Mostra o UUID de um jogador",
+      "whereami": "Mostra o mundo e a posição de um jogador",
+      "kick": "Desconecta um jogador. O Hytale 0.7 não aceita motivo; o painel o guarda no histórico.",
+      "kill": "Mata um jogador",
+      "gamemode": "Define o modo de jogo de um jogador (Aventura ou Criativo)",
+      "give": "Dá um item a um jogador",
+      "heal": "Restaura a vida de um jogador ao máximo (Stamina funciona igual)",
+      "respawn": "Faz um jogador morto renascer",
+      "effectApply": "Aplica um efeito a um jogador",
+      "effectClear": "Remove todos os efeitos de um jogador",
+      "tpPlayer": "Teleporta um jogador até outro jogador",
+      "tpCoords": "Teleporta um jogador para coordenadas",
+      "whitelistStatus": "Mostra se a whitelist está ativa",
+      "whitelistList": "Lista os jogadores na whitelist",
+      "whitelistSwitch": "Liga ou desliga a whitelist",
+      "whitelistAdd": "Adiciona um jogador à whitelist",
+      "whitelistRemove": "Remove um jogador da whitelist",
+      "ban": "Bane um jogador (motivo opcional); o servidor o desconecta",
+      "unban": "Remove o banimento de um jogador",
+      "opAdd": "Torna um jogador operador",
+      "opRemove": "Remove os direitos de operador de um jogador",
+      "permUser": "Dá uma permissão a um jogador (por UUID)",
+      "permGroup": "Dá uma permissão a um grupo",
+      "help": "Mostra a sintaxe de um comando",
+      "version": "Mostra a versão do servidor",
+      "stats": "Mostra estatísticas de memória, CPU ou coleta de lixo",
+      "pluginList": "Lista os plugins e mods carregados",
+      "maxplayers": "Mostra ou define o limite de jogadores",
+      "backup": "Cria o backup próprio do servidor (precisa de --backup-dir na inicialização)",
+      "update": "Verifica, baixa e aplica atualizações do servidor",
+      "authStatus": "Mostra o login Hytale do servidor",
+      "stop": "Para o servidor",
+      "worldList": "Lista os mundos carregados",
+      "worldSave": "Salva todos os mundos agora",
+      "worldPerf": "Mostra os ticks por segundo de um mundo",
+      "worldAdd": "Cria um novo mundo",
+      "worldLoad": "Carrega um mundo",
+      "timeSet": "Define a hora do dia (day, noon, night e midnight também funcionam)",
+      "timePause": "Pausa a hora do dia",
+      "weatherSet": "Força um clima, p. ex. Zone1_Rain ou Zone1_Sunny",
+      "weatherReset": "Volta ao clima natural do mundo (alias: clear)",
+      "warpList": "Lista os pontos de warp",
+      "say": "Envia uma mensagem no chat para todos",
+      "notify": "Mostra um aviso a todos os jogadores, com estilo opcional",
+      "eventtitle": "Mostra um título grande na tela de todos"
     }
   },
   "setup": {
+    "gameModeAdventureHint": "Aventura: o modo de jogo normal para explorar e sobreviver.",
+    "gameModeCreativeHint": "Criativo: construa livremente, voe, recursos ilimitados.",
+    "whitelistAddYourself": "Após a configuração só jogadores na whitelist e administradores podem entrar. Adicione-se primeiro na página da whitelist.",
     "wizardTitle": "Assistente de Configuracao",
     "loading": "Carregando configuracao...",
     "step": "Passo",
@@ -2287,7 +2280,7 @@
     "serverPasswordTooShort": "Senha deve ter pelo menos 4 caracteres",
     "serverPasswordTooLong": "Senha deve ter no maximo 32 caracteres",
     "whitelistEnabled": "Ativar Whitelist",
-    "whitelistDescription": "Apenas jogadores na whitelist podem entrar no servidor. Voce pode gerenciar a whitelist apos a configuracao.",
+    "whitelistDescription": "Só jogadores na whitelist podem entrar (configuração do Hytale RequireJoinPermission). Você gerencia a whitelist no painel após a configuração.",
     "recommended": "Recomendado",
     "allowOperator": "Permitir /op self (--allow-op)",
     "allowOperatorDescription": "Libera o comando /op self para os jogadores. Não é necessário para nomear administradores: /op add funciona pelo console sem isso. Deixe esta opção desativada.",
@@ -2343,7 +2336,7 @@
     "chunks": "Chunks",
     "viewRadiusWarningMedium": "Maior raio de visao aumenta uso de RAM. Considere diminuir para melhor performance.",
     "viewRadiusWarningHigh": "Raio de visao muito alto impacta significativamente a performance. Recomendado apenas para servidores potentes.",
-    "viewRadiusHint": "Valores menores melhoram performance mas reduzem visibilidade. Padrao e 16 chunks.",
+    "viewRadiusHint": "Valores menores melhoram a performance, mas reduzem a distância de visão. O servidor permite no máximo 32 chunks (o padrão dele).",
     "performanceGuideTitle": "Guia de Performance",
     "minutes": "minutos",
     "serverDownloadTitle": "Download do Servidor",
@@ -2698,6 +2691,10 @@
       "webPanelPort": "Porta do Painel Web"
     },
     "summary": {
+      "serverConfigFailed": "Não foi possível gravar as configurações do servidor no config.json ({error}). Verifique-as na seção Configuração.",
+      "serverConfigSkipped": "A pasta do servidor ainda não estava pronta. Verifique as configurações do servidor na seção Configuração após o primeiro início.",
+      "serverConfigPending": "O servidor está sendo reiniciado agora (para carregar os mods instalados) e assume as configurações da instalação.",
+      "serverConfigWritten": "As configurações do servidor estão no config.json e valem a partir do próximo início do servidor.",
       "title": "Resumo da Configuracao",
       "description": "Revise sua configuracao antes de concluir",
       "successTitle": "Configuracao Completa!",
@@ -2708,7 +2705,7 @@
       "serverAddress": "Endereco do Servidor para Jogadores",
       "shareWithPlayers": "Compartilhe este endereco com jogadores para entrar no seu servidor",
       "nextStepsTitle": "Proximos Passos",
-      "tipWhitelist": "Adicione jogadores a whitelist se habilitada",
+      "tipWhitelist": "Se a whitelist estiver ligada, adicione jogadores na página da whitelist",
       "tipBackup": "Configure backups automaticos para proteger seus dados",
       "tipSettings": "Explore as configuracoes do painel para personalizar sua experiencia",
       "goToDashboard": "Ir para o Painel",

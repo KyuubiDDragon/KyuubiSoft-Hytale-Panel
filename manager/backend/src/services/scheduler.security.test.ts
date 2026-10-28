@@ -107,6 +107,23 @@ describe('scheduler: saving scheduled commands', () => {
     if (!review.ok) expect(review.error).toContain('console.execute.admin');
   });
 
+  it('keeps an unchanged entry whose command Hytale 0.7 no longer has, but refuses a new one', async () => {
+    await saveAndRestart([entry('sc-old', '/save-all', { createdBy: 'admin' })]);
+    const keep = await scheduler.reviewScheduledCommands(
+      [entry('sc-old', '/save-all', { name: 'renamed' }), entry('sc-who', '/who')],
+      operator,
+      'default',
+    );
+    expect(keep.ok).toBe(true);
+    const add = await scheduler.reviewScheduledCommands(
+      [entry('sc-new', '/save-all')],
+      admin,
+      'default',
+    );
+    expect(add).toMatchObject({ ok: false, status: 400 });
+    await saveAndRestart([]);
+  });
+
   it('rejects a multi-line command with 400', async () => {
     const review = await scheduler.reviewScheduledCommands(
       [entry('sc-nl', '/say hi\n/op add Evil')],
@@ -144,7 +161,7 @@ describe('scheduler: saving scheduled commands', () => {
     await saveAndRestart(adminSave.value);
 
     const opSave = await scheduler.reviewScheduledCommands(
-      [entry('sc-stop', '/stop', { createdBy: 'operator' }), entry('sc-list', '/list')],
+      [entry('sc-stop', '/stop', { createdBy: 'operator' }), entry('sc-list', '/who')],
       operator,
       'default',
     );
@@ -171,7 +188,7 @@ describe('scheduler: saving scheduled commands', () => {
 
   it('rejects duplicate ids', async () => {
     const review = await scheduler.reviewScheduledCommands(
-      [entry('dup', '/list'), entry('dup', '/list')],
+      [entry('dup', '/who'), entry('dup', '/who')],
       admin,
       'default',
     );
@@ -215,9 +232,12 @@ describe('scheduler: firing scheduled commands', () => {
   });
 
   it('runs a legacy entry without creator only if it needs no admin tier', async () => {
-    await saveAndRestart([entry('legacy-op', '/op add Evil'), entry('legacy-save', '/save')]);
+    await saveAndRestart([
+      entry('legacy-op', '/op add Evil'),
+      entry('legacy-save', '/world save --all --confirm'),
+    ]);
     const sent = await fireOnce();
-    expect(sent).toContain('/save');
+    expect(sent).toContain('/world save --all --confirm');
     expect(sent).not.toContain('/op add Evil');
   });
 });
@@ -270,7 +290,7 @@ describe('scheduler: blocked entries are reported and can be approved', () => {
   it('derives blockedReason without changing the stored entries', async () => {
     await saveAndRestart([
       entry('legacy-op', '/op add Evil'),
-      entry('legacy-save', '/save'),
+      entry('legacy-save', '/world save --all --confirm'),
       entry('admin-stop', '/stop', { createdBy: 'admin' }),
       entry('bad', '/eval x()', { createdBy: 'admin' }),
     ]);

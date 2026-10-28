@@ -286,8 +286,9 @@ onMounted(() => {
               <span class="text-sm text-ink-muted">{{ t('setup.chunks') }}</span>
               <span class="text-lg font-bold text-ink">{{ viewRadius }}</span>
             </div>
+            <!-- .number: a range input hands its value over as text -->
             <input
-              v-model="viewRadius"
+              v-model.number="viewRadius"
               type="range"
               min="8"
               max="32"

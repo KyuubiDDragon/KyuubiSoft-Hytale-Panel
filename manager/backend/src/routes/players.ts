@@ -1,7 +1,5 @@
 import { logger } from '../utils/logger.js';
 import { Router, Request, Response, NextFunction } from 'express';
-import { readFile, writeFile } from 'fs/promises';
-import path from 'path';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import * as playersService from '../services/players.js';
@@ -12,7 +10,9 @@ import * as punishments from '../services/punishments.js';
 import { getLeaderboard, getPlayerSessions } from '../services/playtime.js';
 import * as playerNotes from '../services/playerNotes.js';
 import { exportPlayerData, deletePlayerData } from '../services/playerDataExport.js';
-import { config } from '../config.js';
+import { banPlayer, unbanPlayer, type BanOutcome } from '../services/accessBans.js';
+import { addToWhitelist, removeFromWhitelist } from '../services/accessWhitelist.js';
+import { describeAccessError, type WriteOutcome } from '../services/accessContext.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoWhitelist } from '../services/demoData.js';
 import type { AuthenticatedRequest } from '../types/index.js';
@@ -70,26 +70,46 @@ router.post(
       return;
     }
 
-    const results: Array<{ name: string; success: boolean; error?: string }> = [];
-    const safeReason = reason ? sanitizeMessage(reason, 100) : '';
+    const results: Array<{ name: string; success: boolean; error?: string; warning?: string }> = [];
     for (const rawName of names) {
       if (!isValidPlayerName(rawName)) {
         results.push({ name: rawName, success: false, error: 'invalid name' });
         continue;
       }
-      let cmd: string;
-      if (action === 'kick')
-        cmd = safeReason ? `/kick ${rawName} ${safeReason}` : `/kick ${rawName}`;
-      else if (action === 'ban')
-        cmd = safeReason ? `/ban ${rawName} ${safeReason}` : `/ban ${rawName}`;
-      else cmd = `/unban ${rawName}`;
       if (isDemoMode()) {
         results.push({ name: rawName, success: true });
         continue;
       }
-      const r = await dockerService.execCommand(cmd, req.serverId);
-      results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
-      if (action === 'kick' && r.success) playersService.removePlayer(rawName);
+      if (action === 'kick') {
+        // /kick takes only the player in Hytale 0.7; a reason would fail the command.
+        const r = await dockerService.execCommand(`/kick ${rawName}`, req.serverId);
+        results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
+        if (r.success) playersService.removePlayer(rawName);
+        continue;
+      }
+      // Bans go by UUID (the server matches a bare name by prefix) and are read back.
+      let outcome: BanOutcome;
+      try {
+        outcome =
+          action === 'ban'
+            ? await banPlayer(req.serverId, rawName, reason)
+            : await unbanPlayer(req.serverId, rawName);
+        results.push({ name: rawName, success: true });
+      } catch (error) {
+        results.push({ name: rawName, success: false, error: describeAccessError(error).error });
+        continue;
+      }
+      // Like the single routes: a permanent ban or an unban ends the panel's temp-bans.
+      await punishments
+        .closeBanRecords(
+          banTarget(req, rawName, outcome),
+          action === 'ban' ? ['tempban'] : ['ban', 'tempban'],
+          req.user || 'system',
+        )
+        .catch((error) => {
+          logger.error(`[Players] bulk ${action} ${rawName}: not recorded:`, error);
+          if (action === 'ban') results[results.length - 1].warning = TEMPBANS_NOT_CLOSED;
+        });
     }
     const summary = {
       total: results.length,
@@ -114,7 +134,8 @@ function validatePlayerName(res: Response, name: string): boolean {
   if (!isValidPlayerName(name)) {
     res.status(400).json({
       success: false,
-      error: 'Invalid player name. Only alphanumeric characters, underscores and hyphens allowed.',
+      error:
+        'Invalid player name. Only letters, digits, underscores and hyphens (not first), at most 32 characters.',
     });
     return false;
   }
@@ -133,50 +154,112 @@ function answerMaybeRan(res: Response, playerName: string): void {
   });
 }
 
-// ============== FILE PERSISTENCE HELPERS ==============
-
-interface WhitelistData {
-  enabled: boolean;
-  list: string[];
+/**
+ * The answer for a console command that was accepted. Without the KyuubiSoft
+ * API plugin the line only reached the console's stdin and its result is
+ * unknown, so the answer says that instead of claiming the action worked.
+ */
+function commandDone(
+  res: Response,
+  result: dockerService.CommandExecResult,
+  message: string,
+  extra: Record<string, unknown> = {},
+): void {
+  const confirmed = result.via !== 'stdin';
+  res.json({
+    success: true,
+    confirmed,
+    message: confirmed
+      ? message
+      : `${message} (sent to the server console; without the KyuubiSoft API plugin the result is not confirmed)`,
+    ...extra,
+  });
 }
 
-async function readWhitelist(): Promise<WhitelistData> {
+/**
+ * Hytale 0.7 has no chat mute and no private message command; the routes stay
+ * so older clients get a clear answer instead of a fake success.
+ */
+function answerUnsupported(res: Response, what: string): void {
+  res.status(501).json({ success: false, unsupported: true, error: `${what} in Hytale 0.7` });
+}
+
+interface AccessActivity {
+  user: string;
+  action: string;
+  player: string;
+  details?: string;
+  /** What the answer says when the change happened but `record` failed. */
+  notRecorded?: string;
+  /** Refuse with 409 and this code when nothing changed (then nothing is recorded either). */
+  unchanged?: { code: string; error: string };
+}
+
+const TEMPBANS_NOT_CLOSED =
+  'Banned, but the panel could not close its temporary bans of this player: one may still lift the ban when it ends. Check the punishments list.';
+
+/** The player of a ban change, for the panel's ban entries: typed name, known name and UUID. */
+const banTarget = (req: AuthenticatedRequest, typed: string, outcome: BanOutcome) => ({
+  serverId: req.serverId,
+  names: [typed, outcome.name],
+  uuid: outcome.uuid,
+});
+
+async function logAccessActivity(activity: AccessActivity, ok: boolean, details?: string) {
   try {
-    const content = await readFile(path.join(config.serverPath, 'whitelist.json'), 'utf-8');
-    return JSON.parse(content);
-  } catch {
-    return { enabled: false, list: [] };
+    await logActivity(activity.user, activity.action, 'player', ok, activity.player, details);
+  } catch (error) {
+    logger.error(`[Players] activity log for ${activity.action} ${activity.player} failed:`, error);
   }
 }
 
-async function writeWhitelist(data: WhitelistData): Promise<void> {
-  await writeFile(
-    path.join(config.serverPath, 'whitelist.json'),
-    JSON.stringify(data, null, 2),
-    'utf-8',
-  );
-}
-
-// Name mapping for bans (UUID -> player name)
-interface BanNameMapping {
-  [uuid: string]: string;
-}
-
-async function readBansMapping(): Promise<BanNameMapping> {
+/**
+ * Runs a whitelist or ban change through the access services and answers it:
+ * 200 when the new state was read back, 202 when the server only took the
+ * command, the access error otherwise. Only the change decides the answer:
+ * the panel's own bookkeeping afterwards (`record`, e.g. a punishment entry)
+ * cannot turn a change that happened into a failure; if it fails the answer
+ * carries a warning instead.
+ */
+async function answerAccessChange<O extends WriteOutcome<unknown>>(
+  res: Response,
+  activity: AccessActivity,
+  change: () => Promise<O>,
+  message: string,
+  record?: (outcome: O) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void,
+): Promise<void> {
+  let outcome: O;
   try {
-    const content = await readFile(path.join(config.serverPath, 'bans-names.json'), 'utf-8');
-    return JSON.parse(content);
-  } catch {
-    return {};
+    outcome = await change();
+  } catch (error) {
+    const { status, error: failure, code } = describeAccessError(error);
+    res.status(status).json({ success: false, error: failure, code });
+    await logAccessActivity(activity, false, failure);
+    return;
   }
-}
-
-async function writeBansMapping(mapping: BanNameMapping): Promise<void> {
-  await writeFile(
-    path.join(config.serverPath, 'bans-names.json'),
-    JSON.stringify(mapping, null, 2),
-    'utf-8',
-  );
+  if (!outcome.changed && activity.unchanged) {
+    res.status(409).json({ success: false, ...activity.unchanged });
+    await logAccessActivity(activity, false, activity.unchanged.error);
+    return;
+  }
+  let extra: Record<string, unknown> = {};
+  try {
+    extra = (await record?.(outcome)) ?? {};
+  } catch (error) {
+    logger.error(`[Players] ${activity.action} ${activity.player}: done, not recorded:`, error);
+    extra = {
+      warning: activity.notRecorded ?? 'Done on the server, but the panel could not record it',
+    };
+  }
+  res.status(outcome.verified ? 200 : 202).json({
+    success: true,
+    confirmed: outcome.verified,
+    changed: outcome.changed,
+    via: outcome.via,
+    message: outcome.message || message,
+    ...extra,
+  });
+  await logAccessActivity(activity, true, activity.details);
 }
 
 // GET /api/players
@@ -321,9 +404,9 @@ router.post(
     // SECURITY: Sanitize reason if provided
     const safeReason = reason ? sanitizeMessage(reason, 100) : '';
 
-    // Send kick command to server (with optional reason)
-    const command = safeReason ? `/kick ${playerName} ${safeReason}` : `/kick ${playerName}`;
-    const result = await dockerService.execCommand(command, req.serverId);
+    // Hytale 0.7's /kick takes only the player (any further word fails the
+    // command); the reason is kept in the panel's punishment record.
+    const result = await dockerService.execCommand(`/kick ${playerName}`, req.serverId);
 
     if (result.success) {
       playersService.removePlayer(playerName);
@@ -338,9 +421,8 @@ router.post(
       // Log activity
       await logActivity(username, 'kick', 'player', true, playerName, reason);
 
-      res.json({
-        success: true,
-        message: `Player ${playerName} kicked`,
+      commandDone(res, result, `Player ${playerName} kicked`, {
+        reasonStoredOnly: Boolean(safeReason),
       });
     } else {
       await logActivity(username, 'kick', 'player', false, playerName, result.error);
@@ -358,7 +440,7 @@ router.post(
   '/:name/ban',
   authMiddleware,
   requirePermission('players.ban'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     const { reason } = req.body;
     const username = req.user || 'system';
@@ -376,61 +458,39 @@ router.post(
       return;
     }
 
-    // SECURITY: Sanitize reason if provided
-    const safeReason = reason ? sanitizeMessage(reason, 100) : 'You have been banned';
-
-    // First kick the player if online
-    await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
-
-    // Then execute ban command - server will update bans.json with UUID
-    const command = `/ban ${playerName} ${safeReason}`;
-    const result = await dockerService.execCommand(command, req.serverId);
-
-    if (result.success) {
-      playersService.removePlayer(playerName);
-
-      // Store player name in mapping file for display purposes
-      // The server's bans.json uses UUIDs, we need names for the UI
-      try {
-        const mapping = await readBansMapping();
-        // We'll update the mapping when the bans list is read
-        // For now, just ensure we have a way to associate names
-        mapping[playerName] = playerName; // Temporary - will be replaced with UUID mapping
-        await writeBansMapping(mapping);
-
-        // Remove from whitelist if present
-        const whitelist = await readWhitelist();
-        if (whitelist.list.includes(playerName)) {
-          whitelist.list = whitelist.list.filter((p) => p !== playerName);
-          await writeWhitelist(whitelist);
-        }
-      } catch (err) {
-        logger.error('Failed to update ban mapping:', err);
-      }
-
-      punishments.recordPunishment({
-        serverId: req.serverId,
-        playerName,
-        type: 'ban',
-        reason: safeReason,
-        byUser: username,
-      });
-      // Log activity
-      await logActivity(username, 'ban', 'player', true, playerName, reason);
-
-      res.json({
-        success: true,
-        message: `Player ${playerName} banned`,
-      });
-    } else {
-      await logActivity(username, 'ban', 'player', false, playerName, result.error);
-
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Failed to ban player',
-      });
-    }
-  },
+    // By UUID (the server matches a bare name by prefix), read back afterwards;
+    // with the server stopped it goes into bans.json. The server disconnects a
+    // banned player itself. A ban in Hytale 0.7 has no end date.
+    const safeReason = typeof reason === 'string' ? sanitizeMessage(reason, 100) : '';
+    await answerAccessChange(
+      res,
+      { user: username, action: 'ban', player: playerName, details: safeReason },
+      () => banPlayer(req.serverId, playerName, safeReason),
+      `Player ${playerName} banned`,
+      async (outcome) => {
+        playersService.removePlayer(playerName);
+        // A permanent ban: a temp-ban running on the player must not lift it later.
+        const closed = await punishments
+          .closeBanRecords(banTarget(req, playerName, outcome), ['tempban'], username)
+          .then(
+            () => ({}),
+            (error: unknown) => {
+              logger.error(`[Players] ban ${playerName}: temp-bans not closed:`, error);
+              return { warning: TEMPBANS_NOT_CLOSED };
+            },
+          );
+        punishments.recordPunishment({
+          serverId: req.serverId,
+          playerName,
+          uuid: outcome.uuid,
+          type: 'ban',
+          reason: safeReason || undefined,
+          byUser: username,
+        });
+        return closed;
+      },
+    );
+  }),
 );
 
 // DELETE /api/players/:name/ban
@@ -438,7 +498,7 @@ router.delete(
   '/:name/ban',
   authMiddleware,
   requirePermission('players.unban'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     const username = req.user || 'system';
 
@@ -455,27 +515,20 @@ router.delete(
       return;
     }
 
-    // Execute unban command - server will update bans.json
-    const result = await dockerService.execCommand(`/unban ${playerName}`, req.serverId);
-
-    if (result.success) {
-      punishments.deactivateActiveForPlayer(playerName, ['ban', 'tempban'], username);
-      // Log activity
-      await logActivity(username, 'unban', 'player', true, playerName);
-
-      res.json({
-        success: true,
-        message: `Player ${playerName} unbanned`,
-      });
-    } else {
-      await logActivity(username, 'unban', 'player', false, playerName, result.error);
-
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Failed to unban player',
-      });
-    }
-  },
+    await answerAccessChange(
+      res,
+      { user: username, action: 'unban', player: playerName },
+      () => unbanPlayer(req.serverId, playerName),
+      `Player ${playerName} unbanned`,
+      async (outcome) => {
+        await punishments.closeBanRecords(
+          banTarget(req, playerName, outcome),
+          ['ban', 'tempban'],
+          username,
+        );
+      },
+    );
+  }),
 );
 
 // POST /api/players/:name/whitelist
@@ -483,7 +536,7 @@ router.post(
   '/:name/whitelist',
   authMiddleware,
   requirePermission('players.whitelist'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     const username = req.user || 'system';
 
@@ -500,36 +553,15 @@ router.post(
       return;
     }
 
-    const result = await dockerService.execCommand(`/whitelist add ${playerName}`, req.serverId);
-
-    if (result.success) {
-      // Persist to whitelist.json
-      try {
-        const whitelist = await readWhitelist();
-        if (!whitelist.list.includes(playerName)) {
-          whitelist.list.push(playerName);
-          await writeWhitelist(whitelist);
-        }
-      } catch (err) {
-        logger.error('Failed to persist whitelist:', err);
-      }
-
-      // Log activity
-      await logActivity(username, 'whitelist_add', 'player', true, playerName);
-
-      res.json({
-        success: true,
-        message: `Player ${playerName} added to whitelist`,
-      });
-    } else {
-      await logActivity(username, 'whitelist_add', 'player', false, playerName, result.error);
-
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Failed to add to whitelist',
-      });
-    }
-  },
+    // The join permission by UUID when known (read back afterwards); with the
+    // server stopped it goes into the server's files.
+    await answerAccessChange(
+      res,
+      { user: username, action: 'whitelist_add', player: playerName },
+      () => addToWhitelist(req.serverId, playerName),
+      `Player ${playerName} added to whitelist`,
+    );
+  }),
 );
 
 // DELETE /api/players/:name/whitelist
@@ -537,7 +569,7 @@ router.delete(
   '/:name/whitelist',
   authMiddleware,
   requirePermission('players.whitelist'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     const username = req.user || 'system';
 
@@ -554,34 +586,13 @@ router.delete(
       return;
     }
 
-    const result = await dockerService.execCommand(`/whitelist remove ${playerName}`, req.serverId);
-
-    if (result.success) {
-      // Remove from whitelist.json
-      try {
-        const whitelist = await readWhitelist();
-        whitelist.list = whitelist.list.filter((p) => p !== playerName);
-        await writeWhitelist(whitelist);
-      } catch (err) {
-        logger.error('Failed to persist whitelist removal:', err);
-      }
-
-      // Log activity
-      await logActivity(username, 'whitelist_remove', 'player', true, playerName);
-
-      res.json({
-        success: true,
-        message: `Player ${playerName} removed from whitelist`,
-      });
-    } else {
-      await logActivity(username, 'whitelist_remove', 'player', false, playerName, result.error);
-
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Failed to remove from whitelist',
-      });
-    }
-  },
+    await answerAccessChange(
+      res,
+      { user: username, action: 'whitelist_remove', player: playerName },
+      () => removeFromWhitelist(req.serverId, playerName),
+      `Player ${playerName} removed from whitelist`,
+    );
+  }),
 );
 
 // POST /api/players/:name/op
@@ -684,34 +695,8 @@ router.post(
       return;
     }
 
-    // Demo mode: simulate message
-    if (isDemoMode()) {
-      res.json({
-        success: true,
-        message: `[Demo] Message sent to ${playerName}`,
-      });
-      return;
-    }
-
-    // SECURITY: Sanitize message
-    const safeMessage = sanitizeMessage(message, 256);
-
-    const result = await dockerService.execCommand(
-      `/msg ${playerName} ${safeMessage}`,
-      req.serverId,
-    );
-
-    if (result.success) {
-      res.json({
-        success: true,
-        message: `Message sent to ${playerName}`,
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Failed to send message',
-      });
-    }
+    // /msg, /tell and /whisper do not exist in Hytale 0.7; /say reaches everyone.
+    answerUnsupported(res, 'There is no private message command');
   },
 );
 
@@ -796,12 +781,13 @@ router.post(
 
     if (result.success) {
       await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
-      res.json({
-        success: true,
-        message: target
+      commandDone(
+        res,
+        result,
+        target
           ? `Teleported ${playerName} to ${target}`
           : `Teleported ${playerName} to ${x}, ${y}, ${z}`,
-      });
+      );
     } else {
       await logActivity(username, 'teleport', 'player', false, playerName, result.error);
       res.status(500).json({
@@ -855,10 +841,7 @@ router.post(
 
     if (result.success) {
       await logActivity(username, 'kill', 'player', true, playerName);
-      res.json({
-        success: true,
-        message: `Player ${playerName} killed`,
-      });
+      commandDone(res, result, `Player ${playerName} killed`);
     } else {
       await logActivity(username, 'kill', 'player', false, playerName, result.error);
       res.status(500).json({
@@ -904,17 +887,11 @@ router.post(
       // Plugin not available, fall back to console command
     }
 
-    // Fallback: Use console command
-    const result = await dockerService.execCommand(
-      `/player respawn --player ${playerName}`,
-      req.serverId,
-    );
+    // Fallback: Use console command (the variant with the player as argument)
+    const result = await dockerService.execCommand(`/player respawn ${playerName}`, req.serverId);
 
     if (result.success) {
-      res.json({
-        success: true,
-        message: `Player ${playerName} respawned`,
-      });
+      commandDone(res, result, `Player ${playerName} respawned`);
     } else {
       res.status(500).json({
         success: false,
@@ -995,10 +972,7 @@ router.post(
 
     if (result.success) {
       await logActivity(username, 'gamemode', 'player', true, playerName, `Changed to ${gamemode}`);
-      res.json({
-        success: true,
-        message: `Set ${playerName}'s gamemode to ${gamemode}`,
-      });
+      commandDone(res, result, `Set ${playerName}'s gamemode to ${gamemode}`);
     } else {
       await logActivity(username, 'gamemode', 'player', false, playerName, result.error);
       res.status(500).json({
@@ -1112,10 +1086,7 @@ router.post(
         playerName,
         `Gave ${amount || 1}x ${item}`,
       );
-      res.json({
-        success: true,
-        message: `Gave ${amount || 1} ${item} to ${playerName}`,
-      });
+      commandDone(res, result, `Gave ${amount || 1} ${item} to ${playerName}`);
     } else {
       await logActivity(username, 'give', 'player', false, playerName, result.error);
       res.status(500).json({
@@ -1161,17 +1132,24 @@ router.post(
       // Plugin not available, fall back to console command
     }
 
-    // Fallback: Use console command
+    // Fallback: the console commands of Hytale's own /heal (health and
+    // stamina to their maximum), aimed at the player.
     const result = await dockerService.execCommand(
-      `/player stats settomax --player ${playerName}`,
+      `/player stats settomax Health --player ${playerName}`,
       req.serverId,
     );
+    if (result.success) {
+      const stamina = await dockerService.execCommand(
+        `/player stats settomax Stamina --player ${playerName}`,
+        req.serverId,
+      );
+      if (!stamina.success) {
+        logger.warn(`[Players] heal ${playerName}: stamina not restored: ${stamina.error}`);
+      }
+    }
 
     if (result.success) {
-      res.json({
-        success: true,
-        message: `Player ${playerName} healed`,
-      });
+      commandDone(res, result, `Player ${playerName} healed`);
     } else {
       res.status(500).json({
         success: false,
@@ -1225,23 +1203,23 @@ router.post(
       return;
     }
 
-    // Use --player flag for console commands
+    // The variants that take the player as their first argument
     const command =
       action === 'clear'
-        ? `/player effect clear --player ${playerName}`
-        : `/player effect apply --player ${playerName} ${effect}`;
+        ? `/player effect clear ${playerName}`
+        : `/player effect apply ${playerName} ${effect}`;
     const result = await dockerService.execCommand(command, req.serverId);
 
     if (result.success) {
       const effectDetails = action === 'clear' ? 'Cleared all effects' : `Applied ${effect}`;
       await logActivity(username, 'effect', 'player', true, playerName, effectDetails);
-      res.json({
-        success: true,
-        message:
-          action === 'clear'
-            ? `Cleared effects from ${playerName}`
-            : `Applied ${effect} to ${playerName}`,
-      });
+      commandDone(
+        res,
+        result,
+        action === 'clear'
+          ? `Cleared effects from ${playerName}`
+          : `Applied ${effect} to ${playerName}`,
+      );
     } else {
       await logActivity(username, 'effect', 'player', false, playerName, result.error);
       res.status(500).json({
@@ -1274,38 +1252,32 @@ router.post(
       return;
     }
 
-    // Try plugin API first
+    // Only the plugin can do this: the server's /inventory clear clears the
+    // inventory of whoever runs it and takes no player, so there is no
+    // console fallback.
+    let error = 'Failed to clear inventory';
     try {
       const pluginResult = await kyuubiApi.clearInventoryViaPlugin(playerName, req.serverId);
       if (pluginResult.success) {
         await logActivity(username, 'inventory_clear', 'player', true, playerName);
         res.json({
           success: true,
+          confirmed: true,
           message: `Cleared ${playerName}'s inventory`,
         });
         return;
       }
       if (pluginResult.maybeRan) return answerMaybeRan(res, playerName);
-    } catch {
-      // Plugin not available, fall back to console command
+      if (pluginResult.error) error = pluginResult.error;
+    } catch (err) {
+      if (err instanceof Error) error = err.message;
     }
 
-    // Fallback: Use console command
-    const result = await dockerService.execCommand(`/inventory clear ${playerName}`, req.serverId);
-
-    if (result.success) {
-      await logActivity(username, 'inventory_clear', 'player', true, playerName);
-      res.json({
-        success: true,
-        message: `Cleared ${playerName}'s inventory`,
-      });
-    } else {
-      await logActivity(username, 'inventory_clear', 'player', false, playerName, result.error);
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Failed to clear inventory',
-      });
-    }
+    await logActivity(username, 'inventory_clear', 'player', false, playerName, error);
+    res.status(502).json({
+      success: false,
+      error: `${error}. Clearing another player's inventory needs the KyuubiSoft API plugin; Hytale has no console command for it.`,
+    });
   },
 );
 
@@ -1618,7 +1590,7 @@ router.post(
   '/:name/tempban',
   authMiddleware,
   requirePermission('players.ban'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     const username = req.user || 'system';
     if (!validatePlayerName(res, playerName)) return;
@@ -1649,35 +1621,43 @@ router.post(
       return;
     }
 
-    await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
-    const result = await dockerService.execCommand(
-      `/ban ${playerName} ${safeReason}`,
-      req.serverId,
+    // Hytale 0.7 has no temporary ban: the panel bans without end date and
+    // lifts the ban itself when the time is up (punishments expiry loop). A
+    // player who is banned already keeps that ban: an end date for it would
+    // lift a permanent ban, so the panel refuses and records nothing.
+    const until = new Date(Date.now() + durationMs).toISOString();
+    await answerAccessChange(
+      res,
+      {
+        user: username,
+        action: 'tempban',
+        player: playerName,
+        details: `${safeReason} (until ${until})`,
+        notRecorded:
+          'Banned, but the panel could not record the end date: the ban stays until it is lifted by hand',
+        unchanged: {
+          code: 'already_banned',
+          error: `${playerName} is banned already; a temporary ban would not end that ban. Unban first to set a new end date.`,
+        },
+      },
+      () => banPlayer(req.serverId, playerName, safeReason),
+      `Temp-banned ${playerName}`,
+      (outcome) => {
+        playersService.removePlayer(playerName);
+        const p = punishments.recordPunishment({
+          serverId: req.serverId,
+          playerName,
+          uuid: outcome.uuid,
+          type: 'tempban',
+          reason: safeReason,
+          byUser: username,
+          durationMs,
+        });
+        // The server's ban has no end date; the panel lifts it at expiresAt.
+        return { expiresAt: p.expiresAt, liftedByPanel: true };
+      },
     );
-    if (result.success) {
-      playersService.removePlayer(playerName);
-      const p = punishments.recordPunishment({
-        serverId: req.serverId,
-        playerName,
-        type: 'tempban',
-        reason: safeReason,
-        byUser: username,
-        durationMs,
-      });
-      await logActivity(
-        username,
-        'tempban',
-        'player',
-        true,
-        playerName,
-        `${safeReason} (until ${p.expiresAt})`,
-      );
-      res.json({ success: true, message: `Temp-banned ${playerName}`, expiresAt: p.expiresAt });
-    } else {
-      await logActivity(username, 'tempban', 'player', false, playerName, result.error);
-      res.status(500).json({ success: false, error: result.error || 'Failed to temp-ban player' });
-    }
-  },
+  }),
 );
 
 // POST /api/players/:name/mute  { duration?, reason? }  (duration omitted = permanent)
@@ -1687,41 +1667,14 @@ router.post(
   requirePermission('players.ban'),
   async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
-    const username = req.user || 'system';
     if (!validatePlayerName(res, playerName)) return;
-
-    const { duration, reason } = req.body as { duration?: string | number; reason?: string };
-    const durationMs = punishments.parseDuration(duration);
-    const safeReason = reason ? sanitizeMessage(reason, 100) : '';
-
-    if (!isDemoMode()) {
-      const result = await dockerService.execCommand(`/mute ${playerName}`, req.serverId);
-      if (!result.success) {
-        res.status(500).json({ success: false, error: result.error || 'Failed to mute player' });
-        return;
-      }
-    }
-    const p = punishments.recordPunishment({
-      serverId: req.serverId,
-      playerName,
-      type: durationMs ? 'tempmute' : 'mute',
-      reason: safeReason || undefined,
-      byUser: username,
-      durationMs,
-    });
-    await logActivity(
-      username,
-      'mute',
-      'player',
-      true,
-      playerName,
-      durationMs ? `until ${p.expiresAt}` : 'permanent',
-    );
-    res.json({ success: true, message: `Muted ${playerName}`, expiresAt: p.expiresAt });
+    // No mute is recorded either: it would show a punishment that never applied.
+    answerUnsupported(res, 'There is no chat mute');
   },
 );
 
-// DELETE /api/players/:name/mute  (unmute)
+// DELETE /api/players/:name/mute  (unmute) - Hytale 0.7 has no mute; this only
+// closes mute records an older panel version stored.
 router.delete(
   '/:name/mute',
   authMiddleware,
@@ -1731,16 +1684,12 @@ router.delete(
     const username = req.user || 'system';
     if (!validatePlayerName(res, playerName)) return;
 
-    if (!isDemoMode()) {
-      const result = await dockerService.execCommand(`/unmute ${playerName}`, req.serverId);
-      if (!result.success) {
-        res.status(500).json({ success: false, error: result.error || 'Failed to unmute player' });
-        return;
-      }
-    }
     punishments.deactivateActiveForPlayer(playerName, ['mute', 'tempmute'], username);
     await logActivity(username, 'unmute', 'player', true, playerName);
-    res.json({ success: true, message: `Unmuted ${playerName}` });
+    res.json({
+      success: true,
+      message: `Closed the panel's mute records for ${playerName} (Hytale 0.7 has no chat mute)`,
+    });
   },
 );
 

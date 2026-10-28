@@ -6,8 +6,10 @@
  * configurable rules (banned words, links, excessive caps, length, flood).
  * On the first matching rule it applies the configured action:
  *   - warn  → public reminder via /say + a recorded 'warn' punishment
- *   - mute  → /mute the player + recorded mute/tempmute
- *   - kick  → /kick the player + recorded kick
+ *   - kick  → /kick the player + recorded kick (the reason stays in the panel;
+ *             Hytale 0.7's /kick takes no reason)
+ *   - mute  → Hytale 0.7 has no chat mute, so a 'mute' setting from an older
+ *             panel version warns instead (and says so in the log)
  *
  * Everything is wrapped defensively: a bad rule or a server hiccup must never
  * crash the panel. Flood detection is in-memory and resets on restart.
@@ -18,9 +20,10 @@ import { isDemoMode } from './demoData.js';
 import { logActivity } from './activityLog.js';
 import { recordPunishment } from './punishments.js';
 import { logger } from '../utils/logger.js';
-import { isValidPlayerName, stripControlChars } from '../utils/sanitize.js';
+import { isValidPlayerName, stripControlChars, toCommandText } from '../utils/sanitize.js';
 
 const SYSTEM_USER = 'AutoMod';
+let muteFallbackLogged = false;
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|gg|me|tv|co|xyz|dev)\b/i;
 
 // Per-player recent-message timestamps for flood detection.
@@ -111,7 +114,7 @@ async function enforce(
   serverId: string | undefined,
   v: Violation,
 ): Promise<void> {
-  // The name goes into /kick and /mute as-is; anything but a plain player name
+  // The name goes into /kick and /say as-is; anything but a plain player name
   // is refused instead of being written to the console.
   if (!isValidPlayerName(player)) {
     logger.warn(
@@ -121,33 +124,39 @@ async function enforce(
   }
   const detail = stripControlChars(v.detail).trim();
   const reason = `AutoMod: ${detail}`;
+  let action = cfg.action;
+  if (action === 'mute') {
+    if (!muteFallbackLogged) {
+      logger.warn('[AutoMod] Hytale 0.7 has no chat mute; the "mute" action warns instead');
+      muteFallbackLogged = true;
+    }
+    action = 'warn';
+  }
   const { execCommand } = await import('./docker.js');
   try {
-    if (cfg.action === 'kick') {
-      await execCommand(`/kick ${player} ${reason}`, serverId, { actor: 'automod' });
-      recordPunishment({ serverId, playerName: player, type: 'kick', reason, byUser: SYSTEM_USER });
-    } else if (cfg.action === 'mute') {
-      await execCommand(`/mute ${player}`, serverId, { actor: 'automod' });
-      const durationMs = cfg.muteDurationSec > 0 ? cfg.muteDurationSec * 1000 : null;
-      recordPunishment({
-        serverId,
-        playerName: player,
-        type: durationMs ? 'tempmute' : 'mute',
-        reason,
-        byUser: SYSTEM_USER,
-        durationMs,
-      });
-    } else {
-      // warn — public reminder + recorded warning, no kick/mute.
-      await execCommand(
-        `/say [AutoMod] ${player}, please mind the chat rules (${detail}).`,
-        serverId,
-        { actor: 'automod' },
-      );
-      recordPunishment({ serverId, playerName: player, type: 'warn', reason, byUser: SYSTEM_USER });
+    const result =
+      action === 'kick'
+        ? await execCommand(`/kick ${player}`, serverId, { actor: 'automod' })
+        : // warn — public reminder + recorded warning
+          await execCommand(
+            `/say [AutoMod] ${player}, please mind the chat rules (${toCommandText(detail, 120)}).`,
+            serverId,
+            { actor: 'automod' },
+          );
+    if (!result.success) {
+      logger.warn(`[AutoMod] ${action} ${player} failed: ${result.error ?? 'unknown error'}`);
+      await logActivity(SYSTEM_USER, `automod_${action}`, 'player', false, player, result.error);
+      return;
     }
-    await logActivity(SYSTEM_USER, `automod_${cfg.action}`, 'player', true, player, v.detail);
-    logger.info(`[AutoMod] ${cfg.action} ${player} — ${v.detail}`);
+    recordPunishment({
+      serverId,
+      playerName: player,
+      type: action === 'kick' ? 'kick' : 'warn',
+      reason,
+      byUser: SYSTEM_USER,
+    });
+    await logActivity(SYSTEM_USER, `automod_${action}`, 'player', true, player, v.detail);
+    logger.info(`[AutoMod] ${action} ${player} — ${v.detail}`);
   } catch (err) {
     logger.warn(
       `[AutoMod] enforcement failed for ${player}: ${err instanceof Error ? err.message : err}`,

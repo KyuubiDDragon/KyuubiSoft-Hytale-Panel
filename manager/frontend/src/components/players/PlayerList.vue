@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PlayerInfo } from '@/api/players'
-import Button from '@/components/ui/Button.vue'
 
 const { t } = useI18n()
 
@@ -17,25 +16,15 @@ const emit = defineEmits<{
   whitelist: [name: string]
   op: [name: string]
   teleport: [name: string]
-  message: [name: string, message: string]
 }>()
 
 const expandedPlayer = ref<string | null>(null)
-const messageText = ref('')
 
 function togglePlayer(name: string) {
   if (expandedPlayer.value === name) {
     expandedPlayer.value = null
   } else {
     expandedPlayer.value = name
-    messageText.value = ''
-  }
-}
-
-function sendMessage(name: string) {
-  if (messageText.value.trim()) {
-    emit('message', name, messageText.value)
-    messageText.value = ''
   }
 }
 </script>
@@ -147,26 +136,8 @@ function sendMessage(name: string) {
             </button>
           </div>
 
-          <!-- Send Message -->
-          <div class="flex gap-2">
-            <input
-              v-model="messageText"
-              @click.stop
-              @keyup.enter="sendMessage(player.name)"
-              type="text"
-              :placeholder="t('players.messagePlaceholder') || 'Send message...'"
-              class="flex-1 px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange"
-            />
-            <Button
-              variant="primary"
-              @click.stop="sendMessage(player.name)"
-              :disabled="!messageText.trim()"
-            >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </Button>
-          </div>
+          <!-- Hytale 0.7 has no private messages -->
+          <p class="text-xs text-ink-subtle">{{ t('players.noPrivateMessages') }}</p>
         </div>
       </div>
     </div>
