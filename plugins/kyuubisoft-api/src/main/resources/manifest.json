@@ -1,8 +1,8 @@
 {
   "Group": "KyuubiDDragon",
   "Name": "KyuubiSoftAPI",
-  "Version": "2.1.0",
-  "Description": "REST API for KyuubiSoft Panel - player data (real health/gamemode), real per-world TPS and tick time, player actions (heal/kill/teleport/gamemode/clear-inventory via in-process commands), real-time events (per-world tps_update, player_death with killer, periodic player_position with real ping), and Prometheus metrics. Every request needs the panel's bearer token.",
+  "Version": "2.1.1",
+  "Description": "REST API for KyuubiSoft Panel - player data (real health/gamemode), real per-world TPS and tick time, player actions (heal/respawn/kill/teleport/gamemode/give via in-process commands, clear-inventory directly on the player's world thread), real-time events (per-world tps_update, player_death with killer, periodic player_position with real ping), and Prometheus metrics. Every request needs the panel's bearer token.",
   "Authors": [{"Name": "KyuubiDDragon"}],
   "Main": "com.kyuubisoft.api.KyuubiSoftAPI",
   "ServerVersion": "0.7.0",

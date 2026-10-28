@@ -38,7 +38,7 @@ import java.util.logging.Logger;
 public class KyuubiSoftAPI extends JavaPlugin {
 
     /** Keep in sync with manifest.json, build.gradle and the panel's PLUGIN_VERSION. */
-    public static final String PLUGIN_VERSION = "2.1.0";
+    public static final String PLUGIN_VERSION = "2.1.1";
 
     private static final Logger LOGGER = Logger.getLogger("KyuubiSoftAPI");
     /** Threads for blocking HTTP work (command dispatch), so Netty threads never wait. */

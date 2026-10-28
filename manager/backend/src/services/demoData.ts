@@ -1018,7 +1018,7 @@ export function getDemoVersionInfo() {
   return {
     serverVersion: '1.0.0-demo',
     panelVersion: '2.1.1',
-    pluginVersion: '1.2.1',
+    pluginVersion: '2.1.1',
     patchline: 'release',
   };
 }
@@ -1030,9 +1030,9 @@ export function getDemoVersionInfo() {
 export function getDemoPluginUpdateStatus() {
   return {
     available: true,
-    currentVersion: '1.2.0',
-    latestVersion: '1.2.1',
-    changelog: 'New features: Enhanced metrics, bug fixes for player tracking.',
+    currentVersion: '2.1.0',
+    latestVersion: '2.1.1',
+    changelog: 'Player actions (heal, respawn, clear inventory) use the Hytale 0.7 syntax.',
   };
 }
 

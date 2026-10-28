@@ -166,6 +166,7 @@ describe('config locations', () => {
 
   it('needs the old config only for jars older than 2.1.0', () => {
     expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.1.0.jar', 'Other.jar'])).toBe(false);
+    expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.1.1.jar'])).toBe(false);
     expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.10.0.jar'])).toBe(false);
     expect(auth.needsLegacyConfig(['KyuubiSoftAPI-3.0.0.jar'])).toBe(false);
     expect(auth.needsLegacyConfig(['KyuubiSoftAPI-2.0.0.jar'])).toBe(true);
