@@ -1,7 +1,7 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { config } from '../config.js';
-import type { JwtPayload } from '../types/index.js';
+import type { ApiKeyGrant, JwtPayload } from '../types/index.js';
 import { verifyUserCredentials, updateLastLogin, getTokenVersion, type User } from './users.js';
 
 // WebSocket ticket storage - short-lived, single-use tokens
@@ -14,6 +14,10 @@ interface WsTicket {
   /** Scopes of the API key the ticket was requested with; undefined for a
    *  normal login. The socket must honour them, not just the owner's role. */
   apiKeyScopes?: string[];
+  /** Server list of that API key; undefined = no list (or not known). */
+  apiKeyServerIds?: string[];
+  /** Id of that API key, so a socket can follow its revocation and changes. */
+  apiKeyId?: string;
 }
 
 const wsTickets = new Map<string, WsTicket>();
@@ -82,31 +86,41 @@ export function verifyToken(
 // Creates short-lived, single-use tickets for WebSocket authentication.
 // Tickets are deleted atomically on first verify to eliminate any race window.
 
-export function createWsTicket(
-  username: string,
-  serverId?: string,
-  apiKeyScopes?: string[],
-): string {
+/**
+ * `apiKey` is the requesting key (req.apiKey): its scopes, server list and id
+ * travel with the ticket, so the socket follows the key's current state.
+ */
+export function createWsTicket(username: string, serverId?: string, apiKey?: ApiKeyGrant): string {
+  const grant = apiKey;
   const ticketId = crypto.randomBytes(32).toString('hex');
   wsTickets.set(ticketId, {
     username,
     createdAt: Date.now(),
     serverId,
-    apiKeyScopes: apiKeyScopes ? [...apiKeyScopes] : undefined,
+    apiKeyScopes: grant?.scopes ? [...grant.scopes] : undefined,
+    apiKeyServerIds: grant?.serverIds ? [...grant.serverIds] : undefined,
+    apiKeyId: grant?.id,
   });
   return ticketId;
 }
 
 /**
- * Verify a single-use ticket. When `expectedServerId` is passed, the ticket
- * must have been issued for the same server (or unscoped). Tickets issued
- * with a serverId can only open WebSockets for that server — this prevents
- * cross-server ticket reuse.
+ * Verify a single-use ticket. The ticket's server must match the socket's:
+ * `expectedServerId` for a scoped socket (/api/servers/:id/...), undefined for
+ * a legacy one. A ticket issued for a server opens only that server's scoped
+ * socket, and an unscoped ticket only legacy sockets — no cross-server reuse.
  */
 export function verifyWsTicket(
   ticketId: string,
   expectedServerId?: string,
-): { valid: boolean; username?: string; serverId?: string; apiKeyScopes?: string[] } {
+): {
+  valid: boolean;
+  username?: string;
+  serverId?: string;
+  apiKeyScopes?: string[];
+  apiKeyServerIds?: string[];
+  apiKeyId?: string;
+} {
   // Atomic check-and-delete: Map.delete returns true only if it existed.
   // This guarantees that even if two requests arrive with the same ticket,
   // only one of them gets past this point.
@@ -123,17 +137,9 @@ export function verifyWsTicket(
     return { valid: false };
   }
 
-  // Scoped ticket must match the request's server scope. Unscoped tickets
-  // (legacy single-server) only open unscoped connections.
-  if (
-    ticket.serverId !== undefined &&
-    expectedServerId !== undefined &&
-    ticket.serverId !== expectedServerId
-  ) {
-    return { valid: false };
-  }
-  if (ticket.serverId !== undefined && expectedServerId === undefined) {
-    // A scoped ticket can't open the legacy unscoped WS endpoint.
+  // Scoped ticket ⇔ scoped socket of the same server; unscoped ticket ⇔
+  // legacy socket. Neither opens the other kind.
+  if (ticket.serverId !== expectedServerId) {
     return { valid: false };
   }
 
@@ -142,5 +148,7 @@ export function verifyWsTicket(
     username: ticket.username,
     serverId: ticket.serverId,
     apiKeyScopes: ticket.apiKeyScopes,
+    apiKeyServerIds: ticket.apiKeyServerIds,
+    apiKeyId: ticket.apiKeyId,
   };
 }

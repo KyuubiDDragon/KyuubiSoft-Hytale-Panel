@@ -6,7 +6,10 @@ import fs from 'fs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-world-settings-'));
 const first = path.join(root, 'a');
 const second = path.join(root, 'b');
-vi.mock('./managementHelpers.js', () => ({ getWorldsPaths: () => [first, second] }));
+vi.mock('./serverContext.js', () => ({
+  getServerContext: async (id?: string) => ({ id: id ?? 'default' }),
+  worldRoots: () => [first, second],
+}));
 vi.mock('./pluginCommands.js', () => ({ runCommandViaPlugin: vi.fn() }));
 
 const { isValidWorldName, locateWorldFile, worldJsonPath, applyLiveWorldSettings } =

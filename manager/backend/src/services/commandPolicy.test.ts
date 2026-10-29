@@ -24,7 +24,7 @@ vi.mock('./roles.js', async (importOriginal) => ({
   },
 }));
 
-const { authorizeCommand, authorizeStoredCommand, reportSkippedCommand } =
+const { authorizeCommand, authorizeStoredCommand, holdsCommandTier, reportSkippedCommand } =
   await import('./commandPolicy.js');
 const { listAuditEvents } = await import('./audit.js');
 
@@ -103,6 +103,18 @@ describe('commandPolicy.authorizeCommand (saving / running now)', () => {
 
   it('denies an anonymous actor', async () => {
     expect((await authorizeCommand({ username: null }, '/say hi')).allowed).toBe(false);
+  });
+
+  it('keeps an API key within its server list, and off entries for every server', async () => {
+    const actor = { username: 'admin', apiKeyScopes: ['*'], apiKeyServerIds: ['srv-b'] };
+    expect((await authorizeCommand(actor, '/say hi', 'srv-b')).allowed).toBe(true);
+    expect((await authorizeCommand(actor, '/say hi', 'default')).allowed).toBe(false);
+    expect((await authorizeCommand(actor, '/say hi')).allowed).toBe(false);
+    expect(await holdsCommandTier(actor, 'console.execute', 'default')).toBe(false);
+    expect(await holdsCommandTier(actor, 'console.execute', 'srv-b')).toBe(true);
+    // a key without a list follows its owner, as before
+    const unlimited = { username: 'admin', apiKeyScopes: ['*'] };
+    expect((await authorizeCommand(unlimited, '/say hi')).allowed).toBe(true);
   });
 });
 

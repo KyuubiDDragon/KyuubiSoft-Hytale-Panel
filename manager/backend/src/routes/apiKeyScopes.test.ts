@@ -67,6 +67,11 @@ vi.mock('../services/roles.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../services/roles.js')>()),
   getUserPermissions: async (user: string) => lookup(user),
   getUserPermissionsForServer: async (user: string, serverId?: string) => lookup(user, serverId),
+  // No server lists in this suite; the unreadable users file still fails.
+  getUserAllowedServers: async (user: string) => {
+    lookup(user);
+    return null;
+  },
   hasPermission: async (user: string, permission: string, serverId?: string) => {
     const p = lookup(user, serverId);
     return p.includes('*') || p.includes(permission);
@@ -99,6 +104,13 @@ const { default: playersRouter } = await import('./players.js');
 const { default: authRouter } = await import('./auth.js');
 const { setupWebSocket } = await import('../websocket.js');
 const { createWsTicket, verifyWsTicket } = await import('../services/auth.js');
+const { createApiKey } = await import('../services/apiKeys.js');
+
+/** A real (stored) key of `owner` with these scopes, as req.apiKey would carry it. */
+async function keyGrant(owner: string, scopes: string[]) {
+  const { key } = await createApiKey({ ownerUsername: owner, name: 'ws', scopes });
+  return { id: key.id, scopes, serverIds: null };
+}
 
 let server: Server;
 let base: string;
@@ -239,25 +251,29 @@ describe('ws-ticket and WS console honour API-key scopes', () => {
   }
 
   it('the WS console rejects /op for a ticket whose key lacks console.execute.admin', async () => {
-    const ticket = createWsTicket('root', undefined, ['console.view', 'console.execute']);
+    const ticket = createWsTicket(
+      'root',
+      undefined,
+      await keyGrant('root', ['console.view', 'console.execute']),
+    );
     const msg = await sendOverWs(ticket, '/op add Evil');
     expect(msg).toMatchObject({ type: 'command_response', success: false });
     expect(execCommand).not.toHaveBeenCalled();
   });
 
   it('the WS console allows /op when the key is scoped for it', async () => {
-    const ticket = createWsTicket('root', undefined, [
-      'console.view',
-      'console.execute',
-      'console.execute.admin',
-    ]);
+    const ticket = createWsTicket(
+      'root',
+      undefined,
+      await keyGrant('root', ['console.view', 'console.execute', 'console.execute.admin']),
+    );
     const msg = await sendOverWs(ticket, '/op add Steve');
     expect(msg).toMatchObject({ type: 'command_response', success: true });
     expect(execCommand).toHaveBeenCalledWith('/op add Steve', 'default', { actor: 'root' });
   });
 
   it('closes the socket for a key ticket without console.view', async () => {
-    const ticket = createWsTicket('root', undefined, ['players.view']);
+    const ticket = createWsTicket('root', undefined, await keyGrant('root', ['players.view']));
     expect(await sendOverWs(ticket, '/say hi')).toEqual({ closed: 4003 });
   });
 

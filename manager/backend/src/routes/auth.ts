@@ -10,7 +10,20 @@ import {
 import { authMiddleware } from '../middleware/auth.js';
 import { asyncRoute } from '../utils/asyncRoute.js';
 import { JsonFileCorruptError } from '../utils/jsonStore.js';
-import { requirePermission } from '../middleware/permissions.js';
+import {
+  requirePermission,
+  effectivePermissions,
+  accessibleServerIds,
+  mayAccessServer,
+  SERVER_NOT_ALLOWED,
+} from '../middleware/permissions.js';
+import {
+  checkAccountWithinCaller,
+  checkRoleWithinCaller,
+  checkServersWithinCaller,
+  readServerList,
+} from '../services/accountPolicy.js';
+import { resolveServerId } from '../services/servers.js';
 import {
   getAllUsers,
   createUser,
@@ -20,16 +33,9 @@ import {
   invalidateUserTokens,
   getTokenVersion,
 } from '../services/users.js';
-import { getUserPermissions, getRolePermissions, hasPermission } from '../services/roles.js';
-import {
-  initiateDeviceLogin,
-  checkAuthCompletion,
-  getAuthStatus,
-  resetAuth,
-  setPersistence,
-  listAuthFiles,
-  inspectDownloaderCredentials,
-} from '../services/hytaleAuth.js';
+import { getUserPermissions, hasPermission } from '../services/roles.js';
+import { legacyServerScope } from '../middleware/serverScope.js';
+import hytaleAuthRoutes from './hytaleAuth.js';
 import type { AuthenticatedRequest, LoginRequest } from '../types/index.js';
 import { isDemoMode, getDemoUsers, getDemoRoles } from '../services/demoData.js';
 import {
@@ -93,19 +99,6 @@ const DEMO_ADMIN_USERNAME = 'admin';
 const DEMO_ADMIN_PASSWORD = 'admin';
 
 const router = Router();
-
-/**
- * Privilege-escalation guard for role assignment: an actor may only grant a
- * role whose permissions are a subset of their own. Admins ('*') may grant
- * anything; a target role carrying '*' may only be granted by an admin.
- */
-async function canAssignRole(actorUsername: string, roleId: string): Promise<boolean> {
-  const ownerPerms = await getUserPermissions(actorUsername);
-  if ((ownerPerms as string[]).includes('*')) return true;
-  const targetPerms = await getRolePermissions(roleId);
-  if ((targetPerms as string[]).includes('*')) return false;
-  return (targetPerms as string[]).every((p) => (ownerPerms as string[]).includes(p));
-}
 
 // SECURITY: Rate limiting for authentication endpoints
 const loginLimiter = rateLimit({
@@ -400,13 +393,41 @@ router.post(
         return;
       }
     }
+    // Optional server list, set with the key itself so it is never wider than
+    // chosen. Without one the key follows its owner, which is only "no more
+    // than the caller has" when the caller is not itself a key with a list.
+    let serverIds: string[] | null = null;
+    const keyLimited = Array.isArray(req.apiKey?.serverIds);
+    if (req.body?.serverIds !== undefined || keyLimited) {
+      const list =
+        req.body?.serverIds === undefined
+          ? ({ ok: true, value: null } as const)
+          : await readServerList(req.body, 'serverIds');
+      if (!list.ok) {
+        res.status(list.status).json(list.body);
+        return;
+      }
+      const refusal =
+        list.value === null && !keyLimited
+          ? null
+          : checkServersWithinCaller(await accessibleServerIds(req), list.value);
+      if (refusal) {
+        res.status(refusal.status).json(refusal.body);
+        return;
+      }
+      serverIds = list.value;
+    }
     const { key, token } = await createApiKey({
       ownerUsername: req.user!,
       name,
       scopes,
       expiresAt: expiresAt ?? null,
+      serverIds,
     });
-    audit(req, 'apikey.created', { target: `apikey:${key.id}`, metadata: { name, scopes } });
+    audit(req, 'apikey.created', {
+      target: `apikey:${key.id}`,
+      metadata: { name, scopes, serverIds },
+    });
     publish('user.created', { kind: 'api_key', name, scopes, owner: req.user });
     res.json({ key, token });
   }),
@@ -562,18 +583,31 @@ router.post(
     // scopes travel with the ticket so the socket keeps honouring them (e.g. a
     // key without console.execute.admin can't run /op over the WS console).
     const keyScopes = req.apiKey?.scopes;
+    // An unscoped ticket opens the legacy sockets, which stream the default
+    // server: the rights and server lists of that server apply.
+    const targetServerId = requestedServerId ?? (await resolveServerId());
+    if (!(await mayAccessServer(req, targetServerId))) {
+      res.status(403).json({
+        error: 'No access to this server',
+        code: SERVER_NOT_ALLOWED,
+        serverId: targetServerId,
+      });
+      return;
+    }
     const canViewConsole =
       scopeAllows(keyScopes, 'console.view') &&
-      (await hasPermission(username, 'console.view', requestedServerId));
+      (await hasPermission(username, 'console.view', targetServerId));
     const canViewPlayers =
       scopeAllows(keyScopes, 'players.view') &&
-      (await hasPermission(username, 'players.view', requestedServerId));
+      (await hasPermission(username, 'players.view', targetServerId));
     if (!canViewConsole && !canViewPlayers) {
       res.status(403).json({ error: 'Permission denied: console.view or players.view required' });
       return;
     }
 
-    const ticket = createWsTicket(username, requestedServerId, keyScopes);
+    // The whole key grant travels with the ticket (scopes, server list, id),
+    // so the socket follows the key's current state.
+    const ticket = createWsTicket(username, requestedServerId, req.apiKey);
     res.json({ ticket, expiresIn: 30, serverId: requestedServerId ?? null });
   }),
 );
@@ -670,15 +704,36 @@ router.post(
         return;
       }
 
-      // SECURITY: prevent privilege escalation — a creator can't mint a user with
-      // a role more powerful than their own (e.g. a users.create holder making an admin).
       const targetRole = roleId || 'viewer';
-      if (!(await canAssignRole(req.user!, targetRole))) {
-        res.status(403).json({ error: 'Cannot assign a role with more permissions than your own' });
+      if (typeof targetRole !== 'string') {
+        res.status(400).json({ error: 'roleId must be a string' });
         return;
       }
 
-      const user = await createUser(username, password, targetRole);
+      // SECURITY: prevent privilege escalation — a creator can't mint a user with
+      // a role more powerful than their own (e.g. a users.create holder making an admin),
+      // and the new account gets at most the creator's servers: the creator's
+      // list, or one named in the body inside it.
+      const callerPerms = await effectivePermissions(req);
+      const callerIds = await accessibleServerIds(req);
+      let allowedServers = callerIds;
+      if ((req.body as { allowedServers?: unknown }).allowedServers !== undefined) {
+        const list = await readServerList(req.body, 'allowedServers');
+        if (!list.ok) {
+          res.status(list.status).json(list.body);
+          return;
+        }
+        allowedServers = list.value;
+      }
+      const refusal =
+        (await checkRoleWithinCaller(callerPerms, targetRole)) ??
+        checkServersWithinCaller(callerIds, allowedServers);
+      if (refusal) {
+        res.status(refusal.status).json(refusal.body);
+        return;
+      }
+
+      const user = await createUser(username, password, targetRole, allowedServers);
       res.json({ success: true, user });
     } catch (error) {
       res.status(400).json({ error: (error as Error).message });
@@ -707,16 +762,32 @@ router.put(
         return;
       }
 
+      if (roleId !== undefined && typeof roleId !== 'string') {
+        res.status(400).json({ error: 'roleId must be a string' });
+        return;
+      }
+
       // Prevent users from changing their own role (security)
       if (roleId && username === req.user) {
         res.status(400).json({ error: 'Cannot change your own role' });
         return;
       }
 
-      // SECURITY: same subset guard as user creation — no escalating another
-      // account into a role beyond the actor's own permissions.
-      if (roleId && !(await canAssignRole(req.user!, roleId))) {
-        res.status(403).json({ error: 'Cannot assign a role with more permissions than your own' });
+      const target = await getUser(username);
+      if (!target) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      // SECURITY: an account's password or role is only changed by someone
+      // holding every right it has (an admin only by an admin), and no account
+      // gets a role beyond the actor's own permissions.
+      const callerPerms = await effectivePermissions(req);
+      const refusal =
+        (await checkAccountWithinCaller(callerPerms, await accessibleServerIds(req), target)) ??
+        (roleId ? await checkRoleWithinCaller(callerPerms, roleId) : null);
+      if (refusal) {
+        res.status(refusal.status).json(refusal.body);
         return;
       }
 
@@ -749,6 +820,22 @@ router.delete(
         return;
       }
 
+      const target = await getUser(username);
+      if (!target) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+      // SECURITY: no deleting an account with rights the actor does not have.
+      const refusal = await checkAccountWithinCaller(
+        await effectivePermissions(req),
+        await accessibleServerIds(req),
+        target,
+      );
+      if (refusal) {
+        res.status(refusal.status).json(refusal.body);
+        return;
+      }
+
       await deleteUser(username);
       res.json({ success: true });
     } catch (error) {
@@ -759,210 +846,8 @@ router.delete(
 
 // ============== HYTALE SERVER AUTHENTICATION ==============
 
-// GET /api/auth/hytale/status - Get Hytale authentication status
-router.get(
-  '/hytale/status',
-  authMiddleware,
-  requirePermission('hytale_auth.manage'),
-  async (_req: Request, res: Response) => {
-    // Demo mode: return authenticated status
-    if (isDemoMode()) {
-      res.json({
-        authenticated: true,
-        username: 'demo@kyuubisoft.com',
-        persistence: 'Memory',
-        lastAuth: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        demo: true,
-      });
-      return;
-    }
-
-    try {
-      // Always verify auth status by checking for token files
-      const result = await checkAuthCompletion();
-      const status = await getAuthStatus();
-      res.json({
-        ...status,
-        authenticated: result.success || status.authenticated,
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to get auth status' });
-    }
-  },
-);
-
-// POST /api/auth/hytale/initiate - Initiate Hytale device login
-router.post(
-  '/hytale/initiate',
-  authMiddleware,
-  requirePermission('hytale_auth.manage'),
-  async (_req: AuthenticatedRequest, res: Response) => {
-    // Demo mode: simulate device login initiation
-    if (isDemoMode()) {
-      res.json({
-        success: true,
-        message: '[DEMO] Device login initiated (simulated)',
-        deviceCode: 'DEMO-1234-5678',
-        // Field name aligned with the real hytaleAuth service (verificationUrl)
-        // and the frontend api/auth.ts expectation. Demo response uses the
-        // same field so /ServerAuth.vue and Dashboard.vue see consistent
-        // shape between demo + real auth.
-        verificationUrl: 'https://hypixel.net/activate',
-        expiresIn: 300,
-        demo: true,
-      });
-      return;
-    }
-
-    try {
-      const result = await initiateDeviceLogin();
-
-      if (!result.success) {
-        res.status(400).json(result);
-        return;
-      }
-
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to initiate login',
-      });
-    }
-  },
-);
-
-// POST /api/auth/hytale/check - Check if authentication is complete
-router.post(
-  '/hytale/check',
-  authMiddleware,
-  requirePermission('hytale_auth.manage'),
-  async (_req: Request, res: Response) => {
-    // Demo mode: return authenticated
-    if (isDemoMode()) {
-      res.json({ success: true, authenticated: true, demo: true });
-      return;
-    }
-
-    try {
-      const result = await checkAuthCompletion();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to check auth status',
-      });
-    }
-  },
-);
-
-// POST /api/auth/hytale/reset - Reset Hytale authentication
-router.post(
-  '/hytale/reset',
-  authMiddleware,
-  requirePermission('hytale_auth.manage'),
-  async (_req: AuthenticatedRequest, res: Response) => {
-    // Demo mode: simulate reset
-    if (isDemoMode()) {
-      res.json({ success: true, message: '[DEMO] Auth reset (simulated)', demo: true });
-      return;
-    }
-
-    try {
-      const result = await resetAuth();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to reset auth',
-      });
-    }
-  },
-);
-
-// POST /api/auth/hytale/persistence - Set authentication persistence type
-router.post(
-  '/hytale/persistence',
-  authMiddleware,
-  requirePermission('hytale_auth.manage'),
-  async (req: AuthenticatedRequest, res: Response) => {
-    // Demo mode: simulate persistence change
-    if (isDemoMode()) {
-      const { type } = req.body;
-      res.json({
-        success: true,
-        message: `[DEMO] Persistence set to ${type} (simulated)`,
-        demo: true,
-      });
-      return;
-    }
-
-    try {
-      const { type } = req.body;
-      if (!type || !['Memory', 'Encrypted'].includes(type)) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid persistence type. Must be "Memory" or "Encrypted"',
-        });
-        return;
-      }
-
-      const result = await setPersistence(type);
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to set persistence',
-      });
-    }
-  },
-);
-
-// GET /api/auth/hytale/files - List files in auth directory (debug)
-router.get(
-  '/hytale/files',
-  authMiddleware,
-  requirePermission('hytale_auth.manage'),
-  async (_req: Request, res: Response) => {
-    // Demo mode: return simulated file list
-    if (isDemoMode()) {
-      res.json({ files: ['credentials.json', 'token.json'], demo: true });
-      return;
-    }
-
-    try {
-      const files = await listAuthFiles();
-      res.json({ files });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to list auth files' });
-    }
-  },
-);
-
-// GET /api/auth/hytale/inspect-credentials - Inspect downloader credentials structure (debug)
-router.get(
-  '/hytale/inspect-credentials',
-  authMiddleware,
-  requirePermission('hytale_auth.manage'),
-  async (_req: Request, res: Response) => {
-    // Demo mode: return simulated credentials info
-    if (isDemoMode()) {
-      res.json({
-        success: true,
-        hasCredentials: true,
-        structure: { username: 'demo@kyuubisoft.com' },
-        demo: true,
-      });
-      return;
-    }
-
-    try {
-      const result = await inspectDownloaderCredentials();
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to inspect credentials' });
-    }
-  },
-);
+// /api/auth/hytale/* is the older path of the default server's Hytale sign-in;
+// every server has it at /api/servers/:serverId/server/hytale-auth/* (routes/hytaleAuth.ts).
+router.use('/hytale', legacyServerScope, hytaleAuthRoutes);
 
 export default router;

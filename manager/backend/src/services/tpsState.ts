@@ -12,8 +12,6 @@ import { onServerDeleted } from './servers.js';
 
 /** Hytale's default tick rate; used when a frame carries no target. */
 export const DEFAULT_TARGET_TPS = 30;
-/** Key for frames without a server id (single-server setups). */
-export const UNSCOPED_SERVER = '__default__';
 /** Key for frames without a world name (plugin builds before 2.1). */
 const UNNAMED_WORLD = '';
 
@@ -52,11 +50,16 @@ function minuteAverage(windows: unknown): number | null {
   return null;
 }
 
-/** Store one server_tick payload. Frames without a numeric TPS are ignored. */
+/**
+ * Store one server_tick payload. Frames without a numeric TPS are ignored, and
+ * so are frames without a server id: pluginEvents.ts adds it to every frame,
+ * and one that cannot be placed must not count for any server.
+ */
 export function recordServerTick(payload: unknown, now: number = Date.now()): void {
   const p = (payload ?? {}) as TickPayload;
   if (!finite(p.tps)) return;
-  const serverId = typeof p.serverId === 'string' && p.serverId ? p.serverId : UNSCOPED_SERVER;
+  if (typeof p.serverId !== 'string' || !p.serverId) return;
+  const serverId = p.serverId;
   const world = typeof p.world === 'string' ? p.world : UNNAMED_WORLD;
   const targetTps = finite(p.targetTps) && p.targetTps > 0 ? p.targetTps : DEFAULT_TARGET_TPS;
   let worlds = latest.get(serverId);
@@ -79,16 +82,13 @@ export function tpsRatio(tick: Pick<WorldTick, 'tps' | 'targetTps'>): number {
   return tick.targetTps > 0 ? tick.tps / tick.targetTps : 1;
 }
 
-/**
- * Fresh readings of a server's worlds (younger than maxAgeMs). Falls back to
- * frames without a server id, which single-server setups produce.
- */
+/** Fresh readings of a server's worlds (younger than maxAgeMs). */
 export function getWorldTicks(
   serverId: string,
   maxAgeMs: number,
   now: number = Date.now(),
 ): WorldTick[] {
-  const worlds = latest.get(serverId) ?? latest.get(UNSCOPED_SERVER);
+  const worlds = latest.get(serverId);
   if (!worlds) return [];
   return [...worlds.values()].filter((t) => now - t.at < maxAgeMs);
 }

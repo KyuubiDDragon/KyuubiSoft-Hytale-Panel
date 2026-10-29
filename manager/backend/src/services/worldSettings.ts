@@ -1,8 +1,8 @@
 /**
- * World configs of the default server (universe/worlds/<name>/config.json)
- * and the other JSON files of a world folder, for the world editor.
+ * World configs of a server (universe/worlds/<name>/config.json) and the
+ * other JSON files of a world folder, for the world editor.
  *
- * Files are found across the known worlds roots and only used when they are
+ * Files are found across the server's worlds roots and only used when they are
  * regular files inside that root (utils/serverFiles.ts). The server keeps the
  * config of a loaded world in memory and writes it back, so the editor only
  * writes while the server is stopped (services/serverConfigWrite.ts); PvP and
@@ -10,7 +10,7 @@
  * KyuubiSoft API plugin and checks against the server's answer.
  */
 import path from 'path';
-import { getWorldsPaths } from './managementHelpers.js';
+import { getServerContext, worldRoots } from './serverContext.js';
 import { runCommandViaPlugin, type PluginCommandAttempt } from './pluginCommands.js';
 import { readServerFile } from '../utils/serverFiles.js';
 import { UnsafeFileError } from '../utils/noFollowFs.js';
@@ -53,16 +53,18 @@ export interface WorldFileLocation {
 }
 
 /**
- * The first worlds root that holds `<world>/<relFile>` as a regular file. A
- * candidate that is a link or lies outside its root is skipped; when no root
- * has a usable file, the first such refusal is thrown so the user learns why.
+ * The first worlds root of the server (`undefined` = the default server) that
+ * holds `<world>/<relFile>` as a regular file. A candidate that is a link or
+ * lies outside its root is skipped; when no root has a usable file, the first
+ * such refusal is thrown so the user learns why.
  */
 export async function locateWorldFile(
   worldName: string,
   relFile: string,
+  serverId?: string,
 ): Promise<WorldFileLocation | null> {
   let refused: UnsafeFileError | null = null;
-  for (const root of getWorldsPaths()) {
+  for (const root of worldRoots(await getServerContext(serverId))) {
     const file = path.join(root, worldName, relFile);
     try {
       const found = await readServerFile(file, [root]);
@@ -136,34 +138,55 @@ const LIVE_SETTERS: Readonly<
 // the file still shows the old value of a live change. Remembered well past
 // that, so a quick second change is compared with what the server now uses.
 const RECENT_LIVE_MS = 60_000;
+// Per server and world: two servers may both have a world of the same name.
 const recentLive = new Map<string, Map<string, { value: unknown; at: number }>>();
+const liveKey = (serverId: string, worldName: string) => `${serverId}\0${worldName}`;
 
-export function rememberLiveValues(worldName: string, values: Record<string, unknown>): void {
-  const entries = recentLive.get(worldName) ?? new Map();
-  for (const [key, value] of Object.entries(values)) entries.set(key, { value, at: Date.now() });
-  recentLive.set(worldName, entries);
+export function rememberLiveValues(
+  serverId: string,
+  worldName: string,
+  values: Record<string, unknown>,
+): void {
+  const key = liveKey(serverId, worldName);
+  const entries = new Map(recentLive.get(key));
+  for (const [field, value] of Object.entries(values)) {
+    entries.set(field, { value, at: Date.now() });
+  }
+  recentLive.set(key, entries);
 }
 
 /** The config with the live changes of the last minute laid over it. */
 export function withRecentLiveValues(
+  serverId: string,
   worldName: string,
   config: Record<string, unknown>,
 ): Record<string, unknown> {
-  const entries = recentLive.get(worldName);
+  const key = liveKey(serverId, worldName);
+  const entries = recentLive.get(key);
   if (!entries) return config;
   const next = { ...config };
-  for (const [key, entry] of entries) {
-    if (Date.now() - entry.at > RECENT_LIVE_MS) entries.delete(key);
-    else next[key] = entry.value;
+  for (const [field, entry] of entries) {
+    if (Date.now() - entry.at > RECENT_LIVE_MS) entries.delete(field);
+    else next[field] = entry.value;
   }
-  if (entries.size === 0) recentLive.delete(worldName);
+  if (entries.size === 0) recentLive.delete(key);
   return next;
 }
 
-/** Forget remembered live values (the server stopped and wrote its state). */
-export function forgetLiveValues(worldName?: string): void {
-  if (worldName === undefined) recentLive.clear();
-  else recentLive.delete(worldName);
+/**
+ * Forget remembered live values (the server stopped and wrote its state): of
+ * one world, of every world of a server, or without arguments all of them.
+ */
+export function forgetLiveValues(serverId?: string, worldName?: string): void {
+  if (serverId === undefined) {
+    recentLive.clear();
+  } else if (worldName !== undefined) {
+    recentLive.delete(liveKey(serverId, worldName));
+  } else {
+    for (const key of [...recentLive.keys()]) {
+      if (key.startsWith(`${serverId}\0`)) recentLive.delete(key);
+    }
+  }
 }
 
 /**

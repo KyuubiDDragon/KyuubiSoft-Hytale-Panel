@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/permissions.js';
+import { requirePermission, requireAllServerAccess } from '../middleware/permissions.js';
+import { requireServerFiles } from '../middleware/serverScope.js';
 import * as assetService from '../services/assets.js';
+import { getServerContext } from '../services/serverContext.js';
 import {
   isDemoMode,
   getDemoAssetStatus,
@@ -52,14 +54,22 @@ function setCachedIconPath(itemId: string, path: string | null): void {
   iconPathCache.set(itemId, path);
 }
 
-// GET /api/assets/status - Get extraction status
+// GET /api/assets/status - Get extraction status (the cache is shared by all
+// servers; the archive is the requested server's)
 router.get(
   '/status',
   authMiddleware,
   requirePermission('assets.view'),
-  (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
+    let server;
+    try {
+      server = await getServerContext(req.serverId);
+    } catch (err) {
+      res.status(500).json({ detail: (err as Error).message });
+      return;
+    }
     // In demo mode, still check for real assets first (user may have copied Assets.zip)
-    const status = assetService.getAssetStatus();
+    const status = assetService.getAssetStatus(server);
 
     // If in demo mode and no real assets exist, return demo status
     if (isDemoMode() && !status.sourceExists && !status.extracted) {
@@ -71,14 +81,24 @@ router.get(
   },
 );
 
-// POST /api/assets/extract - Extract assets from archive
+// POST /api/assets/extract - Extract the requested server's archive into the shared cache
 router.post(
   '/extract',
   authMiddleware,
   requirePermission('assets.manage'),
-  (_req: Request, res: Response) => {
+  // The cache is shared by all servers.
+  requireAllServerAccess(),
+  requireServerFiles,
+  async (req: Request, res: Response) => {
+    let server;
+    try {
+      server = await getServerContext(req.serverId);
+    } catch (err) {
+      res.status(500).json({ success: false, error: (err as Error).message });
+      return;
+    }
     // In demo mode, still allow real extraction if Assets.zip exists
-    const archiveExists = assetService.findAssetsArchive() !== null;
+    const archiveExists = assetService.findAssetsArchive(server) !== null;
 
     if (isDemoMode() && !archiveExists) {
       res.json({
@@ -88,7 +108,9 @@ router.post(
       return;
     }
 
-    const result = assetService.extractAssets();
+    // The cache is shared: say so when this replaces another server's assets.
+    const previous = assetService.getAssetCacheSource();
+    const result = assetService.extractAssets(server);
 
     // Clear icon path cache when re-extracting
     iconPathCache.clear();
@@ -101,6 +123,7 @@ router.post(
     res.json({
       success: true,
       message: result.message || 'Extraction started',
+      ...(previous && previous.serverId !== server.id ? { replacesCacheFrom: previous } : {}),
     });
   },
 );
@@ -110,6 +133,7 @@ router.delete(
   '/cache',
   authMiddleware,
   requirePermission('assets.manage'),
+  requireAllServerAccess(),
   (_req: Request, res: Response) => {
     // Demo mode: simulate cache clear
     if (isDemoMode()) {

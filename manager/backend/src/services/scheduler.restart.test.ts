@@ -20,8 +20,11 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('./servers.js', () => ({
-  ensureLoaded: async () => ({ schemaVersion: 1, defaultId: 'default', servers: [] }),
+  ensureLoaded: async () => ({ schemaVersion: 2, defaultId: 'default', servers: [] }),
   getDefaultId: async () => 'default',
+  resolveServerId: async (id?: string) => id || 'default',
+  resolveServerIdSync: (id?: string) => id || 'default',
+  isComposeServer: (s: { id: string }) => s.id === 'default',
   getServer: async (id: string) => ({ id, paths: { data: tmpDir } }),
   listServers: async () => [{ id: 'default' }],
   onServerAdded: () => () => undefined,
@@ -79,7 +82,7 @@ const flush = () => vi.advanceTimersByTimeAsync(1);
 const at = (iso: string) => new Date(iso).getTime();
 
 async function plan(restart: Record<string, unknown>): Promise<void> {
-  scheduler.saveConfig(
+  await scheduler.saveConfig(
     {
       scheduledRestarts: {
         enabled: true,
@@ -303,7 +306,7 @@ describe('restart times', () => {
       JSON.stringify({ scheduledRestarts: { enabled: true, times: ['x'], warningMinutes: [] } }),
     );
     await scheduler.loadConfig('default');
-    scheduler.saveConfig({}, 'default');
+    await scheduler.saveConfig({}, 'default');
     await flush();
     await vi.advanceTimersByTimeAsync(5 * 60_000);
     expect(lifecycle.restartServerGracefully).not.toHaveBeenCalled();
@@ -314,7 +317,7 @@ describe('restart times', () => {
 
 describe('welcome message', () => {
   it('becomes an announce rule on player.joined and follows later edits', async () => {
-    scheduler.saveConfig(
+    await scheduler.saveConfig(
       { announcements: { enabled: true, welcome: 'Welcome {player}!', scheduled: [] } } as never,
       'default',
     );
@@ -331,7 +334,7 @@ describe('welcome message', () => {
 
     // A client cannot point the scheduler at another rule.
     h.rules.set('admin-rule', { id: 'admin-rule', name: 'Op on join', createdBy: 'admin' });
-    scheduler.saveConfig(
+    await scheduler.saveConfig(
       {
         announcements: {
           enabled: true,
@@ -352,7 +355,7 @@ describe('welcome message', () => {
     );
     expect(scheduler.getConfig('default').announcements.welcomeActionId).toBe('ea-1');
 
-    scheduler.saveConfig(
+    await scheduler.saveConfig(
       { announcements: { enabled: true, welcome: '', scheduled: [] } } as never,
       'default',
     );

@@ -11,6 +11,21 @@ fs.mkdirSync(tmpDir, { recursive: true });
 process.env.MANAGER_DATA_PATH = tmpDir;
 delete process.env.DEMO_MODE;
 
+// In the stack the plugin listens on its fixed port inside each container;
+// here the stand-ins run on random local ports.
+const pluginPorts = vi.hoisted(() => new Map<string, number>());
+vi.mock('./serverContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./serverContext.js')>();
+  return {
+    ...actual,
+    getServerContext: async (id?: string | null) => {
+      const ctx = await actual.getServerContext(id);
+      const port = pluginPorts.get(ctx.id);
+      return port ? { ...ctx, plugin: { ...ctx.plugin, port } } : ctx;
+    },
+  };
+});
+
 // A plugin stand-in that accepts upgrades and records their headers.
 const upgradeHeaders: http.IncomingHttpHeaders[] = [];
 let wss: WebSocketServer;
@@ -58,6 +73,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => refusing.listen(0, '127.0.0.1', () => resolve()));
   const okPort = (wss.address() as AddressInfo).port;
   const refusingPort = (refusing.address() as AddressInfo).port;
+  pluginPorts.set('ok', okPort).set('stale', refusingPort);
   fs.writeFileSync(
     path.join(tmpDir, 'servers.json'),
     JSON.stringify({

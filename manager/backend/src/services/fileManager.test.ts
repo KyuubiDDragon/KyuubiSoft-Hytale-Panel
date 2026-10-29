@@ -19,6 +19,7 @@ import {
   uploadFile,
   openDownloadStream,
   type FileManagerRoot,
+  type FileManagerFolders,
   FileManagerError,
 } from './fileManager.js';
 import { config } from '../config.js';
@@ -140,45 +141,56 @@ describe('fileManager.isAbsolutePathAllowed', () => {
   const server = config.serverPath;
   const mods = config.modsPath;
   const data = config.dataPath;
+  const folders = { server, mods, data, plugins: config.pluginsPath };
 
   it('blocks overwriting the server JAR (RCE on restart)', () => {
-    expect(isAbsolutePathAllowed(path.join(server, 'HytaleServer.jar'), 'write')).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'HytaleServer.jar'), 'write')).toBe(
+      false,
+    );
   });
   it('blocks reading encrypted Hytale auth credentials', () => {
-    expect(isAbsolutePathAllowed(path.join(server, 'auth.enc'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'auth.enc'), 'read')).toBe(false);
   });
   it('blocks the schema-validated config.json and users.json', () => {
-    expect(isAbsolutePathAllowed(path.join(server, 'config.json'), 'write')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(data, 'users.json'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'config.json'), 'write')).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(data, 'users.json'), 'read')).toBe(false);
   });
   it('blocks reading the plugin token through the plugin config or its copies', () => {
     const pluginDir = path.join(server, 'config', 'kyuubisoft-api');
-    expect(isAbsolutePathAllowed(path.join(pluginDir, 'config.json'), 'read')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(pluginDir, 'config.json.corrupt-1'), 'read')).toBe(
+    expect(isAbsolutePathAllowed(folders, path.join(pluginDir, 'config.json'), 'read')).toBe(false);
+    expect(
+      isAbsolutePathAllowed(folders, path.join(pluginDir, 'config.json.corrupt-1'), 'read'),
+    ).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'config.json.bak'), 'read')).toBe(
       false,
     );
-    expect(isAbsolutePathAllowed(path.join(server, 'config.json.bak'), 'read')).toBe(false);
     // Plugin 2.1+ keeps it in its data dir below mods/.
     const dataDir = path.join(mods, 'KyuubiDDragon_KyuubiSoftAPI');
-    expect(isAbsolutePathAllowed(path.join(dataDir, 'config.json'), 'read')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(dataDir, 'config.json.tmp'), 'read')).toBe(false);
-  });
-  it('blocks key/pem secret files', () => {
-    expect(isAbsolutePathAllowed(path.join(server, 'server.key'), 'read')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(server, 'tls.pem'), 'read')).toBe(false);
-  });
-  it('blocks paths outside every managed root', () => {
-    expect(isAbsolutePathAllowed('/etc/passwd', 'read')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(server, '..', '..', 'etc', 'shadow'), 'read')).toBe(
+    expect(isAbsolutePathAllowed(folders, path.join(dataDir, 'config.json'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(dataDir, 'config.json.tmp'), 'read')).toBe(
       false,
     );
   });
+  it('blocks key/pem secret files', () => {
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'server.key'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'tls.pem'), 'read')).toBe(false);
+  });
+  it('blocks paths outside every managed root', () => {
+    expect(isAbsolutePathAllowed(folders, '/etc/passwd', 'read')).toBe(false);
+    expect(
+      isAbsolutePathAllowed(folders, path.join(server, '..', '..', 'etc', 'shadow'), 'read'),
+    ).toBe(false);
+  });
   it('blocks writes under the read-only data root', () => {
-    expect(isAbsolutePathAllowed(path.join(data, 'whatever.json'), 'write')).toBe(false);
+    expect(isAbsolutePathAllowed(folders, path.join(data, 'whatever.json'), 'write')).toBe(false);
   });
   it('allows legitimate mod/server config files', () => {
-    expect(isAbsolutePathAllowed(path.join(mods, 'SomeMod', 'config.yml'), 'write')).toBe(true);
-    expect(isAbsolutePathAllowed(path.join(server, 'server.properties'), 'write')).toBe(true);
+    expect(isAbsolutePathAllowed(folders, path.join(mods, 'SomeMod', 'config.yml'), 'write')).toBe(
+      true,
+    );
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'server.properties'), 'write')).toBe(
+      true,
+    );
   });
   it('leaves the access files of the server folder to the access pages', () => {
     for (const name of [
@@ -191,14 +203,14 @@ describe('fileManager.isAbsolutePathAllowed', () => {
       'permissions-names.json',
       'bans-names.json',
     ]) {
-      expect(isAbsolutePathAllowed(path.join(server, name), 'write'), name).toBe(false);
-      expect(isAbsolutePathAllowed(path.join(server, name), 'read'), name).toBe(false);
+      expect(isAbsolutePathAllowed(folders, path.join(server, name), 'write'), name).toBe(false);
+      expect(isAbsolutePathAllowed(folders, path.join(server, name), 'read'), name).toBe(false);
     }
     // Only those of the server itself: a mod may have a file of the same name.
-    expect(isAbsolutePathAllowed(path.join(mods, 'SomeMod', 'permissions.json'), 'write')).toBe(
-      true,
-    );
-    expect(isAbsolutePathAllowed(path.join(server, 'mybans.json'), 'write')).toBe(true);
+    expect(
+      isAbsolutePathAllowed(folders, path.join(mods, 'SomeMod', 'permissions.json'), 'write'),
+    ).toBe(true);
+    expect(isAbsolutePathAllowed(folders, path.join(server, 'mybans.json'), 'write')).toBe(true);
   });
 });
 
@@ -251,7 +263,7 @@ describe('fileManager symlink containment', () => {
   let base: string;
   let modsDir: string;
   let outside: string;
-  let savedModsPath: string;
+  let linkFolders: FileManagerFolders;
 
   beforeAll(async () => {
     base = await fsp.mkdtemp(path.join(os.tmpdir(), 'fm-links-'));
@@ -263,8 +275,12 @@ describe('fileManager symlink containment', () => {
     await fsp.writeFile(path.join(outside, 'dir', 'secret.txt'), 'top secret');
     await fsp.writeFile(path.join(modsDir, 'ok.txt'), 'fine');
     await fsp.writeFile(path.join(modsDir, 'users.json'), 'denied inside the root');
-    savedModsPath = config.modsPath;
-    config.modsPath = modsDir;
+    linkFolders = {
+      mods: modsDir,
+      plugins: path.join(base, 'plugins'),
+      server: path.join(base, 'server'),
+      data: path.join(base, 'data'),
+    };
     if (CAN_LINK_DIRS) {
       fs.symlinkSync(path.join(outside, 'dir'), path.join(modsDir, 'linkdir'), 'junction');
     }
@@ -277,7 +293,6 @@ describe('fileManager symlink containment', () => {
   });
 
   afterAll(async () => {
-    config.modsPath = savedModsPath;
     await fsp.rm(base, { recursive: true, force: true });
   });
 
@@ -286,13 +301,15 @@ describe('fileManager symlink containment', () => {
   it.skipIf(!CAN_LINK_DIRS)(
     'refuses list/read/download through a directory link that leaves the root',
     async () => {
-      await expect(listDir('mods', 'linkdir')).rejects.toMatchObject({
+      await expect(listDir(linkFolders, 'mods', 'linkdir')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(readFile('mods', 'linkdir/secret.txt')).rejects.toMatchObject({
+      await expect(readFile(linkFolders, 'mods', 'linkdir/secret.txt')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(openDownloadStream('mods', 'linkdir/secret.txt')).rejects.toMatchObject({
+      await expect(
+        openDownloadStream(linkFolders, 'mods', 'linkdir/secret.txt'),
+      ).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
     },
@@ -301,16 +318,20 @@ describe('fileManager symlink containment', () => {
   it.skipIf(!CAN_LINK_DIRS)(
     'refuses write/upload/move/delete through a directory link that leaves the root',
     async () => {
-      await expect(writeFile('mods', 'linkdir/new.txt', 'x')).rejects.toMatchObject({
+      await expect(writeFile(linkFolders, 'mods', 'linkdir/new.txt', 'x')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(uploadFile('mods', 'linkdir', upload('up.txt'))).rejects.toMatchObject({
+      await expect(
+        uploadFile(linkFolders, 'mods', 'linkdir', upload('up.txt')),
+      ).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(moveFile('mods', 'ok.txt', 'linkdir/moved.txt')).rejects.toMatchObject({
+      await expect(
+        moveFile(linkFolders, 'mods', 'ok.txt', 'linkdir/moved.txt'),
+      ).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(deleteFile('mods', 'linkdir/secret.txt')).rejects.toMatchObject({
+      await expect(deleteFile(linkFolders, 'mods', 'linkdir/secret.txt')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
       expect(await fsp.readdir(path.join(outside, 'dir'))).toEqual(['secret.txt']);
@@ -321,34 +342,38 @@ describe('fileManager symlink containment', () => {
   it.skipIf(!CAN_LINK_DIRS)(
     'hides links from listings and keeps normal files working',
     async () => {
-      const listing = await listDir('mods', '');
+      const listing = await listDir(linkFolders, 'mods', '');
       const names = listing.entries.map((e) => e.name);
       expect(names).toContain('ok.txt');
       expect(names).not.toContain('linkdir');
-      const read = await readFile('mods', 'ok.txt');
+      const read = await readFile(linkFolders, 'mods', 'ok.txt');
       expect(read.content).toBe('fine');
     },
   );
 
   it.skipIf(!CAN_LINK_DIRS)('isAbsolutePathAllowed decides on the real location', () => {
-    expect(isAbsolutePathAllowed(path.join(modsDir, 'linkdir', 'secret.txt'), 'read')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(modsDir, 'linkdir', 'new.cfg'), 'write')).toBe(false);
-    expect(isAbsolutePathAllowed(path.join(modsDir, 'ok.txt'), 'read')).toBe(true);
+    expect(
+      isAbsolutePathAllowed(linkFolders, path.join(modsDir, 'linkdir', 'secret.txt'), 'read'),
+    ).toBe(false);
+    expect(
+      isAbsolutePathAllowed(linkFolders, path.join(modsDir, 'linkdir', 'new.cfg'), 'write'),
+    ).toBe(false);
+    expect(isAbsolutePathAllowed(linkFolders, path.join(modsDir, 'ok.txt'), 'read')).toBe(true);
   });
 
   it.skipIf(!CAN_LINK_FILES)(
     'refuses read, write and delete through a file link that leaves the root',
     async () => {
-      await expect(readFile('mods', 'link.json')).rejects.toMatchObject({
+      await expect(readFile(linkFolders, 'mods', 'link.json')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(openDownloadStream('mods', 'link.json')).rejects.toMatchObject({
+      await expect(openDownloadStream(linkFolders, 'mods', 'link.json')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(writeFile('mods', 'link.json', 'pwned')).rejects.toMatchObject({
+      await expect(writeFile(linkFolders, 'mods', 'link.json', 'pwned')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
-      await expect(deleteFile('mods', 'link.json')).rejects.toMatchObject({
+      await expect(deleteFile(linkFolders, 'mods', 'link.json')).rejects.toMatchObject({
         code: 'PATH_SYMLINK_ESCAPE',
       });
       expect(await fsp.readFile(path.join(outside, 'users.json'), 'utf-8')).toBe('{"secret":true}');
@@ -358,18 +383,22 @@ describe('fileManager symlink containment', () => {
   it.skipIf(!CAN_LINK_FILES)(
     'applies the deny list to the link target, not only the link name',
     async () => {
-      await expect(readFile('mods', 'notes.txt')).rejects.toMatchObject({ code: 'PATH_DENIED' });
-      expect(isAbsolutePathAllowed(path.join(modsDir, 'notes.txt'), 'read')).toBe(false);
+      await expect(readFile(linkFolders, 'mods', 'notes.txt')).rejects.toMatchObject({
+        code: 'PATH_DENIED',
+      });
+      expect(isAbsolutePathAllowed(linkFolders, path.join(modsDir, 'notes.txt'), 'read')).toBe(
+        false,
+      );
     },
   );
 
   it.skipIf(!CAN_LINK_FILES)(
     'refuses a broken link and allows a link that stays inside the root',
     async () => {
-      await expect(readFile('mods', 'dangling.txt')).rejects.toMatchObject({
+      await expect(readFile(linkFolders, 'mods', 'dangling.txt')).rejects.toMatchObject({
         code: 'PATH_SYMLINK',
       });
-      const read = await readFile('mods', 'alias.txt');
+      const read = await readFile(linkFolders, 'mods', 'alias.txt');
       expect(read.content).toBe('fine');
     },
   );

@@ -16,6 +16,8 @@ const tmpDir = path.join(os.tmpdir(), `kp-modpanel-${Date.now()}`);
 fs.mkdirSync(tmpDir, { recursive: true });
 process.env.MANAGER_DATA_PATH = tmpDir;
 delete process.env.DEMO_MODE;
+// The compose server's container comes from the env (its registry row is overridden).
+process.env.GAME_CONTAINER_NAME = 'hytale-primary';
 
 function serverEntry(id: string, containerName: string, pluginPort: number) {
   return {
@@ -82,6 +84,8 @@ const realFetch = globalThis.fetch;
 const express = (await import('express')).default;
 const { default: modPanelRouter } = await import('./modPanel.js');
 const { serverScopeMiddleware } = await import('../middleware/serverScope.js');
+// The scoped routes for the second server need multiserver.
+(await import('../config.js')).config.multiserverEnabled = true;
 
 let server: Server;
 let base: string;
@@ -210,7 +214,7 @@ describe('GET /api/mod-panel', () => {
     fetchMock.mockResolvedValue(pluginJson(200, { apiVersion: 1, providers: [] }));
     const r = await call('GET', '/api/servers/second/mod-panel', 'viewer');
     expect(r.status).toBe(200);
-    expect(pluginCall().url).toBe('http://hytale-second:18090/api/mods/panel');
+    expect(pluginCall().url).toBe('http://hytale-second:18085/api/mods/panel');
   });
 
   it('reports an older plugin without the registry as unsupported', async () => {
@@ -429,7 +433,9 @@ describe('POST /api/mod-panel/:id/actions/:actionId', () => {
   });
 
   it('answers 200 with success false when the mod reports a failure', async () => {
-    plugin(() => pluginJson(200, { success: false, status: 'failed', message: 'No worlds loaded' }));
+    plugin(() =>
+      pluginJson(200, { success: false, status: 'failed', message: 'No worlds loaded' }),
+    );
     const r = await call(
       'POST',
       '/api/mod-panel/kyuubisoft:pets/actions/clean_orphans',
@@ -466,9 +472,14 @@ describe('POST /api/mod-panel/:id/actions/:actionId', () => {
 
   it('refuses a dangerous action without console.execute.admin and never sends it', async () => {
     plugin(() => pluginJson(200, { success: true, status: 'ok' }));
-    const r = await call('POST', '/api/mod-panel/kyuubisoft:economy/actions/reset_balances', 'operator', {
-      confirmed: true,
-    });
+    const r = await call(
+      'POST',
+      '/api/mod-panel/kyuubisoft:economy/actions/reset_balances',
+      'operator',
+      {
+        confirmed: true,
+      },
+    );
     expect(r.status).toBe(403);
     expect(r.body.code).toBe('admin_required');
     // Only the provider list was read; the action itself never reached the plugin.
@@ -491,15 +502,20 @@ describe('POST /api/mod-panel/:id/actions/:actionId', () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ success: true, message: 'Balances reset' });
     expect(pluginCall(1).url).toBe(
-      'http://hytale-second:18090/api/mods/panel/kyuubisoft%3Aeconomy/actions/reset_balances',
+      'http://hytale-second:18085/api/mods/panel/kyuubisoft%3Aeconomy/actions/reset_balances',
     );
   });
 
   it('answers 404 for an action the plugin does not list, without posting it', async () => {
     plugin(() => pluginJson(200, { success: true, status: 'ok' }));
-    const r = await call('POST', '/api/mod-panel/kyuubisoft:pets/actions/wipe_all', 'consoleadmin', {
-      confirmed: true,
-    });
+    const r = await call(
+      'POST',
+      '/api/mod-panel/kyuubisoft:pets/actions/wipe_all',
+      'consoleadmin',
+      {
+        confirmed: true,
+      },
+    );
     expect(r.status).toBe(404);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(audit.mock.calls[0][2].metadata.status).toBe('not_found');

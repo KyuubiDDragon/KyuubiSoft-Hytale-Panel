@@ -5,16 +5,16 @@
 // so they are only written while it is stopped (services/serverConfigWrite.ts);
 // PvP and the time pause also apply live (services/worldSettings.ts).
 //
-// The world folders the panel sees are those of the default server, so these
-// routes serve only that server: under /api/servers/<other id>/management
-// they answer 409 default_server_only and touch nothing.
-import { Router, Request, Response, NextFunction } from 'express';
+// Every route works on the worlds of the request's server (its world folders
+// from the server context); the management mounts make sure the panel sees
+// that server's files.
+import { Router, Response } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import { logActivity } from '../../services/activityLog.js';
 import { audit } from '../../services/audit.js';
 import { isPluginInstalled } from '../../services/kyuubiApi.js';
-import { getDefaultId } from '../../services/servers.js';
+import { resolveServerId } from '../../services/servers.js';
 import {
   countdownFrom,
   isServerRunning,
@@ -51,35 +51,6 @@ import { UnsafeFileError } from '../../utils/noFollowFs.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 
 const router = Router();
-
-/**
- * Lets only requests for the default server through: the legacy
- * /api/management routes (no server id) and that server's scoped routes.
- */
-async function defaultServerOnly(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  if (req.serverId !== undefined) {
-    let defaultId: string;
-    try {
-      defaultId = await getDefaultId();
-    } catch {
-      res.status(503).json({ success: false, error: 'The server registry is not ready yet' });
-      return;
-    }
-    if (req.serverId !== defaultId) {
-      res.status(409).json({
-        success: false,
-        reason: 'default_server_only',
-        error: 'World configs can only be edited for the default server.',
-      });
-      return;
-    }
-  }
-  next();
-}
 
 // The editor is for config files, not for data dumps.
 const MAX_WORLD_FILE_BYTES = 5 * 1024 * 1024;
@@ -119,8 +90,8 @@ function sendReadError(res: Response, error: unknown, what: string): void {
   });
 }
 
-async function loadWorldConfig(worldName: string) {
-  const found = await locateWorldFile(worldName, 'config.json');
+async function loadWorldConfig(worldName: string, serverId: string) {
+  const found = await locateWorldFile(worldName, 'config.json', serverId);
   if (!found) throw notFound('World config');
   let config: unknown;
   try {
@@ -143,7 +114,6 @@ function seedText(seed: unknown): string | null {
 router.get(
   '/worlds/:worldName/config',
   authMiddleware,
-  defaultServerOnly,
   requirePermission('worlds.view'),
   async (req: AuthenticatedRequest, res: Response) => {
     const { worldName } = req.params;
@@ -152,16 +122,17 @@ router.get(
       return;
     }
     try {
-      const { config, content } = await loadWorldConfig(worldName);
-      const running = await isServerRunning(req.serverId);
-      if (!running) forgetLiveValues(worldName);
+      const serverId = await resolveServerId(req.serverId);
+      const { config, content } = await loadWorldConfig(worldName, serverId);
+      const running = await isServerRunning(serverId);
+      if (!running) forgetLiveValues(serverId, worldName);
       const check = parseWorldConfig(config);
       res.json({
         name: worldName,
         raw: config,
         // The file as it is, for a text editor (a browser would round a big seed).
         rawText: content,
-        ...readWorldFields(withRecentLiveValues(worldName, config)),
+        ...readWorldFields(withRecentLiveValues(serverId, worldName, config)),
         seed: seedText(config.Seed),
         gameTime: typeof config.GameTime === 'string' ? config.GameTime : null,
         fields: worldFieldModes(),
@@ -169,7 +140,7 @@ router.get(
         issues: check.issues,
         warnings: check.warnings,
         serverRunning: running,
-        liveAvailable: running && (await isPluginInstalled(req.serverId)),
+        liveAvailable: running && (await isPluginInstalled(serverId)),
       });
     } catch (error) {
       sendReadError(res, error, 'world config');
@@ -186,7 +157,6 @@ router.get(
 router.put(
   '/worlds/:worldName/config',
   authMiddleware,
-  defaultServerOnly,
   requirePermission('worlds.manage'),
   requireRestartPermissionIfAsked,
   async (req: AuthenticatedRequest, res: Response) => {
@@ -201,12 +171,15 @@ router.put(
       return;
     }
     const { patch } = validation;
-    const { serverId } = req;
     try {
-      const found = await loadWorldConfig(worldName);
+      const serverId = await resolveServerId(req.serverId);
+      const found = await loadWorldConfig(worldName, serverId);
       const running = await isServerRunning(serverId);
-      if (!running) forgetLiveValues(worldName);
-      const changed = changedWorldKeys(withRecentLiveValues(worldName, found.config), patch);
+      if (!running) forgetLiveValues(serverId, worldName);
+      const changed = changedWorldKeys(
+        withRecentLiveValues(serverId, worldName, found.config),
+        patch,
+      );
       if (changed.length === 0) {
         res.json({ success: true, changed: false, message: 'World config unchanged.' });
         return;
@@ -238,6 +211,7 @@ router.put(
           return;
         }
         rememberLiveValues(
+          serverId,
           worldName,
           Object.fromEntries(live.results.filter((r) => r.ok).map((r) => [r.key, values[r.key]])),
         );
@@ -279,7 +253,7 @@ router.put(
           }),
       );
       if (sendRefusedWrite(res, outcome, details)) return;
-      forgetLiveValues(worldName);
+      forgetLiveValues(serverId, worldName);
       const restarted = outcome.kind === 'written' && outcome.restarted;
       audit(req, 'world.config.saved', {
         target: worldName,
@@ -316,9 +290,8 @@ router.put(
 router.get(
   '/worlds/:worldName/files/*',
   authMiddleware,
-  defaultServerOnly,
   requirePermission('worlds.view'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const { worldName } = req.params;
     const filePath = worldJsonPath(req.params[0]);
     if (!isValidWorldName(worldName)) {
@@ -332,7 +305,7 @@ router.get(
       return;
     }
     try {
-      const found = await locateWorldFile(worldName, filePath);
+      const found = await locateWorldFile(worldName, filePath, req.serverId);
       if (!found) throw notFound('File');
       let data: unknown;
       try {
@@ -398,7 +371,6 @@ function fileContent(
 router.put(
   '/worlds/:worldName/files/*',
   authMiddleware,
-  defaultServerOnly,
   requirePermission('worlds.manage'),
   requireRestartPermissionIfAsked,
   async (req: AuthenticatedRequest, res: Response) => {
@@ -425,10 +397,11 @@ router.put(
     }
     try {
       // Only existing files: the editor does not create files in a world.
-      const found = await locateWorldFile(worldName, filePath);
+      const serverId = await resolveServerId(req.serverId);
+      const found = await locateWorldFile(worldName, filePath, serverId);
       if (!found) throw notFound('File');
       const outcome = await writeWhileStopped(
-        req.serverId,
+        serverId,
         {
           restart: req.body?.restart === true,
           actor: req.user,
@@ -437,7 +410,7 @@ router.put(
         () => writeServerFile(found.file, [found.root], content.text),
       );
       if (sendRefusedWrite(res, outcome, { filename: filePath })) return;
-      if (filePath === 'config.json') forgetLiveValues(worldName);
+      if (filePath === 'config.json') forgetLiveValues(serverId, worldName);
       const restarted = outcome.kind === 'written' && outcome.restarted;
       const fileName = filePath.split('/').pop();
       audit(req, 'world.file.saved', {

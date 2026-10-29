@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useConfirm } from '@/composables/useConfirm'
 import { assetsApi, type AssetStatus, type AssetFileInfo, type FileContent, type SearchResult } from '@/api/assets'
 
 const { t } = useI18n()
+const { ask } = useConfirm()
 
 // State
 const status = ref<AssetStatus | null>(null)
@@ -114,12 +116,36 @@ function stopProgressPolling() {
   }
 }
 
+/** Name of the server the shared cache was extracted from. */
+const cacheSourceName = computed(
+  () => status.value?.cacheSource?.serverName || status.value?.cacheSource?.serverId || '',
+)
+
+// The cache is shared by all servers, so extracting from this server
+// replaces what another server's archive produced.
+const replacesOtherCache = computed(
+  () => !!status.value?.extracted && !!status.value.cacheSource && status.value.cacheFromThisServer === false,
+)
+
 async function extractAssets() {
   error.value = ''
   success.value = ''
+  if (replacesOtherCache.value) {
+    const ok = await ask({
+      title: t('assets.replaceCacheTitle'),
+      message: t('assets.replaceCacheMessage', { server: cacheSourceName.value }),
+      variant: 'danger',
+      confirmText: t('assets.reExtract'),
+    })
+    if (!ok) return
+  }
   try {
     const result = await assetsApi.extract()
     if (result.success) {
+      if (result.replacesCacheFrom) {
+        const from = result.replacesCacheFrom.serverName || result.replacesCacheFrom.serverId
+        success.value = t('assets.cacheReplaced', { server: from })
+      }
       // Extraction started in background, start polling
       await loadStatus(false)
     } else {
@@ -501,6 +527,15 @@ onUnmounted(stopProgressPolling)
 
     <!-- Main Browser -->
     <template v-else-if="status && status.extracted">
+      <p
+        v-if="status.cacheSource"
+        class="text-sm rounded-lg px-3 py-2 border"
+        :class="status.cacheFromThisServer === false ? 'bg-status-warning/10 border-status-warning/30 text-status-warning' : 'bg-surface-raised border-border text-ink-muted'"
+        role="status"
+      >
+        {{ status.cacheFromThisServer === false ? t('assets.cacheFromOther', { server: cacheSourceName }) : t('assets.cacheFromThis') }}
+      </p>
+
       <!-- Status Bar -->
       <div class="card">
         <div class="card-body py-3">

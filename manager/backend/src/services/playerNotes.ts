@@ -13,11 +13,33 @@ export interface PlayerNote {
   createdAt: string;
 }
 
+interface NoteRow {
+  id: number;
+  server_id: string | null;
+  player_name: string;
+  uuid: string | null;
+  note: string;
+  by_user: string;
+  created_at: string;
+}
+
+function toNote(r: NoteRow): PlayerNote {
+  return {
+    id: r.id,
+    serverId: r.server_id,
+    playerName: r.player_name,
+    uuid: r.uuid,
+    note: r.note,
+    byUser: r.by_user,
+    createdAt: r.created_at,
+  };
+}
+
 export function addNote(opts: {
   playerName: string;
   note: string;
   byUser: string;
-  serverId?: string;
+  serverId: string;
   uuid?: string;
 }): PlayerNote {
   const db = getDb();
@@ -26,7 +48,7 @@ export function addNote(opts: {
       'INSERT INTO player_notes (server_id, player_name, uuid, note, by_user, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     )
     .run(
-      opts.serverId ?? null,
+      opts.serverId,
       opts.playerName,
       opts.uuid ?? null,
       opts.note,
@@ -60,29 +82,29 @@ export function getNote(id: number): PlayerNote | null {
   };
 }
 
+/** Every server's notes for a player (data export). */
 export function listNotes(playerName: string, limit = 100): PlayerNote[] {
   const rows = getDb()
     .prepare('SELECT * FROM player_notes WHERE player_name = ? ORDER BY created_at DESC LIMIT ?')
-    .all(playerName, Math.max(1, limit)) as Array<{
-    id: number;
-    server_id: string | null;
-    player_name: string;
-    uuid: string | null;
-    note: string;
-    by_user: string;
-    created_at: string;
-  }>;
-  return rows.map((r) => ({
-    id: r.id,
-    serverId: r.server_id,
-    playerName: r.player_name,
-    uuid: r.uuid,
-    note: r.note,
-    byUser: r.by_user,
-    createdAt: r.created_at,
-  }));
+    .all(playerName, Math.max(1, limit)) as NoteRow[];
+  return rows.map(toNote);
 }
 
-export function deleteNote(id: number): boolean {
-  return getDb().prepare('DELETE FROM player_notes WHERE id = ?').run(id).changes > 0;
+/** One server's notes for a player. */
+export function listServerNotes(serverId: string, playerName: string, limit = 100): PlayerNote[] {
+  const rows = getDb()
+    .prepare(
+      'SELECT * FROM player_notes WHERE server_id = ? AND player_name = ? ORDER BY created_at DESC LIMIT ?',
+    )
+    .all(serverId, playerName, Math.max(1, limit)) as NoteRow[];
+  return rows.map(toNote);
+}
+
+/** Deletes a note only when it belongs to this server and player. */
+export function deleteNote(serverId: string, playerName: string, id: number): boolean {
+  return (
+    getDb()
+      .prepare('DELETE FROM player_notes WHERE id = ? AND server_id = ? AND player_name = ?')
+      .run(id, serverId, playerName).changes > 0
+  );
 }

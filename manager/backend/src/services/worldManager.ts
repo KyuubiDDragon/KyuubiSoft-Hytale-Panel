@@ -24,9 +24,8 @@ import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { config } from '../config.js';
-import { getServer, getDefaultId } from './servers.js';
-import { getWorldsPaths } from './managementHelpers.js';
+import { resolveServerIdSync } from './servers.js';
+import { getServerContext, worldRoots } from './serverContext.js';
 import * as dockerService from './docker.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -62,9 +61,10 @@ const WORLD_STAGING_PREFIX = '.kp-extract-world-';
 
 // A worlds dir that was replaced by a link elsewhere (e.g. into the panel's
 // own data) must not receive an import: the real target has to stay inside
-// the game data or server directory.
-function worldExtractRoots(): string[] {
-  return [config.dataPath, config.serverPath];
+// the game data or server directory of the server the import is for.
+async function worldExtractRoots(serverId?: string): Promise<string[]> {
+  const { paths } = await getServerContext(serverId);
+  return [paths.data, paths.server];
 }
 
 export interface WorldBackup {
@@ -83,26 +83,21 @@ export interface WorldDetails {
 }
 
 async function resolvePaths(serverId?: string): Promise<{ backups: string; serverPath: string }> {
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const s = await getServer(id);
-    if (s) return { backups: s.paths.backups, serverPath: s.paths.server };
-  } catch {
-    /* registry not ready */
-  }
-  return { backups: config.backupsPath, serverPath: config.serverPath };
+  const { paths } = await getServerContext(serverId);
+  return { backups: paths.backups, serverPath: paths.server };
 }
 
 /**
- * Find a world directory by name across the known world roots. Returns the
+ * Find a world directory by name across the server's world roots. Returns the
  * absolute path + its parent (the worlds dir) or null if not found. The name
  * is matched against real directory entries, so traversal/encoded names can't
  * escape — we never build a path from raw user input.
  */
 async function findWorldDir(
   worldName: string,
+  serverId: string | undefined,
 ): Promise<{ worldPath: string; parentDir: string } | null> {
-  for (const worldsPath of getWorldsPaths()) {
+  for (const worldsPath of worldRoots(await getServerContext(serverId))) {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(worldsPath, { withFileTypes: true });
@@ -165,9 +160,9 @@ function readSeed(worldPath: string): string | null {
 
 export async function getWorldDetails(
   worldName: string,
-  _serverId?: string,
+  serverId?: string,
 ): Promise<WorldDetails | null> {
-  const found = await findWorldDir(worldName);
+  const found = await findWorldDir(worldName, serverId);
   if (!found) return null;
   const { bytes, files } = dirSizeSync(found.worldPath);
   return {
@@ -203,7 +198,7 @@ export async function backupWorld(
   worldName: string,
   serverId?: string,
 ): Promise<{ success: boolean; backup?: WorldBackup; error?: string }> {
-  const found = await findWorldDir(worldName);
+  const found = await findWorldDir(worldName, serverId);
   if (!found) return { success: false, error: 'World not found' };
 
   const { backups } = await resolvePaths(serverId);
@@ -279,9 +274,9 @@ export async function listWorldBackups(serverId?: string): Promise<WorldBackup[]
   return result;
 }
 
-/** The primary worlds dir (first existing root, else the default). */
-function primaryWorldsDir(): string {
-  const roots = getWorldsPaths();
+/** The server's primary worlds dir (first existing root, else the default). */
+async function primaryWorldsDir(serverId: string | undefined): Promise<string> {
+  const roots = worldRoots(await getServerContext(serverId));
   return roots.find((r) => fs.existsSync(r)) ?? roots[0];
 }
 
@@ -296,14 +291,18 @@ interface StagedWorlds {
  * worlds dir. Only folders are allowed at the top level of the archive. The
  * caller moves the folders on and removes `staging`.
  */
-async function stageWorldArchive(archive: string, format: ArchiveFormat): Promise<StagedWorlds> {
+async function stageWorldArchive(
+  archive: string,
+  format: ArchiveFormat,
+  serverId: string | undefined,
+): Promise<StagedWorlds> {
   const limits = { maxBytes: archiveExtractMaxBytes(), reserveBytes: EXTRACT_RESERVE_BYTES };
   const declared = await inspectArchive(archive, format, limits);
-  const target = primaryWorldsDir();
+  const target = await primaryWorldsDir(serverId);
   await fs.promises.mkdir(target, { recursive: true });
   // A worlds dir that was replaced by a link elsewhere is refused.
   const worldsDir = resolveRealPath(target);
-  if (!worldsDir || !resolveRealPathWithin(worldsDir, worldExtractRoots())) {
+  if (!worldsDir || !resolveRealPathWithin(worldsDir, await worldExtractRoots(serverId))) {
     throw new Error(`Refusing to extract: ${target} resolves outside the allowed directories.`);
   }
   const staging = await fs.promises.mkdtemp(
@@ -349,7 +348,7 @@ async function performWorldRestore(
   setStep('extracting');
   let staged: StagedWorlds;
   try {
-    staged = await stageWorldArchive(file, 'tar.gz');
+    staged = await stageWorldArchive(file, 'tar.gz', serverId);
   } catch (err) {
     return { error: `${err instanceof Error ? err.message : err} No world was changed.` };
   }
@@ -454,7 +453,7 @@ export async function deleteWorldBackup(
 export async function importWorldArchive(
   archivePath: string,
   originalName: string,
-  _serverId?: string,
+  serverId?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const format = archiveFormatFromName(originalName);
   let staged: StagedWorlds | null = null;
@@ -470,7 +469,7 @@ export async function importWorldArchive(
         error: `A backup job is running (${running.type}); try again later.`,
       };
     }
-    const prepared = await stageWorldArchive(archivePath, format);
+    const prepared = await stageWorldArchive(archivePath, format, serverId);
     staged = prepared;
     // Under the backup lock, so no restore swaps the data dir in between.
     return await withBackupLock(async () => {
@@ -554,8 +553,9 @@ interface PregenJob extends PregenStatus {
 
 const pregenByServer = new Map<string, PregenJob>();
 
+// Legacy and scoped calls for the same server share one job.
 function jobKey(serverId?: string): string {
-  return serverId ?? '__default__';
+  return resolveServerIdSync(serverId);
 }
 
 function publicStatus(job: PregenJob | undefined): PregenStatus {
@@ -640,7 +640,7 @@ export async function startPregen(
     return { success: false, error: 'A pre-generation job is already running for this server' };
   }
 
-  const found = await findWorldDir(world);
+  const found = await findWorldDir(world, serverId);
   if (!found) return { success: false, error: 'World not found' };
   if (!Number.isFinite(radius) || radius < 1 || radius > 256) {
     return { success: false, error: 'Radius must be between 1 and 256 chunks' };

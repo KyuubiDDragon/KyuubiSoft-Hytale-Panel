@@ -90,17 +90,52 @@ describe('scheduler per-server config', () => {
 
   it('writes default-server config to legacy <dataPath>/manager-config.json', async () => {
     const { saveConfig } = await import('./scheduler.js');
-    saveConfig(
+    const saved = await saveConfig(
       { backups: { enabled: true, schedule: '04:30', retentionDays: 5, beforeRestart: false } },
       'default',
     );
-    // Wait for the async persist to land.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(saved).toBe(true);
     const persisted = JSON.parse(
       fs.readFileSync(path.join(dataDir, 'manager-config.json'), 'utf-8'),
     );
     expect(persisted.backups.schedule).toBe('04:30');
     expect(persisted.backups.enabled).toBe(true);
+  });
+
+  it("writes another server's config into that server's data dir only", async () => {
+    const { saveConfig } = await import('./scheduler.js');
+    expect(
+      await saveConfig(
+        { backups: { enabled: true, schedule: '05:15', retentionDays: 2, beforeRestart: false } },
+        'secondary',
+      ),
+    ).toBe(true);
+    const read = (dir: string) =>
+      JSON.parse(fs.readFileSync(path.join(dir, 'manager-config.json'), 'utf-8'));
+    expect(read(secondDataDir).backups.schedule).toBe('05:15');
+    expect(read(dataDir).backups.schedule).toBe('04:30');
+    expect(getConfig('secondary').backups.schedule).toBe('05:15');
+  });
+
+  it('keeps every change of saves that run at the same time', async () => {
+    const { saveConfig, addQuickCommand, deleteQuickCommand, getQuickCommands } =
+      await import('./scheduler.js');
+    const before = getQuickCommands('secondary').length;
+    const [cfgSaved, added, missing] = await Promise.all([
+      saveConfig({ announcements: { enabled: true } } as never, 'secondary'),
+      addQuickCommand({ name: 'One', command: '/who', icon: 'x', category: 'c' }, 'secondary'),
+      deleteQuickCommand('no-such-command', 'secondary'),
+    ]);
+    expect(cfgSaved).toBe(true);
+    expect(added).not.toBeNull();
+    expect(missing).toBe('not_found');
+    const persisted = JSON.parse(
+      fs.readFileSync(path.join(secondDataDir, 'manager-config.json'), 'utf-8'),
+    );
+    expect(persisted.announcements.enabled).toBe(true);
+    expect(persisted.quickCommands).toHaveLength(before + 1);
+    expect(await deleteQuickCommand(added!.id, 'secondary')).toBe('ok');
+    expect(getQuickCommands('secondary')).toHaveLength(before);
   });
 });
 

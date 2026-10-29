@@ -2,17 +2,19 @@ import { logger } from '../utils/logger.js';
 /**
  * Replay Recorder (V3.1.2)
  *
- * Records every event passing through {@link eventBus} plus the latest
- * player-location snapshot into gzip-compressed NDJSON segments rotated
- * every 30 minutes.
+ * Records every plugin signal of a server passing through {@link eventBus}
+ * plus that server's latest player-location snapshot into gzip-compressed
+ * NDJSON segments rotated every 30 minutes. Each server records on its own:
+ * a segment only holds events of its server.
  *
- * Storage layout:
- *   <dataPath>/replay/<segmentId>/ticks.ndjson.gz
- *   <dataPath>/replay/<segmentId>/manifest.json
+ * Storage layout (the server's folder from services/perServerData.ts; for
+ * the compose server the manager data folder as before):
+ *   <serverDir>/replay/<segmentId>/ticks.ndjson.gz
+ *   <serverDir>/replay/<segmentId>/manifest.json
  *
- * The recorder is OPT-IN via `config.json.replay.recordingEnabled` and is
- * idempotent — calling `applyReplayConfig` while running re-evaluates the
- * desired state.
+ * The recorder is OPT-IN via `config.json.replay.recordingEnabled` (for every
+ * server) and is idempotent — calling `applyReplayConfig` while running
+ * re-evaluates the desired state.
  */
 
 import { gzipSync, createGunzip } from 'zlib';
@@ -23,15 +25,17 @@ import { randomBytes } from 'crypto';
 import { eventBus, type PanelEvent } from './eventBus.js';
 import * as locations from './playerLocations.js';
 import { getConfig, updateConfig } from './configService.js';
+import { listServers, onServerAdded, onServerDeleted } from './servers.js';
+import { managerDataDir } from './perServerData.js';
 
-const DATA_PATH = process.env.MANAGER_DATA_PATH || '/app/data';
-const REPLAY_ROOT = path.join(DATA_PATH, 'replay');
 const SEGMENT_DURATION_MS = 30 * 60 * 1000;
 const FLUSH_INTERVAL_MS = 5 * 1000;
 const TICK_INTERVAL_MS = 5 * 1000;
 
 export interface ReplayManifest {
   id: string;
+  /** Server the segment was recorded on; missing in segments from before per-server replays. */
+  serverId?: string;
   startedAt: string;
   endedAt: string;
   durationMs: number;
@@ -47,6 +51,7 @@ interface ReplayConfigSlice {
 
 interface ActiveSegment {
   id: string;
+  serverId: string;
   dir: string;
   filePath: string;
   manifestPath: string;
@@ -60,9 +65,17 @@ interface ActiveSegment {
   unsubscribeBus: (() => void) | null;
 }
 
-let active: ActiveSegment | null = null;
+// Recording segment per server id, and starts still under way.
+const active = new Map<string, ActiveSegment>();
+const starting = new Map<string, Promise<void>>();
 let pruneTimer: NodeJS.Timeout | null = null;
+let lifecycleHooksRegistered = false;
 const exportTokens = new Map<string, { segmentId: string; expiresAt: number; zipPath: string }>();
+
+/** Folder of a server's segments. */
+function replayRoot(serverId: string): string {
+  return path.join(managerDataDir(serverId), 'replay');
+}
 
 // ---------------------------------------------------------------------------
 // Config helpers
@@ -148,6 +161,7 @@ async function writeManifest(seg: ActiveSegment): Promise<void> {
   }
   const manifest: ReplayManifest = {
     id: seg.id,
+    serverId: seg.serverId,
     startedAt: new Date(seg.startedAt).toISOString(),
     endedAt: new Date(Math.min(Date.now(), seg.endsAt)).toISOString(),
     durationMs: Math.min(Date.now(), seg.endsAt) - seg.startedAt,
@@ -158,9 +172,9 @@ async function writeManifest(seg: ActiveSegment): Promise<void> {
   await writeFile(seg.manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
 }
 
-async function startSegment(): Promise<ActiveSegment> {
+async function startSegment(serverId: string): Promise<ActiveSegment> {
   const id = newSegmentId();
-  const dir = path.join(REPLAY_ROOT, id);
+  const dir = path.join(replayRoot(serverId), id);
   await ensureDir(dir);
   const filePath = path.join(dir, 'ticks.ndjson.gz');
   const manifestPath = path.join(dir, 'manifest.json');
@@ -168,6 +182,7 @@ async function startSegment(): Promise<ActiveSegment> {
 
   const seg: ActiveSegment = {
     id,
+    serverId,
     dir,
     filePath,
     manifestPath,
@@ -181,7 +196,9 @@ async function startSegment(): Promise<ActiveSegment> {
     unsubscribeBus: null,
   };
 
+  // Every plugin signal carries its server (pluginEvents.ts, playerPresence.ts).
   seg.unsubscribeBus = eventBus.subscribe('*', (evt: PanelEvent) => {
+    if (evt.payload.serverId !== serverId) return;
     seg.bufferedEvents.push(evt);
     seg.totalEvents++;
     const player =
@@ -195,10 +212,10 @@ async function startSegment(): Promise<ActiveSegment> {
   }, FLUSH_INTERVAL_MS);
   seg.flushTimer.unref?.();
 
-  // Snapshot all player positions every TICK_INTERVAL_MS even when the bus is
-  // quiet — this is the data layer the player will scrub on.
+  // Snapshot the server's player positions every TICK_INTERVAL_MS even when
+  // the bus is quiet — this is the data layer the player will scrub on.
   seg.tickTimer = setInterval(() => {
-    const snap = locations.getLatestSnapshot();
+    const snap = locations.getLatestSnapshot(serverId);
     for (const s of snap) {
       seg.bufferedEvents.push({
         name: 'player_position',
@@ -212,7 +229,7 @@ async function startSegment(): Promise<ActiveSegment> {
   seg.tickTimer.unref?.();
 
   await writeManifest(seg);
-  logger.info(`[replay] segment started: ${id}`);
+  logger.info(`[replay:${serverId}] segment started: ${id}`);
   return seg;
 }
 
@@ -231,16 +248,51 @@ async function stopSegment(seg: ActiveSegment): Promise<void> {
   await flushSegment(seg);
   await writeManifest(seg);
   logger.info(
-    `[replay] segment closed: ${seg.id} (events=${seg.totalEvents}, players=${seg.uniquePlayers.size})`,
+    `[replay:${seg.serverId}] segment closed: ${seg.id} (events=${seg.totalEvents}, players=${seg.uniquePlayers.size})`,
   );
 }
 
+async function startRecording(serverId: string): Promise<void> {
+  if (active.has(serverId)) return;
+  // A start already under way for this server: wait for it, never open a second segment.
+  const pending = starting.get(serverId);
+  if (pending) return pending;
+  const start = (async () => {
+    await ensureDir(replayRoot(serverId));
+    active.set(serverId, await startSegment(serverId));
+  })().finally(() => starting.delete(serverId));
+  starting.set(serverId, start);
+  return start;
+}
+
+async function stopRecording(serverId: string): Promise<void> {
+  await starting.get(serverId)?.catch(() => undefined);
+  const seg = active.get(serverId);
+  if (!seg) return;
+  active.delete(serverId);
+  await stopSegment(seg);
+}
+
+async function rotateServer(serverId: string, seg: ActiveSegment): Promise<void> {
+  const next = await startSegment(serverId);
+  if (active.get(serverId) !== seg) {
+    // Stopped meanwhile: the new segment is not wanted.
+    await stopSegment(next);
+    return;
+  }
+  active.set(serverId, next);
+  await stopSegment(seg);
+}
+
 async function rotateIfNeeded(): Promise<void> {
-  if (!active) return;
-  if (Date.now() >= active.endsAt) {
-    const oldSeg = active;
-    active = await startSegment();
-    await stopSegment(oldSeg);
+  for (const [serverId, seg] of [...active]) {
+    if (Date.now() < seg.endsAt) continue;
+    // One server failing (full disk, no access) must not keep the others from rotating.
+    try {
+      await rotateServer(serverId, seg);
+    } catch (err) {
+      logger.error(`[replay:${serverId}] rotate error:`, err);
+    }
   }
 }
 
@@ -261,21 +313,38 @@ function stopBackgroundLoop(): void {
   }
 }
 
+function registerLifecycleHooks(): void {
+  if (lifecycleHooksRegistered) return;
+  lifecycleHooksRegistered = true;
+  onServerAdded(async (server) => {
+    if ((await getReplayConfig()).recordingEnabled) await startRecording(server.id);
+  });
+  onServerDeleted((serverId) => stopRecording(serverId));
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export async function applyReplayConfig(): Promise<void> {
   const cfg = await getReplayConfig();
+  registerLifecycleHooks();
 
-  if (cfg.recordingEnabled && !active) {
-    await ensureDir(REPLAY_ROOT);
-    active = await startSegment();
+  if (cfg.recordingEnabled) {
+    const servers = await listServers().catch((err) => {
+      logger.error('[replay] could not list the servers:', err);
+      return [];
+    });
+    for (const s of servers) {
+      try {
+        await startRecording(s.id);
+      } catch (err) {
+        logger.error(`[replay:${s.id}] could not start recording:`, err);
+      }
+    }
     startBackgroundLoop();
-  } else if (!cfg.recordingEnabled && active) {
-    const seg = active;
-    active = null;
-    await stopSegment(seg);
+  } else if (active.size > 0) {
+    for (const serverId of [...active.keys()]) await stopRecording(serverId);
     stopBackgroundLoop();
   }
 }
@@ -285,24 +354,22 @@ export async function initializeReplay(): Promise<void> {
 }
 
 export async function shutdownReplay(): Promise<void> {
-  if (active) {
-    const seg = active;
-    active = null;
-    await stopSegment(seg);
-  }
+  for (const serverId of [...active.keys()]) await stopRecording(serverId);
   stopBackgroundLoop();
 }
 
-export async function listSegments(): Promise<ReplayManifest[]> {
+/** A server's segments, newest first. */
+export async function listSegments(serverId: string): Promise<ReplayManifest[]> {
+  const root = replayRoot(serverId);
   try {
-    await ensureDir(REPLAY_ROOT);
-    const dirs = await readdir(REPLAY_ROOT);
+    await ensureDir(root);
+    const dirs = await readdir(root);
     const out: ReplayManifest[] = [];
     for (const d of dirs) {
-      const mp = path.join(REPLAY_ROOT, d, 'manifest.json');
+      const mp = path.join(root, d, 'manifest.json');
       try {
         const content = await readFile(mp, 'utf-8');
-        out.push(JSON.parse(content) as ReplayManifest);
+        out.push({ serverId, ...(JSON.parse(content) as ReplayManifest) });
       } catch {
         /* skip incomplete segments */
       }
@@ -315,29 +382,35 @@ export async function listSegments(): Promise<ReplayManifest[]> {
   }
 }
 
-export async function getManifest(id: string): Promise<ReplayManifest | null> {
+export async function getManifest(id: string, serverId: string): Promise<ReplayManifest | null> {
   const safe = sanitiseId(id);
   if (!safe) return null;
   try {
-    const content = await readFile(path.join(REPLAY_ROOT, safe, 'manifest.json'), 'utf-8');
-    return JSON.parse(content) as ReplayManifest;
+    const content = await readFile(path.join(replayRoot(serverId), safe, 'manifest.json'), 'utf-8');
+    return { serverId, ...(JSON.parse(content) as ReplayManifest) };
   } catch {
     return null;
   }
 }
 
-export function streamSegment(id: string): NodeJS.ReadableStream | null {
+/** The recorded file of one of a server's segments, or null. */
+function segmentFile(id: string, serverId: string): { safe: string; file: string } | null {
   const safe = sanitiseId(id);
   if (!safe) return null;
-  const fp = path.join(REPLAY_ROOT, safe, 'ticks.ndjson.gz');
-  if (!existsSync(fp)) return null;
-  return createReadStream(fp);
+  const file = path.join(replayRoot(serverId), safe, 'ticks.ndjson.gz');
+  return existsSync(file) ? { safe, file } : null;
 }
 
-export async function deleteSegment(id: string): Promise<boolean> {
+export function streamSegment(id: string, serverId: string): NodeJS.ReadableStream | null {
+  const found = segmentFile(id, serverId);
+  return found ? createReadStream(found.file) : null;
+}
+
+export async function deleteSegment(id: string, serverId: string): Promise<boolean> {
   const safe = sanitiseId(id);
   if (!safe) return false;
-  const dir = path.join(REPLAY_ROOT, safe);
+  const dir = path.join(replayRoot(serverId), safe);
+  if (!existsSync(dir)) return false;
   try {
     await rm(dir, { recursive: true, force: true });
     return true;
@@ -352,14 +425,12 @@ export interface ExportToken {
   expiresAt: number;
 }
 
-export async function createExportToken(id: string): Promise<ExportToken | null> {
-  const safe = sanitiseId(id);
-  if (!safe) return null;
-  const fp = path.join(REPLAY_ROOT, safe, 'ticks.ndjson.gz');
-  if (!existsSync(fp)) return null;
+export async function createExportToken(id: string, serverId: string): Promise<ExportToken | null> {
+  const found = segmentFile(id, serverId);
+  if (!found) return null;
   const token = randomBytes(16).toString('hex');
   const expiresAt = Date.now() + 5 * 60 * 1000;
-  exportTokens.set(token, { segmentId: safe, expiresAt, zipPath: fp });
+  exportTokens.set(token, { segmentId: found.safe, expiresAt, zipPath: found.file });
   return { token, expiresAt };
 }
 
@@ -375,40 +446,46 @@ export function consumeExportToken(
 
 // Optional: open a Node stream that re-emits each NDJSON tick. Used by the SSE
 // route. We decompress on the fly so the client doesn't have to.
-export function openTicksStream(id: string): NodeJS.ReadableStream | null {
-  const safe = sanitiseId(id);
-  if (!safe) return null;
-  const fp = path.join(REPLAY_ROOT, safe, 'ticks.ndjson.gz');
-  if (!existsSync(fp)) return null;
-  const raw = createReadStream(fp);
+export function openTicksStream(id: string, serverId: string): NodeJS.ReadableStream | null {
+  const found = segmentFile(id, serverId);
+  if (!found) return null;
+  const raw = createReadStream(found.file);
   const gunzip = createGunzip();
   raw.pipe(gunzip);
   return gunzip;
 }
 
+async function pruneServer(serverId: string, cutoff: number): Promise<void> {
+  const root = replayRoot(serverId);
+  if (!existsSync(root)) return;
+  const dirs = await readdir(root);
+  for (const d of dirs) {
+    // Don't touch the active segment.
+    if (active.get(serverId)?.id === d) continue;
+    const mp = path.join(root, d, 'manifest.json');
+    try {
+      const content = await readFile(mp, 'utf-8');
+      const m = JSON.parse(content) as ReplayManifest;
+      if (new Date(m.endedAt).getTime() < cutoff) {
+        await rm(path.join(root, d), { recursive: true, force: true });
+        logger.info(`[replay:${serverId}] pruned segment ${d}`);
+      }
+    } catch {
+      /* skip */
+    }
+  }
+}
+
 async function pruneRetention(): Promise<void> {
   const cfg = await getReplayConfig();
   const cutoff = Date.now() - cfg.retentionDays * 24 * 60 * 60 * 1000;
-  try {
-    await ensureDir(REPLAY_ROOT);
-    const dirs = await readdir(REPLAY_ROOT);
-    for (const d of dirs) {
-      // Don't touch the active segment.
-      if (active && active.id === d) continue;
-      const mp = path.join(REPLAY_ROOT, d, 'manifest.json');
-      try {
-        const content = await readFile(mp, 'utf-8');
-        const m = JSON.parse(content) as ReplayManifest;
-        if (new Date(m.endedAt).getTime() < cutoff) {
-          await rm(path.join(REPLAY_ROOT, d), { recursive: true, force: true });
-          logger.info(`[replay] pruned segment ${d}`);
-        }
-      } catch {
-        /* skip */
-      }
+  const servers = await listServers().catch(() => []);
+  for (const s of servers) {
+    try {
+      await pruneServer(s.id, cutoff);
+    } catch (err) {
+      logger.error(`[replay:${s.id}] retention error:`, err);
     }
-  } catch (err) {
-    logger.error('[replay] retention error:', err);
   }
 }
 

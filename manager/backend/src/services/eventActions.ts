@@ -22,7 +22,12 @@
  * the rule's own backup) is tagged with the chain of running rules. A rule
  * never fires for an event its own action caused, chains stop after
  * MAX_RULE_CHAIN rules, and a backup rule runs at most once per cooldown.
- * Floods: every rule runs at most RULE_RUNS_PER_MINUTE times per event name.
+ * Floods: every rule runs at most RULE_RUNS_PER_MINUTE times per event name
+ * and server, so a flood on one server does not use up the others' runs.
+ *
+ * Servers: a rule with a server only fires for that server's events. An event
+ * published without a server id is the default server's (legacy callers),
+ * except account and panel events, which concern no server (eventServer.ts).
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getDb } from '../db/index.js';
@@ -39,7 +44,10 @@ import {
   type CommandActor,
   type StoredCommandBlock,
 } from './commandPolicy.js';
-import { getServer } from './servers.js';
+import { getServer, resolveServerId } from './servers.js';
+import { userMayAccessServer } from './roles.js';
+import { getUser } from './users.js';
+import { eventServerId } from './eventServer.js';
 
 export type EventActionType = 'command' | 'announce' | 'backup';
 
@@ -229,9 +237,10 @@ export async function approveEventAction(
     : { ok: false, status: 404, error: 'Rule not found' };
 }
 
-// One rule runs at most this often per event name. Some events can be caused
-// from outside (refused joins under made-up names), and a rule must not turn a
-// flood of them into a flood of console commands, broadcasts or backups.
+// One rule runs at most this often per event name and server. Some events can
+// be caused from outside (refused joins under made-up names), and a rule must
+// not turn a flood of them into a flood of console commands, broadcasts or
+// backups.
 export const RULE_RUNS_PER_MINUTE = 10;
 const THROTTLE_LOG_INTERVAL_MS = 60_000;
 const ruleThrottle = new KeyedTokenBucket({ perMinute: RULE_RUNS_PER_MINUTE });
@@ -239,13 +248,14 @@ const throttleLoggedAt = new Map<string, number>();
 
 /** May `rule` run for `evt` now? A dropped run is logged before anything executes. */
 function withinRuleBudget(rule: EventAction, evt: PanelEvent): boolean {
-  const key = `${rule.id}\u0000${evt.name}`;
+  const server = evt.serverId ?? '';
+  const key = `${rule.id}\u0000${server}\u0000${evt.name}`;
   if (ruleThrottle.tryTake(key)) return true;
   const now = Date.now();
   if (now - (throttleLoggedAt.get(key) ?? 0) >= THROTTLE_LOG_INTERVAL_MS) {
     throttleLoggedAt.set(key, now);
     logger.warn(
-      `[EventAction] "${rule.name}" throttled for ${evt.name}: more than ${RULE_RUNS_PER_MINUTE} runs per minute, further runs are dropped (logged at most once per minute)`,
+      `[EventAction] "${rule.name}" throttled for ${evt.name}${server ? ` on ${server}` : ''}: more than ${RULE_RUNS_PER_MINUTE} runs per minute, further runs are dropped (logged at most once per minute)`,
     );
   }
   return false;
@@ -496,9 +506,32 @@ function commandFailed(rule: EventAction, evt: PanelEvent, error: string | undef
   );
 }
 
+/**
+ * Creators of the rules the panel keeps itself (the scheduler's welcome
+ * message). They name no account, so the account check would always refuse
+ * them; instead such a rule only runs for the server it was made for. A
+ * change to what a rule does makes the editing user its creator, and an
+ * account that happens to carry one of these names is checked like any other.
+ */
+const SYSTEM_CREATORS: ReadonlySet<string> = new Set(['scheduler']);
+
+/** May the rule's creator act on `target` (before any per-permission check)? */
+async function creatorMayUse(rule: EventAction, target: string): Promise<boolean> {
+  if (SYSTEM_CREATORS.has(rule.createdBy) && (await getUser(rule.createdBy)) === null) {
+    return rule.serverId === target;
+  }
+  return userMayAccessServer(rule.createdBy, target);
+}
+
 async function runAction(rule: EventAction, evt: PanelEvent): Promise<void> {
   const serverId = rule.serverId ?? evt.serverId ?? undefined;
   try {
+    // Every action works on its target server (an announcement or a backup as
+    // much as a command): the creator must still be allowed to use it.
+    const target = await resolveServerId(serverId);
+    if (!(await creatorMayUse(rule, target))) {
+      return skipAction(rule, evt, `the creator has no access to server ${target}`);
+    }
     if (rule.actionType === 'command' && rule.actionPayload.command) {
       const rendered = renderTemplate(rule.actionPayload.command, evt);
       if (!rendered.ok) return skipAction(rule, evt, rendered.error);
@@ -569,6 +602,33 @@ function mayFire(rule: EventAction, evt: PanelEvent, chain: readonly string[]): 
 
 let started = false;
 
+/**
+ * Run the matching rules for one event. `chain` is the rule chain the event
+ * was published in, read when it was published.
+ */
+async function dispatch(evt: PanelEvent, chain: readonly string[]): Promise<void> {
+  let rules: EventAction[];
+  try {
+    rules = listEventActions().filter(
+      // Wildcards never cover events outsiders can cause (schemas/events.ts).
+      (rule) => rule.enabled && eventPatternMatches(rule.eventPattern, evt.name),
+    );
+  } catch {
+    return; // db not ready
+  }
+  if (rules.length === 0) return;
+  // The event's server, resolved: a legacy event without one is the default server's.
+  const serverId = await eventServerId(evt);
+  const scoped: PanelEvent = serverId ? { ...evt, serverId } : evt;
+  for (const rule of rules) {
+    // A rule for one server only fires for that server's events, never panel-wide ones.
+    if (rule.serverId && rule.serverId !== serverId) continue;
+    if (commandFromLogEvent(rule, scoped)) continue;
+    if (!mayFire(rule, scoped, chain)) continue;
+    void ruleChain.run([...chain, rule.id], () => runAction(rule, scoped));
+  }
+}
+
 export function startEventActions(): void {
   if (started) return;
   started = true;
@@ -578,21 +638,11 @@ export function startEventActions(): void {
       logger.warn(`[EventAction] ${evt.name} ignored: rule chain too long (${chain.length})`);
       return;
     }
-    let rules: EventAction[];
-    try {
-      rules = listEventActions();
-    } catch {
-      return; // db not ready
-    }
-    for (const rule of rules) {
-      if (!rule.enabled) continue;
-      if (rule.serverId && evt.serverId && rule.serverId !== evt.serverId) continue;
-      // Wildcards never cover events outsiders can cause (schemas/events.ts).
-      if (!eventPatternMatches(rule.eventPattern, evt.name)) continue;
-      if (commandFromLogEvent(rule, evt)) continue;
-      if (!mayFire(rule, evt, chain)) continue;
-      void ruleChain.run([...chain, rule.id], () => runAction(rule, evt));
-    }
+    dispatch(evt, chain).catch((err) =>
+      logger.warn(
+        `[EventAction] ${evt.name} not handled: ${err instanceof Error ? err.message : err}`,
+      ),
+    );
   });
   logger.info('[EventAction] engine started');
 }

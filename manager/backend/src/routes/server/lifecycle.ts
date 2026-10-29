@@ -4,6 +4,7 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
+import { requireServerFiles } from '../../middleware/serverScope.js';
 import * as dockerService from '../../services/docker.js';
 import * as kyuubiApiService from '../../services/kyuubiApi.js';
 import { getPlayerInventoryFromFile, getPlayerDetailsFromFile } from '../../services/players.js';
@@ -15,13 +16,14 @@ import {
 import { parsePrometheusMetrics, parseTpsMetrics } from './shared.js';
 import { tpsMetricsFromPlugin } from '../../services/pluginTps.js';
 import { audit } from '../../services/audit.js';
+import { resolveServerId } from '../../services/servers.js';
 import {
   restartServerGracefully,
   startServer,
   stopServerGracefully,
   type LifecycleResult,
 } from '../../services/serverLifecycle.js';
-import type { ActionResponse } from '../../types/index.js';
+import type { ActionResponse, AuthenticatedRequest } from '../../types/index.js';
 
 const router = Router();
 
@@ -79,7 +81,10 @@ router.get(
     }
 
     try {
-      const result = await dockerService.execCommand('/server stats memory');
+      const result = await dockerService.execCommand(
+        '/server stats memory',
+        (req as AuthenticatedRequest).serverId,
+      );
 
       if (!result.success || !result.output) {
         res.json({
@@ -154,17 +159,17 @@ router.post(
       return;
     }
 
-    const serverId = (req as { serverId?: string }).serverId;
+    const serverId = await resolveServerId((req as { serverId?: string }).serverId);
     const result = await startServer(serverId, { reason: 'user', actor: req.user });
     if (!result.ok) {
       audit(req, 'server.start_failed', {
-        target: `server:${serverId ?? 'default'}`,
+        target: `server:${serverId}`,
         success: false,
       });
       res.status(500).json(toActionResponse(result, 'started'));
       return;
     }
-    audit(req, 'server.started', { target: `server:${serverId ?? 'default'}` });
+    audit(req, 'server.started', { target: `server:${serverId}` });
     res.json(toActionResponse(result, 'started'));
   },
 );
@@ -184,19 +189,19 @@ router.post(
       return;
     }
 
-    const serverId = (req as { serverId?: string }).serverId;
+    const serverId = await resolveServerId((req as { serverId?: string }).serverId);
     // /stop first so the server saves; Docker only as the fallback.
     const result = await stopServerGracefully(serverId, { reason: 'user', actor: req.user });
     if (!result.ok) {
       audit(req, 'server.stop_failed', {
-        target: `server:${serverId ?? 'default'}`,
+        target: `server:${serverId}`,
         success: false,
       });
       res.status(500).json(toActionResponse(result, 'stopped'));
       return;
     }
     audit(req, 'server.stopped', {
-      target: `server:${serverId ?? 'default'}`,
+      target: `server:${serverId}`,
       metadata: { method: result.method },
     });
     res.json(toActionResponse(result, 'stopped'));
@@ -218,18 +223,18 @@ router.post(
       return;
     }
 
-    const serverId = (req as { serverId?: string }).serverId;
+    const serverId = await resolveServerId((req as { serverId?: string }).serverId);
     const result = await restartServerGracefully(serverId, { reason: 'restart', actor: req.user });
     if (!result.ok) {
       audit(req, 'server.restart_failed', {
-        target: `server:${serverId ?? 'default'}`,
+        target: `server:${serverId}`,
         success: false,
       });
       res.status(500).json(toActionResponse(result, 'restarted'));
       return;
     }
     audit(req, 'server.restarted', {
-      target: `server:${serverId ?? 'default'}`,
+      target: `server:${serverId}`,
       metadata: { method: result.method },
     });
     res.json(toActionResponse(result, 'restarted'));
@@ -247,7 +252,7 @@ router.get(
   requirePermission('server.view_status'),
   async (req: Request, res: Response) => {
     try {
-      const status = await kyuubiApiService.getPluginStatus();
+      const status = await kyuubiApiService.getPluginStatus(req.serverId);
       res.json(status);
     } catch (error) {
       res.status(500).json({
@@ -290,6 +295,7 @@ router.post(
   '/plugin/install',
   authMiddleware,
   requirePermission('mods.install'),
+  requireServerFiles,
   async (req: Request, res: Response) => {
     // Demo mode: simulate plugin install
     if (isDemoMode()) {
@@ -298,7 +304,7 @@ router.post(
     }
 
     try {
-      const result = await kyuubiApiService.installPlugin();
+      const result = await kyuubiApiService.installPlugin(req.serverId);
       if (!result.success) {
         res.status(500).json(result);
         return;
@@ -322,6 +328,7 @@ router.delete(
   '/plugin/uninstall',
   authMiddleware,
   requirePermission('mods.install'),
+  requireServerFiles,
   async (req: Request, res: Response) => {
     // Demo mode: simulate plugin uninstall
     if (isDemoMode()) {
@@ -330,7 +337,7 @@ router.delete(
     }
 
     try {
-      const result = await kyuubiApiService.uninstallPlugin();
+      const result = await kyuubiApiService.uninstallPlugin(req.serverId);
       if (!result.success) {
         res.status(500).json(result);
         return;
@@ -355,7 +362,7 @@ router.get(
   requirePermission('server.view_status'),
   async (req: Request, res: Response) => {
     try {
-      const result = await kyuubiApiService.getPlayersFromPlugin();
+      const result = await kyuubiApiService.getPlayersFromPlugin(req.serverId);
       if (!result.success) {
         res.status(503).json(result);
         return;
@@ -377,7 +384,7 @@ router.get(
   requirePermission('server.view_status'),
   async (req: Request, res: Response) => {
     try {
-      const result = await kyuubiApiService.getServerInfoFromPlugin();
+      const result = await kyuubiApiService.getServerInfoFromPlugin(req.serverId);
       if (!result.success) {
         res.status(503).json(result);
         return;
@@ -399,7 +406,7 @@ router.get(
   requirePermission('server.view_status'),
   async (req: Request, res: Response) => {
     try {
-      const result = await kyuubiApiService.getMemoryFromPlugin();
+      const result = await kyuubiApiService.getMemoryFromPlugin(req.serverId);
       if (!result.success) {
         res.status(503).json(result);
         return;
@@ -421,7 +428,7 @@ router.get(
   requirePermission('performance.view'),
   async (req: Request, res: Response) => {
     try {
-      const result = await kyuubiApiService.getPrometheusMetrics();
+      const result = await kyuubiApiService.getPrometheusMetrics(req.serverId);
       if (!result.success) {
         res.status(503).json({ success: false, error: result.error });
         return;
@@ -457,7 +464,7 @@ router.get(
     try {
       // Plugin 2.1+: real per-world tick metrics. Older plugins only have the
       // Prometheus gauges (one value, capped at 20).
-      const perWorld = await kyuubiApiService.getTpsFromPlugin();
+      const perWorld = await kyuubiApiService.getTpsFromPlugin(req.serverId);
       if (perWorld.success && perWorld.data && Array.isArray(perWorld.data.worlds)) {
         const metrics = tpsMetricsFromPlugin(perWorld.data);
         if (!metrics) {
@@ -469,7 +476,7 @@ router.get(
         return;
       }
 
-      const result = await kyuubiApiService.getPrometheusMetrics();
+      const result = await kyuubiApiService.getPrometheusMetrics(req.serverId);
       if (!result.success) {
         res.status(503).json({ success: false, error: result.error });
         return;
@@ -500,7 +507,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { name } = req.params;
-      const result = await kyuubiApiService.getPlayerDetailsFromPlugin(name);
+      const result = await kyuubiApiService.getPlayerDetailsFromPlugin(name, req.serverId);
       if (!result.success) {
         res.status(503).json(result);
         return;
@@ -523,7 +530,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { name } = req.params;
-      const result = await kyuubiApiService.getPlayerInventoryFromPlugin(name);
+      const result = await kyuubiApiService.getPlayerInventoryFromPlugin(name, req.serverId);
       if (!result.success) {
         res.status(503).json(result);
         return;
@@ -546,7 +553,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { name } = req.params;
-      const result = await kyuubiApiService.getPlayerAppearanceFromPlugin(name);
+      const result = await kyuubiApiService.getPlayerAppearanceFromPlugin(name, req.serverId);
       if (!result.success) {
         res.status(503).json(result);
         return;
@@ -570,10 +577,11 @@ router.get(
   '/players/:name/file/details',
   authMiddleware,
   requirePermission('players.view'),
+  requireServerFiles,
   async (req: Request, res: Response) => {
     try {
       const { name } = req.params;
-      const details = await getPlayerDetailsFromFile(name);
+      const details = await getPlayerDetailsFromFile(name, req.serverId);
       if (!details) {
         res.status(404).json({
           success: false,
@@ -600,10 +608,11 @@ router.get(
   '/players/:name/file/inventory',
   authMiddleware,
   requirePermission('players.view'),
+  requireServerFiles,
   async (req: Request, res: Response) => {
     try {
       const { name } = req.params;
-      const inventory = await getPlayerInventoryFromFile(name);
+      const inventory = await getPlayerInventoryFromFile(name, req.serverId);
       if (!inventory) {
         res.status(404).json({
           success: false,

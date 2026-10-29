@@ -30,6 +30,12 @@ const DEMO_SCHEDULER_CONFIG = {
 // Demo quick commands: the Hytale 0.7 defaults of a new install.
 const DEMO_QUICK_COMMANDS = schedulerService.defaultQuickCommands();
 
+function sendQuickCommandChange(res: Response, change: schedulerService.QuickCommandChange): void {
+  if (change === 'ok') res.json({ success: true });
+  else if (change === 'not_found') res.status(404).json({ error: 'Command not found' });
+  else res.status(500).json({ error: 'Failed to save the quick command' });
+}
+
 // GET /api/scheduler/config - Get scheduler configuration
 router.get(
   '/config',
@@ -110,7 +116,7 @@ router.put(
       }
     }
 
-    const success = schedulerService.saveConfig(update, req.serverId);
+    const success = await schedulerService.saveConfig(update, req.serverId);
     if (success) {
       res.json({ success: true, message: 'Configuration saved' });
     } else {
@@ -266,7 +272,7 @@ router.post(
       return;
     }
 
-    const newCommand = schedulerService.addQuickCommand(
+    const newCommand = await schedulerService.addQuickCommand(
       {
         name,
         command,
@@ -275,6 +281,10 @@ router.post(
       },
       req.serverId,
     );
+    if (!newCommand) {
+      res.status(500).json({ error: 'Failed to save the quick command' });
+      return;
+    }
 
     res.json(newCommand);
   },
@@ -310,12 +320,10 @@ router.put(
         return;
       }
     }
-    const success = schedulerService.updateQuickCommand(req.params.id, updates, req.serverId);
-    if (success) {
-      res.json({ success: true });
-    } else {
-      res.status(404).json({ error: 'Command not found' });
-    }
+    sendQuickCommandChange(
+      res,
+      await schedulerService.updateQuickCommand(req.params.id, updates, req.serverId),
+    );
   },
 );
 
@@ -329,12 +337,10 @@ router.delete(
       res.json({ success: true, message: '[DEMO] Command deleted (simulated)' });
       return;
     }
-    const success = schedulerService.deleteQuickCommand(req.params.id, req.serverId);
-    if (success) {
-      res.json({ success: true });
-    } else {
-      res.status(404).json({ error: 'Command not found' });
-    }
+    sendQuickCommandChange(
+      res,
+      await schedulerService.deleteQuickCommand(req.params.id, req.serverId),
+    );
   },
 );
 

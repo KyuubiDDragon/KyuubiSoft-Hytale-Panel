@@ -7,13 +7,13 @@
  * module — there's no need for per-server cron daemons.
  *
  * Backward-compat: callers that omit `serverId` resolve to the default
- * server from the registry (services/servers.ts). The legacy single-server
- * manager-config.json living in `config.dataPath` continues to be loaded
- * for the default server so existing installs migrate transparently.
+ * server from the registry (services/servers.ts). Each server keeps its
+ * manager-config.json in its own data directory; for the compose server
+ * that is the legacy single-server location, so existing installs migrate
+ * transparently.
  */
 import fs from 'fs';
 import path from 'path';
-import { config } from '../config.js';
 import { createBackup, listBackups, deleteBackup, isAutomaticBackupId } from './backup.js';
 import * as dockerService from './docker.js';
 import { validateCommand, stripControlChars, toCommandText } from '../utils/sanitize.js';
@@ -27,12 +27,15 @@ import {
 } from './commandPolicy.js';
 import {
   ensureLoaded,
-  getDefaultId,
-  getServer,
   listServers,
   onServerAdded,
   onServerDeleted,
+  resolveServerId,
+  resolveServerIdSync,
 } from './servers.js';
+import { getServerContext } from './serverContext.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 import {
   LifecycleError,
   restartServerGracefully,
@@ -40,7 +43,12 @@ import {
   type GracefulOptions,
 } from './serverLifecycle.js';
 import { getOnlinePlayers } from './players.js';
-import { createEventAction, getEventAction, updateEventAction } from './eventActions.js';
+import {
+  createEventAction,
+  deleteEventAction,
+  getEventAction,
+  updateEventAction,
+} from './eventActions.js';
 
 // Scheduler configuration
 interface ScheduleConfig {
@@ -271,36 +279,33 @@ function deepMerge(target: any, source: any): any {
 }
 
 /**
- * Resolve serverId, defaulting to the registry default.
- */
-async function resolveServerId(serverId?: string): Promise<string> {
-  if (serverId) return serverId;
-  try {
-    return await getDefaultId();
-  } catch {
-    // registry not ready yet (very early boot) — use a stable sentinel
-    return 'default';
-  }
-}
-
-/**
- * Resolve the on-disk config file path for a specific server.
- * The default server keeps using the legacy `<dataPath>/manager-config.json`
- * for backward compatibility; additional servers store under their own
- * data directory.
+ * The on-disk config file of a server: `manager-config.json` in its data
+ * directory (for the compose server that is the legacy location).
  */
 async function getConfigFilePath(serverId: string): Promise<string> {
+  const { paths } = await getServerContext(serverId);
+  return path.join(paths.data, 'manager-config.json');
+}
+
+// The data folder belongs to the game server, which can put links there: the
+// file is only read when it is a regular file in that folder, and replaced
+// (fresh temporary file, then rename) instead of written through a link.
+async function writeConfigFile(filePath: string, cfg: ScheduleConfig): Promise<void> {
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  await replaceFileContent(filePath, JSON.stringify(cfg, null, 2), [path.dirname(filePath)]);
+}
+
+/** The file's content, or null when it does not exist. */
+async function readConfigFile(filePath: string): Promise<string | null> {
   try {
-    const defaultId = await getDefaultId();
-    if (serverId === defaultId) {
-      return path.join(config.dataPath, 'manager-config.json');
-    }
-    const s = await getServer(serverId);
-    if (s) return path.join(s.paths.data, 'manager-config.json');
-  } catch {
-    /* registry not ready */
+    const content = await readRegularFile(filePath, [path.dirname(filePath)], {
+      maxBytes: MAX_SERVER_FILE_BYTES,
+    });
+    return content.toString('utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
   }
-  return path.join(config.dataPath, 'manager-config.json');
 }
 
 /**
@@ -311,8 +316,8 @@ export async function loadConfig(serverId?: string): Promise<ScheduleConfig> {
   const filePath = await getConfigFilePath(id);
   let cfg: ScheduleConfig = { ...DEFAULT_CONFIG };
   try {
-    if (fs.existsSync(filePath)) {
-      const data = fs.readFileSync(filePath, 'utf-8');
+    const data = await readConfigFile(filePath);
+    if (data !== null) {
       const loaded = JSON.parse(data);
       cfg = deepMerge(DEFAULT_CONFIG, carryOverRestartBackup(loaded));
       // The file sits in the server's data dir; its restart plan gets the same
@@ -352,68 +357,90 @@ export async function loadConfig(serverId?: string): Promise<ScheduleConfig> {
 }
 
 /**
- * Save configuration for a single server.
+ * Save configuration for a single server (default if omitted). Resolves once
+ * the server's file is written and its timers run on the new config; false
+ * when the file could not be written, the previous config then stays active.
  */
-export function saveConfig(cfg: Partial<ScheduleConfig>, serverId?: string): boolean {
-  // saveConfig is sync in the public API; use a microtask-friendly approach
-  // that resolves the serverId synchronously when possible.
-  // We rely on the cache being populated by loadConfig at startup.
-  const id = serverId ?? '__pending__';
-  if (id === '__pending__') {
-    // Resolve default lazily — wrap async work in a synchronous-looking call
-    // by returning the result of doSave().
-    return doSaveSync(cfg);
-  }
-  return doSaveSync(cfg, id);
+export function saveConfig(cfg: Partial<ScheduleConfig>, serverId?: string): Promise<boolean> {
+  return applyConfig(cfg, resolveServerIdSync(serverId));
 }
 
-function doSaveSync(cfg: Partial<ScheduleConfig>, serverIdOverride?: string): boolean {
-  try {
-    const id = serverIdOverride ?? Object.keys(schedulerConfig)[0] ?? 'default';
-    const current = schedulerConfig[id] ?? { ...DEFAULT_CONFIG };
-    // The welcome rule id is managed here, never taken from a client.
-    const incoming = cfg.announcements
-      ? { ...cfg, announcements: { ...cfg.announcements, welcomeActionId: undefined } }
-      : cfg;
-    let merged: ScheduleConfig = deepMerge(current, incoming);
-    merged = { ...merged, scheduledRestarts: normalizeRestartPlan(merged.scheduledRestarts) };
-    if (cfg.announcements) {
-      const welcomeActionId = syncWelcomeAction(id, {
-        ...merged,
-        announcements: {
-          ...merged.announcements,
-          welcomeActionId: current.announcements?.welcomeActionId,
-        },
-      });
-      merged = { ...merged, announcements: { ...merged.announcements, welcomeActionId } };
+// Saves of one server run one after another, each on the last saved config.
+const saveQueues = new Map<string, Promise<unknown>>();
+
+function queueSave<T>(id: string, task: () => Promise<T>): Promise<T> {
+  const run = (saveQueues.get(id) ?? Promise.resolve()).then(task, task);
+  const settled = run.catch(() => undefined);
+  saveQueues.set(id, settled);
+  void settled.then(() => {
+    if (saveQueues.get(id) === settled) saveQueues.delete(id);
+  });
+  return run;
+}
+
+/**
+ * `change` may be computed from the config current at the time of the save;
+ * returning null saves nothing (and counts as success). A server whose config
+ * was not loaded yet is loaded first, never replaced by the defaults.
+ */
+function applyConfig(
+  change: Partial<ScheduleConfig> | ((current: ScheduleConfig) => Partial<ScheduleConfig> | null),
+  id: string,
+): Promise<boolean> {
+  return queueSave(id, async () => {
+    try {
+      const current = schedulerConfig[id] ?? (await loadConfig(id));
+      const cfg = typeof change === 'function' ? change(current) : change;
+      if (cfg) await writeMergedConfig(id, current, cfg);
+      return true;
+    } catch (error) {
+      console.error(`[Scheduler:${id}] Failed to save config:`, error);
+      return false;
     }
-    schedulerConfig[id] = merged;
-    // Fire-and-forget async persist + restart for the resolved server.
-    void (async () => {
-      try {
-        const filePath = await getConfigFilePath(id);
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-        fs.writeFileSync(filePath, JSON.stringify(merged, null, 2));
-        console.log(`[Scheduler:${id}] Config saved to file:`, filePath);
-        stopSchedulersForServer(id);
-        startSchedulersForServer(id);
-      } catch (err) {
-        console.error(`[Scheduler:${id}] Failed to persist config:`, err);
-      }
-    })();
-    return true;
-  } catch (error) {
-    console.error('Failed to save scheduler config:', error);
-    return false;
+  });
+}
+
+async function writeMergedConfig(
+  id: string,
+  current: ScheduleConfig,
+  cfg: Partial<ScheduleConfig>,
+): Promise<void> {
+  // Resolved first: a server that does not exist gets no welcome rule.
+  const filePath = await getConfigFilePath(id);
+  // The welcome rule id is managed here, never taken from a client.
+  const incoming = cfg.announcements
+    ? { ...cfg, announcements: { ...cfg.announcements, welcomeActionId: undefined } }
+    : cfg;
+  let merged: ScheduleConfig = deepMerge(current, incoming);
+  merged = { ...merged, scheduledRestarts: normalizeRestartPlan(merged.scheduledRestarts) };
+  let createdRuleId: string | undefined;
+  if (cfg.announcements) {
+    const previousRuleId = current.announcements?.welcomeActionId;
+    const welcomeActionId = syncWelcomeAction(id, {
+      ...merged,
+      announcements: { ...merged.announcements, welcomeActionId: previousRuleId },
+    });
+    if (welcomeActionId && welcomeActionId !== previousRuleId) createdRuleId = welcomeActionId;
+    merged = { ...merged, announcements: { ...merged.announcements, welcomeActionId } };
   }
+  try {
+    await writeConfigFile(filePath, merged);
+  } catch (err) {
+    // No saved config would name the new rule; a retry creates it again.
+    if (createdRuleId) deleteEventAction(createdRuleId);
+    throw err;
+  }
+  console.log(`[Scheduler:${id}] Config saved to file:`, filePath);
+  schedulerConfig[id] = merged;
+  stopSchedulersForServer(id);
+  startSchedulersForServer(id);
 }
 
 /**
  * Get configuration for a specific server (default if omitted).
  */
 export function getConfig(serverId?: string): ScheduleConfig {
-  const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
-  return schedulerConfig[id] ?? { ...DEFAULT_CONFIG };
+  return schedulerConfig[resolveServerIdSync(serverId)] ?? { ...DEFAULT_CONFIG };
 }
 
 // Calculate next backup time for a server
@@ -664,8 +691,7 @@ function scheduleNextRestart(serverId: string): void {
 
 // Cancel the pending restart (also mid-countdown); the next slot is planned.
 export function cancelPendingRestart(serverId?: string): boolean {
-  const id = serverId ?? Object.keys(timersByServer)[0];
-  if (!id) return false;
+  const id = resolveServerIdSync(serverId);
   const timers = timersByServer[id];
   if (!timers || !timers.pendingRestart) return false;
 
@@ -685,9 +711,7 @@ export function cancelPendingRestart(serverId?: string): boolean {
 
 // Get pending restart info
 export function getPendingRestart(serverId?: string): { time: string; scheduledAt: string } | null {
-  const id = serverId ?? Object.keys(timersByServer)[0];
-  if (!id) return null;
-  const timers = timersByServer[id];
+  const timers = timersByServer[resolveServerIdSync(serverId)];
   if (!timers || !timers.pendingRestart) return null;
   return {
     time: timers.pendingRestart.time,
@@ -887,6 +911,8 @@ export async function startSchedulers(): Promise<void> {
     if (!lifecycleHooksRegistered) {
       onServerAdded(async (server) => {
         await loadConfig(server.id);
+        // Never a second set of timers for a server that already has some.
+        stopSchedulersForServer(server.id);
         startSchedulersForServer(server.id);
       });
       onServerDeleted((serverId) => {
@@ -1098,47 +1124,55 @@ export function defaultQuickCommands(): QuickCommand[] {
 }
 
 export function getQuickCommands(serverId?: string): QuickCommand[] {
-  const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
-  return schedulerConfig[id]?.quickCommands ?? DEFAULT_CONFIG.quickCommands;
+  return getConfig(serverId).quickCommands;
 }
 
-export function addQuickCommand(
+/** The new command, or null when the config could not be saved. */
+export async function addQuickCommand(
   command: Omit<QuickCommand, 'id'>,
   serverId?: string,
-): QuickCommand {
-  const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
-  const cfg = schedulerConfig[id] ?? { ...DEFAULT_CONFIG };
+): Promise<QuickCommand | null> {
   const newCommand: QuickCommand = { ...command, id: Date.now().toString() };
-  cfg.quickCommands = [...cfg.quickCommands, newCommand];
-  schedulerConfig[id] = cfg;
-  doSaveSync(cfg, id);
-  return newCommand;
+  const saved = await applyConfig(
+    (current) => ({ quickCommands: [...current.quickCommands, newCommand] }),
+    resolveServerIdSync(serverId),
+  );
+  return saved ? newCommand : null;
+}
+
+export type QuickCommandChange = 'ok' | 'not_found' | 'save_failed';
+
+/** Replaces the server's quick commands with `edit(current)`; null = command not found. */
+async function changeQuickCommands(
+  serverId: string | undefined,
+  edit: (current: QuickCommand[]) => QuickCommand[] | null,
+): Promise<QuickCommandChange> {
+  let found = true;
+  const saved = await applyConfig((current) => {
+    const quickCommands = edit(current.quickCommands);
+    found = quickCommands !== null;
+    return quickCommands ? { quickCommands } : null;
+  }, resolveServerIdSync(serverId));
+  if (!found) return 'not_found';
+  return saved ? 'ok' : 'save_failed';
 }
 
 export function updateQuickCommand(
   qcId: string,
   updates: Partial<QuickCommand>,
   serverId?: string,
-): boolean {
-  const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
-  const cfg = schedulerConfig[id];
-  if (!cfg) return false;
-  const index = cfg.quickCommands.findIndex((c) => c.id === qcId);
-  if (index === -1) return false;
-  cfg.quickCommands[index] = { ...cfg.quickCommands[index], ...updates };
-  doSaveSync(cfg, id);
-  return true;
+): Promise<QuickCommandChange> {
+  return changeQuickCommands(serverId, (current) =>
+    current.some((c) => c.id === qcId)
+      ? current.map((c) => (c.id === qcId ? { ...c, ...updates, id: qcId } : c))
+      : null,
+  );
 }
 
-export function deleteQuickCommand(qcId: string, serverId?: string): boolean {
-  const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
-  const cfg = schedulerConfig[id];
-  if (!cfg) return false;
-  const index = cfg.quickCommands.findIndex((c) => c.id === qcId);
-  if (index === -1) return false;
-  cfg.quickCommands.splice(index, 1);
-  doSaveSync(cfg, id);
-  return true;
+export function deleteQuickCommand(qcId: string, serverId?: string): Promise<QuickCommandChange> {
+  return changeQuickCommands(serverId, (current) =>
+    current.some((c) => c.id === qcId) ? current.filter((c) => c.id !== qcId) : null,
+  );
 }
 
 // ============================================================
@@ -1366,11 +1400,21 @@ export async function approveScheduledCommand(
   if (!auth.allowed) return { success: false, status: auth.status, error: auth.error };
   if (!actor.username) return { success: false, status: 403, error: 'Authentication required' };
   const approved: ScheduledCommand = { ...cmd, createdBy: actor.username };
-  // New array, so the timers are re-armed from the stamped entry.
-  doSaveSync(
-    { scheduledCommands: cfg.scheduledCommands.map((c) => (c.id === commandId ? approved : c)) },
-    id,
-  );
+  // Only the entry that was authorized: one edited meanwhile is not stamped.
+  let unchanged = true;
+  const saved = await applyConfig((current) => {
+    const now = current.scheduledCommands.find((c) => c.id === commandId);
+    unchanged = JSON.stringify(now) === JSON.stringify(cmd);
+    if (!unchanged) return null;
+    // New array, so the timers are re-armed from the stamped entry.
+    return {
+      scheduledCommands: current.scheduledCommands.map((c) => (c.id === commandId ? approved : c)),
+    };
+  }, id);
+  if (!unchanged) {
+    return { success: false, status: 409, error: 'The command was changed meanwhile; try again' };
+  }
+  if (!saved) return { success: false, status: 500, error: 'Failed to save the approval' };
   return { success: true, command: approved, serverId: id };
 }
 

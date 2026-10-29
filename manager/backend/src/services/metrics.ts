@@ -9,7 +9,7 @@
  *   - kp_auth_logins_total{result}                       counter
  *   - kp_webhook_deliveries_total{status}                counter
  *   - kp_active_websockets                               gauge
- *   - kp_online_players                                  gauge
+ *   - kp_online_players{server}                          gauge
  *   - kp_servers_registered                              gauge
  *
  * Node + process metrics from prom-client's default registry are also
@@ -18,6 +18,9 @@
  * The metrics module is intentionally a thin wrapper: each subsystem
  * imports the counter / gauge it needs and calls .inc() / .set() at the
  * right moment. /api/metrics renders the exposition (routes/metrics.ts).
+ * The two fleet gauges are read when scraped, from what the panel already
+ * keeps in memory (the server registry and who is online per server), so a
+ * scrape never asks Docker or the plugins anything.
  */
 import client from 'prom-client';
 
@@ -59,17 +62,61 @@ export const activeWebsockets = new client.Gauge({
   registers: [registry],
 });
 
+// Imported on the first scrape (both modules pull in most of the panel), once.
+type FleetSources = {
+  servers: typeof import('./servers.js');
+  presence: typeof import('./playerPresence.js');
+};
+let fleet: Promise<FleetSources> | null = null;
+function fleetSources(): Promise<FleetSources> {
+  fleet ??= (async () => ({
+    servers: await import('./servers.js'),
+    presence: await import('./playerPresence.js'),
+  }))().catch((err: unknown) => {
+    fleet = null; // try again on the next scrape
+    throw err;
+  });
+  return fleet;
+}
+
+// An unreadable registry leaves the fleet gauges empty; the rest of the scrape still answers.
+function fleetUnavailable(err: unknown): void {
+  console.warn('[metrics] fleet gauges unavailable:', err instanceof Error ? err.message : err);
+}
+
 export const onlinePlayers = new client.Gauge({
   name: 'kp_online_players',
-  help: 'Players reported online by the plugin',
+  help: 'Players online per server (KyuubiSoft plugin events, or the server log without the plugin)',
   labelNames: ['server'] as const,
   registers: [registry],
+  async collect() {
+    let counts: Array<[string, number]> = [];
+    try {
+      const { servers, presence } = await fleetSources();
+      counts = (await servers.listServers()).map((s) => [s.id, presence.onlinePlayers(s.id).length]);
+    } catch (err) {
+      fleetUnavailable(err);
+    }
+    // Replaced in one go, after the awaits: removed servers stop reporting,
+    // and a scrape running alongside never sees a half-filled gauge.
+    this.reset();
+    for (const [server, count] of counts) this.set({ server }, count);
+  },
 });
 
 export const serversRegistered = new client.Gauge({
   name: 'kp_servers_registered',
   help: 'Number of Hytale server instances tracked by the panel',
   registers: [registry],
+  async collect() {
+    try {
+      const { servers } = await fleetSources();
+      this.set((await servers.listServers()).length);
+    } catch (err) {
+      this.reset();
+      fleetUnavailable(err);
+    }
+  },
 });
 
 export async function exposition(): Promise<string> {

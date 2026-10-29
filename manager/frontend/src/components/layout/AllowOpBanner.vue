@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useDemoStore } from '@/stores/demo'
+import { useServersStore } from '@/stores/servers'
 import { serverApi } from '@/api/server'
 
 // Existing installs may still start the server with --allow-op (it used to be
 // the setup default). The setting is not changed silently; this banner keeps
-// pointing at the risk until it is switched off. Dismissal lasts one session.
+// pointing at the risk until it is switched off. Dismissal lasts one session
+// and applies to one server.
 const DISMISS_KEY = 'allow-op-banner-dismissed'
+
+function dismissKey(): string {
+  return `${DISMISS_KEY}:${serversStore.scopeId ?? 'default'}`
+}
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const demoStore = useDemoStore()
+const serversStore = useServersStore()
 
 const allowOp = ref(false)
 const dismissed = ref(false)
@@ -33,24 +40,32 @@ async function checkAllowOp() {
 function dismiss() {
   dismissed.value = true
   try {
-    sessionStorage.setItem(DISMISS_KEY, 'true')
+    sessionStorage.setItem(dismissKey(), 'true')
   } catch {
     // Storage unavailable (private mode): dismissal lasts until reload.
   }
 }
 
-onMounted(() => {
-  if (!authStore.canManageServer) return
-  try {
-    if (sessionStorage.getItem(DISMISS_KEY) === 'true') {
-      dismissed.value = true
-      return
+// The flag belongs to one server: load it once the server list is known and
+// again whenever another server becomes the target.
+watch(
+  () => [serversStore.loaded, serversStore.epoch] as const,
+  ([loaded]) => {
+    allowOp.value = false
+    dismissed.value = false
+    if (!loaded || !authStore.canManageServer) return
+    try {
+      if (sessionStorage.getItem(dismissKey()) === 'true') {
+        dismissed.value = true
+        return
+      }
+    } catch {
+      // Storage unavailable: show the banner.
     }
-  } catch {
-    // Storage unavailable: show the banner.
-  }
-  checkAllowOp()
-})
+    checkAllowOp()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

@@ -89,8 +89,8 @@ async function savedSources(serverId?: string): Promise<DirectoryEntry[][]> {
 
   const { serverPath } = await resolveInstallPaths(serverId);
   const [files, history, ...legacy] = await Promise.all([
-    getAllPlayerFiles().catch(() => []),
-    getPlayerHistory().catch(() => []),
+    getAllPlayerFiles(serverId).catch(() => []),
+    getPlayerHistory(serverId).catch(() => []),
     ...LEGACY_NAME_FILES.map((name) =>
       readServerJson(path.join(serverPath, name), serverPath)
         .then(legacyNameEntries)

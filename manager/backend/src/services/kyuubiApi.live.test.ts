@@ -3,7 +3,7 @@
  * bearer token, typed data, and the plugin's refusal status passed through
  * (404 offline, 501 not offered by the server build).
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -14,6 +14,21 @@ const tmpDir = path.join(os.tmpdir(), `kp-kyuubi-live-${Date.now()}`);
 fs.mkdirSync(tmpDir, { recursive: true });
 process.env.MANAGER_DATA_PATH = tmpDir;
 delete process.env.DEMO_MODE;
+
+// In the stack the plugin listens on its fixed port inside each container;
+// here the stand-in runs on a random local port.
+const pluginPorts = vi.hoisted(() => new Map<string, number>());
+vi.mock('./serverContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./serverContext.js')>();
+  return {
+    ...actual,
+    getServerContext: async (id?: string | null) => {
+      const ctx = await actual.getServerContext(id);
+      const port = pluginPorts.get(ctx.id);
+      return port ? { ...ctx, plugin: { ...ctx.plugin, port } } : ctx;
+    },
+  };
+});
 
 interface Seen {
   url: string;
@@ -72,6 +87,7 @@ let tokenFor: (id: string) => Promise<string>;
 beforeAll(async () => {
   await new Promise<void>((resolve) => stand.listen(0, '127.0.0.1', () => resolve()));
   const port = (stand.address() as AddressInfo).port;
+  pluginPorts.set('main', port);
   fs.writeFileSync(
     path.join(tmpDir, 'servers.json'),
     JSON.stringify({

@@ -5,16 +5,21 @@
  * running->stopped transition. We snapshot the tail of the container log at
  * that moment into the `crash_reports` table so operators get a post-mortem
  * instead of a vanished crash. `server.restarted` (auto-restart) flags the most
- * recent open crash as recovered.
+ * recent open crash of that server as recovered.
+ *
+ * Every report stores the resolved server id; an event without one is the
+ * default server's.
  */
 import { getDb } from '../db/index.js';
 import { subscribe } from './eventBus.js';
 import { getLogs } from './docker.js';
+import { resolveServerId } from './servers.js';
 
 const nowIso = (): string => new Date().toISOString();
 const MAX_LOG_CHARS = 20000;
 
-async function onCrash(serverId: string | undefined, detectedAt: string): Promise<void> {
+async function onCrash(eventServerId: string | undefined, detectedAt: string): Promise<void> {
+  const serverId = await resolveServerId(eventServerId);
   let logTail = '';
   try {
     logTail = await getLogs(250, serverId);
@@ -26,22 +31,22 @@ async function onCrash(serverId: string | undefined, detectedAt: string): Promis
       'INSERT INTO crash_reports (server_id, detected_at, log_tail, created_at) VALUES (?, ?, ?, ?)',
     )
     .run(
-      serverId ?? null,
+      serverId,
       detectedAt || nowIso(),
       logTail ? logTail.slice(-MAX_LOG_CHARS) : null,
       nowIso(),
     );
 }
 
-function markAutoRestarted(serverId: string | undefined): void {
+async function markAutoRestarted(eventServerId: string | undefined): Promise<void> {
   // Flag the latest not-yet-recovered crash for this server.
+  const serverId = await resolveServerId(eventServerId);
   const db = getDb();
-  const where = serverId ? 'server_id = ?' : 'server_id IS NULL';
   const row = db
     .prepare(
-      `SELECT id FROM crash_reports WHERE ${where} AND auto_restarted = 0 ORDER BY created_at DESC LIMIT 1`,
+      'SELECT id FROM crash_reports WHERE server_id = ? AND auto_restarted = 0 ORDER BY created_at DESC LIMIT 1',
     )
-    .get(...(serverId ? [serverId] : [])) as { id: number } | undefined;
+    .get(serverId) as { id: number } | undefined;
   if (row) db.prepare('UPDATE crash_reports SET auto_restarted = 1 WHERE id = ?').run(row.id);
 }
 
@@ -56,11 +61,7 @@ export function startCrashCapture(): void {
     );
   });
   subscribe(['server.restarted'], (event) => {
-    try {
-      markAutoRestarted(event.serverId);
-    } catch (e) {
-      console.error('[crash] flag failed', e);
-    }
+    markAutoRestarted(event.serverId).catch((e) => console.error('[crash] flag failed', e));
   });
   console.log('[crash] capture started');
 }
@@ -76,6 +77,7 @@ export interface CrashReportDetail extends CrashReport {
   logTail: string | null;
 }
 
+/** Recent crash reports, newest first: of one server, or of every server without `serverId`. */
 export function getCrashReports(serverId?: string, limit = 50): CrashReport[] {
   const db = getDb();
   const where = serverId ? 'WHERE server_id = ?' : '';
@@ -100,12 +102,13 @@ export function getCrashReports(serverId?: string, limit = 50): CrashReport[] {
   }));
 }
 
-export function getCrashReport(id: number): CrashReportDetail | null {
+/** One crash report with its log; with `serverId` only if it belongs to that server. */
+export function getCrashReport(id: number, serverId?: string): CrashReportDetail | null {
   const r = getDb()
     .prepare(
-      'SELECT id, server_id, detected_at, log_tail, auto_restarted, created_at FROM crash_reports WHERE id = ?',
+      `SELECT id, server_id, detected_at, log_tail, auto_restarted, created_at FROM crash_reports WHERE id = ?${serverId ? ' AND server_id = ?' : ''}`,
     )
-    .get(id) as
+    .get(...(serverId ? [id, serverId] : [id])) as
     | {
         id: number;
         server_id: string | null;

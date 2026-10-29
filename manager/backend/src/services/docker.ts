@@ -12,12 +12,12 @@
  * Docker calls, because that would silently ignore multi-server setups.
  */
 import type Docker from 'dockerode';
-import { config } from '../config.js';
 import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.js';
 import { validateCommand, containsControlChars, PLAYER_NAME_SOURCE } from '../utils/sanitize.js';
 import { clearOnlinePlayers } from './players.js';
 import { isDemoMode, getDemoStatus, getDemoStats, getDemoLogs } from './demoData.js';
-import { ensureLoaded, getDefaultId, getServer, resolveServerId } from './servers.js';
+import { resolveServerId } from './servers.js';
+import { getServerContext } from './serverContext.js';
 import { createDockerClient } from './dockerClient.js';
 import { ensurePluginAuthConfig } from './pluginAuth.js';
 import { decodeDockerOutput } from './dockerStream.js';
@@ -62,21 +62,9 @@ function withTimeout<T>(
   });
 }
 
-/** Resolve the container name for an explicit or default server id. */
+/** Container name for an explicit or default server id; unknown ids throw. */
 async function resolveContainerName(serverId?: string): Promise<string> {
-  // Fast path for legacy single-server boot before servers.json exists.
-  if (!serverId) {
-    try {
-      const id = await getDefaultId();
-      const s = await getServer(id);
-      return s?.containerName ?? config.gameContainerName;
-    } catch {
-      return config.gameContainerName;
-    }
-  }
-  const s = await getServer(serverId);
-  if (!s) throw new Error(`Unknown server id: ${serverId}`);
-  return s.containerName;
+  return (await getServerContext(serverId)).containerName;
 }
 
 async function getContainer(serverId?: string): Promise<Docker.Container | null> {
@@ -267,6 +255,16 @@ export async function startContainer(serverId?: string): Promise<ActionResponse>
   }
 }
 
+/** Everyone on that server is offline now; a failure here doesn't fail the stop. */
+function markPlayersOffline(serverId?: string): void {
+  Promise.resolve(clearOnlinePlayers(serverId)).catch((err) =>
+    console.warn(
+      `[Docker] Could not mark the players of ${serverId ?? 'the default server'} offline:`,
+      err,
+    ),
+  );
+}
+
 /**
  * `docker stop`: SIGTERM, then SIGKILL after `timeoutSeconds`. The start script
  * forwards SIGTERM to Java, which then saves and shuts down. Prefer
@@ -286,7 +284,7 @@ export async function stopContainer(
       container.stop({ t: timeoutSeconds }),
       timeoutSeconds * 1000 + DOCKER_STOP_HEADROOM_MS,
     );
-    clearOnlinePlayers();
+    markPlayersOffline(serverId);
     return { success: true, message: 'Container stopped' };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -309,7 +307,7 @@ export async function restartContainer(serverId?: string): Promise<ActionRespons
       container.restart({ t: DEFAULT_STOP_SECONDS }),
       DEFAULT_STOP_SECONDS * 1000 + DOCKER_STOP_HEADROOM_MS,
     );
-    clearOnlinePlayers();
+    markPlayersOffline(serverId);
     return { success: true, message: 'Container restarted' };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -767,17 +765,4 @@ export async function execInContainer(
 
 export function getDockerInstance(): Docker {
   return docker;
-}
-
-/**
- * Synchronous lookup — preserved for the few legacy call sites that need
- * a container name without an async boundary. Returns the registry value
- * when servers.json has been loaded, otherwise the env-var default.
- */
-export function getContainerName(): string {
-  // ensureLoaded is fire-and-forget here; the registry sync-cache fills in
-  // after the first call. Until then we serve the env-var default which
-  // happens to also be the default-server's container name on fresh installs.
-  void ensureLoaded();
-  return config.gameContainerName;
 }

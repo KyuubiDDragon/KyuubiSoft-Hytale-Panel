@@ -19,7 +19,7 @@ import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { readHytaleJarVersion } from '../utils/jarManifest.js';
 import { readRegularFile, removeTree } from '../utils/noFollowFs.js';
-import { getDefaultId, getServer } from './servers.js';
+import { getServerContext } from './serverContext.js';
 
 export const VERSION_FILE_NAME = '.hytale-version';
 export const SERVER_JAR_NAME = 'HytaleServer.jar';
@@ -45,27 +45,15 @@ export interface InstallPaths {
 }
 
 /**
- * Paths for a server id. Only the compose (default) server has the updater
- * mounted in the manager; additional servers report it as unavailable.
+ * Paths for a server id. Only the compose server has the updater mounted in
+ * the manager; additional servers report it as unavailable.
  */
 export async function resolveInstallPaths(serverId?: string): Promise<InstallPaths> {
-  let serverPath = config.serverPath;
-  let backupsPath = config.backupsPath;
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const srv = await getServer(id);
-    if (srv) {
-      serverPath = srv.paths.server;
-      backupsPath = srv.paths.backups;
-    }
-  } catch {
-    // registry not ready: legacy single-server paths
-  }
+  const ctx = await getServerContext(serverId);
   return {
-    serverPath,
-    backupsPath,
-    updaterPath:
-      path.resolve(serverPath) === path.resolve(config.serverPath) ? config.updaterPath : null,
+    serverPath: ctx.paths.server,
+    backupsPath: ctx.paths.backups,
+    updaterPath: ctx.kind === 'compose' ? config.updaterPath : null,
   };
 }
 

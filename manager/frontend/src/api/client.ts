@@ -1,6 +1,8 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { useServersStore } from '@/stores/servers'
+import { scopeUrl } from '@/utils/serverScope'
 
 // Create axios instance.
 // `withCredentials: true` makes the browser send the HttpOnly kp_refresh
@@ -25,12 +27,29 @@ export const setupApiClient: AxiosInstance = axios.create({
   },
 })
 
-// Request interceptor - add auth token
+// Requests aimed at one server are cancelled together when the panel switches
+// to another server, so a late answer of the old server never lands in the
+// new server's view.
+let scopedRequests = new AbortController()
+
+export function abortScopedRequests(): void {
+  scopedRequests.abort()
+  scopedRequests = new AbortController()
+}
+
+// Request interceptor - add auth token and address the active server
 api.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
     if (authStore.accessToken) {
       config.headers.Authorization = `Bearer ${authStore.accessToken}`
+    }
+    if (typeof config.url === 'string') {
+      const scoped = scopeUrl(config.url, useServersStore().scopeId)
+      if (scoped !== config.url) {
+        config.url = scoped
+        if (!config.signal) config.signal = scopedRequests.signal
+      }
     }
     return config
   },
@@ -112,6 +131,27 @@ export function forceLogout(message?: string): void {
   }
 }
 
+// The active server was deleted or taken away while the panel was open: every
+// poll then fails with 404 / SERVER_NOT_ALLOWED. Reload the server list once;
+// the store falls back to a server the account may still use.
+let serverListRecheck: Promise<void> | null = null
+
+function recheckServersOnLostScope(error: AxiosError<{ detail?: string; code?: string }>): void {
+  const url = error.config?.url ?? ''
+  if (!/^\/servers\/[^/?#]+\/./.test(url)) return
+  const data = error.response?.data
+  const lost =
+    (error.response?.status === 404 && data?.detail === 'Server not found') ||
+    (error.response?.status === 403 && data?.code === 'SERVER_NOT_ALLOWED')
+  if (!lost || serverListRecheck) return
+  serverListRecheck = useServersStore()
+    .refresh()
+    .catch(() => {})
+    .finally(() => {
+      serverListRecheck = null
+    })
+}
+
 // Response interceptor - handle token refresh and forced logout.
 // Applied to BOTH clients (the setup client previously had no 401 handling
 // at all, so an expired token during a long setup step surfaced as a dead UI).
@@ -161,6 +201,7 @@ function attachAuthRefreshInterceptor(client: AxiosInstance): void {
         }
       }
 
+      recheckServersOnLostScope(error)
       return Promise.reject(error)
     },
   )

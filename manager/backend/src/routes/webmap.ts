@@ -5,9 +5,11 @@
  * to run unauthenticated on the panel origin, where its scripts could read
  * the panel's access token and call the API as the viewing admin. Now:
  *
- *  - POST /api/webmap/session (Bearer auth + players.view) mints a session;
- *    the map is reachable only under /api/webmap/t/<session>/... (HTTP and
- *    WebSocket), and every request re-checks the session's user + right.
+ *  - POST /api/webmap/session (Bearer auth + players.view) mints a session
+ *    for one server (the scoped mount /api/servers/:id/webmap, or the
+ *    default server); the map is reachable only under
+ *    /api/webmap/t/<session>/... (HTTP and WebSocket), every request
+ *    re-checks the session's user + right and goes to that server's map.
  *  - Every proxied response carries `Content-Security-Policy: sandbox
  *    allow-scripts` (no allow-same-origin), so the map always runs with an
  *    opaque origin — framed or opened in its own tab — and gets no access
@@ -34,6 +36,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { asyncRoute } from '../utils/asyncRoute.js';
+import { resolveServerId } from '../services/servers.js';
 import {
   checkWebMapSession,
   createWebMapSession,
@@ -283,12 +286,19 @@ export interface WebMapProxy {
   handleUpgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>;
 }
 
-export function createWebMapProxy(target: string): WebMapProxy {
-  // Session prefix of each in-flight request, for redirect rewriting.
+/** The map's base URL (`http://host:port`), fixed or per server id. */
+export type WebMapTarget = string | ((serverId: string) => Promise<string>);
+
+export function createWebMapProxy(target: WebMapTarget): WebMapProxy {
+  const targetFor = typeof target === 'string' ? async () => target : target;
+  // Session prefix and upstream of each in-flight request, for routing and
+  // redirect rewriting.
   const prefixes = new WeakMap<IncomingMessage, string>();
+  const targets = new WeakMap<IncomingMessage, string>();
 
   const httpForward = createProxyMiddleware<IncomingMessage, ServerResponse>({
-    target,
+    // Set per request from the session's server (the middleware below).
+    router: (req) => targets.get(req),
     changeOrigin: true,
     selfHandleResponse: true,
     proxyTimeout: UPSTREAM_TIMEOUT_MS,
@@ -302,9 +312,10 @@ export function createWebMapProxy(target: string): WebMapProxy {
       },
       proxyRes: (proxyRes, req, res) => {
         const prefix = prefixes.get(req);
+        const upstream = targets.get(req);
         const location = proxyRes.headers.location;
-        if (prefix && typeof location === 'string') {
-          proxyRes.headers.location = rewriteLocation(location, target, req.url || '/', prefix);
+        if (prefix && upstream && typeof location === 'string') {
+          proxyRes.headers.location = rewriteLocation(location, upstream, req.url || '/', prefix);
         }
         handleProxyResponse(proxyRes, res);
       },
@@ -315,7 +326,8 @@ export function createWebMapProxy(target: string): WebMapProxy {
     },
   });
 
-  const wsForward = httpProxy.createProxyServer({ target, ws: true, changeOrigin: true });
+  // The target is passed per socket (the session's server).
+  const wsForward = httpProxy.createProxyServer({ ws: true, changeOrigin: true });
   wsForward.on('proxyReqWs', (proxyReq, _req, socket) => {
     // http-proxy only ends the upstream socket when the client socket errors;
     // make every client close (revoke, failed re-check, reset) end it too.
@@ -367,8 +379,17 @@ export function createWebMapProxy(target: string): WebMapProxy {
           .json({ error: 'Method not allowed' });
         return;
       }
+      let upstream: string;
+      try {
+        upstream = await targetFor(access.serverId);
+      } catch (err) {
+        console.error('[WebMap Proxy] No map target:', err instanceof Error ? err.message : err);
+        sendProxyError(res);
+        return;
+      }
       req.url = rest + query;
       prefixes.set(req, `${WEBMAP_PROXY_PREFIX}${sessionId}/`);
+      targets.set(req, upstream);
       await httpForward(req, res, next);
     } catch (err) {
       next(err);
@@ -389,12 +410,14 @@ export function createWebMapProxy(target: string): WebMapProxy {
       return;
     }
     const [, sessionId, rest = '/', query = ''] = match;
+    let upstream: string;
     try {
       const access = await checkWebMapSession(sessionId);
       if (!access.ok) {
         rejectUpgrade(socket, access.status);
         return;
       }
+      upstream = await targetFor(access.serverId);
     } catch (err) {
       console.error('[WebMap WS Proxy] Session check failed:', err);
       socket.destroy();
@@ -421,7 +444,7 @@ export function createWebMapProxy(target: string): WebMapProxy {
       release();
     });
 
-    wsForward.ws(req, socket, head);
+    wsForward.ws(req, socket, head, { target: upstream });
   };
 
   return { middleware, handleUpgrade };
@@ -441,14 +464,15 @@ const sessionLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// POST /api/webmap/session — mint a map session for the current user.
+// POST /api/webmap/session — mint a map session for the current user, for the
+// request's server (scoped mount) or the default server.
 router.post(
   '/session',
   authMiddleware,
   sessionLimiter,
   requirePermission('players.view'),
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
-    const ticket = await createWebMapSession(req.user!);
+    const ticket = await createWebMapSession(req.user!, await resolveServerId(req.serverId));
     res.set('Cache-Control', 'no-store').json({
       ticket,
       path: `${WEBMAP_PROXY_PREFIX}${ticket}/`,

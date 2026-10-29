@@ -383,7 +383,8 @@ async function stopLocked(
   }
 
   if (result.ok) {
-    clearOnlinePlayers();
+    // This server's players only; the other servers keep theirs.
+    await clearOnlinePlayers(id);
     // Restart the watchdog's grace window: the exit may land well after /stop.
     await dockerService.noteIntentionalStop(id);
     publish('server.stopped', { ...eventPayload(opts, action), method: result.method }, id);

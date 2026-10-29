@@ -7,6 +7,11 @@
  *   - Discord → in-game chat (messages in the channel become /say broadcasts)
  *   - /status and /players slash commands
  *
+ * The bot bridges one server, the panel's default server (looked up on every
+ * message, so it follows a change of the default): only its chat reaches the
+ * channel, messages from the channel go to it, and the slash commands answer
+ * for it. Other servers' chat stays out of the channel.
+ *
  * Everything is wrapped defensively: a Discord outage or bad token must never
  * take down the panel. `discord.js` is only imported when the bot is enabled,
  * so installs that never use it don't pay the startup cost.
@@ -16,6 +21,11 @@ import { toCommandText } from '../utils/sanitize.js';
 import { eventBus, type PanelEvent } from './eventBus.js';
 import { getConfig } from './configService.js';
 import { isDemoMode } from './demoData.js';
+import { resolveServerId } from './servers.js';
+import { serverDisplayName } from './perServerData.js';
+
+/** The server the bot bridges: the panel's default server. */
+const bridgedServer = (): Promise<string> => resolveServerId(undefined);
 
 // Loose typing for the lazily-imported discord.js client so the rest of the
 // codebase doesn't hard-depend on the types at module load.
@@ -113,10 +123,20 @@ export async function startDiscordBot(): Promise<void> {
     }
   });
 
-  // In-game chat → Discord
+  // In-game chat of the bridged server → Discord
   unsubscribeChat = eventBus.subscribe(['player_chat'], (evt: PanelEvent) => {
-    const p = evt.payload as { player?: string; message?: string };
-    if (p.player && p.message) void sendToChannel(d.channelId, `**${p.player}**: ${p.message}`);
+    const p = evt.payload as { player?: string; message?: string; serverId?: string };
+    if (!p.player || !p.message) return;
+    const { player, message } = p;
+    void bridgedServer()
+      .then((serverId) => {
+        if (p.serverId === serverId) {
+          return sendToChannel(d.channelId, `**${player}**: ${message}`);
+        }
+      })
+      .catch((err) =>
+        logger.warn(`[Discord] chat relay failed: ${err instanceof Error ? err.message : err}`),
+      );
   });
 
   // Discord → in-game chat
@@ -128,7 +148,7 @@ export async function startDiscordBot(): Promise<void> {
       const safe = toCommandText(msg.content, 200);
       const author = toCommandText(msg.author.username, 32);
       if (!safe) return;
-      const result = await execCommand(`/say [Discord] ${author}: ${safe}`, undefined, {
+      const result = await execCommand(`/say [Discord] ${author}: ${safe}`, await bridgedServer(), {
         actor: 'discord',
       });
       if (!result.success) logger.warn(`[Discord] relay-to-game failed: ${result.error}`);
@@ -141,14 +161,18 @@ export async function startDiscordBot(): Promise<void> {
   c.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     try {
+      const serverId = await bridgedServer();
       if (interaction.commandName === 'status') {
         const { getStatus } = await import('./docker.js');
-        const status = await getStatus();
-        let line = status.running ? '🟢 Server is **online**' : '🔴 Server is **offline**';
+        const status = await getStatus(serverId);
+        const name = await serverDisplayName(serverId);
+        let line = status.running
+          ? `🟢 ${name} is **online**`
+          : `🔴 ${name} is **offline**`;
         if (status.running) {
           try {
             const kyuubi = await import('./kyuubiApi.js');
-            const info = await kyuubi.getServerInfoFromPlugin();
+            const info = await kyuubi.getServerInfoFromPlugin(serverId);
             const data = info.success
               ? (info.data as { playerCount?: number; version?: string })
               : undefined;
@@ -161,7 +185,7 @@ export async function startDiscordBot(): Promise<void> {
         await interaction.reply({ content: line, ephemeral: true });
       } else if (interaction.commandName === 'players') {
         const players = await import('./players.js');
-        const list = await players.getOnlinePlayers();
+        const list = await players.getOnlinePlayers(serverId);
         await interaction.reply({
           content: list.length
             ? `Online (${list.length}): ${list.map((p) => p.name).join(', ')}`

@@ -10,7 +10,9 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import { isDemoMode, getDemoWorlds } from '../../services/demoData.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
-import { WorldInfo, getWorldsPaths, scanWorldsInPath } from '../../services/managementHelpers.js';
+import { WorldInfo, scanWorldsInPath } from '../../services/managementHelpers.js';
+import { getServerContext, worldRoots } from '../../services/serverContext.js';
+import { resolveServerIdSync } from '../../services/servers.js';
 import {
   getWorldDetails,
   backupWorld,
@@ -47,12 +49,12 @@ const worldUpload = multer({
   },
 });
 
-// GET /api/management/worlds
+// GET /api/management/worlds - the worlds of the request's server
 router.get(
   '/worlds',
   authMiddleware,
   requirePermission('worlds.view'),
-  async (_req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     // Demo mode: return mock worlds
     if (isDemoMode()) {
       const demoWorlds = getDemoWorlds();
@@ -75,8 +77,8 @@ router.get(
       const checkedPaths: string[] = [];
       const seenRealPaths = new Set<string>(); // Track real paths to prevent symlink duplicates
 
-      // Check all possible world paths
-      for (const worldsPath of getWorldsPaths()) {
+      // Check all possible world paths of the server
+      for (const worldsPath of worldRoots(await getServerContext(req.serverId))) {
         checkedPaths.push(worldsPath);
         const found = await scanWorldsInPath(worldsPath, seenRealPaths);
         worlds.push(...found);
@@ -208,7 +210,11 @@ router.get(
   requirePermission('worlds.view'),
   (req: AuthenticatedRequest, res: Response) => {
     const job = getBackupJob(req.params.jobId);
-    if (!job || job.type !== 'world-restore' || job.serverId !== (req.serverId ?? null)) {
+    if (
+      !job ||
+      job.type !== 'world-restore' ||
+      job.serverId !== resolveServerIdSync(req.serverId)
+    ) {
       res.status(404).json({ error: 'Job not found' });
       return;
     }

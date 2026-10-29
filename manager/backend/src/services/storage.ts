@@ -14,9 +14,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { config } from '../config.js';
-import { getServer, getDefaultId } from './servers.js';
-import { getWorldsPaths } from './managementHelpers.js';
+import { getServerContext, worldRoots } from './serverContext.js';
 import { isDemoMode } from './demoData.js';
 
 export interface StorageCategory {
@@ -92,33 +90,6 @@ function statfsUsage(p: string): FilesystemUsage | null {
   }
 }
 
-async function resolveServerPaths(
-  serverId?: string,
-): Promise<{
-  server: string;
-  data: string;
-  backups: string;
-  mods: string;
-  plugins: string;
-  assets: string;
-}> {
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const srv = await getServer(id);
-    if (srv) return srv.paths;
-  } catch {
-    // registry not ready — fall back to the env-configured default paths
-  }
-  return {
-    server: config.serverPath,
-    data: config.dataPath,
-    backups: config.backupsPath,
-    mods: config.modsPath,
-    plugins: config.pluginsPath,
-    assets: config.assetsPath,
-  };
-}
-
 export async function getStorageBreakdown(serverId?: string): Promise<StorageBreakdown> {
   if (isDemoMode()) {
     const gb = (n: number) => Math.round(n * 1024 ** 3);
@@ -145,18 +116,17 @@ export async function getStorageBreakdown(serverId?: string): Promise<StorageBre
     };
   }
 
-  const cacheKey = serverId ?? '__default__';
+  const ctx = await getServerContext(serverId);
+  const { id: cacheKey, paths } = ctx;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return cached.data;
   }
 
-  const paths = await resolveServerPaths(serverId);
-
   // Worlds can live in several locations (data/worlds, server/universe/worlds,
   // server/worlds). Sum the real ones, de-duplicating by resolved path so a
   // symlinked location isn't counted twice.
-  const worldPaths = getWorldsPaths();
+  const worldPaths = worldRoots(ctx);
   const seenWorldReal = new Set<string>();
   let worldsBytes = 0;
   let worldsRepresentativePath = worldPaths[0] ?? path.join(paths.data, 'worlds');

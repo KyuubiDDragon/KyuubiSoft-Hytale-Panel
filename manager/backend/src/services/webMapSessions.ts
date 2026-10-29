@@ -11,17 +11,19 @@
  * part of the proxied path: /api/webmap/t/<id>/... — the map's relative URLs
  * keep working under that prefix.
  *
- * Sessions are minted by an authenticated user holding players.view and are
- * re-checked on every request: the user must still exist, still hold
- * players.view and still have the token version the session was minted
- * with, so logout, password/role changes and permission revocation take
- * effect immediately. A session expires after WEBMAP_SESSION_IDLE_TTL_MS
+ * Sessions are minted by an authenticated user holding players.view on one
+ * server and show that server's map only. They are re-checked on every
+ * request: the user must still exist, still hold players.view on that server
+ * and still have the token version the session was minted with, so logout,
+ * password/role changes and permission revocation take effect immediately.
+ * A session expires after WEBMAP_SESSION_IDLE_TTL_MS
  * without use (an open map WebSocket counts as use) and after
  * WEBMAP_SESSION_MAX_TTL_MS in any case.
  */
 import crypto from 'crypto';
 import { hasPermission } from './roles.js';
 import { getTokenVersion, isUserInvalidated } from './users.js';
+import { getServer, resolveServerId } from './servers.js';
 
 export const WEBMAP_SESSION_IDLE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 export const WEBMAP_SESSION_MAX_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
@@ -31,6 +33,8 @@ const SESSION_ID_PATTERN = /^[a-f0-9]{64}$/;
 
 interface WebMapSession {
   readonly username: string;
+  /** Registry id of the server whose map the session shows. */
+  readonly serverId: string;
   readonly tokenVersion: number;
   readonly createdAt: number;
   readonly lastUsedAt: number;
@@ -38,7 +42,8 @@ interface WebMapSession {
 }
 
 export type WebMapAccess =
-  { ok: true; username: string } | { ok: false; status: 401 | 403; error: string };
+  | { ok: true; username: string; serverId: string }
+  | { ok: false; status: 401 | 403; error: string };
 
 const sessions = new Map<string, WebMapSession>();
 // Close callbacks of the WebSockets open on each session.
@@ -71,8 +76,12 @@ export function isWebMapSessionId(value: unknown): value is string {
   return typeof value === 'string' && SESSION_ID_PATTERN.test(value);
 }
 
-/** Mint a session for `username`. The caller must have checked players.view. */
-export async function createWebMapSession(username: string): Promise<string> {
+/**
+ * Mint a session for `username` on a server (`undefined` = the default one).
+ * The caller must have checked players.view on that server.
+ */
+export async function createWebMapSession(username: string, serverId?: string): Promise<string> {
+  const server = await resolveServerId(serverId);
   const tokenVersion = await getTokenVersion(username);
 
   // Bound memory per user: drop the oldest sessions beyond the cap, idle
@@ -89,7 +98,14 @@ export async function createWebMapSession(username: string): Promise<string> {
 
   const id = crypto.randomBytes(32).toString('hex');
   const now = Date.now();
-  sessions.set(id, { username, tokenVersion, createdAt: now, lastUsedAt: now, openSockets: 0 });
+  sessions.set(id, {
+    username,
+    serverId: server,
+    tokenVersion,
+    createdAt: now,
+    lastUsedAt: now,
+    openSockets: 0,
+  });
   return id;
 }
 
@@ -108,17 +124,19 @@ export async function checkWebMapSession(id: string): Promise<WebMapAccess> {
   }
   if (
     isUserInvalidated(session.username) ||
-    (await getTokenVersion(session.username)) !== session.tokenVersion
+    (await getTokenVersion(session.username)) !== session.tokenVersion ||
+    // The server was removed since: its map is gone with it.
+    !(await getServer(session.serverId).catch(() => null))
   ) {
     sessions.delete(id);
     return INVALID;
   }
-  if (!(await hasPermission(session.username, 'players.view'))) return FORBIDDEN;
+  if (!(await hasPermission(session.username, 'players.view', session.serverId))) return FORBIDDEN;
 
   const current = sessions.get(id);
   if (!current) return INVALID; // revoked while we were checking
   sessions.set(id, { ...current, lastUsedAt: now });
-  return { ok: true, username: session.username };
+  return { ok: true, username: session.username, serverId: session.serverId };
 }
 
 export type WebMapSessionStatus =

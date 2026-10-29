@@ -5,6 +5,7 @@ import { Router, Response } from 'express';
 import path from 'path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
+import { requireServerFiles } from '../../middleware/serverScope.js';
 import * as dockerService from '../../services/docker.js';
 import { isDemoMode, getDemoUpdateStatus, getDemoUpdateConfig } from '../../services/demoData.js';
 import { readPanelConfig, getLatestVersion } from './shared.js';
@@ -114,6 +115,7 @@ router.get(
   '/check-update',
   authMiddleware,
   requirePermission('server.view_status'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -131,12 +133,12 @@ router.get(
     try {
       const { serverPath } = await resolveInstallPaths(req.serverId);
       const installedVersion = (await readInstalledVersion(serverPath)).version ?? 'unknown';
-      const { patchline: currentPatchline } = await readPanelConfig();
+      const { patchline: currentPatchline } = await readPanelConfig(req.serverId);
 
       // One after the other: the downloader calls share a lock and a probe
       // that cannot get it reports "busy" instead of waiting.
-      const releaseResult = await getLatestVersion('release');
-      const preReleaseResult = await getLatestVersion('pre-release');
+      const releaseResult = await getLatestVersion('release', req.serverId);
+      const preReleaseResult = await getLatestVersion('pre-release', req.serverId);
 
       const authRequired = releaseResult.authRequired || preReleaseResult.authRequired;
       const latestVersionResult = currentPatchline === 'release' ? releaseResult : preReleaseResult;
@@ -193,6 +195,7 @@ router.get(
   '/update-config',
   authMiddleware,
   requirePermission('updates.view'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json(getDemoUpdateConfig());
@@ -201,7 +204,7 @@ router.get(
     try {
       const [{ data }, panelConfig] = await Promise.all([
         readServerConfig(req.serverId),
-        readPanelConfig(),
+        readPanelConfig(req.serverId),
       ]);
       res.json(readUpdateSettings(data, panelConfig.patchline));
     } catch (error) {
@@ -219,6 +222,7 @@ router.put(
   '/update-config',
   authMiddleware,
   requirePermission('updates.config'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -231,7 +235,7 @@ router.put(
     try {
       const [{ file, data }, panelConfig] = await Promise.all([
         readServerConfig(req.serverId),
-        readPanelConfig(),
+        readPanelConfig(req.serverId),
       ]);
       const current = readUpdateSettings(data, panelConfig.patchline);
       const validation = validateUpdateSettingsPatch(req.body, current);
@@ -295,6 +299,7 @@ router.get(
   '/update-status',
   authMiddleware,
   requirePermission('updates.view'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({ success: true, data: getDemoUpdateStatus() });
@@ -313,6 +318,7 @@ router.post(
   '/update-check',
   authMiddleware,
   requirePermission('updates.check'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -352,6 +358,7 @@ router.post(
   '/update-download',
   authMiddleware,
   requirePermission('updates.download'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({ success: true, message: '[DEMO] Update download started (simulated)' });
@@ -400,6 +407,7 @@ router.post(
   '/update-apply',
   authMiddleware,
   requirePermission('updates.apply'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -489,14 +497,17 @@ router.post(
         }
       }
 
-      await recordUpdate({
-        action: 'apply',
-        fromVersion,
-        toVersion,
-        by: req.user ?? null,
-        success: false,
-        pending: true,
-      });
+      await recordUpdate(
+        {
+          action: 'apply',
+          fromVersion,
+          toVersion,
+          by: req.user ?? null,
+          success: false,
+          pending: true,
+        },
+        req.serverId,
+      );
       res.json({
         success: true,
         message: status.serverRunning
@@ -523,6 +534,7 @@ router.post(
   '/update-cancel',
   authMiddleware,
   requirePermission('updates.download'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({ success: true, message: '[DEMO] Update cancelled (simulated)' });
@@ -590,6 +602,7 @@ router.get(
   '/update-history',
   authMiddleware,
   requirePermission('updates.view'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -622,6 +635,7 @@ router.get(
   '/jar-snapshots',
   authMiddleware,
   requirePermission('updates.view'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -651,6 +665,7 @@ router.post(
   '/jar-snapshot',
   authMiddleware,
   requirePermission('updates.apply'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({ success: true, message: '[DEMO] JAR snapshot created (simulated)' });
@@ -686,6 +701,7 @@ router.post(
   '/rollback',
   authMiddleware,
   requirePermission('updates.apply'),
+  requireServerFiles,
   async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
@@ -721,7 +737,7 @@ router.post(
       }
       fromVersion = (await readInstalledVersion(paths.serverPath)).version;
       running = await isServerRunning(req.serverId);
-      autoUpdate = (await readPanelConfig()).autoUpdate === true;
+      autoUpdate = (await readPanelConfig(req.serverId)).autoUpdate === true;
       // The start script installs a staged update on every start, so it
       // would replace the restored version right away.
       const discardStaged = req.body?.discardStaged === true;
@@ -787,32 +803,38 @@ router.post(
       }
       const failed = error instanceof RollbackFailed ? error.result : null;
       const message = failed?.error ?? errorMessage(error);
-      await recordUpdate({
-        action: 'rollback',
-        fromVersion,
-        toVersion: null,
-        by: req.user ?? null,
-        success: false,
-        note: message,
-      });
+      await recordUpdate(
+        {
+          action: 'rollback',
+          fromVersion,
+          toVersion: null,
+          by: req.user ?? null,
+          success: false,
+          note: message,
+        },
+        req.serverId,
+      );
       res.status(failed ? 400 : 503).json({ success: false, error: message });
       return;
     }
 
-    await recordUpdate({
-      action: 'rollback',
-      fromVersion,
-      toVersion: result.restoredVersion ?? null,
-      by: req.user ?? null,
-      success: true,
-      note:
-        [
-          result.restoredAssets ? null : 'JAR only (Assets.zip unchanged)',
-          discardedVersion ? `staged update ${discardedVersion} discarded` : null,
-        ]
-          .filter(Boolean)
-          .join('; ') || undefined,
-    });
+    await recordUpdate(
+      {
+        action: 'rollback',
+        fromVersion,
+        toVersion: result.restoredVersion ?? null,
+        by: req.user ?? null,
+        success: true,
+        note:
+          [
+            result.restoredAssets ? null : 'JAR only (Assets.zip unchanged)',
+            discardedVersion ? `staged update ${discardedVersion} discarded` : null,
+          ]
+            .filter(Boolean)
+            .join('; ') || undefined,
+      },
+      req.serverId,
+    );
     res.json({
       success: true,
       message: `Rolled back to ${result.restoredVersion ?? 'the previous version'}.${running ? ' The server is starting again.' : ''}`,

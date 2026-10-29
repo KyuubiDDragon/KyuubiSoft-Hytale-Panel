@@ -1,4 +1,5 @@
 import api from './client'
+import { scopedApiUrl } from './scope'
 
 // Extended timeout for long-running backup requests (creation, downloads: 30 minutes).
 // Restores and native backups run as jobs on the server and are polled instead.
@@ -131,7 +132,7 @@ export const backupApi = {
   },
 
   getDownloadUrl(backupId: string): string {
-    return `/api/backups/${backupId}/download`
+    return scopedApiUrl(`/backups/${backupId}/download`)
   },
 
   async download(backupId: string): Promise<{ blob: Blob; filename: string }> {

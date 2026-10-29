@@ -16,7 +16,7 @@ import { addChatMessage, recordDeathPosition } from './chatLog.js';
 import { parsePluginEvent, type PluginEvent } from '../schemas/pluginEvents.js';
 import { eventBus, publish as publishPanelEvent } from './eventBus.js';
 import { forwardLiveEvent } from './pluginLiveEvents.js';
-import { listServers, onServerAdded, onServerDeleted } from './servers.js';
+import { listServers, onServerAdded, onServerDeleted, onServerStatusChanged } from './servers.js';
 import { invalidateCommandRegistry } from './commandRegistry.js';
 import { forwardModEvent } from './modEvents.js';
 
@@ -77,7 +77,7 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
   switch (event.type) {
     case 'player_chat':
       console.log(`[Chat:${serverId}] ${event.player}: ${event.message}`);
-      await addChatMessage(event.player, event.message, event.uuid);
+      await addChatMessage(serverId, event.player, event.message, event.uuid);
       eventBus.publish('player_chat', {
         player: event.player,
         uuid: event.uuid,
@@ -93,7 +93,7 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
         `[Death:${serverId}] ${event.player} died${event.cause ? ` (${event.cause}${by})` : ''}`,
       );
       if (event.world && event.x !== undefined && event.y !== undefined && event.z !== undefined) {
-        await recordDeathPosition(event.player, event.world, event.x, event.y, event.z);
+        await recordDeathPosition(serverId, event.player, event.world, event.x, event.y, event.z);
       }
       const death = {
         player: event.player,
@@ -355,6 +355,10 @@ export function initializePluginEvents(): void {
   if (!lifecycleHooksRegistered) {
     onServerAdded((server) => connect(server.id));
     onServerDeleted((serverId) => disconnect(serverId));
+    // A server whose container is back: connect now instead of after the backoff.
+    onServerStatusChanged((server) => {
+      if (server.status === 'ready') void connect(server.id);
+    });
     lifecycleHooksRegistered = true;
   }
   void connectAll();

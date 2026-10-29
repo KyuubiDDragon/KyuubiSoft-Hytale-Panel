@@ -12,6 +12,9 @@ import fs from 'fs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-config-migration-'));
 const serverDir = path.join(root, 'server');
 const worldsRoot = path.join(root, 'worlds');
+// A second server with its own folders.
+const secondServerDir = path.join(root, 'second', 'server');
+const secondWorldsRoot = path.join(root, 'second', 'worlds');
 process.env.MANAGER_DATA_PATH = path.join(root, 'manager');
 delete process.env.DEMO_MODE;
 
@@ -23,14 +26,13 @@ vi.mock('./serverLifecycle.js', () => ({
   runWhileServerStopped: async (_id: unknown, _opts: unknown, fn: () => Promise<unknown>) =>
     state.running ? { ran: false } : { ran: true, value: await fn() },
 }));
-vi.mock('./servers.js', () => ({
-  resolveServerId: async (id?: string) => id ?? 'default',
-  getDefaultId: async () => 'default',
+vi.mock('./serverContext.js', () => ({
+  getServerContext: async (id?: string) =>
+    id === 'second'
+      ? { id, paths: { server: secondServerDir }, worlds: [secondWorldsRoot] }
+      : { id: 'default', paths: { server: serverDir }, worlds: [worldsRoot] },
+  worldRoots: (ctx: { worlds: string[] }) => ctx.worlds,
 }));
-vi.mock('./serverInstall.js', () => ({
-  resolveInstallPaths: async () => ({ serverPath: serverDir, backupsPath: root }),
-}));
-vi.mock('./managementHelpers.js', () => ({ getWorldsPaths: () => [worldsRoot] }));
 
 const {
   dismissMigrationNotes,
@@ -58,7 +60,9 @@ function write(file: string, value: unknown) {
 }
 
 beforeEach(async () => {
-  for (const dir of [serverDir, worldsRoot]) fs.rmSync(dir, { recursive: true, force: true });
+  for (const dir of [serverDir, worldsRoot, path.join(root, 'second')]) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
   fs.mkdirSync(process.env.MANAGER_DATA_PATH!, { recursive: true });
   write(serverFile, LEGACY_SERVER);
   write(worldFile('default'), LEGACY_WORLD);
@@ -98,9 +102,21 @@ describe('migrateLegacyConfigKeys', () => {
     expect(fs.existsSync(worldFile('default'))).toBe(false);
   });
 
-  it('only touches world folders of the default server', async () => {
+  it("cleans another server's own config.json and worlds, not the default server's", async () => {
+    write(path.join(secondServerDir, 'config.json'), LEGACY_SERVER);
+    write(path.join(secondWorldsRoot, 'arena', 'config.json'), LEGACY_WORLD);
     const notes = await migrateLegacyConfigKeys('second');
-    expect(notes.every((n) => n.file === 'config.json')).toBe(true);
+    expect(notes.map((n) => n.file)).toEqual([
+      'config.json',
+      'config.json',
+      'config.json',
+      'worlds/arena/config.json',
+    ]);
+    expect(read(path.join(secondWorldsRoot, 'arena', 'config.json'))).toEqual({
+      Seed: 1,
+      DaytimeDurationSeconds: 600,
+    });
+    expect(read(serverFile)).toEqual(LEGACY_SERVER);
     expect(read(worldFile('default'))).toEqual(LEGACY_WORLD);
   });
 

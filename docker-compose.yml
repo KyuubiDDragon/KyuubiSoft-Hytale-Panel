@@ -28,6 +28,9 @@
 
 services:
   hytale:
+    # No image: name on purpose. Compose names the build <project>-hytale,
+    # unique per stack; the panel creates additional servers (Multiserver)
+    # from the image this container runs (or HYTALE_IMAGE, see the manager).
     build: .
     container_name: ${STACK_NAME:-hytale}
     hostname: ${STACK_NAME:-hytale}
@@ -83,8 +86,9 @@ services:
     # Ports - UDP for game, TCP for webmap
     ports:
       - "${SERVER_PORT:-5520}:${SERVER_PORT:-5520}/udp"
-      - "${WEBMAP_PORT:-18081}:${WEBMAP_PORT:-18081}/tcp"
-      - "${WEBMAP_WS_PORT:-18082}:${WEBMAP_WS_PORT:-18082}/tcp"
+      # WEBMAP_BIND=127.0.0.1 keeps the map reachable only through the panel
+      - "${WEBMAP_BIND:-0.0.0.0}:${WEBMAP_PORT:-18081}:${WEBMAP_PORT:-18081}/tcp"
+      - "${WEBMAP_BIND:-0.0.0.0}:${WEBMAP_WS_PORT:-18082}:${WEBMAP_WS_PORT:-18082}/tcp"
     
     # Volumes - Bind Mounts (HOST_DATA_PATH -> /opt/hytale im Container)
     volumes:
@@ -176,8 +180,14 @@ services:
       # Multiserver (experimental, off by default - see .env.example)
       - MULTISERVER_ENABLED=${MULTISERVER_ENABLED:-false}
 
-      # Target container
+      # Target container, and the stack the panel's additional servers join
+      # (network ${STACK_NAME}-net, image of the ${STACK_NAME} container)
       - GAME_CONTAINER_NAME=${STACK_NAME:-hytale}
+      - STACK_NAME=${STACK_NAME:-hytale}
+      # Optional: image for additional servers instead of the primary's
+      - HYTALE_IMAGE=${HYTALE_IMAGE:-}
+      # Host address the map ports of additional servers are published on
+      - WEBMAP_BIND=${WEBMAP_BIND:-0.0.0.0}
 
       # Manager port (for display purposes - internal port is always 18080)
       - MANAGER_PORT=${MANAGER_PORT:-18080}
@@ -268,6 +278,10 @@ services:
 
       # Asset Explorer cache (extracted game assets)
       - ${HOST_DATA_PATH:-/opt/hytale}/assets:/opt/hytale/assets
+
+      # Folders of the additional servers (Multiserver), one per server id.
+      # Without this mount the panel can't reach their files and answers 409.
+      - ${HOST_DATA_PATH:-/opt/hytale}/instances:/opt/hytale-instances
 
       # Manager persistent data
       - manager-data:/app/data

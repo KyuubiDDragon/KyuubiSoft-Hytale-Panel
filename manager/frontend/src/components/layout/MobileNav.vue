@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router'
 import { computed, inject } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import Icon from '@/components/ui/Icon.vue'
+import ServerPicker from './ServerPicker.vue'
+import { useServersStore } from '@/stores/servers'
 
 /**
  * Bottom navigation bar for phones (hidden at lg+, where the static sidebar
@@ -14,6 +16,7 @@ import Icon from '@/components/ui/Icon.vue'
 const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
+const serversStore = useServersStore()
 const toggleSidebar = inject<() => void>('toggleSidebar', () => {})
 
 interface QuickItem { name: string; path: string; icon: string; label: string; permission: string }
@@ -25,8 +28,13 @@ const candidates = computed<QuickItem[]>(() => [
   { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), permission: 'performance.view' },
 ])
 
-// At most four quick links so the bar plus the Menu button fit on one row.
-const items = computed(() => candidates.value.filter(i => authStore.hasPermission(i.permission)).slice(0, 4))
+// At most four quick links so the bar plus the Menu button fit on one row;
+// the server picker takes one place while it is shown.
+const items = computed(() =>
+  candidates.value
+    .filter(i => authStore.hasPermission(i.permission))
+    .slice(0, serversStore.pickerVisible ? 3 : 4),
+)
 
 function isActive(path: string): boolean {
   return path === '/' ? route.path === '/' : route.path.startsWith(path)
@@ -38,6 +46,10 @@ function isActive(path: string): boolean {
     class="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-surface-raised/95 backdrop-blur-xl border-t border-border/60 flex items-stretch justify-around pb-[env(safe-area-inset-bottom)]"
     :aria-label="t('nav.server')"
   >
+    <!-- Below sm the header has no room for the server picker. -->
+    <div v-if="serversStore.pickerVisible" class="sm:hidden flex-1 flex items-center justify-center px-1">
+      <ServerPicker placement="up" />
+    </div>
     <router-link
       v-for="item in items"
       :key="item.name"

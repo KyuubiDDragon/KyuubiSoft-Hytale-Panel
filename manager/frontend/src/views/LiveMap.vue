@@ -12,6 +12,8 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
 import { authApi } from '@/api/auth'
+import { useServersStore } from '@/stores/servers'
+import { scopedWsUrl } from '@/api/scope'
 
 interface LocationSample {
   playerName: string
@@ -134,15 +136,13 @@ async function connectWebSocket() {
   try {
     let ticket: string
     try {
-      const res = await authApi.getWsTicket()
+      const res = await authApi.getWsTicket(useServersStore().scopeId)
       ticket = res.ticket
     } catch {
       // No ticket (e.g. missing permission) — polling already covers updates.
       return
     }
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const wsUrl = `${proto}://${window.location.host}/api/players/locations/ws?ticket=${encodeURIComponent(ticket)}`
-    ws = new WebSocket(wsUrl)
+    ws = new WebSocket(scopedWsUrl('players/locations/ws', ticket))
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data)

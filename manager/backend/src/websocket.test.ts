@@ -6,6 +6,7 @@ import fs from 'fs';
 const tmpDir = path.join(os.tmpdir(), `kp-websocket-${Date.now()}`);
 fs.mkdirSync(tmpDir, { recursive: true });
 process.env.MANAGER_DATA_PATH = tmpDir;
+process.env.MULTISERVER_ENABLED = 'true';
 
 // Seed two servers so we can verify the per-server WS routing.
 const seed = {
@@ -70,6 +71,17 @@ describe('websocket per-server console routing', () => {
   it('scoped /api/servers/:id/console/ws extracts and validates the id', async () => {
     const id = await resolveSocketServerId('/api/servers/abc123/console/ws?ticket=xyz');
     expect(id).toBe('abc123');
+  });
+
+  it('refuses servers other than the compose server while multiserver is off', async () => {
+    const { config } = await import('./config.js');
+    config.multiserverEnabled = false;
+    try {
+      expect(await resolveSocketServerId('/api/servers/abc123/console/ws')).toBeNull();
+      expect(await resolveSocketServerId('/api/servers/default/console/ws')).toBe('default');
+    } finally {
+      config.multiserverEnabled = true;
+    }
   });
 
   it('rejects unknown server ids', async () => {

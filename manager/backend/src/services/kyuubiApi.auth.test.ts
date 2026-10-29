@@ -11,6 +11,11 @@ fs.mkdirSync(modsDir, { recursive: true });
 fs.writeFileSync(path.join(modsDir, 'KyuubiSoftAPI-2.0.0.jar'), '');
 process.env.MANAGER_DATA_PATH = tmpDir;
 delete process.env.DEMO_MODE;
+// The compose server's container and folders come from the env, like in the
+// real stack; the registry row below only names it.
+process.env.GAME_CONTAINER_NAME = 'hytale-primary';
+process.env.SERVER_PATH = path.join(tmpDir, 'server');
+process.env.MODS_PATH = modsDir;
 
 fs.writeFileSync(
   path.join(tmpDir, 'servers.json'),

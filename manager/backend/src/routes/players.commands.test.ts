@@ -208,7 +208,8 @@ describe('players: mute and private messages', () => {
     const r = await call('DELETE', '/Steve/mute');
     expect(r.status).toBe(200);
     expect(sent()).toEqual([]);
-    expect(h.deactivate).toHaveBeenCalledWith('Steve', ['mute', 'tempmute'], 'root');
+    // Unscoped mount: the default server (resolved by the service).
+    expect(h.deactivate).toHaveBeenCalledWith('Steve', ['mute', 'tempmute'], 'root', undefined);
   });
 
   it('answers 501 for a private message', async () => {

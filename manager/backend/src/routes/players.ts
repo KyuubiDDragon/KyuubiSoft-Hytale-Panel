@@ -1,7 +1,11 @@
 import { logger } from '../utils/logger.js';
 import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/permissions.js';
+import {
+  ALL_SERVERS_REQUIRED,
+  accessibleServerIds,
+  requirePermission,
+} from '../middleware/permissions.js';
 import * as playersService from '../services/players.js';
 import * as dockerService from '../services/docker.js';
 import * as kyuubiApi from '../services/kyuubiApi.js';
@@ -9,7 +13,12 @@ import * as chatLog from '../services/chatLog.js';
 import * as punishments from '../services/punishments.js';
 import { getLeaderboard, getPlayerSessions } from '../services/playtime.js';
 import * as playerNotes from '../services/playerNotes.js';
-import { exportPlayerData, deletePlayerData } from '../services/playerDataExport.js';
+import {
+  exportPlayerData,
+  deletePlayerData,
+  type PlayerDataScope,
+} from '../services/playerDataExport.js';
+import { resolveServerId } from '../services/servers.js';
 import { banPlayer, unbanPlayer, type BanOutcome } from '../services/accessBans.js';
 import { addToWhitelist, removeFromWhitelist } from '../services/accessWhitelist.js';
 import { describeAccessError, type WriteOutcome } from '../services/accessContext.js';
@@ -84,7 +93,7 @@ router.post(
         // /kick takes only the player in Hytale 0.7; a reason would fail the command.
         const r = await dockerService.execCommand(`/kick ${rawName}`, req.serverId);
         results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
-        if (r.success) playersService.removePlayer(rawName);
+        if (r.success) await markOffline(req, rawName);
         continue;
       }
       // Bans go by UUID (the server matches a bare name by prefix) and are read back.
@@ -198,6 +207,16 @@ interface AccessActivity {
 const TEMPBANS_NOT_CLOSED =
   'Banned, but the panel could not close its temporary bans of this player: one may still lift the ban when it ends. Check the punishments list.';
 
+/**
+ * Marks a kicked or banned player offline in the server's player list. Only
+ * bookkeeping: a failure is logged and never fails the action.
+ */
+async function markOffline(req: AuthenticatedRequest, playerName: string): Promise<void> {
+  await playersService
+    .removePlayer(playerName, req.serverId)
+    .catch((error) => logger.warn(`[Players] could not mark ${playerName} offline:`, error));
+}
+
 /** The player of a ban change, for the panel's ban entries: typed name, known name and UUID. */
 const banTarget = (req: AuthenticatedRequest, typed: string, outcome: BanOutcome) => ({
   serverId: req.serverId,
@@ -271,7 +290,7 @@ router.get(
     // Check if server is running - if not, clear stale players and return empty list
     const status = await dockerService.getStatus(req.serverId);
     if (!status.running) {
-      playersService.clearOnlinePlayers();
+      await playersService.clearOnlinePlayers(req.serverId);
       res.json({
         players: [],
         count: 0,
@@ -293,15 +312,15 @@ router.get(
   '/count',
   authMiddleware,
   requirePermission('players.view'),
-  async (_req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     // Check if server is running - if not, return 0
-    const status = await dockerService.getStatus();
+    const status = await dockerService.getStatus(req.serverId);
     if (!status.running) {
-      playersService.clearOnlinePlayers();
+      await playersService.clearOnlinePlayers(req.serverId);
       res.json({ count: 0 });
       return;
     }
-    const count = await playersService.getPlayerCount();
+    const count = await playersService.getPlayerCount(req.serverId);
     res.json({ count });
   },
 );
@@ -311,8 +330,8 @@ router.get(
   '/history',
   authMiddleware,
   requirePermission('players.view'),
-  async (_req: Request, res: Response) => {
-    const history = await playersService.getPlayerHistory();
+  async (req: AuthenticatedRequest, res: Response) => {
+    const history = await playersService.getPlayerHistory(req.serverId);
     res.json({ players: history, count: history.length });
   },
 );
@@ -322,8 +341,8 @@ router.get(
   '/offline',
   authMiddleware,
   requirePermission('players.view'),
-  async (_req: Request, res: Response) => {
-    const offline = await playersService.getOfflinePlayers();
+  async (req: AuthenticatedRequest, res: Response) => {
+    const offline = await playersService.getOfflinePlayers(req.serverId);
     res.json({ players: offline, count: offline.length });
   },
 );
@@ -333,14 +352,14 @@ router.get(
   '/all',
   authMiddleware,
   requirePermission('players.view'),
-  async (_req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     // Update online status based on server status
-    const status = await dockerService.getStatus();
+    const status = await dockerService.getStatus(req.serverId);
     if (!status.running) {
-      playersService.clearOnlinePlayers();
+      await playersService.clearOnlinePlayers(req.serverId);
     }
 
-    const players = await playersService.getAllPlayersUnified();
+    const players = await playersService.getAllPlayersUnified(req.serverId);
     const onlineCount = players.filter((p) => p.online).length;
     res.json({ players, count: players.length, onlineCount });
   },
@@ -351,10 +370,10 @@ router.get(
   '/playtime',
   authMiddleware,
   requirePermission('players.view'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
-      res.json({ leaderboard: getLeaderboard(req.serverId, limit) });
+      res.json({ leaderboard: getLeaderboard(await resolveServerId(req.serverId), limit) });
     } catch (error) {
       logger.error('[Players] playtime leaderboard failed:', error);
       res.status(500).json({ error: 'Failed to load playtime leaderboard' });
@@ -367,10 +386,10 @@ router.get(
   '/:uuid/playtime',
   authMiddleware,
   requirePermission('players.view'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     try {
       const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
-      res.json(getPlayerSessions(req.params.uuid, limit));
+      res.json(getPlayerSessions(req.params.uuid, limit, await resolveServerId(req.serverId)));
     } catch (error) {
       logger.error('[Players] playtime sessions failed:', error);
       res.status(500).json({ error: 'Failed to load playtime sessions' });
@@ -409,15 +428,19 @@ router.post(
     const result = await dockerService.execCommand(`/kick ${playerName}`, req.serverId);
 
     if (result.success) {
-      playersService.removePlayer(playerName);
+      await markOffline(req, playerName);
 
-      punishments.recordPunishment({
-        serverId: req.serverId,
-        playerName,
-        type: 'kick',
-        reason: safeReason || undefined,
-        byUser: username,
-      });
+      try {
+        await punishments.recordPunishment({
+          serverId: req.serverId,
+          playerName,
+          type: 'kick',
+          reason: safeReason || undefined,
+          byUser: username,
+        });
+      } catch (error) {
+        logger.error(`[Players] kick ${playerName}: not recorded:`, error);
+      }
       // Log activity
       await logActivity(username, 'kick', 'player', true, playerName, reason);
 
@@ -468,7 +491,7 @@ router.post(
       () => banPlayer(req.serverId, playerName, safeReason),
       `Player ${playerName} banned`,
       async (outcome) => {
-        playersService.removePlayer(playerName);
+        await markOffline(req, playerName);
         // A permanent ban: a temp-ban running on the player must not lift it later.
         const closed = await punishments
           .closeBanRecords(banTarget(req, playerName, outcome), ['tempban'], username)
@@ -479,7 +502,7 @@ router.post(
               return { warning: TEMPBANS_NOT_CLOSED };
             },
           );
-        punishments.recordPunishment({
+        await punishments.recordPunishment({
           serverId: req.serverId,
           playerName,
           uuid: outcome.uuid,
@@ -1286,8 +1309,8 @@ router.get(
   '/statistics',
   authMiddleware,
   requirePermission('players.view'),
-  async (_req: Request, res: Response) => {
-    const stats = await playersService.getPlayerStatistics();
+  async (req: AuthenticatedRequest, res: Response) => {
+    const stats = await playersService.getPlayerStatistics(req.serverId);
     res.json(stats);
   },
 );
@@ -1297,9 +1320,9 @@ router.get(
   '/activity',
   authMiddleware,
   requirePermission('players.view'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const days = parseInt(req.query.days as string) || 7;
-    const activity = await playersService.getDailyActivity(days);
+    const activity = await playersService.getDailyActivity(days, req.serverId);
     res.json(activity);
   },
 );
@@ -1311,12 +1334,12 @@ router.get(
   '/chat',
   authMiddleware,
   requirePermission('chat.view'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
     const days = parseInt(req.query.days as string) || 7; // Default 7 days, 0 = all
 
-    const result = await chatLog.getGlobalChatLog({ limit, offset, days });
+    const result = await chatLog.getGlobalChatLog({ limit, offset, days }, req.serverId);
     res.json(result);
   },
 );
@@ -1326,7 +1349,7 @@ router.get(
   '/:name/chat',
   authMiddleware,
   requirePermission('chat.view'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
 
     // SECURITY: Validate player name
@@ -1336,7 +1359,11 @@ router.get(
     const offset = parseInt(req.query.offset as string) || 0;
     const days = parseInt(req.query.days as string) || 7; // Default 7 days, 0 = all
 
-    const result = await chatLog.getPlayerChatLog(playerName, { limit, offset, days });
+    const result = await chatLog.getPlayerChatLog(
+      playerName,
+      { limit, offset, days },
+      req.serverId,
+    );
     res.json(result);
   },
 );
@@ -1348,14 +1375,17 @@ router.get(
   '/:name/deaths',
   authMiddleware,
   requirePermission('players.view'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
 
     // SECURITY: Validate player name
     if (!validatePlayerName(res, playerName)) return;
 
     // Get death positions directly from player JSON file
-    const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
+    const positions = await playersService.getPlayerDeathPositionsFromFile(
+      playerName,
+      req.serverId,
+    );
 
     res.json({
       success: positions.length > 0,
@@ -1371,14 +1401,17 @@ router.get(
   '/:name/deaths/last',
   authMiddleware,
   requirePermission('players.view'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
 
     // SECURITY: Validate player name
     if (!validatePlayerName(res, playerName)) return;
 
     // Get death positions from file and return the last one (most recent)
-    const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
+    const positions = await playersService.getPlayerDeathPositionsFromFile(
+      playerName,
+      req.serverId,
+    );
 
     if (positions.length > 0) {
       const lastPosition = positions[positions.length - 1];
@@ -1403,7 +1436,7 @@ router.post(
   '/:name/teleport/death',
   authMiddleware,
   requirePermission('players.teleport'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     const { index } = req.body;
 
@@ -1411,7 +1444,10 @@ router.post(
     if (!validatePlayerName(res, playerName)) return;
 
     // Get death positions from player file
-    const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
+    const positions = await playersService.getPlayerDeathPositionsFromFile(
+      playerName,
+      req.serverId,
+    );
 
     if (positions.length === 0) {
       res.status(404).json({
@@ -1462,7 +1498,7 @@ router.post(
   '/:name/deaths',
   authMiddleware,
   requirePermission('players.edit'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
 
     // SECURITY: Validate player name
@@ -1480,6 +1516,7 @@ router.post(
 
     try {
       const position = await chatLog.recordDeathPosition(
+        await resolveServerId(req.serverId),
         playerName,
         world,
         parseFloat(x),
@@ -1513,7 +1550,10 @@ router.get(
     const type = typeof req.query.type === 'string' ? req.query.type : undefined;
     const activeOnly = req.query.active === 'true';
     const limit = parseInt(req.query.limit as string) || 200;
-    res.json({ punishments: punishments.listPunishments({ player, type, activeOnly, limit }) });
+    const serverId = await resolveServerId(req.serverId);
+    res.json({
+      punishments: punishments.listPunishments({ serverId, player, type, activeOnly, limit }),
+    });
   },
 );
 
@@ -1522,10 +1562,13 @@ router.get(
   '/:name/punishments',
   authMiddleware,
   requirePermission('players.view'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     if (!validatePlayerName(res, playerName)) return;
-    res.json({ punishments: punishments.listPunishments({ player: playerName, limit: 200 }) });
+    const serverId = await resolveServerId(req.serverId);
+    res.json({
+      punishments: punishments.listPunishments({ serverId, player: playerName, limit: 200 }),
+    });
   },
 );
 
@@ -1534,10 +1577,11 @@ router.get(
   '/:name/notes',
   authMiddleware,
   requirePermission('players.view'),
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const playerName = req.params.name;
     if (!validatePlayerName(res, playerName)) return;
-    res.json({ notes: playerNotes.listNotes(playerName) });
+    const serverId = await resolveServerId(req.serverId);
+    res.json({ notes: playerNotes.listServerNotes(serverId, playerName) });
   },
 );
 
@@ -1559,7 +1603,7 @@ router.post(
       playerName,
       note,
       byUser: username,
-      serverId: req.serverId,
+      serverId: await resolveServerId(req.serverId),
     });
     await logActivity(username, 'note_add', 'player', true, playerName, note.slice(0, 80));
     res.json({ success: true, note: created });
@@ -1578,10 +1622,14 @@ router.delete(
       res.status(400).json({ error: 'Invalid id' });
       return;
     }
-    const ok = playerNotes.deleteNote(id);
-    if (ok)
-      await logActivity(username, 'note_delete', 'player', true, req.params.name, `note #${id}`);
-    res.json({ success: ok });
+    const serverId = await resolveServerId(req.serverId);
+    const ok = playerNotes.deleteNote(serverId, req.params.name, id);
+    if (!ok) {
+      res.status(404).json({ success: false, error: 'Note not found' });
+      return;
+    }
+    await logActivity(username, 'note_delete', 'player', true, req.params.name, `note #${id}`);
+    res.json({ success: true });
   },
 );
 
@@ -1604,7 +1652,7 @@ router.post(
     const safeReason = reason ? sanitizeMessage(reason, 100) : 'Temporarily banned';
 
     if (isDemoMode()) {
-      const p = punishments.recordPunishment({
+      const p = await punishments.recordPunishment({
         serverId: req.serverId,
         playerName,
         type: 'tempban',
@@ -1642,9 +1690,9 @@ router.post(
       },
       () => banPlayer(req.serverId, playerName, safeReason),
       `Temp-banned ${playerName}`,
-      (outcome) => {
-        playersService.removePlayer(playerName);
-        const p = punishments.recordPunishment({
+      async (outcome) => {
+        await markOffline(req, playerName);
+        const p = await punishments.recordPunishment({
           serverId: req.serverId,
           playerName,
           uuid: outcome.uuid,
@@ -1684,7 +1732,12 @@ router.delete(
     const username = req.user || 'system';
     if (!validatePlayerName(res, playerName)) return;
 
-    punishments.deactivateActiveForPlayer(playerName, ['mute', 'tempmute'], username);
+    await punishments.deactivateActiveForPlayer(
+      playerName,
+      ['mute', 'tempmute'],
+      username,
+      req.serverId,
+    );
     await logActivity(username, 'unmute', 'player', true, playerName);
     res.json({
       success: true,
@@ -1695,8 +1748,32 @@ router.delete(
 
 // ============== GDPR / DSGVO: data export & erasure ==============
 
+/**
+ * The records an export or erasure covers: those of the request's server, or
+ * with `?allServers=true` those of every server, which only an account with
+ * access to every server may ask for. Undefined when the request was refused.
+ */
+async function playerDataScope(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<PlayerDataScope | undefined> {
+  if (req.query.allServers !== 'true') return resolveServerId(req.serverId);
+  if ((await accessibleServerIds(req)) !== null) {
+    res.status(403).json({
+      error: 'Only accounts with access to every server may export or erase every server',
+      code: ALL_SERVERS_REQUIRED,
+    });
+    return undefined;
+  }
+  return null;
+}
+
+const scopeLabel = (scope: PlayerDataScope) =>
+  scope === null ? 'every server' : `server ${scope}`;
+
 // GET /api/players/:name/export-data - download everything the panel stores
-// about a player (notes, punishments, sessions, chat) as a JSON file.
+// about a player (notes, punishments, sessions, chat) on this server as a
+// JSON file; ?allServers=true for every server.
 router.get(
   '/:name/export-data',
   authMiddleware,
@@ -1705,8 +1782,17 @@ router.get(
     const playerName = req.params.name;
     if (!validatePlayerName(res, playerName)) return;
     try {
-      const data = await exportPlayerData(playerName);
-      await logActivity(req.user || 'system', 'export_player_data', 'player', true, playerName);
+      const scope = await playerDataScope(req, res);
+      if (scope === undefined) return;
+      const data = await exportPlayerData(playerName, scope);
+      await logActivity(
+        req.user || 'system',
+        'export_player_data',
+        'player',
+        true,
+        playerName,
+        `Exported the player's data of ${scopeLabel(scope)}`,
+      );
       res.setHeader('Content-Disposition', `attachment; filename="player-data-${playerName}.json"`);
       res.setHeader('Content-Type', 'application/json');
       res.send(JSON.stringify(data, null, 2));
@@ -1718,8 +1804,9 @@ router.get(
 );
 
 // DELETE /api/players/:name/data - erase the panel's personal data for a player
-// (right to be forgotten). Gated behind players.ban — the highest-trust player
-// permission moderators hold. The on-disk game save is NOT touched.
+// on this server (right to be forgotten); ?allServers=true for every server.
+// Gated behind players.ban — the highest-trust player permission moderators
+// hold. Punishments still in effect and the on-disk game save are kept.
 router.delete(
   '/:name/data',
   authMiddleware,
@@ -1728,14 +1815,16 @@ router.delete(
     const playerName = req.params.name;
     if (!validatePlayerName(res, playerName)) return;
     try {
-      const result = await deletePlayerData(playerName);
+      const scope = await playerDataScope(req, res);
+      if (scope === undefined) return;
+      const result = await deletePlayerData(playerName, scope);
       await logActivity(
         req.user || 'system',
         'erase_player_data',
         'player',
         true,
         playerName,
-        JSON.stringify(result.deleted),
+        `${scopeLabel(scope)}: ${JSON.stringify({ ...result.deleted, kept: result.kept })}`,
       );
       res.json({ success: true, ...result });
     } catch (err) {

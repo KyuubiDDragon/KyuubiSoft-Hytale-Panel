@@ -70,7 +70,8 @@ beforeEach(() => {
 const job = (over: Record<string, unknown> = {}) => ({
   id: 'job-1',
   type: 'restore',
-  serverId: null,
+  // Jobs carry the resolved id; the legacy routes act on the default server.
+  serverId: 'default',
   target: 'manual_x',
   state: 'running',
   step: 'queued',

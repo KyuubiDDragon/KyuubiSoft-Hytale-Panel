@@ -8,6 +8,8 @@ import { isDemoMode } from '../../services/demoData.js';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import { getPerfHistory } from '../../services/perfHistory.js';
+import type { AuthenticatedRequest } from '../../types/index.js';
+import { asyncRoute } from '../../utils/asyncRoute.js';
 
 import lifecycleRoutes from './lifecycle.js';
 import configRoutes from './config.js';
@@ -17,6 +19,7 @@ import authRoutes from './auth.js';
 import panelRoutes from './panel.js';
 import crashesRoutes from './crashes.js';
 import pluginLiveRoutes from './pluginLive.js';
+import hytaleAuthRoutes from '../hytaleAuth.js';
 
 const router = Router();
 
@@ -28,14 +31,15 @@ router.get('/demo', (_req: Request, res: Response) => {
   });
 });
 
-// GET /api/server/perf-history - TPS/MSPT/CPU/memory time-series for charts
+// GET /api/server/perf-history - TPS/MSPT/CPU/memory time-series of the
+// request's server (scoped mount) or the default server, for charts
 router.get(
   '/perf-history',
   authMiddleware,
   requirePermission('performance.view'),
-  (_req: Request, res: Response) => {
-    res.json(getPerfHistory());
-  },
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    res.json(await getPerfHistory(req.serverId));
+  }),
 );
 
 // Mount submodules at root so all original /api/server/* paths still resolve
@@ -47,5 +51,7 @@ router.use('/', authRoutes);
 router.use('/', panelRoutes);
 router.use('/', crashesRoutes);
 router.use('/', pluginLiveRoutes);
+// Hytale sign-in of this server (also at /api/auth/hytale for older clients)
+router.use('/hytale-auth', hytaleAuthRoutes);
 
 export default router;

@@ -1,20 +1,59 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useServersStore } from '@/stores/servers'
+import { useServersStore, displayState, type DisplayState } from '@/stores/servers'
+
+withDefaults(defineProps<{ placement?: 'down' | 'up' }>(), { placement: 'down' })
 
 const { t } = useI18n()
 const serversStore = useServersStore()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 
-onMounted(() => {
-  if (!serversStore.loaded) {
-    void serversStore.refresh()
-  }
-  document.addEventListener('click', onDocClick)
+const RUN_STATE_POLL_MS = 30_000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const DOT_CLASS: Record<DisplayState, string> = {
+  running: 'bg-status-success',
+  stopped: 'bg-gray-500',
+  unknown: 'bg-gray-500',
+  creating: 'bg-status-warning',
+  waiting: 'bg-status-warning',
+  broken: 'bg-status-error',
+}
+
+function stateOf(id: string): DisplayState {
+  const server = serversStore.servers.find((s) => s.id === id)
+  return server ? displayState(server, serversStore.runStates[id]) : 'unknown'
+}
+
+const activeState = computed<DisplayState>(() =>
+  serversStore.activeServer ? stateOf(serversStore.activeServer.id) : 'unknown',
+)
+
+// The running state is only asked for while the picker is on screen.
+watch(
+  () => serversStore.pickerVisible,
+  (visible) => {
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = null
+    if (!visible) return
+    void serversStore.refreshRunStates()
+    pollTimer = setInterval(() => void serversStore.refreshRunStates(), RUN_STATE_POLL_MS)
+  },
+  { immediate: true },
+)
+
+function toggle() {
+  open.value = !open.value
+  if (open.value) void serversStore.refreshRunStates()
+}
+
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  if (pollTimer) clearInterval(pollTimer)
 })
-onUnmounted(() => document.removeEventListener('click', onDocClick))
 
 // Close on outside-clicks only. Without the target check the handler fires
 // on the toggle button itself (clicks bubble to document) and closes the
@@ -32,25 +71,21 @@ function pick(id: string) {
 </script>
 
 <template>
-  <!-- Hidden unless the backend enables multiserver: the picker still mounts
-       so its refresh() loads the flag. -->
-  <div v-if="serversStore.multiserverEnabled" ref="root" class="relative">
+  <!-- Hidden without multiserver, without servers.list, or while nothing is loaded. -->
+  <div v-if="serversStore.pickerVisible" ref="root" class="relative">
     <button
       type="button"
-      @click="open = !open"
+      @click="toggle"
       class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-overlay hover:bg-surface-overlay text-sm text-white transition-colors min-h-9"
-      :class="serversStore.activeServer?.status === 'broken' ? 'border border-status-error' : 'border border-border/40'"
+      :class="activeState === 'broken' ? 'border border-status-error' : 'border border-border/40'"
       :aria-expanded="open"
       :aria-haspopup="true"
+      :aria-label="t('serverScope.label')"
+      :title="t(`serverScope.${activeState}`)"
     >
-      <span
-        class="inline-block w-2 h-2 rounded-full"
-        :class="serversStore.activeServer?.status === 'ready' ? 'bg-status-success' :
-                serversStore.activeServer?.status === 'creating' ? 'bg-status-warning' :
-                serversStore.activeServer?.status === 'broken' ? 'bg-status-error' : 'bg-gray-500'"
-      />
-      <span class="font-medium truncate max-w-[12rem]">
-        {{ serversStore.activeServer?.name ?? 'Loading…' }}
+      <span class="inline-block w-2 h-2 rounded-full" :class="DOT_CLASS[activeState]" />
+      <span class="font-medium truncate max-w-[7rem] sm:max-w-[12rem]">
+        {{ serversStore.activeServer?.name ?? t('serverScope.loading') }}
       </span>
       <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </button>
@@ -66,7 +101,8 @@ function pick(id: string) {
       <div
         v-if="open"
         @click.stop
-        class="absolute left-0 top-full mt-2 w-72 rounded-xl bg-surface-raised border border-border/60 shadow-2xl z-50 overflow-hidden"
+        class="absolute left-0 w-72 max-w-[calc(100vw-2rem)] rounded-xl bg-surface-raised border border-border/60 shadow-2xl z-50 overflow-hidden"
+        :class="placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'"
         role="listbox"
       >
         <div class="max-h-72 overflow-y-auto">
@@ -81,21 +117,22 @@ function pick(id: string) {
           >
             <span
               class="mt-1 inline-block w-2 h-2 rounded-full"
-              :class="s.status === 'ready' ? 'bg-status-success' :
-                      s.status === 'creating' ? 'bg-status-warning' :
-                      'bg-status-error'"
+              :class="DOT_CLASS[stateOf(s.id)]"
+              :title="t(`serverScope.${stateOf(s.id)}`)"
             />
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-white truncate">{{ s.name }}</span>
-                <span v-if="s.id === serversStore.defaultId" class="text-[10px] uppercase tracking-wider text-hytale-orange">default</span>
+                <span v-if="s.id === serversStore.defaultId" class="text-[10px] uppercase tracking-wider text-hytale-orange">{{ t('serverScope.defaultBadge') }}</span>
               </div>
-              <div class="text-xs text-gray-400 truncate">{{ s.containerName }} · :{{ s.network.serverPort }}</div>
+              <div class="text-xs text-gray-400 truncate">
+                {{ t(`serverScope.${stateOf(s.id)}`) }} · :{{ s.network.serverPort }}
+              </div>
             </div>
           </button>
         </div>
         <div class="border-t border-border/60 px-3 py-2 text-xs text-gray-400">
-          {{ serversStore.servers.length }} server{{ serversStore.servers.length === 1 ? '' : 's' }} registered
+          {{ t('serverScope.count', { count: serversStore.servers.length }, serversStore.servers.length) }}
           · <span class="uppercase tracking-wider text-status-warning">{{ t('servers.guard.experimentalBadge') }}</span>
         </div>
       </div>

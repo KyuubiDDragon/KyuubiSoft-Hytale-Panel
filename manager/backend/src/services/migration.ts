@@ -22,17 +22,25 @@ import { readFile, writeFile, mkdir, access, constants } from 'fs/promises';
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcrypt';
-import { config, reloadConfigFromFile } from '../config.js';
+import { config, reloadConfigFromFile, getConfigFilePath, getManagerDataDir } from '../config.js';
 import { getCurrentVersion } from './panelVersionService.js';
 import { readJsonFile, updateJsonFile } from '../utils/jsonStore.js';
 import { migrateLegacyUpdateBlock } from './updateSettings.js';
+import { adoptLegacyManagerFiles } from './legacyManagerFiles.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
+
+export { adoptLegacyManagerFiles };
 
 // Paths
 const DATA_DIR = config.dataPath;
-const CONFIG_JSON_FILE = path.join(DATA_DIR, 'config.json');
+// config.json and users.json belong to the manager volume (what the panel reads
+// at runtime); the rest stays in the game server's data folder.
+const MANAGER_DIR = getManagerDataDir();
+const CONFIG_JSON_FILE = getConfigFilePath();
 const SETUP_CONFIG_FILE = path.join(DATA_DIR, 'setup-config.json');
 const PANEL_CONFIG_FILE = path.join(DATA_DIR, 'panel-config.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const USERS_FILE = path.join(MANAGER_DIR, 'users.json');
 const SERVER_CONFIG_FILE = path.join(config.serverPath, 'config.json');
 
 // Environment variable mapping
@@ -168,13 +176,21 @@ function readEnvConfig(): EnvConfig {
   };
 }
 
+// The game server can write to its server and data folders: files there are
+// only read when they are regular files inside, and replaced instead of
+// written through a link.
+async function readGameFile(file: string, root: string): Promise<string> {
+  return (await readRegularFile(file, [root], { maxBytes: MAX_SERVER_FILE_BYTES })).toString(
+    'utf-8',
+  );
+}
+
 /**
  * Read server config.json if it exists
  */
 async function readServerConfig(): Promise<ServerConfig | null> {
   try {
-    const content = await readFile(SERVER_CONFIG_FILE, 'utf-8');
-    return JSON.parse(content);
+    return JSON.parse(await readGameFile(SERVER_CONFIG_FILE, config.serverPath));
   } catch {
     return null;
   }
@@ -185,8 +201,7 @@ async function readServerConfig(): Promise<ServerConfig | null> {
  */
 async function readPanelConfig(): Promise<PanelConfig | null> {
   try {
-    const content = await readFile(PANEL_CONFIG_FILE, 'utf-8');
-    return JSON.parse(content);
+    return JSON.parse(await readGameFile(PANEL_CONFIG_FILE, DATA_DIR));
   } catch {
     return null;
   }
@@ -273,6 +288,7 @@ export async function runMigration(): Promise<boolean> {
   try {
     // Ensure data directory exists
     await mkdir(DATA_DIR, { recursive: true });
+    await mkdir(MANAGER_DIR, { recursive: true });
 
     // Read all source data
     const envConfig = readEnvConfig();
@@ -350,10 +366,10 @@ export async function runMigration(): Promise<boolean> {
 
     // Keep settings this migration does not know about (JVM tuning, boot
     // commands, autoUpdate, ...) instead of dropping them.
-    await writeFile(
+    await replaceFileContent(
       PANEL_CONFIG_FILE,
       JSON.stringify({ ...(existingPanelConfig ?? {}), ...panelConfig }, null, 2),
-      'utf-8',
+      [DATA_DIR],
     );
     logger.info('[Migration] Panel config created:', panelConfig);
 
@@ -418,7 +434,7 @@ export async function runMigration(): Promise<boolean> {
       disableSentry: existingPanelConfig?.disableSentry ?? false,
     };
 
-    await writeFile(SETUP_CONFIG_FILE, JSON.stringify(setupConfig, null, 2), 'utf-8');
+    await replaceFileContent(SETUP_CONFIG_FILE, JSON.stringify(setupConfig, null, 2), [DATA_DIR]);
     logger.info('[Migration] Setup config created');
 
     // 4. Create config.json (main config)
@@ -640,6 +656,8 @@ export async function dismissNewFeaturesBanner(): Promise<boolean> {
  * Returns false if migration failed (server should continue but may need setup).
  */
 export async function checkAndRunMigration(): Promise<boolean> {
+  await adoptLegacyManagerFiles();
+
   // Check if config.json already exists (setup already complete)
   if (fs.existsSync(CONFIG_JSON_FILE)) {
     try {
@@ -669,6 +687,7 @@ export async function checkAndRunMigration(): Promise<boolean> {
 export default {
   isExistingInstallation,
   runMigration,
+  adoptLegacyManagerFiles,
   checkAndRunMigration,
   migrateUpdateConfig,
   checkPanelVersionAndFeatures,

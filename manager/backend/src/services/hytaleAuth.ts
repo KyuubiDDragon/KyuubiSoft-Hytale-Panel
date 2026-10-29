@@ -1,8 +1,17 @@
+/**
+ * Hytale server sign-in (`/auth login device`) of one server: the device code
+ * comes from that server's console log, its token files lie in that server's
+ * folders, and the panel's record of the flow (hytale-auth.json) lies in its
+ * data folder. `serverId` undefined means the default server.
+ */
 import { logger } from '../utils/logger.js';
 import fs from 'fs/promises';
 import path from 'path';
-import { config } from '../config.js';
 import { execCommand, getLogs } from './docker.js';
+import { getServerContext, type ServerContext } from './serverContext.js';
+import { readRegularFile, UnsafeFileError } from '../utils/noFollowFs.js';
+import { writeJsonAtomic } from '../utils/jsonStore.js';
+import { downloaderCredentialsFile, isRegularFileWithin } from '../routes/server/shared.js';
 import type { ActionResponse } from '../types/index.js';
 
 export interface HytaleAuthStatus {
@@ -27,42 +36,62 @@ export interface HytaleDeviceCodeResponse {
   error?: string;
 }
 
-const AUTH_STATUS_FILE = path.join(config.dataPath, 'hytale-auth.json');
+const AUTH_STATUS_FILE = 'hytale-auth.json';
+const DEFAULT_DEVICE_CODE_SECONDS = 15 * 60;
+const AUTH_STATUS_MAX_BYTES = 64 * 1024;
+const CREDENTIALS_MAX_BYTES = 1024 * 1024;
 
-/**
- * Reads the Hytale authentication status from disk
- */
-export async function getAuthStatus(): Promise<HytaleAuthStatus> {
+const authStatusFile = (ctx: ServerContext) => path.join(ctx.paths.data, AUTH_STATUS_FILE);
+
+async function readAuthStatus(ctx: ServerContext): Promise<HytaleAuthStatus> {
   try {
-    const data = await fs.readFile(AUTH_STATUS_FILE, 'utf-8');
-    return JSON.parse(data);
+    // The data folder belongs to the game server: a planted link is not followed.
+    const raw = await readRegularFile(authStatusFile(ctx), [ctx.paths.data], {
+      maxBytes: AUTH_STATUS_MAX_BYTES,
+    });
+    return JSON.parse(raw.toString('utf-8'));
   } catch {
     return { authenticated: false };
   }
 }
 
-/**
- * Saves the Hytale authentication status to disk
- */
-export async function saveAuthStatus(status: HytaleAuthStatus): Promise<void> {
+async function writeAuthStatus(ctx: ServerContext, status: HytaleAuthStatus): Promise<void> {
   try {
-    await fs.mkdir(config.dataPath, { recursive: true });
-    await fs.writeFile(AUTH_STATUS_FILE, JSON.stringify(status, null, 2));
+    await fs.mkdir(ctx.paths.data, { recursive: true });
+    await writeJsonAtomic(authStatusFile(ctx), status);
   } catch (error) {
     logger.error('Failed to save Hytale auth status:', error);
   }
 }
 
 /**
+ * Reads the Hytale authentication status from disk
+ */
+export async function getAuthStatus(serverId?: string): Promise<HytaleAuthStatus> {
+  return readAuthStatus(await getServerContext(serverId));
+}
+
+/**
+ * Saves the Hytale authentication status to disk
+ */
+export async function saveAuthStatus(status: HytaleAuthStatus, serverId?: string): Promise<void> {
+  await writeAuthStatus(await getServerContext(serverId), status);
+}
+
+/**
  * Sets the persistence type for authentication tokens
  * Available types: Memory, Encrypted
  */
-export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<ActionResponse> {
+export async function setPersistence(
+  type: 'Memory' | 'Encrypted',
+  serverId?: string,
+): Promise<ActionResponse> {
   try {
-    logger.info(`[HytaleAuth] Setting persistence to: ${type}`);
+    const ctx = await getServerContext(serverId);
+    logger.info(`[HytaleAuth] Setting persistence of ${ctx.id} to: ${type}`);
 
     // Execute the /auth persistence command
-    const result = await execCommand(`/auth persistence ${type}`);
+    const result = await execCommand(`/auth persistence ${type}`, ctx.id);
 
     if (!result.success) {
       logger.error('[HytaleAuth] Failed to execute persistence command:', result.error);
@@ -76,7 +105,7 @@ export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<Acti
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Get logs to verify the change
-    const logs = await getLogs(150);
+    const logs = await getLogs(150, ctx.id);
     const cleanLogs = stripAnsiCodes(logs);
 
     // Debug logging removed to reduce console spam
@@ -98,11 +127,11 @@ export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<Acti
       logger.info('[HytaleAuth] Persistence successfully set to Encrypted');
 
       // Check if token file now exists
-      const tokenFileExists = await checkTokenFileExists();
+      const tokenFileExists = await checkTokenFileExists(ctx);
 
       // Update auth status
-      const status = await getAuthStatus();
-      await saveAuthStatus({
+      const status = await readAuthStatus(ctx);
+      await writeAuthStatus(ctx, {
         ...status,
         persistent: type === 'Encrypted',
         persistenceType: type === 'Encrypted' ? 'disk' : 'memory',
@@ -154,10 +183,11 @@ function stripAnsiCodes(text: string): string {
  * Parses the server console output to extract the device code and verification URL
  * Note: Persistence is set AFTER successful authentication (per Hytale documentation)
  */
-export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
+export async function initiateDeviceLogin(serverId?: string): Promise<HytaleDeviceCodeResponse> {
   try {
+    const ctx = await getServerContext(serverId);
     // Execute the auth command
-    const result = await execCommand('/auth login device');
+    const result = await execCommand('/auth login device', ctx.id);
 
     if (!result.success) {
       return {
@@ -170,7 +200,7 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Get recent logs to find the device code and URL
-    const logs = await getLogs(50);
+    const logs = await getLogs(50, ctx.id);
 
     // Remove ANSI escape codes from logs
     const cleanLogs = stripAnsiCodes(logs);
@@ -216,9 +246,13 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
 
     const deviceCode = userCode; // Use userCode as deviceCode
 
-    // Save status with expiry (typically 15 minutes for device codes)
-    const expiresAt = Date.now() + 15 * 60 * 1000;
-    await saveAuthStatus({
+    // The server says how long the code lives ("Waiting for authorization
+    // (expires in 599 seconds)"); without that line, 15 minutes as before.
+    const announced = Number([...cleanLogs.matchAll(/expires in (\d{1,5}) seconds/gi)].pop()?.[1]);
+    const expiresIn =
+      Number.isInteger(announced) && announced > 0 ? announced : DEFAULT_DEVICE_CODE_SECONDS;
+    const expiresAt = Date.now() + expiresIn * 1000;
+    await writeAuthStatus(ctx, {
       authenticated: false,
       deviceCode,
       userCode,
@@ -232,7 +266,7 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
       deviceCode,
       userCode,
       verificationUrl,
-      expiresIn: 900, // 15 minutes
+      expiresIn,
     };
   } catch (error) {
     return {
@@ -243,33 +277,36 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
 }
 
 /**
- * Gets the base Hytale path (parent of serverPath)
- * e.g., if serverPath is /opt/hytale/server, returns /opt/hytale
+ * The folders a server keeps its sign-in in: its auth folder (/opt/hytale/auth
+ * in the container) and the auth folders inside its server folder.
  */
-function getHytaleBasePath(): string {
-  return path.dirname(config.serverPath);
+function authDirs(ctx: ServerContext): string[] {
+  return [
+    ctx.paths.auth,
+    path.join(ctx.paths.server, 'auth'),
+    path.join(ctx.paths.server, '.auth'),
+  ];
 }
 
 /**
  * Lists all files in the auth directories
- * Checks both /opt/hytale/auth and /opt/hytale/server/auth
+ * Checks the server's auth folder and server/auth, server/.auth
  */
-export async function listAuthFiles(): Promise<string[]> {
+export async function listAuthFiles(serverId?: string): Promise<string[]> {
+  return listAuthFilesOf(await getServerContext(serverId));
+}
+
+async function listAuthFilesOf(ctx: ServerContext): Promise<string[]> {
   const allFiles: string[] = [];
-  const basePath = getHytaleBasePath();
 
-  // Check auth directories at different locations
-  const authDirs = [
-    path.join(basePath, 'auth'), // /opt/hytale/auth (main auth folder)
-    path.join(config.serverPath, 'auth'), // /opt/hytale/server/auth
-    path.join(config.serverPath, '.auth'), // /opt/hytale/server/.auth
-  ];
-
-  for (const authDir of authDirs) {
+  for (const authDir of authDirs(ctx)) {
+    // The game server can write here: a folder replaced by a link is not
+    // listed, and only regular files count.
+    const st = await fs.lstat(authDir).catch(() => null);
+    if (!st?.isDirectory()) continue;
     try {
-      const files = await fs.readdir(authDir);
-      // Files found in auth directory
-      allFiles.push(...files);
+      const entries = await fs.readdir(authDir, { withFileTypes: true });
+      allFiles.push(...entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
     } catch {
       // Directory doesn't exist, continue
     }
@@ -284,16 +321,19 @@ export async function listAuthFiles(): Promise<string[]> {
  * Reads and returns the structure of the downloader credentials file
  * This helps understand what format the credentials are in
  */
-export async function inspectDownloaderCredentials(): Promise<{
+export async function inspectDownloaderCredentials(serverId?: string): Promise<{
   exists: boolean;
   structure?: any;
   error?: string;
 }> {
   try {
-    const downloaderCredsPath = '/opt/hytale/downloader/.hytale-downloader-credentials.json';
+    const { file, dir } = downloaderCredentialsFile(await getServerContext(serverId));
 
     try {
-      const content = await fs.readFile(downloaderCredsPath, 'utf-8');
+      // The downloader folder belongs to the game server: a link is not followed.
+      const content = (
+        await readRegularFile(file, [dir], { maxBytes: CREDENTIALS_MAX_BYTES })
+      ).toString('utf-8');
       const parsed = JSON.parse(content);
 
       // Return structure without exposing sensitive values
@@ -321,7 +361,10 @@ export async function inspectDownloaderCredentials(): Promise<{
       // Downloader credentials not found or not readable
       return {
         exists: false,
-        error: 'File not found or not readable',
+        error:
+          readError instanceof UnsafeFileError
+            ? readError.message
+            : 'File not found or not readable',
       };
     }
   } catch (error) {
@@ -333,49 +376,55 @@ export async function inspectDownloaderCredentials(): Promise<{
   }
 }
 
+/** Throws unless `file` is a regular file in the server's folders (no planted link). */
+async function requireTokenFile(ctx: ServerContext, file: string): Promise<void> {
+  if (!(await isRegularFileWithin(file, [ctx.paths.auth, ctx.paths.server]))) {
+    throw new Error(`No token file at ${file}`);
+  }
+}
+
 /**
  * Checks if the server has a saved authentication token file
  * Common locations: server folder, config folder, or home directory
  */
-async function checkTokenFileExists(): Promise<boolean> {
+async function checkTokenFileExists(ctx: ServerContext): Promise<boolean> {
   try {
     // First, list what's in the auth directory
-    const authFiles = await listAuthFiles();
-
-    const basePath = getHytaleBasePath();
+    const authFiles = await listAuthFilesOf(ctx);
+    const serverPath = ctx.paths.server;
 
     // Try common token file locations
     const possiblePaths = [
-      // Main auth folder at /opt/hytale/auth (same level as server)
-      path.join(basePath, 'auth', 'credentials.enc'),
-      path.join(basePath, 'auth', 'auth.enc'),
-      path.join(basePath, 'auth', 'token'),
-      path.join(basePath, 'auth', 'oauth_token'),
+      // The server's auth folder (/opt/hytale/auth, same level as server)
+      path.join(ctx.paths.auth, 'credentials.enc'),
+      path.join(ctx.paths.auth, 'auth.enc'),
+      path.join(ctx.paths.auth, 'token'),
+      path.join(ctx.paths.auth, 'oauth_token'),
       // Root server folder
-      path.join(config.serverPath, 'auth.enc'),
-      path.join(config.serverPath, '.hytale_token'),
-      path.join(config.serverPath, 'auth_token'),
-      path.join(config.serverPath, 'oauth_token.json'),
-      path.join(config.serverPath, 'oauth_credentials.json'),
-      path.join(config.serverPath, '.oauth_token'),
+      path.join(serverPath, 'auth.enc'),
+      path.join(serverPath, '.hytale_token'),
+      path.join(serverPath, 'auth_token'),
+      path.join(serverPath, 'oauth_token.json'),
+      path.join(serverPath, 'oauth_credentials.json'),
+      path.join(serverPath, '.oauth_token'),
       // Config folder
-      path.join(config.serverPath, 'config', 'auth_token'),
-      path.join(config.serverPath, 'config', 'oauth_token.json'),
+      path.join(serverPath, 'config', 'auth_token'),
+      path.join(serverPath, 'config', 'oauth_token.json'),
       // 'auth' subfolder in server
-      path.join(config.serverPath, 'auth', 'credentials.json'),
-      path.join(config.serverPath, 'auth', 'oauth_credentials.json'),
-      path.join(config.serverPath, 'auth', 'credentials.enc'),
-      path.join(config.serverPath, 'auth', 'auth.enc'),
+      path.join(serverPath, 'auth', 'credentials.json'),
+      path.join(serverPath, 'auth', 'oauth_credentials.json'),
+      path.join(serverPath, 'auth', 'credentials.enc'),
+      path.join(serverPath, 'auth', 'auth.enc'),
       // '.auth' subfolder in server
-      path.join(config.serverPath, '.auth', 'credentials.json'),
-      path.join(config.serverPath, '.auth', 'oauth_credentials.json'),
-      path.join(config.serverPath, '.auth', 'credentials.enc'),
-      path.join(config.serverPath, '.auth', 'auth.enc'),
+      path.join(serverPath, '.auth', 'credentials.json'),
+      path.join(serverPath, '.auth', 'oauth_credentials.json'),
+      path.join(serverPath, '.auth', 'credentials.enc'),
+      path.join(serverPath, '.auth', 'auth.enc'),
     ];
 
     for (const tokenPath of possiblePaths) {
       try {
-        await fs.access(tokenPath);
+        await requireTokenFile(ctx, tokenPath);
         // File exists
         logger.info(`[HytaleAuth] Found Hytale auth token at: ${tokenPath}`);
         return true;
@@ -405,24 +454,24 @@ async function checkTokenFileExists(): Promise<boolean> {
  * Checks for real server auth tokens (auth.enc), not downloader credentials
  * If authentication is successful but not persisted, automatically runs /auth persistence Encrypted
  */
-export async function checkAuthCompletion(): Promise<ActionResponse> {
+export async function checkAuthCompletion(serverId?: string): Promise<ActionResponse> {
   try {
-    const status = await getAuthStatus();
-    const basePath = getHytaleBasePath();
+    const ctx = await getServerContext(serverId);
+    const status = await readAuthStatus(ctx);
 
     // Check for REAL server token files (auth.enc)
     // These are created by /auth persistence Encrypted AFTER successful auth
     const serverTokenPaths = [
-      path.join(basePath, 'auth', 'auth.enc'),
-      path.join(config.serverPath, '.auth', 'auth.enc'),
-      path.join(config.serverPath, 'auth.enc'),
+      path.join(ctx.paths.auth, 'auth.enc'),
+      path.join(ctx.paths.server, '.auth', 'auth.enc'),
+      path.join(ctx.paths.server, 'auth.enc'),
     ];
 
     for (const tokenPath of serverTokenPaths) {
       try {
-        await fs.access(tokenPath);
+        await requireTokenFile(ctx, tokenPath);
         logger.info(`[HytaleAuth] Found server auth token at: ${tokenPath}`);
-        await saveAuthStatus({
+        await writeAuthStatus(ctx, {
           authenticated: true,
           persistent: true,
           persistenceType: 'disk',
@@ -440,7 +489,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
     // If there's a pending device code, check if authentication completed
     if (status.deviceCode) {
       if (status.expiresAt && Date.now() > status.expiresAt) {
-        await saveAuthStatus({ authenticated: false });
+        await writeAuthStatus(ctx, { authenticated: false });
         return {
           success: false,
           error: 'Authentication code has expired. Please initiate login again.',
@@ -448,7 +497,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
       }
 
       // Check server logs for authentication success
-      const logs = await getLogs(100);
+      const logs = await getLogs(100, ctx.id);
       const cleanLogs = stripAnsiCodes(logs);
 
       // Look for success messages: "Authentication successful" or "Successfully created game session"
@@ -466,7 +515,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
         );
 
         // Authentication successful - now set persistence to save credentials
-        const persistenceResult = await execCommand('/auth persistence Encrypted');
+        const persistenceResult = await execCommand('/auth persistence Encrypted', ctx.id);
 
         if (persistenceResult.success) {
           // Wait for the persistence command to create auth.enc
@@ -475,11 +524,11 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
           // Verify auth.enc was created
           for (const tokenPath of serverTokenPaths) {
             try {
-              await fs.access(tokenPath);
+              await requireTokenFile(ctx, tokenPath);
               logger.info(
                 `[HytaleAuth] Persistence successful - auth.enc created at: ${tokenPath}`,
               );
-              await saveAuthStatus({
+              await writeAuthStatus(ctx, {
                 authenticated: true,
                 persistent: true,
                 persistenceType: 'disk',
@@ -498,7 +547,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
           logger.info(
             '[HytaleAuth] Persistence command ran but auth.enc not found. Auth may be memory-only.',
           );
-          await saveAuthStatus({
+          await writeAuthStatus(ctx, {
             authenticated: true,
             persistent: false,
             persistenceType: 'memory',
@@ -512,7 +561,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
         } else {
           logger.warn('[HytaleAuth] Failed to set persistence:', persistenceResult.error);
           // Auth successful but persistence failed
-          await saveAuthStatus({
+          await writeAuthStatus(ctx, {
             authenticated: true,
             persistent: false,
             persistenceType: 'memory',
@@ -543,13 +592,13 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
     }
 
     // Check logs for "No server tokens configured" - indicates server needs auth after download
-    const logs = await getLogs(200);
+    const logs = await getLogs(200, ctx.id);
     const cleanLogs = stripAnsiCodes(logs);
 
     const serverAuthNeeded = /no server tokens configured/i.test(cleanLogs);
 
     // Check if downloader credentials exist (meaning download auth was done)
-    const downloaderCredsExist = await checkDownloaderCredentialsExist();
+    const downloaderCredsExist = await checkDownloaderCredentialsExist(ctx);
 
     if (serverAuthNeeded) {
       logger.info(
@@ -557,7 +606,7 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
       );
 
       // Update status to indicate server auth is specifically required
-      await saveAuthStatus({
+      await writeAuthStatus(ctx, {
         authenticated: false,
         serverAuthRequired: true,
         authType: downloaderCredsExist ? 'downloader' : 'none',
@@ -588,28 +637,17 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
 /**
  * Checks if downloader credentials exist (separate from server auth)
  */
-async function checkDownloaderCredentialsExist(): Promise<boolean> {
-  const basePath = getHytaleBasePath();
-  // The downloader volume is mounted read-only into the manager.
-  const credPaths = [path.join(basePath, 'downloader', '.hytale-downloader-credentials.json')];
-
-  for (const credPath of credPaths) {
-    try {
-      await fs.access(credPath);
-      return true;
-    } catch {
-      // Continue checking
-    }
-  }
-  return false;
+async function checkDownloaderCredentialsExist(ctx: ServerContext): Promise<boolean> {
+  const { file, dir } = downloaderCredentialsFile(ctx);
+  return isRegularFileWithin(file, [dir]);
 }
 
 /**
  * Resets the authentication status (for logout or retry)
  */
-export async function resetAuth(): Promise<ActionResponse> {
+export async function resetAuth(serverId?: string): Promise<ActionResponse> {
   try {
-    await saveAuthStatus({ authenticated: false });
+    await writeAuthStatus(await getServerContext(serverId), { authenticated: false });
     return {
       success: true,
       message: 'Authentication status reset',

@@ -2,9 +2,15 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
+import { useServersStore } from '@/stores/servers'
+import { apiErrorMessage } from '@/utils/apiErrors'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import Modal from '@/components/ui/Modal.vue'
+import Button from '@/components/ui/Button.vue'
+import ServerAccessEditor from '@/components/access/ServerAccessEditor.vue'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
+const serversStore = useServersStore()
 
 // ---------- 2FA ----------
 const twoFAEnabled = ref(false)
@@ -53,10 +59,18 @@ interface ApiKey {
   lastUsedAt: string | null
   expiresAt: string | null
   revokedAt: string | null
+  /** Servers the key may use; null = the same as its owner. */
+  serverIds?: string[] | null
 }
 const apiKeys = ref<ApiKey[]>([])
 const newKey = ref<{ name: string; scopes: string }>({ name: '', scopes: '' })
 const justCreatedToken = ref<string | null>(null)
+// null = the key follows its owner's servers
+const newKeyServers = ref<string[] | null>(null)
+const keyError = ref('')
+const serversTarget = ref<ApiKey | null>(null)
+const serversDraft = ref<string[] | null>(null)
+const savingServers = ref(false)
 
 async function loadKeys() {
   const { data } = await api.get<{ keys: ApiKey[] }>('/auth/api-keys')
@@ -66,12 +80,55 @@ async function loadKeys() {
 async function createKey() {
   const scopes = newKey.value.scopes.split(',').map(s => s.trim()).filter(Boolean)
   if (!newKey.value.name || scopes.length === 0) return
-  const { data } = await api.post<{ key: ApiKey; token: string }>('/auth/api-keys', {
-    name: newKey.value.name, scopes,
-  })
-  justCreatedToken.value = data.token
-  newKey.value = { name: '', scopes: '' }
+  keyError.value = ''
+  try {
+    // The server list is part of the same request: the key never exists
+    // wider than chosen, and a refused list creates no key at all.
+    const { data } = await api.post<{ key: ApiKey; token: string }>('/auth/api-keys', {
+      name: newKey.value.name,
+      scopes,
+      ...(newKeyServers.value !== null ? { serverIds: newKeyServers.value } : {}),
+    })
+    justCreatedToken.value = data.token
+    newKey.value = { name: '', scopes: '' }
+    newKeyServers.value = null
+  } catch (err) {
+    keyError.value = apiErrorMessage(err, t, te, t('errors.serverError'))
+  }
   await loadKeys()
+}
+
+function serversLabel(k: ApiKey): string {
+  if (!k.serverIds) return t('serverAccess.keyFollowsOwner')
+  if (k.serverIds.length === 0) return t('serverAccess.noneShort')
+  return t('serverAccess.count', { count: k.serverIds.length })
+}
+
+function serverTitle(k: ApiKey): string {
+  return (k.serverIds ?? [])
+    .map((id) => serversStore.servers.find((s) => s.id === id)?.name ?? id)
+    .join(', ')
+}
+
+function editServers(k: ApiKey) {
+  serversTarget.value = k
+  serversDraft.value = k.serverIds ? [...k.serverIds] : null
+  keyError.value = ''
+}
+
+async function saveServers() {
+  const target = serversTarget.value
+  if (!target) return
+  savingServers.value = true
+  try {
+    await api.put(`/auth/api-keys/${target.id}/servers`, { serverIds: serversDraft.value })
+    serversTarget.value = null
+    await loadKeys()
+  } catch (err) {
+    keyError.value = apiErrorMessage(err, t, te, t('errors.serverError'))
+  } finally {
+    savingServers.value = false
+  }
 }
 
 // Revoke flow via ConfirmDialog instead of window.confirm so it matches
@@ -95,6 +152,7 @@ async function confirmRevoke() {
 }
 
 onMounted(async () => {
+  void serversStore.init()
   await load2fa()
   await loadKeys()
 })
@@ -167,7 +225,9 @@ onMounted(async () => {
               <code class="text-xs font-mono text-ink-muted">{{ k.prefix }}…</code>
             </div>
             <div class="text-xs text-ink-subtle mt-0.5">{{ k.scopes.length }} scopes · created {{ new Date(k.createdAt).toLocaleDateString() }} · last used {{ k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : 'never' }}</div>
+            <div class="text-xs text-ink-muted mt-0.5" :title="serverTitle(k)">{{ t('serverAccess.servers') }}: {{ serversLabel(k) }}</div>
           </div>
+          <button v-if="!k.revokedAt" @click="editServers(k)" :aria-label="t('serverAccess.editKeyAria', { name: k.name })" class="px-2 py-1 text-xs rounded bg-surface-raised hover:bg-surface-sunken text-ink-muted hover:text-white">{{ t('serverAccess.servers') }}</button>
           <button @click="askRevoke(k)" :aria-label="t('security.revokeApiKeyAria', { name: k.name })" class="px-2 py-1 text-xs rounded bg-status-error/20 hover:bg-status-error/40 text-status-error">{{ t('common.revoke') }}</button>
         </div>
         <div v-if="apiKeys.length === 0" class="text-center text-sm text-ink-muted py-4">No API keys yet.</div>
@@ -176,9 +236,30 @@ onMounted(async () => {
       <div class="space-y-2">
         <input v-model="newKey.name" placeholder="Key name (e.g. 'CI deploy bot')" class="w-full bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-white" />
         <input v-model="newKey.scopes" placeholder="Comma-separated scopes (e.g. server.view_status, backups.create)" class="w-full bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-white" />
+        <ServerAccessEditor
+          v-model="newKeyServers"
+          :all-label="t('serverAccess.keyAll')"
+          :all-hint="t('serverAccess.keyAllHint')"
+        />
+        <p v-if="keyError" class="text-sm text-status-error" role="alert">{{ keyError }}</p>
         <button @click="createKey" :disabled="!newKey.name || !newKey.scopes" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm disabled:opacity-50">Create key</button>
       </div>
     </section>
+
+    <Modal :open="!!serversTarget" :title="t('serverAccess.keyServersTitle', { name: serversTarget?.name ?? '' })" @close="serversTarget = null">
+      <div class="space-y-3">
+        <ServerAccessEditor
+          v-model="serversDraft"
+          :all-label="t('serverAccess.keyAll')"
+          :all-hint="t('serverAccess.keyAllHint')"
+        />
+        <p v-if="keyError" class="text-sm text-status-error" role="alert">{{ keyError }}</p>
+      </div>
+      <template #footer>
+        <Button variant="secondary" size="sm" :disabled="savingServers" @click="serversTarget = null">{{ t('common.cancel') }}</Button>
+        <Button variant="primary" size="sm" :loading="savingServers" @click="saveServers">{{ t('common.save') }}</Button>
+      </template>
+    </Modal>
 
     <!-- Revoke confirm dialog (replaces window.confirm) -->
     <ConfirmDialog

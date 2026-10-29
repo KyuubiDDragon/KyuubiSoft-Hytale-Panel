@@ -1,10 +1,12 @@
 /**
  * Server update history + rollback.
  *
- *   1. History log of every update and rollback the panel started, at
- *      <dataPath>/update-history.json. An apply is recorded as pending and only
- *      marked successful once the server runs the target version
- *      (reconcilePendingUpdates); sending `/update apply` proves nothing.
+ *   1. History log of every update and rollback the panel started, one per
+ *      server at <dataPath>/update-history.json in that server's data folder
+ *      (the compose server's is the configured data path, as before). An
+ *      apply is recorded as pending and only marked successful once the
+ *      server runs the target version (reconcilePendingUpdates); sending
+ *      `/update apply` proves nothing.
  *   2. JAR snapshots in <serverPath>/.jar-snapshots/: a copy of
  *      HytaleServer.jar plus hard links to the Assets.zip and HytaleServer.aot
  *      it ran with. A link costs no disk space as long as the original exists;
@@ -30,8 +32,8 @@ import fs from 'fs';
 import { lstat, mkdir, readdir, rename, rm } from 'fs/promises';
 import type { Stats } from 'fs';
 import path from 'path';
-import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { serverFolders } from './perServerData.js';
 import { readHytaleJarVersion } from '../utils/jarManifest.js';
 import { withFileLock } from '../utils/jsonStore.js';
 import {
@@ -55,7 +57,7 @@ import {
   AOT_NAME,
 } from './serverInstall.js';
 
-const HISTORY_FILE = path.join(config.dataPath, 'update-history.json');
+const HISTORY_FILE_NAME = 'update-history.json';
 const SNAPSHOT_DIRNAME = '.jar-snapshots';
 const MAX_HISTORY = 100;
 const MAX_SNAPSHOTS = 5;
@@ -128,9 +130,20 @@ async function exists(p: string): Promise<boolean> {
 
 // ---------- history ----------
 
-async function readHistory(): Promise<UpdateHistoryEntry[]> {
+/** A server's history file and the folder it must lie in. */
+interface HistoryLocation {
+  file: string;
+  root: string;
+}
+
+async function historyLocation(serverId?: string): Promise<HistoryLocation> {
+  const { data } = await serverFolders(serverId);
+  return { file: path.join(data, HISTORY_FILE_NAME), root: data };
+}
+
+async function readHistory(at: HistoryLocation): Promise<UpdateHistoryEntry[]> {
   try {
-    const raw = await readRegularFile(HISTORY_FILE, [config.dataPath], {
+    const raw = await readRegularFile(at.file, [at.root], {
       maxBytes: HISTORY_MAX_BYTES,
     });
     const data = JSON.parse(raw.toString('utf-8')) as unknown;
@@ -141,31 +154,35 @@ async function readHistory(): Promise<UpdateHistoryEntry[]> {
   }
 }
 
-export function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
-  return readHistory();
+/** A server's update history, newest first; `undefined` is the default server. */
+export async function getUpdateHistory(serverId?: string): Promise<UpdateHistoryEntry[]> {
+  return readHistory(await historyLocation(serverId));
 }
 
 /** Callers hold the history lock. Never throws (a failed write is logged). */
-async function writeHistory(list: UpdateHistoryEntry[]): Promise<void> {
+async function writeHistory(at: HistoryLocation, list: UpdateHistoryEntry[]): Promise<void> {
   try {
-    await mkdir(path.dirname(HISTORY_FILE), { recursive: true });
-    await replaceFileContent(HISTORY_FILE, JSON.stringify(list.slice(0, MAX_HISTORY), null, 2), [
-      config.dataPath,
+    await mkdir(path.dirname(at.file), { recursive: true });
+    await replaceFileContent(at.file, JSON.stringify(list.slice(0, MAX_HISTORY), null, 2), [
+      at.root,
     ]);
   } catch (err) {
     logger.error('[UpdateHistory] Failed to write history:', err);
   }
 }
 
+/** Records an update or rollback in a server's history; `undefined` is the default server. */
 export async function recordUpdate(
   entry: Omit<UpdateHistoryEntry, 'id' | 'at'>,
+  serverId?: string,
 ): Promise<UpdateHistoryEntry> {
   const full: UpdateHistoryEntry = {
     id: `up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     at: new Date().toISOString(),
     ...entry,
   };
-  await withFileLock(HISTORY_FILE, async () => writeHistory([full, ...(await readHistory())]));
+  const at = await historyLocation(serverId);
+  await withFileLock(at.file, async () => writeHistory(at, [full, ...(await readHistory(at))]));
   return full;
 }
 
@@ -205,22 +222,23 @@ export function reconcilePendingUpdates(
   });
 }
 
-/** History with pending applies resolved (and persisted when something changed). */
+/** A server's history with pending applies resolved (and persisted when something changed). */
 export async function getReconciledHistory(serverId?: string): Promise<UpdateHistoryEntry[]> {
-  const list = await readHistory();
+  const at = await historyLocation(serverId);
+  const list = await readHistory(at);
   if (!list.some((e) => e.pending)) return list;
   const paths = await resolveInstallPaths(serverId);
   const installed = await readInstalledVersion(paths.serverPath);
   const stagedPresent =
     !!paths.updaterPath &&
     fs.existsSync(path.join(paths.updaterPath, 'staging', 'Server', SERVER_JAR_NAME));
-  return withFileLock(HISTORY_FILE, async () => {
-    const current = await readHistory();
+  return withFileLock(at.file, async () => {
+    const current = await readHistory(at);
     const next = reconcilePendingUpdates(current, {
       installedVersion: installed.version,
       stagedPresent,
     });
-    if (JSON.stringify(next) !== JSON.stringify(current)) await writeHistory(next);
+    if (JSON.stringify(next) !== JSON.stringify(current)) await writeHistory(at, next);
     return next;
   });
 }

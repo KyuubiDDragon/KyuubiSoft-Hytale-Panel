@@ -6,15 +6,13 @@
  *
  * Multi-server: every public function takes an optional `serverId`. When
  * omitted, the default server in the registry (services/servers.ts) is used.
- * The plugin host (container name) and port are pulled from the registry
- * entry, falling back to legacy env-var config if the registry isn't ready
- * yet on fresh boot.
+ * The plugin host (container name) comes from the server context
+ * (services/serverContext.ts); the port is the plugin's fixed internal one.
  *
  * Every request and WebSocket carries the server's plugin token
  * (services/pluginAuth.ts). Plugin 2.0.0 requires it; 1.4.x ignores it.
  */
 
-import { config } from '../config.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,7 +24,8 @@ import {
   getDemoPlayerDetails,
   getDemoPlayerInventory,
 } from './demoData.js';
-import { getDefaultId, getServer, resolveServerId } from './servers.js';
+import { resolveServerId } from './servers.js';
+import { PLUGIN_INTERNAL_PORT, getServerContext } from './serverContext.js';
 import { ensurePluginAuthConfig, getPluginToken } from './pluginAuth.js';
 
 // Get directory name in ESM
@@ -36,11 +35,10 @@ const __dirname = path.dirname(__filename);
 // Plugin version (should match the built JAR version in
 // manager/backend/assets/plugins/ and plugins/kyuubisoft-api/build.gradle).
 export const PLUGIN_VERSION = '2.1.1';
-// Legacy default plugin port. Kept exported for back-compat with callers
-// that read this constant directly (e.g. configService snapshots, status
-// fallbacks). Per-server callers should use `resolvePluginEndpoint(serverId)`
-// which reads the actual port from the registry.
-export const PLUGIN_PORT = 18085;
+// The plugin listens on this port inside every game container. Kept exported
+// for callers that read the constant directly; per-server callers use
+// `resolvePluginEndpoint(serverId)`.
+export const PLUGIN_PORT = PLUGIN_INTERNAL_PORT;
 export const PLUGIN_JAR_NAME = `KyuubiSoftAPI-${PLUGIN_VERSION}.jar`;
 
 /**
@@ -111,35 +109,19 @@ function authFailure<T>(authError: PluginAuthError): PluginApiResponse & { data?
 }
 
 /**
- * Resolve the plugin host + port for an explicit or default server id.
- * Falls back to env-var defaults if the registry isn't loaded yet.
+ * Plugin host + port for an explicit or default server id: the server's
+ * container on the stack network, always on the plugin's internal port.
  */
 export async function resolvePluginEndpoint(
   serverId?: string,
 ): Promise<{ host: string; port: number }> {
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const s = await getServer(id);
-    if (s) return { host: s.containerName, port: s.network.pluginPort };
-  } catch {
-    /* registry not ready yet */
-  }
-  return { host: config.gameContainerName, port: PLUGIN_PORT };
+  const { plugin } = await getServerContext(serverId);
+  return { host: plugin.host, port: plugin.port };
 }
 
-/**
- * Resolve the on-disk mods path for an explicit or default server id.
- * Falls back to legacy env-var config if registry isn't loaded.
- */
+/** On-disk mods path for an explicit or default server id. */
 async function resolveModsPath(serverId?: string): Promise<string> {
-  try {
-    const id = serverId ?? (await getDefaultId());
-    const s = await getServer(id);
-    if (s) return s.paths.mods;
-  } catch {
-    /* registry not ready yet */
-  }
-  return config.modsPath;
+  return (await getServerContext(serverId)).paths.mods;
 }
 
 /**

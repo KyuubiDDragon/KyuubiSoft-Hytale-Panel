@@ -53,7 +53,7 @@ const STEVE = '0a1b2c3d-0000-4000-8000-0000000000aa';
 const HOUR = 3_600_000;
 
 async function expireAndRun(player: string, uuid: string | null = STEVE) {
-  const p = punishments.recordPunishment({
+  const p = await punishments.recordPunishment({
     serverId: 'default',
     playerName: player,
     uuid,
@@ -192,10 +192,10 @@ describe('punishments: closing the ban entries of a player', () => {
 
   it('closes them by UUID or name on that server only', async () => {
     const BOB = '0a1b2c3d-0000-4000-8000-0000000000bb';
-    const byUuid = tempban('default', 'OldName', BOB);
-    const legacy = tempban(undefined, 'bob');
-    const elsewhere = tempban('other', 'Bob', BOB);
-    const ban = punishments.recordPunishment({
+    const byUuid = await tempban('default', 'OldName', BOB);
+    const legacy = await tempban(undefined, 'bob');
+    const elsewhere = await tempban('other', 'Bob', BOB);
+    const ban = await punishments.recordPunishment({
       serverId: 'default',
       playerName: 'Bob',
       type: 'ban',

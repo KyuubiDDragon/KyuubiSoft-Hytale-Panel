@@ -9,6 +9,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
+import { scopedApiUrl } from '@/api/scope'
 import { useAuthStore } from '@/stores/auth'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 
@@ -121,7 +122,7 @@ function openPlayer(seg: ReplayManifest) {
   // SSE doesn't normally carry an Authorization header; for the demo build
   // we rely on session-cookie auth or token-in-query. The same-origin call
   // works with the panel's existing cookie store.
-  const url = `/api/replay/${seg.id}/stream${authStore.accessToken ? `?token=${encodeURIComponent(authStore.accessToken)}` : ''}`
+  const url = scopedApiUrl(`/replay/${seg.id}/stream${authStore.accessToken ? `?token=${encodeURIComponent(authStore.accessToken)}` : ''}`)
   evtSource = new EventSource(url)
   evtSource.onmessage = (ev) => {
     try {

@@ -5,11 +5,14 @@ import { logger } from '../utils/logger.js';
  * API Documentation: https://stackmart.org/api-docs
  */
 
-import { writeFile, mkdir, access, readFile, unlink } from 'fs/promises';
+import { mkdir, access, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
 import { sanitizeFileName, resolveFileInDir } from '../utils/pathSecurity.js';
+import type { ServerContext } from './serverContext.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 
 // Security: Regex pattern for validating resource IDs (MongoDB ObjectId or slug)
 const RESOURCE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -122,58 +125,85 @@ interface InstalledResourcesData {
   resources: Record<string, InstalledResourceInfo>;
 }
 
+// Kept in each server's data folder: every server has its own install list.
 const INSTALLED_RESOURCES_FILE = 'stackmart-installed.json';
 
-function getInstalledResourcesPath(): string {
-  return path.join(config.dataPath, INSTALLED_RESOURCES_FILE);
+function getInstalledResourcesPath(server: ServerContext): string {
+  return path.join(server.paths.data, INSTALLED_RESOURCES_FILE);
 }
 
-async function loadInstalledResources(): Promise<InstalledResourcesData> {
+async function loadInstalledResources(server: ServerContext): Promise<InstalledResourcesData> {
   try {
-    const filePath = getInstalledResourcesPath();
-    const data = await readFile(filePath, 'utf-8');
-    return JSON.parse(data);
+    // In the server's data folder: only a regular file there is read.
+    const data = await readRegularFile(getInstalledResourcesPath(server), [server.paths.data], {
+      maxBytes: MAX_SERVER_FILE_BYTES,
+    });
+    return JSON.parse(data.toString('utf-8'));
   } catch {
     return { resources: {} };
   }
 }
 
-async function saveInstalledResources(data: InstalledResourcesData): Promise<void> {
+async function saveInstalledResources(
+  server: ServerContext,
+  data: InstalledResourcesData,
+): Promise<void> {
   try {
-    const filePath = getInstalledResourcesPath();
+    const filePath = getInstalledResourcesPath(server);
     await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, JSON.stringify(data, null, 2));
+    await replaceFileContent(filePath, JSON.stringify(data, null, 2), [server.paths.data]);
   } catch (e) {
     logger.error('Failed to save installed resources tracking:', e);
   }
 }
 
-export async function getInstalledStackMartInfo(): Promise<Record<string, InstalledResourceInfo>> {
-  const data = await loadInstalledResources();
+export async function getInstalledStackMartInfo(
+  server: ServerContext,
+): Promise<Record<string, InstalledResourceInfo>> {
+  const data = await loadInstalledResources(server);
   return data.resources;
 }
 
 export async function isStackMartResourceInstalled(
+  server: ServerContext,
   resourceId: string,
 ): Promise<InstalledResourceInfo | null> {
-  const data = await loadInstalledResources();
+  const data = await loadInstalledResources(server);
   return data.resources[resourceId] || null;
 }
 
-async function trackInstalledResource(info: InstalledResourceInfo): Promise<void> {
-  const data = await loadInstalledResources();
+async function trackInstalledResource(
+  server: ServerContext,
+  info: InstalledResourceInfo,
+): Promise<void> {
+  const data = await loadInstalledResources(server);
   data.resources[info.resourceId] = info;
-  await saveInstalledResources(data);
+  await saveInstalledResources(server, data);
 }
 
-export async function untrackInstalledResource(resourceId: string): Promise<boolean> {
-  const data = await loadInstalledResources();
+export async function untrackInstalledResource(
+  server: ServerContext,
+  resourceId: string,
+): Promise<boolean> {
+  const data = await loadInstalledResources(server);
   if (data.resources[resourceId]) {
     delete data.resources[resourceId];
-    await saveInstalledResources(data);
+    await saveInstalledResources(server, data);
     return true;
   }
   return false;
+}
+
+/** Folder a resource of this category goes to (scripts, tools and unknown: data). */
+function folderFor(server: ServerContext, category: string | undefined): string {
+  switch (category?.toLowerCase()) {
+    case 'plugins':
+      return server.paths.plugins;
+    case 'mods':
+      return server.paths.mods;
+    default:
+      return server.paths.data;
+  }
 }
 
 // ============== Security Validation ==============
@@ -335,7 +365,10 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
           res.on('end', async () => {
             try {
               const buffer = Buffer.concat(chunks);
-              await writeFile(destPath, buffer);
+              // destPath is <folder>/<plain name>. The game server can write
+              // to that folder: the file is replaced, never written through
+              // a link planted under its name.
+              await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
               resolve(true);
             } catch (e) {
               logger.error('Failed to write file:', e);
@@ -453,6 +486,7 @@ export async function getCategories(): Promise<string[]> {
  * Install a resource from StackMart
  */
 export async function installResourceFromStackMart(
+  server: ServerContext,
   resourceId: string,
 ): Promise<StackMartInstallResult> {
   // Security: Validate resourceId
@@ -502,19 +536,7 @@ export async function installResourceFromStackMart(
   }
 
   // Choose target directory based on category
-  let targetPath: string;
-  switch (resource.category?.toLowerCase()) {
-    case 'plugins':
-      targetPath = config.pluginsPath;
-      break;
-    case 'mods':
-      targetPath = config.modsPath;
-      break;
-    case 'scripts':
-    case 'tools':
-    default:
-      targetPath = config.dataPath;
-  }
+  const targetPath = folderFor(server, resource.category);
 
   // Ensure target directory exists
   try {
@@ -524,22 +546,9 @@ export async function installResourceFromStackMart(
   }
 
   // Check if this resource is already installed (for updates) and remove old file
-  const existingInstall = await isStackMartResourceInstalled(resourceId);
+  const existingInstall = await isStackMartResourceInstalled(server, resourceId);
   if (existingInstall && existingInstall.filename) {
-    // Determine path based on category
-    let oldBasePath: string;
-    switch (existingInstall.category?.toLowerCase()) {
-      case 'plugins':
-        oldBasePath = config.pluginsPath;
-        break;
-      case 'mods':
-        oldBasePath = config.modsPath;
-        break;
-      case 'scripts':
-      case 'tools':
-      default:
-        oldBasePath = config.dataPath;
-    }
+    const oldBasePath = folderFor(server, existingInstall.category);
     // The stored filename is untrusted (shared data dir): only a bare name in the base folder.
     const oldFilePath = resolveFileInDir(oldBasePath, existingInstall.filename);
     try {
@@ -576,7 +585,7 @@ export async function installResourceFromStackMart(
   }
 
   // Track the installed resource
-  await trackInstalledResource({
+  await trackInstalledResource(server, {
     resourceId: resource.id,
     resourceName: resource.name,
     version: safeVersion,
@@ -598,6 +607,7 @@ export async function installResourceFromStackMart(
  * Uninstall a StackMart resource
  */
 export async function uninstallStackMart(
+  server: ServerContext,
   resourceId: string,
 ): Promise<{ success: boolean; error?: string }> {
   // Security: Validate resourceId
@@ -605,23 +615,12 @@ export async function uninstallStackMart(
     return { success: false, error: 'Invalid resource ID format' };
   }
 
-  const installed = await isStackMartResourceInstalled(resourceId);
+  const installed = await isStackMartResourceInstalled(server, resourceId);
   if (!installed) {
     return { success: false, error: 'Resource is not installed' };
   }
 
-  // Determine the file path based on category
-  let basePath: string;
-  switch (installed.category?.toLowerCase()) {
-    case 'plugins':
-      basePath = config.pluginsPath;
-      break;
-    case 'mods':
-      basePath = config.modsPath;
-      break;
-    default:
-      basePath = config.dataPath;
-  }
+  const basePath = folderFor(server, installed.category);
 
   // Security: the stored filename (shared data dir) must be a bare name in the base folder -
   // "sub/x.jar" through a symlinked sub folder would pass a plain prefix check.
@@ -637,7 +636,7 @@ export async function uninstallStackMart(
     // Continue to untrack even if file doesn't exist
   }
 
-  await untrackInstalledResource(resourceId);
+  await untrackInstalledResource(server, resourceId);
 
   return { success: true };
 }

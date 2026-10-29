@@ -5,12 +5,15 @@ import { logger } from '../utils/logger.js';
  * API Documentation: https://docs.curseforge.com/rest-api/
  */
 
-import { writeFile, mkdir, access, readFile, unlink } from 'fs/promises';
+import { mkdir, access, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
 import { sanitizeFileName, resolveFileInDir } from '../utils/pathSecurity.js';
 import { untrackMod as cfwidgetUntrackMod } from './cfwidget.js';
+import type { ServerContext } from './serverContext.js';
+import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 
 // Security: Regex pattern for validating mod IDs (CurseForge uses numeric IDs)
 const MOD_ID_PATTERN = /^\d{1,10}$/;
@@ -228,55 +231,63 @@ interface InstalledModsData {
   mods: Record<string, InstalledModInfo>;
 }
 
+// Kept in each server's data folder: every server has its own install list.
 const INSTALLED_MODS_FILE = 'curseforge-installed.json';
 
-function getInstalledModsPath(): string {
-  return path.join(config.dataPath, INSTALLED_MODS_FILE);
+function getInstalledModsPath(server: ServerContext): string {
+  return path.join(server.paths.data, INSTALLED_MODS_FILE);
 }
 
-async function loadInstalledMods(): Promise<InstalledModsData> {
+async function loadInstalledMods(server: ServerContext): Promise<InstalledModsData> {
   try {
-    const filePath = getInstalledModsPath();
-    const data = await readFile(filePath, 'utf-8');
-    return JSON.parse(data);
+    // In the server's data folder: only a regular file there is read.
+    const data = await readRegularFile(getInstalledModsPath(server), [server.paths.data], {
+      maxBytes: MAX_SERVER_FILE_BYTES,
+    });
+    return JSON.parse(data.toString('utf-8'));
   } catch {
     return { mods: {} };
   }
 }
 
-async function saveInstalledMods(data: InstalledModsData): Promise<void> {
+async function saveInstalledMods(server: ServerContext, data: InstalledModsData): Promise<void> {
   try {
-    const filePath = getInstalledModsPath();
+    const filePath = getInstalledModsPath(server);
     // Ensure data directory exists
     await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, JSON.stringify(data, null, 2));
+    await replaceFileContent(filePath, JSON.stringify(data, null, 2), [server.paths.data]);
   } catch (e) {
     logger.error('Failed to save installed mods tracking:', e);
   }
 }
 
-export async function getInstalledCurseForgeInfo(): Promise<Record<string, InstalledModInfo>> {
-  const data = await loadInstalledMods();
+export async function getInstalledCurseForgeInfo(
+  server: ServerContext,
+): Promise<Record<string, InstalledModInfo>> {
+  const data = await loadInstalledMods(server);
   return data.mods;
 }
 
-export async function isCurseForgeModInstalled(modId: number): Promise<InstalledModInfo | null> {
-  const data = await loadInstalledMods();
+export async function isCurseForgeModInstalled(
+  server: ServerContext,
+  modId: number,
+): Promise<InstalledModInfo | null> {
+  const data = await loadInstalledMods(server);
   return data.mods[modId.toString()] || null;
 }
 
-async function trackInstalledMod(info: InstalledModInfo): Promise<void> {
-  const data = await loadInstalledMods();
+async function trackInstalledMod(server: ServerContext, info: InstalledModInfo): Promise<void> {
+  const data = await loadInstalledMods(server);
   data.mods[info.modId.toString()] = info;
-  await saveInstalledMods(data);
+  await saveInstalledMods(server, data);
 }
 
-export async function untrackInstalledMod(modId: number): Promise<boolean> {
-  const data = await loadInstalledMods();
+export async function untrackInstalledMod(server: ServerContext, modId: number): Promise<boolean> {
+  const data = await loadInstalledMods(server);
   const key = modId.toString();
   if (data.mods[key]) {
     delete data.mods[key];
-    await saveInstalledMods(data);
+    await saveInstalledMods(server, data);
     return true;
   }
   return false;
@@ -485,7 +496,10 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
           res.on('end', async () => {
             try {
               const buffer = Buffer.concat(chunks);
-              await writeFile(destPath, buffer);
+              // destPath is <folder>/<plain name>. The game server can write
+              // to that folder: the file is replaced, never written through
+              // a link planted under its name.
+              await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
               resolve(true);
             } catch (e) {
               logger.error('Failed to write file:', e);
@@ -711,6 +725,7 @@ export async function getCategories(gameId?: number): Promise<CurseForgeCategory
  * Install a mod from CurseForge
  */
 export async function installModFromCurseForge(
+  server: ServerContext,
   modId: number,
   fileId?: number,
 ): Promise<CurseForgeInstallResult> {
@@ -771,10 +786,10 @@ export async function installModFromCurseForge(
   }
 
   // Check if this mod is already installed (for updates) and remove old file
-  const existingInstall = await isCurseForgeModInstalled(modId);
+  const existingInstall = await isCurseForgeModInstalled(server, modId);
   if (existingInstall && existingInstall.filename) {
     // The stored filename is untrusted (shared data dir): only a bare name in the mods folder.
-    const oldFilePath = resolveFileInDir(config.modsPath, existingInstall.filename);
+    const oldFilePath = resolveFileInDir(server.paths.mods, existingInstall.filename);
     try {
       if (!oldFilePath) throw new Error('invalid stored filename');
       await unlink(oldFilePath);
@@ -815,7 +830,7 @@ export async function installModFromCurseForge(
   const filename = safeFilename || `${sanitizeForFilename(mod.name)}-${file.id}.jar`;
 
   // Determine target path - mods go to mods directory
-  const targetPath = config.modsPath;
+  const targetPath = server.paths.mods;
 
   // Ensure target directory exists
   try {
@@ -842,7 +857,7 @@ export async function installModFromCurseForge(
   }
 
   // Track the installed mod (CurseForge internal tracking)
-  await trackInstalledMod({
+  await trackInstalledMod(server, {
     modId: mod.id,
     modName: mod.name,
     fileId: file.id,
@@ -938,7 +953,7 @@ export async function getPopularMods(limit: number = 10): Promise<CurseForgeMod[
 /**
  * Check for updates for installed mods
  */
-export async function checkForUpdates(): Promise<
+export async function checkForUpdates(server: ServerContext): Promise<
   Array<{
     modId: number;
     modName: string;
@@ -950,7 +965,7 @@ export async function checkForUpdates(): Promise<
     hasUpdate: boolean;
   }>
 > {
-  const installed = await getInstalledCurseForgeInfo();
+  const installed = await getInstalledCurseForgeInfo(server);
   const updates: Array<{
     modId: number;
     modName: string;
@@ -1000,27 +1015,32 @@ export async function checkForUpdates(): Promise<
 /**
  * Update a mod to the latest version
  */
-export async function updateMod(modId: number, fileId?: number): Promise<CurseForgeInstallResult> {
+export async function updateMod(
+  server: ServerContext,
+  modId: number,
+  fileId?: number,
+): Promise<CurseForgeInstallResult> {
   // First check if mod is installed
-  const installed = await isCurseForgeModInstalled(modId);
+  const installed = await isCurseForgeModInstalled(server, modId);
   if (!installed) {
     return { success: false, error: 'Mod is not installed' };
   }
 
   // Uninstall old version
-  const uninstallResult = await uninstallCurseForge(modId);
+  const uninstallResult = await uninstallCurseForge(server, modId);
   if (!uninstallResult.success) {
     return { success: false, error: `Failed to uninstall old version: ${uninstallResult.error}` };
   }
 
   // Install new version
-  return installModFromCurseForge(modId, fileId);
+  return installModFromCurseForge(server, modId, fileId);
 }
 
 /**
  * Uninstall a CurseForge mod
  */
 export async function uninstallCurseForge(
+  server: ServerContext,
   modId: number,
 ): Promise<{ success: boolean; error?: string }> {
   // Security: Validate modId
@@ -1028,12 +1048,12 @@ export async function uninstallCurseForge(
     return { success: false, error: 'Invalid mod ID format' };
   }
 
-  const installed = await isCurseForgeModInstalled(modId);
+  const installed = await isCurseForgeModInstalled(server, modId);
   if (!installed) {
     return { success: false, error: 'Mod is not installed' };
   }
 
-  const basePath = config.modsPath;
+  const basePath = server.paths.mods;
   // Security: the stored filename (shared data dir) must be a bare name in the base folder -
   // "sub/x.jar" through a symlinked sub folder would pass a plain prefix check.
   const filePath = resolveFileInDir(basePath, installed.filename);
@@ -1048,11 +1068,11 @@ export async function uninstallCurseForge(
     // Continue to untrack even if file doesn't exist
   }
 
-  await untrackInstalledMod(modId);
+  await untrackInstalledMod(server, modId);
 
   // Also untrack from CFWidget
   try {
-    await cfwidgetUntrackMod(installed.filename);
+    await cfwidgetUntrackMod(server, installed.filename);
     logger.info(`[CurseForge] Mod ${installed.modName} also untracked from CFWidget`);
   } catch (e) {
     logger.error('[CurseForge] Failed to untrack mod from CFWidget:', e);

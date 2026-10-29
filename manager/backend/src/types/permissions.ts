@@ -41,6 +41,7 @@ export const PERMISSIONS = {
   'servers.list': 'List server instances',
   'servers.create': 'Create new server instance',
   'servers.delete': 'Delete server instance',
+  'servers.manage': 'Edit server instances, change the default server, reconcile containers',
 
   // Replay & wiki (v3.1)
   'replay.view': 'View replays',

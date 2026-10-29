@@ -33,6 +33,8 @@ export interface CommandActor {
   username?: string | null;
   /** Present when the caller authenticated with an API key. */
   apiKeyScopes?: string[];
+  /** Present when that API key is limited to some servers. */
+  apiKeyServerIds?: string[];
 }
 
 export type CommandAuthorization =
@@ -40,7 +42,21 @@ export type CommandAuthorization =
 
 /** Actor for the user (or API key) behind a request. */
 export function actorFromRequest(req: AuthenticatedRequest): CommandActor {
-  return { username: req.user, apiKeyScopes: req.apiKey?.scopes };
+  return {
+    username: req.user,
+    apiKeyScopes: req.apiKey?.scopes,
+    apiKeyServerIds: req.apiKey?.serverIds ?? undefined,
+  };
+}
+
+/**
+ * Does an API key's server list cover `serverId`? A key with a list never
+ * covers "no server" (an entry for every server): stored entries later run
+ * with the owner's rights, which would reach beyond the key's list.
+ */
+function keyCoversServer(actor: CommandActor, serverId?: string): boolean {
+  if (!actor.apiKeyServerIds) return true;
+  return serverId !== undefined && actor.apiKeyServerIds.includes(serverId);
 }
 
 /**
@@ -109,6 +125,7 @@ export async function holdsCommandTier(
 ): Promise<boolean> {
   if (!actor.username) return false;
   if (!scopeAllows(actor.apiKeyScopes, permission)) return false;
+  if (!keyCoversServer(actor, serverId)) return false;
   return holds(actor.username, permission, serverId);
 }
 
@@ -131,8 +148,9 @@ export async function authorizeCommand(
     error: `Permission denied: ${permission} required`,
   };
   if (!actor.username) return denied;
-  // An API key never exceeds its declared scopes, even when its owner could.
+  // An API key never exceeds its declared scopes or servers, even when its owner could.
   if (!scopeAllows(actor.apiKeyScopes, permission)) return denied;
+  if (!keyCoversServer(actor, serverId)) return denied;
   if (!(await holds(actor.username, permission, serverId))) return denied;
   return { allowed: true, permission };
 }

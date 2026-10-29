@@ -26,13 +26,13 @@ const DB_PATH = path.join(DATA_DIR, 'panel.sqlite');
 
 let db: Database.Database | null = null;
 
-interface Migration {
+export interface Migration {
   version: number;
   name: string;
   up: (conn: Database.Database) => void;
 }
 
-const MIGRATIONS: Migration[] = [
+export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     name: 'baseline',
@@ -196,7 +196,47 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
-  // Future schema changes: add { version: 2, name: '…', up: (conn) => conn.exec('ALTER TABLE …') }
+  {
+    // Multi-server: punishments, crash reports and play sessions always carry
+    // their server. Rows from single-server installs had none; they belong to
+    // the compose server ('default'), not to whichever server is default later.
+    // Webhooks get an optional server filter (JSON array, NULL = every server).
+    version: 2,
+    name: 'per_server_data',
+    up: (conn) => {
+      conn.exec(`
+        UPDATE punishments SET server_id = 'default' WHERE server_id IS NULL;
+        UPDATE crash_reports SET server_id = 'default' WHERE server_id IS NULL;
+        UPDATE play_sessions SET server_id = 'default' WHERE server_id IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_punish_server ON punishments(server_id, player_name);
+        CREATE INDEX IF NOT EXISTS idx_crash_reports_server ON crash_reports(server_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_play_sessions_server ON play_sessions(server_id, uuid);
+        ALTER TABLE webhooks ADD COLUMN server_ids TEXT;
+      `);
+    },
+  },
+  {
+    // API keys may be limited to some servers (JSON array, NULL = every server
+    // the owner may use).
+    version: 3,
+    name: 'api_keys_server_ids',
+    up: (conn) => {
+      conn.exec('ALTER TABLE api_keys ADD COLUMN server_ids TEXT;');
+    },
+  },
+  {
+    // Staff notes belong to one server: rows from single-server installs (or
+    // written without a server) are the compose server's.
+    version: 4,
+    name: 'player_notes_server',
+    up: (conn) => {
+      conn.exec(`
+        UPDATE player_notes SET server_id = 'default' WHERE server_id IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_player_notes_server ON player_notes(server_id, player_name, created_at DESC);
+      `);
+    },
+  },
+  // Future schema changes: add { version: 5, name: '…', up: (conn) => conn.exec('ALTER TABLE …') }
 ];
 
 /**

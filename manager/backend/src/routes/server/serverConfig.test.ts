@@ -59,6 +59,10 @@ vi.mock('../../services/servers.js', () => ({
 vi.mock('../../services/serverInstall.js', () => ({
   resolveInstallPaths: async () => ({ serverPath: serverDir, backupsPath: root }),
 }));
+// One server whose files the panel sees (the guard has its own tests).
+vi.mock('../../middleware/serverScope.js', () => ({
+  requireServerFiles: (_req: Request, _res: Response, next: NextFunction) => next(),
+}));
 const runCommandViaPlugin = vi.fn<(command: string) => Promise<PluginCommandAttempt>>();
 vi.mock('../../services/pluginCommands.js', () => ({
   runCommandViaPlugin: (command: string) => runCommandViaPlugin(command),

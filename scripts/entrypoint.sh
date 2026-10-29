@@ -104,11 +104,23 @@ rmdir /opt/hytale/server/updater 2>/dev/null || true
 # Directories the server writes into. Created here, before the ownership pass
 # below, so they never stay root-owned.
 mkdir -p /opt/hytale/data/worlds /opt/hytale/plugins /opt/hytale/mods /opt/hytale/auth
+# The links in the server folder point to their sibling folder by a relative
+# path (../data, not /opt/hytale/data): that names the same folder here, on
+# the host and in the panel's container, which sees an additional server's
+# folders under another path. A link an older image made with the absolute
+# target is replaced; rm + ln because `ln -sfn` cannot replace a link to a
+# folder on every shared filesystem (Docker Desktop).
+relink_absolute() {
+    if [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ]; then
+        rm -f "$1" && ln -s "$3" "$1"
+    fi
+}
 # The prefabs volume is bind-mounted at /opt/hytale/prefabs, but the server
 # looks for them under server/prefabs. Symlink it so the mount is actually used
 # (no-op when the volume isn't mounted).
 if [ -d /opt/hytale/prefabs ]; then
-    ln -snf /opt/hytale/prefabs /opt/hytale/server/prefabs
+    relink_absolute /opt/hytale/server/prefabs /opt/hytale/prefabs ../prefabs
+    ln -snf ../prefabs /opt/hytale/server/prefabs
 fi
 
 # Give the data volumes to the hytale user, touching only entries that are not
@@ -740,23 +752,29 @@ ln -sfn /opt/hytale/start-server.sh /opt/hytale/start.sh
 # ============================================================
 echo "[INFO] Setting up data directories..."
 
+# Relative links, see relink_absolute above.
+relink_absolute /opt/hytale/server/universe /opt/hytale/data ../data
+relink_absolute /opt/hytale/server/.auth /opt/hytale/auth ../auth
+relink_absolute /opt/hytale/server/plugins /opt/hytale/plugins ../plugins
+relink_absolute /opt/hytale/server/mods /opt/hytale/mods ../mods
+
 mkdir -p /opt/hytale/data/worlds
 if [ ! -L "/opt/hytale/server/universe" ]; then
     rm -rf /opt/hytale/server/universe 2>/dev/null || true
-    ln -sfn /opt/hytale/data /opt/hytale/server/universe
+    ln -sfn ../data /opt/hytale/server/universe
 fi
 
 mkdir -p /opt/hytale/plugins
-ln -sfn /opt/hytale/plugins /opt/hytale/server/plugins 2>/dev/null || true
+ln -sfn ../plugins /opt/hytale/server/plugins 2>/dev/null || true
 
 mkdir -p /opt/hytale/mods
-ln -sfn /opt/hytale/mods /opt/hytale/server/mods 2>/dev/null || true
+ln -sfn ../mods /opt/hytale/server/mods 2>/dev/null || true
 
 # Auth credentials - symlink to persistent volume
 mkdir -p /opt/hytale/auth
 if [ ! -L "/opt/hytale/server/.auth" ]; then
     rm -rf /opt/hytale/server/.auth 2>/dev/null || true
-    ln -sfn /opt/hytale/auth /opt/hytale/server/.auth
+    ln -sfn ../auth /opt/hytale/server/.auth
 fi
 
 # ============================================================

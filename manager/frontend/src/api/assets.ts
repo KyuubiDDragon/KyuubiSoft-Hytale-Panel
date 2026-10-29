@@ -1,4 +1,5 @@
 import api from './client'
+import { scopedApiUrl } from './scope'
 
 export interface ItemInfo {
   id: string
@@ -33,6 +34,14 @@ export interface AssetStatus {
   totalSize: number
   extracting: boolean
   extractProgress: ExtractionProgress | null
+  /** The cache is shared by all servers; this is the server it was extracted from. */
+  cacheSource?: AssetCacheSource | null
+  cacheFromThisServer?: boolean
+}
+
+export interface AssetCacheSource {
+  serverId: string
+  serverName: string | null
 }
 
 export interface AssetFileInfo {
@@ -77,7 +86,13 @@ export const assetsApi = {
     return response.data
   },
 
-  async extract(): Promise<{ success: boolean; message?: string; error?: string }> {
+  async extract(): Promise<{
+    success: boolean
+    message?: string
+    error?: string
+    /** Set when this extraction replaced the cache of another server. */
+    replacesCacheFrom?: AssetCacheSource
+  }> {
     const response = await api.post('/assets/extract', {})
     return response.data
   },
@@ -130,15 +145,15 @@ export const assetsApi = {
   },
 
   getDownloadUrl(path: string): string {
-    return `/api/assets/download/${path}`
+    return scopedApiUrl(`/assets/download/${path}`)
   },
 
   getItemIconUrl(itemId: string): string {
-    return `/api/assets/item-icon/${encodeURIComponent(itemId)}`
+    return scopedApiUrl(`/assets/item-icon/${encodeURIComponent(itemId)}`)
   },
 
   getPlayerAvatarUrl(): string {
-    return '/api/assets/player-avatar'
+    return scopedApiUrl('/assets/player-avatar')
   },
 
   async searchItemIcon(

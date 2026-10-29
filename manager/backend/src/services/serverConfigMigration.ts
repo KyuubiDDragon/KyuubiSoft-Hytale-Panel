@@ -17,9 +17,7 @@ import { updateServerJson } from '../utils/serverFiles.js';
 import { isJsonObject } from '../utils/losslessJson.js';
 import { migrateLegacyServerConfig, type LegacyChange } from '../schemas/hytaleConfig.js';
 import { migrateLegacyWorldConfig } from '../schemas/worldConfig.js';
-import { getWorldsPaths } from './managementHelpers.js';
-import { resolveInstallPaths } from './serverInstall.js';
-import { getDefaultId, resolveServerId } from './servers.js';
+import { getServerContext, worldRoots } from './serverContext.js';
 import { registerBeforeStartHook, runWhileServerStopped } from './serverLifecycle.js';
 import { isDemoMode } from './demoData.js';
 
@@ -51,10 +49,12 @@ async function migrateFile(
   return notes;
 }
 
-async function worldConfigFiles(): Promise<{ file: string; roots: string[]; label: string }[]> {
+async function worldConfigFiles(
+  roots: string[],
+): Promise<{ file: string; roots: string[]; label: string }[]> {
   const files: { file: string; roots: string[]; label: string }[] = [];
   const seen = new Set<string>();
-  for (const root of getWorldsPaths()) {
+  for (const root of roots) {
     let entries: import('fs').Dirent[];
     try {
       entries = await readdir(root, { withFileTypes: true });
@@ -90,13 +90,14 @@ function describe(note: MigrationNote): string {
 }
 
 /**
- * Cleans the server's config.json and, for the default server, every world
- * config. The caller makes sure the server is stopped. A file that cannot be
- * read (broken JSON, a link) is skipped with a warning.
+ * Cleans the server's config.json and every world config of that server. The
+ * caller makes sure the server is stopped. A file that cannot be read (broken
+ * JSON, a link) is skipped with a warning.
  */
 export async function migrateLegacyConfigKeys(serverId?: string): Promise<MigrationNote[]> {
   const notes: MigrationNote[] = [];
-  const { serverPath } = await resolveInstallPaths(serverId);
+  const ctx = await getServerContext(serverId);
+  const serverPath = ctx.paths.server;
   const targets = [
     {
       file: path.join(serverPath, 'config.json'),
@@ -105,11 +106,8 @@ export async function migrateLegacyConfigKeys(serverId?: string): Promise<Migrat
       migrate: migrateLegacyServerConfig,
     },
   ];
-  // World folders are only known for the default server.
-  if ((await resolveServerId(serverId)) === (await getDefaultId())) {
-    for (const world of await worldConfigFiles()) {
-      targets.push({ ...world, migrate: migrateLegacyWorldConfig });
-    }
+  for (const world of await worldConfigFiles(worldRoots(ctx))) {
+    targets.push({ ...world, migrate: migrateLegacyWorldConfig });
   }
   for (const target of targets) {
     try {
