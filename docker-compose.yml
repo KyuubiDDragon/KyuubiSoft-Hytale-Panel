@@ -215,6 +215,9 @@ services:
       - ALLOW_INTERNAL_WEBHOOKS=${ALLOW_INTERNAL_WEBHOOKS:-false}
       - WEB_PUSH_EXTRA_HOSTS=${WEB_PUSH_EXTRA_HOSTS:-}
 
+      # Prometheus: static bearer token for GET /api/metrics (empty = off, see .env.example)
+      - METRICS_TOKEN=${METRICS_TOKEN:-}
+
       # Settings
       - TZ=${TZ:-Europe/Berlin}
 
