@@ -182,7 +182,7 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-eval'", 'blob:'], // Vue.js needs unsafe-eval; Monaco loads workers from blob:
         workerSrc: ["'self'", 'blob:'], // Monaco editor uses Web Workers via blob URLs
         childSrc: ["'self'", 'blob:'], // Fallback for older browsers that don't honour workerSrc
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], // Vue/CSS-in-JS + Google Fonts
+        styleSrc: ["'self'", "'unsafe-inline'"], // Vue/CSS-in-JS; fonts are served by the panel itself
         imgSrc: [
           "'self'",
           'data:',
@@ -192,7 +192,7 @@ app.use(
           'https://hyvatar.io',
           'https://media.forgecdn.net',
         ], // Allow data URIs, Modtale CDN, StackMart, Hyvatar and CurseForge CDN
-        fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'], // Google Fonts
+        fontSrc: ["'self'", 'data:'],
         connectSrc: ["'self'", 'ws:', 'wss:'], // Allow WebSocket connections
         frameSrc: ["'self'", 'https:', 'http:'], // Allow embedding web map iframe from external sources
         objectSrc: ["'none'"],

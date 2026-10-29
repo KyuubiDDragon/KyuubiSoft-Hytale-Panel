@@ -23,6 +23,7 @@ vi.mock('../middleware/auth.js', () => ({
 vi.mock('../middleware/permissions.js', () => ({
   requirePermission: () => (_req: Request, _res: Response, next: NextFunction) => next(),
   accessibleServerIds: async () => access.allowed,
+  effectivePermissions: async () => ['*'],
   ALL_SERVERS_REQUIRED: 'ALL_SERVERS_REQUIRED',
   SERVER_NOT_ALLOWED: 'SERVER_NOT_ALLOWED',
 }));

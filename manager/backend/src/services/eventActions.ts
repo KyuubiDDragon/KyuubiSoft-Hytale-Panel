@@ -119,6 +119,8 @@ export function createEventAction(input: {
   eventPattern: string;
   actionType: EventActionType;
   actionPayload: { command?: string; message?: string };
+  /** Defaults to true. */
+  enabled?: boolean;
   createdBy: string;
 }): EventAction {
   const id =
@@ -128,7 +130,7 @@ export function createEventAction(input: {
     .prepare(
       `
     INSERT INTO event_actions (id, name, server_id, event_pattern, action_type, action_payload, enabled, created_by, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
     )
     .run(
@@ -138,6 +140,7 @@ export function createEventAction(input: {
       input.eventPattern,
       input.actionType,
       JSON.stringify(input.actionPayload ?? {}),
+      input.enabled === false ? 0 : 1,
       input.createdBy,
       now,
     );

@@ -155,7 +155,7 @@ router.post(
       eventPattern: input.eventPattern,
       actionType: input.actionType,
       actionPayload: input.actionPayload ?? {},
-      enabled: true,
+      enabled: input.enabled === undefined ? true : input.enabled, // omitted = on
     } as EventActionDraft;
     const problem = await serverAccessProblem(
       req,
@@ -176,6 +176,7 @@ router.post(
       eventPattern: draft.eventPattern,
       actionType: draft.actionType as EventActionType,
       actionPayload: draft.actionPayload,
+      enabled: draft.enabled,
       createdBy: review.createdBy,
     });
     audit(req, 'event_action.created', {

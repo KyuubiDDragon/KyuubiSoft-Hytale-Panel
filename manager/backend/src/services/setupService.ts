@@ -356,7 +356,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 export async function saveStepData(
   stepId: string,
   data: PartialSetupData,
-): Promise<{ success: boolean; nextStep: string; error?: string }> {
+): Promise<{ success: boolean; nextStep: string; error?: string; code?: string }> {
   try {
     const setupConfig = await readSetupConfig();
 
@@ -395,7 +395,12 @@ export async function saveStepData(
           }
         }
         if (!(await mayTakeAdminName(data.username as string))) {
-          return { success: false, nextStep: stepId, error: ADMIN_NAME_TAKEN };
+          return {
+            success: false,
+            nextStep: stepId,
+            error: ADMIN_NAME_TAKEN,
+            code: 'ADMIN_NAME_TAKEN',
+          };
         }
 
         // Store admin info (we'll create the user during finalization)
@@ -637,6 +642,8 @@ function convertAutomationToSchedulerConfig(automation: SetupConfig['automation'
 export async function finalizeSetup(): Promise<{
   success: boolean;
   error?: string;
+  /** Machine-readable reason the panel translates (see the frontend's apiErrors). */
+  code?: string;
   jwtSecret?: string;
   /** How the wizard's server settings reached config.json. */
   serverConfig?: WizardConfigResult;
@@ -672,7 +679,7 @@ export async function finalizeSetup(): Promise<{
     try {
       if (!(await mayTakeAdminName(adminUsername))) {
         logger.error(`[Setup] Not taking over the existing account '${adminUsername}'`);
-        return { success: false, error: ADMIN_NAME_TAKEN };
+        return { success: false, error: ADMIN_NAME_TAKEN, code: 'ADMIN_NAME_TAKEN' };
       }
     } catch (error) {
       logger.error('[Setup] Failed to read users.json:', error);
