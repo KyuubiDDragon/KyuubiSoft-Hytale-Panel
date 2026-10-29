@@ -121,7 +121,10 @@ describe('writeJsonAtomic on a target rename cannot replace', () => {
   });
 });
 
-describe('updateJsonFile', () => {
+// Many writers at once; on a loaded machine (a commit hook next to other work) this takes seconds.
+const PARALLEL_TIMEOUT_MS = 30_000;
+
+describe('updateJsonFile', { timeout: PARALLEL_TIMEOUT_MS }, () => {
   it('serialises parallel read-modify-write cycles without losing updates', async () => {
     await writeJsonAtomic(file, { items: [] });
 

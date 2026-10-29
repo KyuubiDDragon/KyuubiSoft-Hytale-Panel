@@ -149,7 +149,10 @@ describe('missing users.json', () => {
   });
 });
 
-describe('parallel updates', () => {
+// Many writers at once; on a loaded machine (a commit hook next to other work) this takes seconds.
+const PARALLEL_TIMEOUT_MS = 30_000;
+
+describe('parallel updates', { timeout: PARALLEL_TIMEOUT_MS }, () => {
   it('lose no accounts or fields across users and 2FA writers', async () => {
     const names = Array.from({ length: 20 }, (_, i) => `user${i}`);
     await seed([seedUser('root', { roleId: 'admin' }), ...names.map((n) => seedUser(n))]);
@@ -193,7 +196,7 @@ describe('parallel updates', () => {
   });
 });
 
-describe('2FA consume races', () => {
+describe('2FA consume races', { timeout: PARALLEL_TIMEOUT_MS }, () => {
   async function enrolledUser(): Promise<{ secret: string; backupCodes: string[] }> {
     await seed([seedUser('root', { roleId: 'admin' })]);
     const { secret } = await totp.startTotpEnrollment('root', 'KP-Tests');

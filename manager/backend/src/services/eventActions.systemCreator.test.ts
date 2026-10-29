@@ -23,7 +23,7 @@ vi.mock('./docker.js', () => ({ execCommand }));
 const ea = await import('./eventActions.js');
 const { publish } = await import('./eventBus.js');
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 30));
+const flush = () => ea.eventActionsIdle();
 const welcomeRule = (serverId: string | null) =>
   ea.createEventAction({
     name: 'Welcome message (Scheduler)',

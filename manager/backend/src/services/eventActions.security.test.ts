@@ -50,7 +50,7 @@ const operator = { username: 'operator' };
 const admin = { username: 'admin' };
 
 async function flush(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await ea.eventActionsIdle();
 }
 
 beforeAll(() => {
