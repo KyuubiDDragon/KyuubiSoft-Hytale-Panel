@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.kyuubisoft'
-version = '2.0.0'
+version = '2.1.0'
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -36,4 +36,26 @@ jar {
             'Implementation-Version': version
         )
     }
+}
+
+// Compile-only jar for mods that integrate with the panel (PanelRegistry & co.):
+// just the public API package, no runtime. Mods add it as compileOnly and
+// declare KyuubiSoftAPI as an optional dependency; at runtime the classes come
+// from the installed plugin. See README, "Integrating your mod".
+tasks.register('panelApiJar', Jar) {
+    archiveBaseName.set('KyuubiSoftAPI-panel-api')
+    archiveVersion.set(version)
+    from(sourceSets.main.output) {
+        include 'com/kyuubisoft/api/panel/*.class'
+    }
+    manifest {
+        attributes(
+            'Implementation-Title': 'KyuubiSoft API - panel integration (compile only)',
+            'Implementation-Version': version
+        )
+    }
+}
+
+tasks.named('assemble') {
+    dependsOn 'panelApiJar'
 }

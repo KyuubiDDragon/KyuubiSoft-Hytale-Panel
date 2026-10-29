@@ -2,6 +2,7 @@ package com.kyuubisoft.api.handlers;
 
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.kyuubisoft.api.metrics.WorldPerf;
 
 import java.util.*;
 
@@ -56,6 +57,16 @@ public class WorldsHandler {
         return createWorldStats(world);
     }
 
+    /**
+     * GET /api/worlds/{name}/perf
+     * Tick metrics (TPS, tick time over 10 s / 1 min / 5 min) of one world;
+     * null when the world does not exist or is not running.
+     */
+    public WorldPerf.Snapshot getWorldPerf(String worldName) {
+        World world = Universe.get().getWorld(worldName);
+        return world == null ? null : WorldPerf.snapshot(world);
+    }
+
     private WorldData createWorldData(World world) {
         WorldData data = new WorldData();
         data.name = world.getName();
@@ -97,11 +108,14 @@ public class WorldsHandler {
             stats.currentTick = -1;
         }
 
-        // Loaded chunk / entity counts are not exposed as cheap aggregate getters
-        // by the current Hytale API; left as -1 ("unknown") rather than guessed.
-        stats.loadedChunks = -1;
-        stats.entityCount = -1;
+        // Entity and loaded-chunk counts straight from the world's stores
+        // (plain counters, readable from any thread). -1 = not available.
+        WorldPerf.Snapshot perf = WorldPerf.snapshot(world);
+        stats.loadedChunks = perf != null ? perf.loadedChunks : -1;
+        stats.entityCount = perf != null ? perf.entities : -1;
+        // Block entities are not counted separately by the server.
         stats.tileEntityCount = -1;
+        stats.perf = perf;
 
         return stats;
     }
@@ -129,5 +143,7 @@ public class WorldsHandler {
         public int loadedChunks;
         public int entityCount;
         public int tileEntityCount;
+        /** Tick metrics of this world; omitted while it is not running. */
+        public WorldPerf.Snapshot perf;
     }
 }

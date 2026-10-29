@@ -13,6 +13,7 @@ import {
   getDemoPluginUpdateStatus,
 } from '../../services/demoData.js';
 import { parsePrometheusMetrics, parseTpsMetrics } from './shared.js';
+import { tpsMetricsFromPlugin } from '../../services/pluginTps.js';
 import { publish } from '../../services/eventBus.js';
 import { audit } from '../../services/audit.js';
 
@@ -436,6 +437,20 @@ router.get(
   requirePermission('performance.view'),
   async (req: Request, res: Response) => {
     try {
+      // Plugin 2.1+: real per-world tick metrics. Older plugins only have the
+      // Prometheus gauges (one value, capped at 20).
+      const perWorld = await kyuubiApiService.getTpsFromPlugin();
+      if (perWorld.success && perWorld.data && Array.isArray(perWorld.data.worlds)) {
+        const metrics = tpsMetricsFromPlugin(perWorld.data);
+        if (!metrics) {
+          // Plugin 2.1 is up but no world runs yet: no data, not "full speed".
+          res.status(503).json({ success: false, error: 'No world is running yet' });
+          return;
+        }
+        res.json({ success: true, data: metrics });
+        return;
+      }
+
       const result = await kyuubiApiService.getPrometheusMetrics();
       if (!result.success) {
         res.status(503).json({ success: false, error: result.error });

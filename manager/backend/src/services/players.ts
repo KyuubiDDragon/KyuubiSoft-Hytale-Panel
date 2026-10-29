@@ -830,7 +830,7 @@ function getUniversePlayersPath(): string {
 /**
  * Convert item ID to display name (e.g., "Weapon_Sword_Adamantite" -> "Adamantite Sword")
  */
-function formatItemName(itemId: string): string {
+export function formatItemName(itemId: string): string {
   // Remove common prefixes and format
   const parts = itemId.split('_');
   // Reverse certain patterns for readability

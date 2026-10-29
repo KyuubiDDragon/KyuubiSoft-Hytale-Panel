@@ -143,7 +143,9 @@ describe('event actions: firing', () => {
 
     publish('auth.login_failed', { username: 'Bob', reason: 'invalid_credentials' });
     await flush();
-    expect(execCommand).toHaveBeenCalledWith('/say Failed login: Bob', undefined);
+    expect(execCommand).toHaveBeenCalledWith('/say Failed login: Bob', undefined, {
+      actor: 'event/admin',
+    });
   });
 
   it('runs an admin rule for its admin creator, but not a stored /stop from an operator', async () => {
@@ -178,6 +180,7 @@ describe('event actions: firing', () => {
     expect(execCommand).toHaveBeenCalledWith(
       '/broadcast Backup failed: disk full /stop',
       'default',
+      { actor: expect.stringMatching(/^event\//) },
     );
   });
 
@@ -191,7 +194,45 @@ describe('event actions: firing', () => {
     });
     publish('player.left', { player: 'Steve' }, 'default');
     await flush();
-    expect(execCommand).toHaveBeenCalledWith('/say bye Steve', 'default');
+    expect(execCommand).toHaveBeenCalledWith('/say bye Steve', 'default', { actor: 'event/admin' });
+  });
+});
+
+describe('event actions: events from outside and throttling', () => {
+  it('wildcard rules do not fire for refused joins; only the exact event name does', async () => {
+    for (const eventPattern of ['*', 'player.*']) {
+      ea.createEventAction({
+        ...draft({ eventPattern, actionPayload: { command: `/say wildcard ${eventPattern}` } }),
+        createdBy: 'admin',
+      });
+    }
+    ea.createEventAction({
+      ...draft({
+        eventPattern: 'player.join_denied',
+        actionPayload: { command: '/say denied {player}' },
+      }),
+      createdBy: 'admin',
+    });
+
+    publish('player.join_denied', { player: 'Stranger', kind: 'whitelist' }, 'default');
+    await flush();
+    expect(execCommand.mock.calls.map((c) => c[0])).toEqual(['/say denied Stranger']);
+  });
+
+  it(`runs one rule at most ${ea.RULE_RUNS_PER_MINUTE} times per minute for one event`, async () => {
+    ea.createEventAction({ ...draft(), createdBy: 'admin' });
+    // One after another: vitest can hand parallel lazy imports the real
+    // docker module instead of the mock. The budget is per minute either way.
+    for (let i = 0; i < ea.RULE_RUNS_PER_MINUTE + 5; i++) {
+      publish('player.joined', { player: `Steve${i}`, uuid: `u-${i}` }, 'default');
+      await flush();
+    }
+    expect(execCommand).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE);
+    // Another event name has its own budget.
+    ea.createEventAction({ ...draft({ eventPattern: 'player.left' }), createdBy: 'admin' });
+    publish('player.left', { player: 'Steve' }, 'default');
+    await flush();
+    expect(execCommand).toHaveBeenCalledTimes(ea.RULE_RUNS_PER_MINUTE + 1);
   });
 });
 
@@ -232,7 +273,7 @@ describe('event actions: blocked rules are reported and can be approved', () => 
 
     publish('player.joined', { player: 'Steve', uuid: 'u-1' }, 'default');
     await flush();
-    expect(execCommand).toHaveBeenCalledWith('/kick Steve', 'default');
+    expect(execCommand).toHaveBeenCalledWith('/kick Steve', 'default', { actor: 'event/admin' });
   });
 
   it('approve rejects non-command rules and unknown ids', async () => {

@@ -77,7 +77,8 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
   // Use the dedicated, schema-validated config editor. Also covers .bak /
   // .tmp-* / .corrupt-* copies: the plugin's config.json holds its API token.
   /(^|\/)config\.json(\.|$)/i,
-  /(^|\/)config\/kyuubisoft-api(\/|$)/i, // KyuubiSoft API plugin config dir (bearer token)
+  /(^|\/)config\/kyuubisoft-api(\/|$)/i, // KyuubiSoft API plugin config dir up to 2.0 (bearer token)
+  /(^|\/)KyuubiDDragon_KyuubiSoftAPI(\/|$)/i, // its data dir in mods/ since 2.1 (bearer token)
 ];
 
 // Extension-based denies target secret/credential FILES only. They must NEVER

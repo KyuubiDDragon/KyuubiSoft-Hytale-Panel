@@ -94,6 +94,11 @@ export const PERMISSIONS = {
   'mods.delete': 'Delete mods',
   'mods.config': 'Edit mod configuration',
   'mods.toggle': 'Enable/disable mods',
+  // Mod status page: snapshots and actions KS mods register with the KyuubiSoft API plugin.
+  // Actions run inside the game server with full rights, like console commands;
+  // those a mod marks dangerous also need console.execute.admin.
+  'mods.panel.view': 'View mod status pages',
+  'mods.panel.action': 'Run mod admin actions (high privilege: runs with full server rights)',
 
   // Plugins
   'plugins.view': 'View plugins',
@@ -168,6 +173,8 @@ export interface RolesData {
   roles: Role[];
   version: number;
   lastModified: string;
+  /** Ids of the permission migrations already applied to this file (services/roles.ts). */
+  appliedMigrations?: string[];
 }
 
 // Helper function to get all permission keys
@@ -273,6 +280,7 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
       'mods.install',
       'mods.config',
       'mods.toggle',
+      'mods.panel.view',
       'plugins.view',
       'plugins.install',
       'plugins.config',
@@ -301,6 +309,7 @@ export const DEFAULT_ROLES: Omit<Role, 'id' | 'createdAt' | 'updatedAt'>[] = [
       'scheduler.view',
       'worlds.view',
       'mods.view',
+      'mods.panel.view',
       'plugins.view',
       'config.view',
       'assets.view',

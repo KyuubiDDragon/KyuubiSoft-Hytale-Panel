@@ -127,7 +127,7 @@ export async function startDiscordBot(): Promise<void> {
       // One console line: every control character (not just \r\n) becomes a space.
       const safe = stripControlChars(msg.content).slice(0, 200);
       const author = stripControlChars(msg.author.username).slice(0, 32);
-      await execCommand(`/say [Discord] ${author}: ${safe}`);
+      await execCommand(`/say [Discord] ${author}: ${safe}`, undefined, { actor: 'discord' });
     } catch (err) {
       logger.warn(`[Discord] relay-to-game failed: ${err instanceof Error ? err.message : err}`);
     }

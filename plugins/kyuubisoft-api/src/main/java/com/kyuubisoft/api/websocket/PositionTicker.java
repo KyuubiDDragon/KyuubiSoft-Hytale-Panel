@@ -8,10 +8,14 @@ import com.hypixel.hytale.protocol.packets.connection.PongType;
 import com.hypixel.hytale.metrics.metric.HistoricMetric;
 import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.math.vector.Rotation3f;
+import com.kyuubisoft.api.util.WorldThread;
 import org.joml.Vector3d;
 
-import java.util.Collection;
-import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -24,16 +28,17 @@ import java.util.logging.Logger;
  * The panel's LiveMap.vue and Replay recorder both subscribe to
  * "player_position" WebSocket frames.
  *
- * <h3>Hytale 2026-05 API access</h3>
+ * <h3>How positions are read</h3>
  * <ul>
- *   <li>Position comes from {@link Transform#getPosition()} which now returns an
- *       {@link org.joml.Vector3d}; rotation from {@link Transform#getRotation()}
- *       which returns a {@link Rotation3f} exposing {@code yaw()}/{@code pitch()}.</li>
- *   <li>World name via {@link PlayerRef#getWorldUuid()} + {@link Universe#getWorld(UUID)}.</li>
+ *   <li>Nothing is read while no WebSocket client is connected.</li>
+ *   <li>Each world's players are copied on that world's own thread
+ *       ({@link WorldThread}): the world thread writes position and rotation
+ *       in place, so a copy taken elsewhere could mix x/y/z of two ticks.
+ *       A world that is still busy with the previous copy is skipped.</li>
+ *   <li>Yaw and pitch are the head rotation, i.e. where the player looks
+ *       (the body rotation trails behind).</li>
  *   <li>Latency is read from {@link PacketHandler#getPingInfo(PongType)} →
- *       {@link HistoricMetric}. (The previous reflection probe for
- *       {@code getPing()}/{@code getLatency()} never matched and always returned
- *       null on this API.)</li>
+ *       {@link HistoricMetric}.</li>
  * </ul>
  *
  * <h3>Test hook</h3>
@@ -49,6 +54,8 @@ public class PositionTicker {
     private final EventBroadcaster broadcaster;
     private final long intervalMs;
     private final boolean debug;
+    // World name -> snapshot still queued on that world's thread.
+    private final Map<String, CompletableFuture<?>> pending = new ConcurrentHashMap<>();
 
     private ScheduledExecutorService executor;
     private ScheduledFuture<?> task;
@@ -77,89 +84,75 @@ public class PositionTicker {
     public void shutdown() {
         if (task != null) task.cancel(false);
         if (executor != null) executor.shutdownNow();
+        pending.clear();
     }
 
     void tick() {
         try {
+            if (!broadcaster.hasClients()) return;
             Universe universe = Universe.get();
             if (universe == null) return;
-            Collection<PlayerRef> players = universe.getPlayers();
-            if (players == null || players.isEmpty()) return;
 
-            for (PlayerRef player : players) {
-                broadcastFor(player, universe);
+            for (World world : universe.getWorlds().values()) {
+                if (!world.isAlive() || world.getPlayerCount() == 0) continue;
+                String name = world.getName();
+                CompletableFuture<?> previous = pending.get(name);
+                if (previous != null && !previous.isDone()) continue; // world is lagging
+
+                // Only the copy runs on the world thread; ping lookup, JSON
+                // and sending happen back on the ticker thread.
+                CompletableFuture<?> snapshot = WorldThread.supply(world, () -> copyPositions(world))
+                        .thenAcceptAsync(this::broadcastAll, executor)
+                        .whenComplete((ignored, error) -> {
+                            if (error != null && debug) {
+                                System.out.println("[KYUUBI_DEBUG_POSITIONS] world " + name + " skipped: " + error);
+                            }
+                        });
+                pending.put(name, snapshot);
             }
+            // Forget worlds that were removed.
+            pending.keySet().removeIf(name -> universe.getWorld(name) == null);
         } catch (Throwable t) {
             // Defensive: never let a ticker exception kill the scheduler thread.
             LOGGER.warning("PositionTicker tick failed: " + t.getMessage());
         }
     }
 
-    private void broadcastFor(PlayerRef player, Universe universe) {
-        if (player == null) return;
-
-        String name;
-        String uuid;
-        try {
-            name = player.getUsername();
-            uuid = player.getUuid().toString();
-        } catch (Throwable t) {
-            return; // can't identify, skip
-        }
-
-        // World resolution — defensive; world may be null during transitions.
-        String worldName = null;
-        try {
-            UUID worldUuid = player.getWorldUuid();
-            if (worldUuid != null) {
-                World w = universe.getWorld(worldUuid);
-                if (w != null) worldName = w.getName();
-            }
-        } catch (Throwable ignored) { }
-
-        // Position + rotation from the transform.
-        Double x = null, y = null, z = null, yaw = null, pitch = null;
-        try {
+    /** Runs on the world thread: copy every player's position and head rotation. */
+    private static List<Sample> copyPositions(World world) {
+        List<Sample> samples = new ArrayList<>();
+        String worldName = world.getName();
+        for (PlayerRef player : world.getPlayerRefs()) {
+            if (player == null) continue;
             Transform transform = player.getTransform();
-            if (transform != null) {
-                Vector3d pos = transform.getPosition();
-                if (pos != null) {
-                    x = pos.x();
-                    y = pos.y();
-                    z = pos.z();
-                }
-                Rotation3f rot = transform.getRotation();
-                if (rot != null) {
-                    yaw = (double) rot.yaw();
-                    pitch = (double) rot.pitch();
-                }
-            }
-        } catch (Throwable ignored) { }
+            Vector3d pos = transform != null ? transform.getPosition() : null;
+            if (pos == null) continue;
+            Rotation3f head = player.getHeadRotation();
+            samples.add(new Sample(player, player.getUsername(), player.getUuid().toString(), worldName,
+                    pos.x(), pos.y(), pos.z(),
+                    head != null ? (double) head.yaw() : null,
+                    head != null ? (double) head.pitch() : null));
+        }
+        return samples;
+    }
 
-        // Skip the broadcast entirely when we have no spatial data.
-        if (x == null || y == null || z == null) {
+    private void broadcastAll(List<Sample> samples) {
+        for (Sample s : samples) {
+            Integer latencyMs = extractPing(s.player);
             if (debug) {
-                System.out.println("[KYUUBI_DEBUG_POSITIONS] skip " + name + ": no transform");
+                System.out.println("[KYUUBI_DEBUG_POSITIONS] " + s.name + " uuid=" + s.uuid
+                    + " world=" + s.world + " x=" + s.x + " y=" + s.y + " z=" + s.z
+                    + " yaw=" + s.yaw + " pitch=" + s.pitch + " ping=" + latencyMs);
             }
-            return;
+            broadcaster.broadcastPlayerPosition(s.name, s.uuid, s.world, s.x, s.y, s.z, s.yaw, s.pitch, latencyMs);
         }
-
-        Integer latencyMs = extractPing(player);
-
-        if (debug) {
-            System.out.println("[KYUUBI_DEBUG_POSITIONS] " + name + " uuid=" + uuid
-                + " world=" + worldName + " x=" + x + " y=" + y + " z=" + z
-                + " yaw=" + yaw + " pitch=" + pitch + " ping=" + latencyMs);
-        }
-
-        broadcaster.broadcastPlayerPosition(name, uuid, worldName, x, y, z, yaw, pitch, latencyMs);
     }
 
     /**
      * Read the player's latency from the connection's ping metrics.
      *
-     * The {@link HistoricMetric} stores nanosecond samples; we convert to
-     * milliseconds and clamp to a plausible range. Returns null when no ping
+     * The {@link HistoricMetric} stores samples in {@code PingInfo.TIME_UNIT};
+     * we convert to milliseconds and clamp to a plausible range. Returns null when no ping
      * sample is available yet (e.g. the player just connected).
      */
     private Integer extractPing(PlayerRef player) {
@@ -205,5 +198,10 @@ public class PositionTicker {
         long ms = PacketHandler.PingInfo.TIME_UNIT.toMillis(raw);
         if (ms < 0 || ms > 60_000L) return null;
         return (int) ms;
+    }
+
+    /** One player's position, copied on the world thread. */
+    private record Sample(PlayerRef player, String name, String uuid, String world,
+                          double x, double y, double z, Double yaw, Double pitch) {
     }
 }

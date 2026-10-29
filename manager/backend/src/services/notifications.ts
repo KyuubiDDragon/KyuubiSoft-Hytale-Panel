@@ -193,6 +193,8 @@ function describeEvent(event: PanelEvent): string {
       return 'Server update available';
     case 'player.banned':
       return `Player banned: ${event.payload.player ?? ''}`;
+    case 'mod.event':
+      return `${String(event.payload.modId ?? 'mod')}: ${String(event.payload.event ?? '')}`;
     default:
       return event.name;
   }

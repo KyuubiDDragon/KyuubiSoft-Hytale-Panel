@@ -76,7 +76,9 @@ export type PanelEventName =
   | 'player_chat'
   | 'player_death'
   | 'player_position'
-  | 'server_tick';
+  | 'server_tick'
+  // KS mod events (services/modEvents.ts); payload { modId, event, payload, serverId }
+  | 'mod_event';
 
 export interface PanelEvent {
   name: PanelEventName;

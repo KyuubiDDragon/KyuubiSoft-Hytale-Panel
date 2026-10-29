@@ -91,6 +91,7 @@
     "permissions": "Permissions",
     "worlds": "Worlds",
     "mods": "Mods & Plugins",
+    "modStatus": "Mod Status",
     "performance": "Performance",
     "configuration": "Configuration",
     "users": "Users",
@@ -487,7 +488,18 @@
     "showWarnings": "Warnings",
     "showInfo": "Info",
     "bypassWarning": "Warning: Console access allows executing all server commands, bypassing UI permission restrictions.",
-    "filtered": "(filtered)"
+    "filtered": "(filtered)",
+    "syntax": "Syntax",
+    "suggestionBlocked": "not allowed in the panel",
+    "suggestionAdmin": "admin",
+    "reply": {
+      "pending": "Waiting for the server…",
+      "running": "Still running on the server; later output appears in the log only.",
+      "noOutput": "Done, no output.",
+      "sentOnly": "Sent to the server console. Its answer appears in the log above; with the KyuubiSoft API plugin it is shown here.",
+      "noAnswer": "No answer yet. The command may still have run; check the log.",
+      "connectionLost": "Connection lost before the answer arrived. The command may still have run; check the log."
+    }
   },
   "backups": {
     "title": "Backup Management",
@@ -622,7 +634,16 @@
       "noDeaths": "No death positions recorded",
       "deathCount": "{count} death positions",
       "deathDay": "Day {day}",
-      "latestDeath": "Latest"
+      "latestDeath": "Latest",
+      "live": "Live on the server",
+      "online": "Online",
+      "ping": "Ping",
+      "groups": "Groups",
+      "joined": "Joined",
+      "language": "Language",
+      "protocol": "Protocol",
+      "sourceLive": "Live from the running server",
+      "sourceFile": "Last saved state"
     },
     "itemTypes": {
       "sword": "Sword",
@@ -1053,6 +1074,22 @@
     "min": "Minimum",
     "msptAvg": "MSPT Avg",
     "prometheusTpsMetrics": "Prometheus TPS Metrics (60s Window)",
+    "ofTarget": "of {target} TPS",
+    "tpsInWorld": "slowest world: {world}",
+    "tickTime": "ms tick time",
+    "perWorld": {
+      "title": "TPS per world",
+      "hint": "Every world ticks on its own thread. TPS is measured against the world's target rate; tick time is how long a tick took to compute (budget {budget} ms per tick).",
+      "world": "World",
+      "tps10s": "TPS (10 s)",
+      "tps1m": "TPS (1 min)",
+      "min1m": "Lowest (1 min)",
+      "tickAvg": "Tick avg (1 min)",
+      "tickMax": "Tick max (1 min)",
+      "players": "Players",
+      "entities": "Entities",
+      "chunks": "Chunks"
+    },
     "jvmDetails": "JVM Details",
     "heapMemoryLabel": "Heap Memory",
     "nonHeapMemory": "Non-Heap Memory",
@@ -1648,6 +1685,37 @@
     "noRolesSubtitle": "Create a custom role to grant specific permissions.",
     "type": "Type"
   },
+  "modPanel": {
+    "title": "Mod Status",
+    "subtitle": "Status pages and admin actions that mods register with the KyuubiSoft API plugin",
+    "autoRefresh": "Auto-refresh",
+    "providers": "Mods",
+    "actions": "Admin actions",
+    "dangerousNeedsAdmin": "The mod marks this action as dangerous: it needs the console admin permission",
+    "run": "Run",
+    "confirmDefault": "Run this action now?",
+    "updatedAt": "Updated {time}",
+    "noRows": "No entries",
+    "rowsTruncated": "Showing {shown} of {total} rows",
+    "snapshotTruncated": "The mod reported more data than the panel shows; some sections were cut.",
+    "emptyTitle": "No mod status pages yet",
+    "emptyDescription": "No installed mod has registered a status page. Mods with panel support (for example KyuubiSoft Pets 1.12 or newer) appear here automatically.",
+    "unavailableTitle": "Mod status not available",
+    "unavailable": {
+      "offline": "The KyuubiSoft API plugin is not reachable. Is the server running and the plugin installed?",
+      "auth": "The plugin rejected the panel token. Restart the server from the panel so the plugin loads the current token.",
+      "unsupported": "The installed KyuubiSoft API plugin is too old for mod status pages. Update it from the dashboard.",
+      "unavailable": "The plugin's mod registry is not running yet. Try again in a moment.",
+      "error": "The plugin answered with an error."
+    },
+    "status": {
+      "ok": "Done",
+      "failed": "The action reported a failure",
+      "error": "The mod reported an error",
+      "timeout": "The mod did not answer in time",
+      "busy": "The mod is still busy with the previous request"
+    }
+  },
   "permissionCategories": {
     "dashboard": "Dashboard",
     "server": "Server",
@@ -1730,7 +1798,11 @@
       "install": "Install mods",
       "delete": "Delete mods",
       "config": "Edit mod configuration",
-      "toggle": "Enable/disable mods"
+      "toggle": "Enable/disable mods",
+      "panel": {
+        "view": "View mod status pages",
+        "action": "Run mod admin actions (high privilege: they run with full server rights; dangerous ones also need console admin)"
+      }
     },
     "plugins": {
       "view": "View plugins",

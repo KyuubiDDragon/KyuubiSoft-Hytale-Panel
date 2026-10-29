@@ -353,7 +353,7 @@ async function sendAnnouncement(message: string, serverId: string): Promise<void
   if (!text) return;
 
   try {
-    await dockerService.execCommand(`/broadcast ${text}`, serverId);
+    await dockerService.execCommand(`/broadcast ${text}`, serverId, { actor: 'scheduler' });
     console.log(`[Scheduler:${serverId}] Sent announcement: ${text}`);
   } catch (error) {
     console.error(`[Scheduler:${serverId}] Failed to send announcement:`, error);
@@ -561,11 +561,16 @@ async function runScheduledCommand(cmd: ScheduledCommand, serverId: string): Pro
 
 async function executeScheduledCommand(cmd: ScheduledCommand, serverId: string): Promise<void> {
   try {
-    const result = await dockerService.execCommand(cmd.command, serverId);
+    const result = await dockerService.execCommand(cmd.command, serverId, {
+      actor: cmd.createdBy ? `scheduler/${cmd.createdBy}` : 'scheduler',
+    });
     const timers = timersByServer[serverId];
     if (timers && result.success) timers.commandLastRun.set(cmd.id, Date.now());
+    // The server's answer is only known when the plugin ran the command.
+    const outcome = result.status ?? (result.success ? 'ok' : 'failed');
+    const detail = result.success ? '' : `: ${result.error ?? 'unknown error'}`;
     console.log(
-      `[Scheduler:${serverId}] Ran scheduled command "${cmd.name}": ${cmd.command} (${result.success ? 'ok' : 'failed'})`,
+      `[Scheduler:${serverId}] Ran scheduled command "${cmd.name}": ${cmd.command} (${outcome}${detail})`,
     );
   } catch (err) {
     console.error(`[Scheduler:${serverId}] Scheduled command "${cmd.name}" failed:`, err);
@@ -756,7 +761,7 @@ export async function sendWelcomeMessage(playerName: string, serverId?: string):
   const message = stripControlChars(
     cfg.announcements.welcome.replace('{player}', playerName),
   ).trim();
-  await dockerService.execCommand(`/msg ${playerName} ${message}`, id);
+  await dockerService.execCommand(`/msg ${playerName} ${message}`, id, { actor: 'scheduler' });
 }
 
 // Quick commands

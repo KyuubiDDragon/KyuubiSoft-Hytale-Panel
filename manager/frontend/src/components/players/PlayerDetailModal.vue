@@ -2,7 +2,13 @@
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-import { serverApi, type FilePlayerDetails, type FilePlayerInventory, type FileInventoryItem } from '@/api/server'
+import {
+  serverApi,
+  type FilePlayerDetails,
+  type FilePlayerInventory,
+  type FileInventoryItem,
+  type LivePlayerSnapshot,
+} from '@/api/server'
 import { playersApi, type ChatMessage, type DeathPosition } from '@/api/players'
 import { assetsApi } from '@/api/assets'
 import Button from '@/components/ui/Button.vue'
@@ -44,6 +50,8 @@ const loading = ref(false)
 const error = ref('')
 const details = ref<FilePlayerDetails | null>(null)
 const inventory = ref<FilePlayerInventory | null>(null)
+// Live data from the running server; null while offline or without plugin 2.1+.
+const live = ref<LivePlayerSnapshot | null>(null)
 
 // Chat state
 const chatMessages = ref<ChatMessage[]>([])
@@ -75,6 +83,7 @@ watch(() => props.open, async (isOpen) => {
     activeTab.value = 'info'
     details.value = null
     inventory.value = null
+    live.value = null
     chatMessages.value = []
     chatTotal.value = 0
     deathPositions.value = []
@@ -96,10 +105,12 @@ async function fetchAllData() {
   error.value = ''
 
   try {
-    // Fetch file-based data and asset status in parallel
-    const [detailsRes, inventoryRes, assetStatus] = await Promise.all([
+    // Fetch file-based data, live data (online players only) and asset status in parallel
+    const [detailsRes, inventoryRes, liveRes, liveInventoryRes, assetStatus] = await Promise.all([
       serverApi.getFilePlayerDetails(props.playerName).catch(() => null),
       serverApi.getFilePlayerInventory(props.playerName).catch(() => null),
+      serverApi.getPluginPlayerLive(props.playerName).catch(() => null),
+      serverApi.getPluginPlayerLiveInventory(props.playerName).catch(() => null),
       assetsApi.getStatus().catch(() => null)
     ])
 
@@ -109,11 +120,17 @@ async function fetchAllData() {
     if (detailsRes?.success && detailsRes.data) {
       details.value = detailsRes.data
     }
-    if (inventoryRes?.success && inventoryRes.data) {
+    if (liveRes?.success && liveRes.data) {
+      live.value = liveRes.data
+    }
+    // The live inventory is current; the saved file lags behind until the next save.
+    if (liveInventoryRes?.success && liveInventoryRes.data) {
+      inventory.value = liveInventoryRes.data
+    } else if (inventoryRes?.success && inventoryRes.data) {
       inventory.value = inventoryRes.data
     }
 
-    if (!details.value && !inventory.value) {
+    if (!details.value && !inventory.value && !live.value) {
       error.value = t('players.details.noSavedData')
     }
   } catch (err) {
@@ -243,6 +260,19 @@ const healthColor = computed(() => {
 const staminaPercent = computed(() => {
   if (!details.value?.stats) return 0
   return Math.min(100, (details.value.stats.stamina / details.value.stats.maxStamina) * 100)
+})
+
+// Live stats as bars (only the stats the server reports for this player)
+const LIVE_STAT_KEYS = ['health', 'stamina', 'mana', 'oxygen'] as const
+const liveStats = computed(() => {
+  const stats = live.value?.stats
+  if (!stats) return []
+  return LIVE_STAT_KEYS.filter((key) => stats[key] && stats[key].max > 0).map((key) => ({
+    key,
+    value: stats[key].value,
+    max: stats[key].max,
+    percent: Math.min(100, (stats[key].value / stats[key].max) * 100),
+  }))
 })
 
 // Format durability percentage
@@ -476,10 +506,13 @@ const toolsGrid = computed(() => {
               </div>
               <div>
                 <h3 class="text-lg font-semibold text-ink">{{ playerName }}</h3>
-                <p v-if="details?.uuid" class="text-xs text-ink-subtle font-mono truncate max-w-[200px]">
-                  {{ details.uuid }}
+                <p v-if="details?.uuid || live?.uuid" class="text-xs text-ink-subtle font-mono truncate max-w-[200px]">
+                  {{ details?.uuid || live?.uuid }}
                 </p>
-                <!-- Online/Offline indicator could go here -->
+                <p v-if="live" class="flex items-center gap-1.5 text-xs text-green-400 mt-0.5">
+                  <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                  {{ t('players.details.online') }}<template v-if="live.world"> · {{ live.world }}</template>
+                </p>
               </div>
             </div>
             <button
@@ -573,7 +606,71 @@ const toolsGrid = computed(() => {
             </div>
 
             <!-- Info Tab -->
-            <div v-else-if="activeTab === 'info'">
+            <div v-else-if="activeTab === 'info'" class="space-y-4">
+              <!-- Live data from the running server (plugin 2.1+) -->
+              <div v-if="live" class="space-y-3">
+                <h4 class="text-sm font-medium text-ink-muted flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                  {{ t('players.details.live') }}
+                </h4>
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="bg-surface-raised rounded-lg p-4">
+                    <div class="text-ink-muted text-sm mb-1">{{ t('players.details.gamemode') }}</div>
+                    <p class="text-ink font-medium capitalize">{{ live.gamemode || '-' }}</p>
+                  </div>
+                  <div class="bg-surface-raised rounded-lg p-4">
+                    <div class="text-ink-muted text-sm mb-1">{{ t('players.details.ping') }}</div>
+                    <p class="text-ink font-medium">
+                      <span v-if="live.ping?.lastMs !== undefined">{{ live.ping.lastMs }} ms</span>
+                      <span v-else class="text-ink-subtle">-</span>
+                      <span v-if="live.ping?.avg1mMs !== undefined" class="text-xs text-ink-subtle ml-1">
+                        (Ø {{ live.ping.avg1mMs }} ms)
+                      </span>
+                    </p>
+                  </div>
+                  <div class="bg-surface-raised rounded-lg p-4">
+                    <div class="text-ink-muted text-sm mb-1">{{ t('players.details.joined') }}</div>
+                    <p class="text-ink font-medium text-sm">{{ live.joinedAt ? formatChatTime(live.joinedAt) : '-' }}</p>
+                  </div>
+                  <div class="bg-surface-raised rounded-lg p-4">
+                    <div class="text-ink-muted text-sm mb-1">{{ t('players.details.position') }}</div>
+                    <p class="text-ink font-medium font-mono text-sm">
+                      <span v-if="live.position">{{ live.position.x }}, {{ live.position.y }}, {{ live.position.z }}</span>
+                      <span v-else class="text-ink-subtle">-</span>
+                    </p>
+                  </div>
+                  <div class="bg-surface-raised rounded-lg p-4 col-span-2">
+                    <div class="text-ink-muted text-sm mb-1">{{ t('players.details.groups') }}</div>
+                    <div v-if="live.groups?.length" class="flex flex-wrap gap-1.5">
+                      <span
+                        v-for="group in live.groups"
+                        :key="group"
+                        class="px-2 py-0.5 rounded bg-surface-overlay text-ink text-xs font-mono"
+                      >{{ group }}</span>
+                    </div>
+                    <p v-else class="text-ink-subtle">-</p>
+                  </div>
+                </div>
+                <div v-if="liveStats.length" class="bg-surface-raised rounded-lg p-4 space-y-3">
+                  <div v-for="stat in liveStats" :key="stat.key">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span class="text-ink-muted">{{ t(`players.details.${stat.key}`) }}</span>
+                      <span class="text-ink font-mono">{{ stat.value }} / {{ stat.max }}</span>
+                    </div>
+                    <div class="h-2 bg-surface-overlay rounded-full overflow-hidden">
+                      <div class="h-full bg-hytale-orange rounded-full" :style="{ width: `${stat.percent}%` }"></div>
+                    </div>
+                  </div>
+                </div>
+                <p class="text-xs text-ink-subtle">
+                  {{ t('players.details.language') }}: {{ live.language || '-' }} ·
+                  {{ t('players.details.protocol') }}: <span class="font-mono">{{ live.protocolCrc ?? '-' }}</span>
+                </p>
+              </div>
+
+              <h4 v-if="live && details" class="text-sm font-medium text-ink-muted">
+                {{ t('players.details.sourceFile') }}
+              </h4>
               <div v-if="details" class="grid grid-cols-2 gap-4">
                 <!-- World -->
                 <div class="bg-surface-raised rounded-lg p-4">
@@ -649,7 +746,7 @@ const toolsGrid = computed(() => {
                 </div>
               </div>
 
-              <div v-else class="flex flex-col items-center justify-center h-48 text-center">
+              <div v-else-if="!live" class="flex flex-col items-center justify-center h-48 text-center">
                 <svg class="w-12 h-12 text-ink-subtle mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -660,6 +757,11 @@ const toolsGrid = computed(() => {
             <!-- Inventory Tab -->
             <div v-else-if="activeTab === 'inventory'">
               <div v-if="inventory" class="space-y-6">
+                <!-- Where the inventory comes from: the running server or the last save -->
+                <p class="flex items-center gap-1.5 text-xs" :class="inventory.source === 'live' ? 'text-green-400' : 'text-ink-subtle'">
+                  <span class="w-2 h-2 rounded-full" :class="inventory.source === 'live' ? 'bg-green-500' : 'bg-ink-subtle'"></span>
+                  {{ inventory.source === 'live' ? t('players.details.sourceLive') : t('players.details.sourceFile') }}
+                </p>
                 <!-- Assets hint when icons fail to load -->
                 <div v-if="showAssetsHint" class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <div class="flex items-center gap-2 text-amber-400 text-sm">

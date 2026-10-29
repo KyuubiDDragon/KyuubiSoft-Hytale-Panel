@@ -6,6 +6,8 @@ import { useConsoleStore } from '@/stores/console'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { formatLogMessage } from '@/utils/formatItemPath'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import CommandReplyBlock from '@/components/console/CommandReplyBlock.vue'
+import { useCommandAutocomplete, type CommandSuggestion } from '@/composables/useCommandAutocomplete'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -19,204 +21,63 @@ const searchFilter = ref('')
 const levelFilter = ref<'all' | 'error' | 'warn' | 'info' | 'debug'>('all')
 const showClearConfirm = ref(false)
 
-// Command auto-complete
+// Command auto-complete: the server's real command list via the KyuubiSoft
+// API plugin (vanilla + mod commands, syntax, argument values), otherwise a
+// short built-in list.
 const showSuggestions = ref(false)
 const selectedSuggestion = ref(0)
+// Late server suggestions must not reopen the list after the input lost focus.
+const inputFocused = ref(false)
+const { suggestions, activeCommand, loadCommands, refreshCommands } = useCommandAutocomplete(commandInput)
 
-// Real Hytale Server commands extracted from HytaleServer.jar
-const knownCommands = [
-  // Authentication
-  '/auth',
-  '/auth login device',
-  '/auth login browser',
-  '/auth logout',
-  '/auth status',
-  '/auth select',
-  '/auth cancel',
-  // Server Management
-  '/stop',
-  '/server',
-  '/server stats',
-  '/server gc',
-  '/server dump',
-  '/version',
-  '/help',
-  '/commands',
-  '/backup',
-  // Player Management
-  '/kick',
-  '/ban',
-  '/unban',
-  '/op',
-  '/op add',
-  '/op remove',
-  '/op self',
-  '/perm',
-  '/perm user',
-  '/perm group',
-  '/perm test',
-  '/who',
-  '/whoami',
-  '/list',
-  '/maxplayers',
-  '/player',
-  '/player reset',
-  '/player respawn',
-  '/player stats get',
-  '/player stats set',
-  '/player stats add',
-  '/player stats reset',
-  // Teleport Commands
-  '/tp',
-  '/teleport',
-  '/teleport all',
-  '/teleport back',
-  '/teleport forward',
-  '/teleport history',
-  '/teleport home',
-  '/teleport top',
-  '/teleport world',
-  '/teleport tocoordinates',
-  '/teleport toplayer',
-  '/teleport playertoplayer',
-  // World Commands
-  '/world',
-  '/world add',
-  '/world remove',
-  '/world list',
-  '/world load',
-  '/world save',
-  '/world prune',
-  '/world tps',
-  '/world perf',
-  '/world settings',
-  '/worldconfig',
-  '/worldconfig seed',
-  '/worldconfig setspawn',
-  '/worldconfig setpvp',
-  '/worldconfig pausetime',
-  // Whitelist
-  '/whitelist',
-  '/whitelist add',
-  '/whitelist remove',
-  '/whitelist enable',
-  '/whitelist disable',
-  '/whitelist status',
-  '/whitelist list',
-  '/whitelist clear',
-  // Items & Spawning
-  '/give',
-  '/give armor',
-  '/spawn',
-  '/spawn item',
-  '/spawn block',
-  '/spawn prefab',
-  '/spawn markers',
-  '/spawn set',
-  '/spawn setdefault',
-  // Time & Weather
-  '/time',
-  '/time set',
-  '/time pause',
-  '/time dilation',
-  '/weather',
-  '/weather get',
-  '/weather set',
-  '/weather reset',
-  // Game
-  '/gamemode',
-  '/inventory',
-  '/inventory clear',
-  '/inventory see',
-  '/kill',
-  '/damage',
-  '/emote',
-  // Plugins
-  '/plugin',
-  '/plugin list',
-  '/plugin load',
-  '/plugin unload',
-  '/plugin reload',
-  // Chat & Communication
-  '/say',
-  '/msg',
-  '/notify',
-  // Warps
-  '/warp',
-  '/warp list',
-  '/warp set',
-  '/warp go',
-  '/warp remove',
-  '/warp reload',
-  // Blocks & Building
-  '/block',
-  '/block set',
-  '/block get',
-  '/block bulk',
-  '/fill',
-  '/replace',
-  '/copy',
-  '/paste',
-  '/cut',
-  '/undo',
-  '/redo',
-  '/pos1',
-  '/pos2',
-  // Debug & Dev
-  '/debug',
-  '/entity',
-  '/entity count',
-  '/entity remove',
-  '/entity clean',
-  '/npc',
-  '/npc spawn',
-  '/chunk',
-  '/chunk load',
-  '/chunk unload',
-  '/chunk info',
-]
-
-const filteredCommands = computed(() => {
-  if (!commandInput.value.startsWith('/')) return []
-  if (commandInput.value === '/') return knownCommands.slice(0, 10)
-  const input = commandInput.value.toLowerCase()
-  return knownCommands.filter(cmd => cmd.toLowerCase().startsWith(input)).slice(0, 10)
-})
-
-function selectSuggestion(cmd: string) {
-  commandInput.value = cmd
-  showSuggestions.value = false
+function selectSuggestion(suggestion: CommandSuggestion) {
+  commandInput.value = suggestion.value
+  selectedSuggestion.value = 0
   inputRef.value?.focus()
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (!showSuggestions.value || filteredCommands.value.length === 0) return
+  if (!showSuggestions.value || suggestions.value.length === 0) return
 
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    selectedSuggestion.value = (selectedSuggestion.value + 1) % filteredCommands.value.length
+    selectedSuggestion.value = (selectedSuggestion.value + 1) % suggestions.value.length
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     selectedSuggestion.value = selectedSuggestion.value === 0
-      ? filteredCommands.value.length - 1
+      ? suggestions.value.length - 1
       : selectedSuggestion.value - 1
   } else if (e.key === 'Tab' || e.key === 'Enter') {
-    if (filteredCommands.value.length > 0 && showSuggestions.value) {
+    const suggestion = suggestions.value[selectedSuggestion.value]
+    // Enter on a line that is already complete sends it.
+    if (e.key === 'Enter' && suggestion && suggestion.value.trim() === commandInput.value.trim()) return
+    if (suggestion) {
       e.preventDefault()
-      selectSuggestion(filteredCommands.value[selectedSuggestion.value])
+      selectSuggestion(suggestion)
     }
   } else if (e.key === 'Escape') {
     showSuggestions.value = false
   }
 }
 
-watch(commandInput, (val) => {
-  if (val.startsWith('/')) {
-    showSuggestions.value = filteredCommands.value.length > 0
-    selectedSuggestion.value = 0
-  } else {
-    showSuggestions.value = false
-  }
+watch([commandInput, suggestions], ([val]) => {
+  showSuggestions.value = inputFocused.value && val.startsWith('/') && suggestions.value.length > 0
+  if (selectedSuggestion.value >= suggestions.value.length) selectedSuggestion.value = 0
+})
+
+watch(commandInput, () => {
+  selectedSuggestion.value = 0
+})
+
+// Syntax of the command being typed, shown under the input.
+const syntaxHint = computed(() => {
+  const node = activeCommand.value
+  if (!node || !commandInput.value.startsWith('/')) return null
+  const usage = node.usage ?? `/${node.name}`
+  const options = (node.optionalArgs ?? [])
+    .map((o) => (o.kind === 'flag' ? `[--${o.name}]` : `[--${o.name}=<${o.type ?? o.name}>]`))
+    .join(' ')
+  return { usage: options ? `${usage} ${options}` : usage, description: node.description }
 })
 
 // Filtered logs based on search and level
@@ -322,13 +183,21 @@ function scrollToBottom(retries = 3) {
 // suggestion still registers). Defined as a method because `setTimeout` isn't
 // available on the component instance inside template expressions.
 function hideSuggestionsSoon(): void {
+  inputFocused.value = false
   setTimeout(() => { showSuggestions.value = false }, 150)
+}
+
+function onInputFocus(): void {
+  inputFocused.value = true
+  refreshCommands()
 }
 
 // Auto-scroll interval - more reliable than watchers for continuous updates
 let autoScrollInterval: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
+  if (authStore.hasPermission('console.execute')) void loadCommands()
+
   // Initial scroll
   scrollToBottom()
 
@@ -452,6 +321,8 @@ watch(
           'text-ink-subtle': log.level === 'DEBUG',
           'text-ink-muted': log.level === 'INFO' || !log.level
         }">{{ formatLogMessage(log.message) }}</span>
+        <!-- The server's answer to a command sent from here -->
+        <CommandReplyBlock v-if="log.reply" :reply="log.reply" />
       </div>
     </div>
 
@@ -465,6 +336,7 @@ watch(
               v-model="commandInput"
               @keydown="handleKeyDown"
               @blur="hideSuggestionsSoon"
+              @focus="onInputFocus"
               type="text"
               :placeholder="t('console.commandPlaceholder')"
               class="input w-full font-mono"
@@ -472,22 +344,35 @@ watch(
 
             <!-- Auto-complete dropdown -->
             <div
-              v-if="showSuggestions && filteredCommands.length > 0"
+              v-if="showSuggestions && suggestions.length > 0"
               class="absolute bottom-full left-0 right-0 mb-1 bg-surface-muted border border-border rounded-lg overflow-hidden shadow-lg z-10"
             >
               <button
-                v-for="(cmd, index) in filteredCommands"
-                :key="cmd"
+                v-for="(suggestion, index) in suggestions"
+                :key="suggestion.value"
                 type="button"
-                @click="selectSuggestion(cmd)"
+                @mousedown.prevent
+                @click="selectSuggestion(suggestion)"
+                :title="suggestion.description"
                 :class="[
-                  'w-full px-4 py-2 text-left font-mono text-sm transition-colors',
+                  'w-full px-4 py-2 text-left font-mono text-sm transition-colors flex items-baseline gap-2',
                   index === selectedSuggestion
                     ? 'bg-hytale-orange/20 text-hytale-orange'
-                    : 'text-ink-muted hover:bg-surface-overlay'
+                    : 'text-ink-muted hover:bg-surface-overlay',
+                  suggestion.blocked ? 'opacity-50' : ''
                 ]"
               >
-                {{ cmd }}
+                <span class="flex-shrink-0">{{ suggestion.label }}</span>
+                <span v-if="suggestion.hint" class="text-ink-subtle flex-shrink-0">{{ suggestion.hint }}</span>
+                <span v-if="suggestion.description" class="text-ink-subtle font-sans text-xs truncate">{{ suggestion.description }}</span>
+                <span
+                  v-if="suggestion.blocked"
+                  class="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded bg-status-error/15 text-status-error font-sans text-xs"
+                >{{ t('console.suggestionBlocked') }}</span>
+                <span
+                  v-else-if="suggestion.admin"
+                  class="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded bg-status-warning/15 text-status-warning font-sans text-xs"
+                >{{ t('console.suggestionAdmin') }}</span>
               </button>
             </div>
           </div>
@@ -497,6 +382,11 @@ watch(
             </svg>
           </button>
         </div>
+        <!-- Syntax of the command being typed (from the server's command list) -->
+        <p v-if="syntaxHint" class="mt-1 text-xs text-ink-subtle font-mono truncate" :title="syntaxHint.description">
+          {{ t('console.syntax') }}: {{ syntaxHint.usage }}
+          <span v-if="syntaxHint.description" class="font-sans"> · {{ syntaxHint.description }}</span>
+        </p>
       </form>
       <div v-else class="p-3 bg-surface-overlay rounded-lg text-ink-subtle text-sm text-center">
         {{ t('common.noPermission') }}

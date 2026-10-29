@@ -73,3 +73,33 @@ describe('kyuubiApi per-server endpoint resolution', () => {
     expect(await getDefaultId()).toBe('default');
   });
 });
+
+describe('postToPlugin after a timeout', () => {
+  it('marks an aborted request as "may have run", a refused connection not', async () => {
+    const { postToPlugin } = await import('./kyuubiApi.js');
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new DOMException('This operation was aborted', 'AbortError');
+        }),
+      );
+      expect(await postToPlugin('/api/players/Steve/give', { item: 'Rock_Stone' })).toMatchObject({
+        success: false,
+        maybeRan: true,
+      });
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new TypeError('fetch failed');
+        }),
+      );
+      const refused = await postToPlugin('/api/players/Steve/give', { item: 'Rock_Stone' });
+      expect(refused.success).toBe(false);
+      expect(refused.maybeRan).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

@@ -120,6 +120,12 @@ describe('fileManager.isDenied', () => {
     expect(isDenied(root, 'config/other-mod/settings.json')).toBe(false);
     expect(isDenied(root, 'myconfig.json')).toBe(false);
   });
+  it('blocks the plugin data dir in mods/ (config with token since plugin 2.1)', () => {
+    expect(isDenied(root, 'KyuubiDDragon_KyuubiSoftAPI', true)).toBe(true);
+    expect(isDenied(root, 'KyuubiDDragon_KyuubiSoftAPI/config.json.tmp')).toBe(true);
+    expect(isDenied(root, 'KyuubiDDragon_KyuubiSoftAPI/notes.txt')).toBe(true);
+    expect(isDenied(root, 'KyuubiDDragon_Pets/settings.json')).toBe(false);
+  });
   it('allows normal files', () => {
     expect(isDenied(root, 'hello.txt')).toBe(false);
     expect(isDenied(root, 'sub/nested.txt')).toBe(false);
@@ -151,6 +157,10 @@ describe('fileManager.isAbsolutePathAllowed', () => {
       false,
     );
     expect(isAbsolutePathAllowed(path.join(server, 'config.json.bak'), 'read')).toBe(false);
+    // Plugin 2.1+ keeps it in its data dir below mods/.
+    const dataDir = path.join(mods, 'KyuubiDDragon_KyuubiSoftAPI');
+    expect(isAbsolutePathAllowed(path.join(dataDir, 'config.json'), 'read')).toBe(false);
+    expect(isAbsolutePathAllowed(path.join(dataDir, 'config.json.tmp'), 'read')).toBe(false);
   });
   it('blocks key/pem secret files', () => {
     expect(isAbsolutePathAllowed(path.join(server, 'server.key'), 'read')).toBe(false);

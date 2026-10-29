@@ -121,6 +121,8 @@ export interface PlayersResponse {
 export interface WsMessage {
   type: string;
   payload?: string;
+  /** Client-chosen id of a 'command' message, echoed in its command_response. */
+  requestId?: unknown;
 }
 
 export interface WsLogMessage {

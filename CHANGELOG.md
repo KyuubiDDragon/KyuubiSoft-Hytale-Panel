@@ -194,6 +194,151 @@ upgrade notes** below before updating.
   Deleting the file re-creates only the `.env` admin; all other accounts are
   lost.
 
+### KyuubiSoft API 2.1.0: command replies, live server data and mod panels
+
+The panel bundles KyuubiSoft API **2.1.0** and offers it as an update from the
+dashboard. Everything below needs the plugin; without it the panel keeps
+working as before (stdin console, log-based status).
+
+**Console and commands**
+- Console commands return the server's real answer: the panel runs them
+  through the plugin as `Panel:<user>` and shows the output and the outcome
+  (done, still running, unknown command, rejected, failed) below each command.
+  The server log names the panel user who ran a command.
+- The stdin console is only a fallback when the plugin is missing,
+  unreachable, too old or refuses the token; a command that may already have
+  reached the plugin is never sent twice. The panel's command checks run
+  before both paths.
+- Player actions, scheduled commands, event actions, AutoMod and the Discord
+  relay report whether a command actually worked instead of always reporting
+  success. Player actions in the plugin (heal, kill, teleport, game mode,
+  give, clear inventory) report the command's real result. A player action
+  the plugin did not answer in time is not repeated on the console, so an item
+  is never given twice.
+- Messages a command sends after its reply (download progress, results from a
+  world thread) are written to the server console instead of being lost. Only
+  the user who ran a command sees its reply; the server log records who ran
+  it.
+- The Updates page reads the server's real `/update status` reply (version,
+  staged update, latest version, download progress); an update only counts as
+  ready to apply when one is actually staged.
+- Console autocomplete uses the server's real command list, including the
+  commands of installed mods, with syntax hints, descriptions and the server's
+  own argument suggestions. Commands the panel does not allow are marked, and
+  argument suggestions (player names, groups, …) are only given for commands
+  the user may run. The list is cached per server and refreshed when plugins
+  load or unload; an unreachable plugin is asked again after 15 s at the
+  earliest.
+- A console connection queues at most 20 waiting commands; further commands
+  are answered with an error.
+
+**Performance**
+- Real TPS and tick time per world (10 s / 1 min / 5 min, min/avg/max) with
+  each world's target rate (Hytale: 30 TPS). TPS was capped at 20 before, and
+  "MSPT" was only the tick interval.
+- Performance page and dashboard scale TPS to the target rate, show the real
+  tick time and add a "TPS per world" table. The performance history records
+  the slowest world together with its target.
+- The watchdog TPS alarm works per world and relative to the target
+  (`WATCHDOG_TPS_ALERT_PERCENT`, default 75 %, judged on the 1-minute
+  average).
+- The plugin no longer blocks its network threads: player data is read on the
+  player's world thread, commands run on a worker pool and CPU load is sampled
+  in the background (`/api/server/performance` on Windows: ~6 s → 0.1 s). A
+  stuck world answers `504`.
+
+**Live server data**
+- The player details show live data from the running server (game mode,
+  health and other stats, ping, groups, join time) and the real inventory,
+  falling back to the saved player file when the player is offline or the
+  installed plugin is older than 2.1.
+- New read-only proxy routes under `/api/server/plugin/*`: server status
+  (build, update state, auth state and token expiry, never the tokens),
+  plugin and mod load state (including mods the server refused), whitelist,
+  bans, permission groups and users, sessions and live player data.
+- New panel events `server.shutdown`, `player.gamemode_changed`,
+  `player.join_denied`, `world.added`, `world.removed`,
+  `plugin.state_changed` and `permissions.changed` for webhooks and event
+  actions. Player deaths carry the killer through to events, webhooks and the
+  live map.
+- `player.join_denied` can be caused by anyone who connects, under any name, so
+  wildcard subscriptions (`*`, `player.*`) of webhooks and event actions do not
+  include it; select it by its exact name. A webhook receives it at most 10
+  times per minute.
+- An event action rule runs at most 10 times per minute for the same event
+  name; further runs are dropped and logged once per minute.
+
+**Mod Status page**
+- KyuubiSoft mods can register a status page (metric tiles, tables, notices)
+  and admin actions with the plugin. New page **Mod Status** (Management) with
+  the permissions `mods.panel.view` (Operator and Viewer) and
+  `mods.panel.action` (only Administrator by default, since mod actions run
+  with full server rights). Actions marked as dangerous ask for confirmation
+  first and also need `console.execute.admin` on that server; the panel reads
+  that flag from the plugin, not from the browser. Every run is recorded in the
+  audit log, with parameters such as passwords, tokens and URLs masked.
+- Mods can send their own events; the panel publishes them as `mod.event` to
+  webhooks, event actions, notifications and the replay recorder.
+- Mod code runs on its own worker pool with timeouts; a hanging or failing mod
+  never blocks the API. Everything a mod returns is size-limited, validated on
+  both sides and shown as plain text.
+- Webhooks send nested payload values as JSON instead of `[object Object]`, and
+  empty values no longer make Discord reject the whole embed.
+
+**KyuubiSoft API plugin 2.1.0**
+- New endpoints: `POST /api/commands/execute`, `GET /api/commands`,
+  `GET /api/commands/complete`, `GET /api/server/tps`,
+  `GET /api/worlds/{name}/perf`, `GET /api/server/status`, `GET /api/plugins`,
+  `GET /api/access/whitelist`, `GET /api/access/bans`,
+  `GET /api/permissions/groups`, `GET /api/permissions/users[/{uuid}]`,
+  `GET /api/sessions`, `GET /api/players/{name|uuid}/live` and
+  `/api/mods/panel…`. `GET /api/players/{name}/inventory` and `/appearance`
+  return real data (`501` where the server build offers none).
+- The WebSocket really sends `tps_update` and `player_death`, plus the new
+  events `commands_changed`, `player_gamemode`, `player_join_denied`,
+  `world_added`, `world_removed`, `server_shutdown`, `plugin_state`,
+  `permission_changed` and `mod_event`. New per-world Prometheus series.
+- Uptime counts from the server start, `maxPlayers` comes from the server
+  config, entity and chunk counts are real and CPU load is never negative.
+  Chat messages cancelled by other mods (mutes, filters) are no longer
+  forwarded.
+- Query strings no longer break routing, invalid JSON gives `400`, and errors
+  never expose internal exception text (a failing mod is reported by its
+  exception class only). Plugin reloads work: the API port is opened in
+  `start()` and released on shutdown.
+- With `insecureDisableAuth` the API is read-only: every method except GET,
+  HEAD and OPTIONS (commands, player and mod actions) answers `403`.
+- `player_join_denied` is sent at most once per name in 30 s. Mod event
+  payloads are also limited in total (2000 values, 32000 characters), and
+  live-data requests queue at most 32 deep (`503` beyond that).
+- The manifest declares `ServerVersion` `0.7.0`, so the server no longer warns
+  about a missing target version.
+- For mod authors: a compile-only `KyuubiSoftAPI-panel-api-2.1.0.jar` and the
+  README section "Integrating your mod".
+
+**Upgrade notes**
+- Install the 2.1.0 update from the dashboard and restart the server from the
+  panel. The plugin config moves to
+  `mods/KyuubiDDragon_KyuubiSoftAPI/config.json`; the old file is migrated and
+  removed on first start. `insecureDisableAuth` and `corsAllowedOrigins` are
+  only taken from the old file while no new one exists. The new folder is
+  blocked in the file manager because it holds the token.
+- Commands with a wrong 0.7 syntax (for example kick or ban with a reason) now
+  fail visibly instead of reporting success.
+- "MSPT" is now the real tick time (around 0.5 ms instead of ~33 ms), and the
+  main TPS figure shows the slowest world instead of the default world. An
+  explicit `WATCHDOG_TPS_ALERT` stays an absolute threshold, now measured
+  against 30-TPS worlds.
+- The plugin's `/inventory` and `/appearance` responses have a new shape.
+- On the first start the built-in Operator and Viewer roles get
+  `mods.panel.view`, exactly as new installations; `mods.panel.action` stays
+  with Administrator. Custom roles are not changed: add the permissions to
+  them yourself. The migration runs once, so a permission you remove from a
+  built-in role later stays removed.
+- Event action rules and webhooks subscribed with `*` or `player.*` no longer
+  see refused joins; subscribe to `player.join_denied` explicitly if you need
+  them.
+
 ### New features
 
 - **Update Center** (`/updates`): a dedicated view over the native Hytale update

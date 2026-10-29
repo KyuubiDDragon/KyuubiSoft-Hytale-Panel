@@ -47,21 +47,32 @@ async function writeRoles(data: RolesData): Promise<void> {
   await rename(tmpFile, ROLES_FILE);
 }
 
+// Map role names to fixed IDs for backward compatibility
+const SYSTEM_ROLE_IDS: Record<string, string> = {
+  Administrator: 'admin',
+  Moderator: 'moderator',
+  Operator: 'operator',
+  Viewer: 'viewer',
+};
+
+/**
+ * Permissions added after roles.json was first written. New installs get them
+ * through DEFAULT_ROLES. An existing file runs each entry once: every built-in
+ * role gets what DEFAULT_ROLES grants it of the listed permissions. Custom
+ * roles stay as they are, and the id is recorded, so a permission an admin
+ * removes from a built-in role later does not come back on the next start.
+ */
+const PERMISSION_MIGRATIONS: ReadonlyArray<{ id: string; permissions: readonly Permission[] }> = [
+  { id: 'mod-panel-permissions', permissions: ['mods.panel.view', 'mods.panel.action'] },
+];
+
 // Create default roles data structure
 // Uses fixed IDs for system roles to maintain backward compatibility
 function createDefaultRolesData(): RolesData {
   const now = new Date().toISOString();
 
-  // Map role names to fixed IDs for backward compatibility
-  const roleIdMap: Record<string, string> = {
-    Administrator: 'admin',
-    Moderator: 'moderator',
-    Operator: 'operator',
-    Viewer: 'viewer',
-  };
-
   const roles: Role[] = DEFAULT_ROLES.map((roleTemplate) => ({
-    id: roleIdMap[roleTemplate.name] || randomUUID(),
+    id: SYSTEM_ROLE_IDS[roleTemplate.name] || randomUUID(),
     ...roleTemplate,
     createdAt: now,
     updatedAt: now,
@@ -71,7 +82,38 @@ function createDefaultRolesData(): RolesData {
     roles,
     version: 1,
     lastModified: now,
+    // DEFAULT_ROLES already contains every migrated permission.
+    appliedMigrations: PERMISSION_MIGRATIONS.map((m) => m.id),
   };
+}
+
+/**
+ * Give the built-in roles of an existing roles.json the permissions new
+ * installs get (PERMISSION_MIGRATIONS). Idempotent: an applied migration is
+ * skipped. Returns whether `data` changed.
+ */
+export function migrateSystemRolePermissions(data: RolesData): boolean {
+  const applied = new Set(data.appliedMigrations ?? []);
+  const pending = PERMISSION_MIGRATIONS.filter((m) => !applied.has(m.id));
+  if (pending.length === 0) return false;
+
+  for (const migration of pending) {
+    for (const role of data.roles) {
+      if (!role.isSystem || role.permissions.includes('*')) continue;
+      const template = DEFAULT_ROLES.find((r) => SYSTEM_ROLE_IDS[r.name] === role.id);
+      if (!template) continue;
+      const missing = migration.permissions.filter(
+        (p) => template.permissions.includes(p) && !role.permissions.includes(p),
+      );
+      if (missing.length === 0) continue;
+      console.log(`[Roles] Granting ${missing.join(', ')} to built-in role "${role.name}"`);
+      role.permissions = [...role.permissions, ...missing];
+      role.updatedAt = new Date().toISOString();
+    }
+    applied.add(migration.id);
+  }
+  data.appliedMigrations = [...applied];
+  return true;
 }
 
 // Check if roles file exists
@@ -125,10 +167,14 @@ export async function initializeRoles(): Promise<void> {
     // Check for migrations on existing data
     const data = await readRoles();
     const migrated = await migrateSystemRoleDescriptions(data);
-    if (migrated) {
+    const granted = migrateSystemRolePermissions(data);
+    if (migrated || granted) {
       data.version += 1;
       await writeRoles(data);
-      console.log('[Roles] Migration completed - system role descriptions updated to English');
+      if (migrated) {
+        console.log('[Roles] Migration completed - system role descriptions updated to English');
+      }
+      if (granted) console.log('[Roles] Migration completed - new permissions for built-in roles');
     }
   }
 }

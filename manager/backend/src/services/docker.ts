@@ -20,6 +20,12 @@ import { isDemoMode, getDemoStatus, getDemoStats, getDemoLogs } from './demoData
 import { ensureLoaded, getDefaultId, getServer, resolveServerId } from './servers.js';
 import { createDockerClient } from './dockerClient.js';
 import { ensurePluginAuthConfig } from './pluginAuth.js';
+import {
+  runCommandViaPlugin,
+  type PluginCommandAttempt,
+  type PluginCommandStatus,
+} from './pluginCommands.js';
+import { currentCommandActor } from './commandActor.js';
 
 const docker = createDockerClient();
 
@@ -246,11 +252,80 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
   }
 }
 
-export async function execCommand(command: string, serverId?: string): Promise<ActionResponse> {
-  // SECURITY: single gate for everything written to the game console. It runs
-  // after every caller has filled in its placeholders, so an embedded line
-  // break (a second, unchecked console command) or a TTY control byte (Ctrl-C
-  // shuts the server down) is rejected here no matter which path built it.
+export interface ExecCommandOptions {
+  /** Panel user the command runs for; defaults to the user of the current request. */
+  actor?: string | null;
+  /** Also print the answer to the server console; see echoesToServerLog. */
+  echo?: boolean;
+  /** How long the plugin waits for the command before answering RUNNING. */
+  timeoutMs?: number;
+}
+
+/**
+ * Outcome of execCommand. Through the KyuubiSoft API plugin (`via: 'plugin'`)
+ * `success` is the command's real outcome, `lines`/`output` its answer and
+ * `status` how it ended. Through stdin (`via: 'stdin'`) `success` only means
+ * the line was written to the console.
+ */
+export interface CommandExecResult extends ActionResponse {
+  via?: 'plugin' | 'stdin' | 'demo';
+  status?: PluginCommandStatus;
+  lines?: string[];
+  messageIds?: string[];
+}
+
+// The Hytale sign-in flow (services/hytaleAuth.ts, the setup wizard) reads the
+// device code and its result from the server log, so /auth answers are also
+// printed there, as they were when every command ran as the console.
+function echoesToServerLog(command: string): boolean {
+  return /^\/?auth\b/i.test(command.trim());
+}
+const ECHOED_COMMAND_TIMEOUT_MS = 1_500;
+
+function fromPluginAttempt(
+  command: string,
+  attempt: Exclude<PluginCommandAttempt, { kind: 'unavailable' }>,
+): CommandExecResult {
+  if (attempt.kind === 'invalid') return { success: false, error: attempt.error, via: 'plugin' };
+  if (attempt.kind === 'unknown') {
+    // A stop takes the plugin down with the server, often before it answers.
+    if (isStopCommand(command)) {
+      return { success: true, message: `Command sent: ${command}`, via: 'plugin' };
+    }
+    return {
+      success: false,
+      error: `${attempt.error}. The command may still have run; it was not sent again.`,
+      via: 'plugin',
+    };
+  }
+  const { reply } = attempt;
+  const output = reply.output.join('\n');
+  const fallbackMessage =
+    reply.status === 'RUNNING'
+      ? `Command still running: ${command}`
+      : `Command executed: ${command}`;
+  return {
+    success: reply.ok,
+    message: output || fallbackMessage,
+    output,
+    error: reply.ok ? undefined : (reply.error ?? 'Command failed'),
+    via: 'plugin',
+    status: reply.status,
+    lines: reply.output,
+    messageIds: reply.messageIds,
+  };
+}
+
+export async function execCommand(
+  command: string,
+  serverId?: string,
+  options: ExecCommandOptions = {},
+): Promise<CommandExecResult> {
+  // SECURITY: single gate for everything sent to the game console, on either
+  // path below. It runs after every caller has filled in its placeholders, so
+  // an embedded line break (a second, unchecked console command) or a TTY
+  // control byte (Ctrl-C shuts the server down) is rejected here no matter
+  // which path built it.
   const validation = validateCommand(command);
   if (!validation.valid) {
     // JSON.stringify keeps a smuggled line break from forging log lines.
@@ -260,8 +335,24 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     return { success: false, error: validation.error || 'Invalid command' };
   }
   if (isDemoMode()) {
-    return { success: true, message: `[DEMO] Command executed: ${command}` };
+    return { success: true, message: `[DEMO] Command executed: ${command}`, via: 'demo' };
   }
+
+  // Preferred path: the plugin runs the command and returns its answer. The
+  // stdin console is only used when the plugin did not take the command (not
+  // installed, unreachable, too old, token refused); a command that may have
+  // reached the plugin is never sent a second time.
+  if (isStopCommand(command)) await noteIntentionalStop(serverId);
+  const echo = options.echo ?? echoesToServerLog(command);
+  const attempt = await runCommandViaPlugin(command, serverId, {
+    actor: options.actor ?? currentCommandActor(),
+    echo,
+    // Callers of echoed commands read the answer from the log; a long-running
+    // one (/auth login device waits for the sign-in) must not hold them up.
+    timeoutMs: options.timeoutMs ?? (echo ? ECHOED_COMMAND_TIMEOUT_MS : undefined),
+  });
+  if (attempt.kind !== 'unavailable') return fromPluginAttempt(command, attempt);
+
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
@@ -276,7 +367,7 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     if (stream) {
       try {
         stream.write(command + '\n');
-        return { success: true, message: `Command executed: ${command}` };
+        return { success: true, message: `Command executed: ${command}`, via: 'stdin' };
       } catch {
         stdinStreams.delete(attached.key);
       }
@@ -305,9 +396,16 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     );
     const execStream = await exec.start({});
     return new Promise((resolve) => {
-      execStream.on('end', () => resolve({ success: true, message: `Command sent: ${command}` }));
-      execStream.on('error', (err: Error) => resolve({ success: false, error: err.message }));
-      setTimeout(() => resolve({ success: true, message: `Command sent: ${command}` }), 1000);
+      const sent: CommandExecResult = {
+        success: true,
+        message: `Command sent: ${command}`,
+        via: 'stdin',
+      };
+      execStream.on('end', () => resolve(sent));
+      execStream.on('error', (err: Error) =>
+        resolve({ success: false, error: err.message, via: 'stdin' }),
+      );
+      setTimeout(() => resolve(sent), 1000);
     });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

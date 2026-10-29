@@ -231,7 +231,7 @@ describe('scheduler: interactive runs', () => {
 
     const ok = await scheduler.runScheduledCommandNow('now-stop', 'default', admin);
     expect(ok.success).toBe(true);
-    expect(execCommand).toHaveBeenCalledWith('/stop', 'default');
+    expect(execCommand).toHaveBeenCalledWith('/stop', 'default', { actor: 'scheduler/admin' });
     await saveAndRestart([]);
   });
 
