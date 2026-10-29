@@ -1,7 +1,7 @@
 {
   "name": "kyuubisoft-hytale-panel",
   "private": true,
-  "version": "3.0.0-alpha",
+  "version": "3.0.0",
   "description": "Repo-root tooling. Backend and frontend packages live under manager/.",
   "scripts": {
     "prepare": "husky || true",
