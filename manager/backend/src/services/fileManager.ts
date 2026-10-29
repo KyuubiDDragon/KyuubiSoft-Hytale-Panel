@@ -1,8 +1,16 @@
 import path from 'path';
-import { promises as fsp, createReadStream, lstatSync, statSync, type Stats } from 'fs';
+import {
+  promises as fsp,
+  createReadStream,
+  lstatSync,
+  readFileSync,
+  statSync,
+  type Stats,
+} from 'fs';
 import type { ReadStream } from 'fs';
 import { config } from '../config.js';
 import { resolveRealPath } from '../utils/pathSecurity.js';
+import { ACCESS_FILE_NAMES, banStorageFile } from './accessFormats.js';
 
 // ============================================================
 // Types
@@ -14,6 +22,8 @@ export interface FileManagerRoot {
   rw: boolean;
   permission: 'files.read' | 'files.write';
   deny?: string[];
+  /** Matched against the whole path inside the root (lower case). */
+  denyPatterns?: RegExp[];
   label?: string;
 }
 
@@ -90,6 +100,44 @@ const EXTENSION_DENY_PATTERNS: RegExp[] = [
   /\.aot$/i, // AOT cache file (paired with the JAR)
 ];
 
+// The server's access files (and the copies next to them: .bak, .tmp-*,
+// backups) belong to the access pages, which check the players.* rights and
+// write them only while the server is stopped. The file manager would skip
+// both, so it leaves them alone.
+const MAX_CONFIG_PEEK_BYTES = 1024 * 1024;
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const fileAndCopies = (relPath: string) =>
+  new RegExp(`^${escapeRegExp(relPath.toLowerCase())}(\\.|$)`, 'i');
+
+/** Deny patterns for the access files of a server folder whose config.json is `configRaw`. */
+export function accessFilePatterns(configRaw: unknown): RegExp[] {
+  const patterns = ACCESS_FILE_NAMES.map(fileAndCopies);
+  const storage = banStorageFile(configRaw);
+  if ('file' in storage) {
+    const rel = path.posix.normalize(storage.file.replace(/\\/g, '/')).replace(/^\.\//, '');
+    const inside = !rel.startsWith('../') && rel !== '..' && !path.posix.isAbsolute(rel);
+    if (inside && !ACCESS_FILE_NAMES.includes(rel.toLowerCase())) patterns.push(fileAndCopies(rel));
+  }
+  return patterns;
+}
+
+// Read again only when the file changed: getRoots() runs on every request.
+let peeked: { key: string; raw: unknown } | null = null;
+
+/** config.json of the server folder as far as it can be read; null when it cannot. */
+function peekServerConfig(serverPath: string): unknown {
+  try {
+    const file = path.join(serverPath, 'config.json');
+    const st = lstatSync(file);
+    if (!st.isFile() || st.size > MAX_CONFIG_PEEK_BYTES) return null;
+    const key = `${file}:${st.size}:${st.mtimeMs}`;
+    if (peeked?.key !== key) peeked = { key, raw: JSON.parse(readFileSync(file, 'utf-8')) };
+    return peeked.raw;
+  } catch {
+    return null;
+  }
+}
+
 // ============================================================
 // Roots configuration (from config.ts paths)
 // ============================================================
@@ -117,6 +165,7 @@ export function getRoots(): FileManagerRoot[] {
       permission: 'files.write',
       // Hytale config.json has its own editor + auth/ is sensitive
       deny: ['config.json', 'auth/', 'auth'],
+      denyPatterns: accessFilePatterns(peekServerConfig(config.serverPath)),
       label: 'Server',
     },
     {
@@ -249,6 +298,8 @@ export function isDenied(root: FileManagerRoot, relPath: string, isDir = false):
       if (re.test(lower)) return true;
     }
   }
+
+  if (root.denyPatterns?.some((re) => re.test(lower))) return true;
 
   // Per-root deny list - exact name or prefix-of-directory
   if (root.deny) {

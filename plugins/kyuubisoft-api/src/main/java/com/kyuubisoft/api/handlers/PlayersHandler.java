@@ -5,6 +5,7 @@ import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.NameMatching;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.inventory.InventoryComponent;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatValue;
 import com.hypixel.hytale.server.core.modules.entitystats.asset.DefaultEntityStatTypes;
@@ -21,6 +22,9 @@ import org.joml.Vector3d;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 
 /**
@@ -45,12 +49,19 @@ public class PlayersHandler {
     // Player Actions (POST endpoints)
     // ============================================================
 
-    /** POST /api/players/{name}/heal — restore the player's stats to full. */
+    /**
+     * POST /api/players/{name}/heal — health and stamina to their maximum, like
+     * the server's own /heal macro does for its sender.
+     */
     public ActionResult healPlayer(String playerName) {
         String name = safeName(playerName);
         if (name == null) return new ActionResult(false, "Invalid player name");
         if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
-        return CommandExecutor.run("player stats settomax --player " + name);
+        ActionResult health = CommandExecutor.run("player stats settomax Health --player " + name);
+        if (!health.success) return health;
+        ActionResult stamina = CommandExecutor.run("player stats settomax Stamina --player " + name);
+        if (!stamina.success) LOGGER.warning("Heal " + name + ": stamina not restored: " + stamina.message);
+        return health;
     }
 
     /** POST /api/players/{name}/respawn — respawn the player at their spawn point. */
@@ -58,7 +69,8 @@ public class PlayersHandler {
         String name = safeName(playerName);
         if (name == null) return new ActionResult(false, "Invalid player name");
         if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
-        return CommandExecutor.run("player respawn --player " + name);
+        // The usage variant with the player as its only argument.
+        return CommandExecutor.run("player respawn " + name);
     }
 
     /** POST /api/players/{name}/kill — kill the player. */
@@ -103,12 +115,43 @@ public class PlayersHandler {
         return CommandExecutor.run("gamemode " + mode + " " + name);
     }
 
-    /** POST /api/players/{name}/inventory/clear — clear the player's inventory. */
+    /**
+     * POST /api/players/{name}/inventory/clear — clear the player's inventory.
+     *
+     * <p>Done directly on the player's world thread: the server's
+     * {@code /inventory clear} only clears the sender's own inventory and takes
+     * no player. Clears the same sections as that command (everything, plus the
+     * tool belt, which "everything" does not include). Blocks the calling
+     * worker thread for up to {@link WorldThread#DEFAULT_TIMEOUT_MS}.</p>
+     */
     public ActionResult clearInventory(String playerName) {
         String name = safeName(playerName);
         if (name == null) return new ActionResult(false, "Invalid player name");
-        if (findPlayer(name) == null) return new ActionResult(false, "Player not found: " + name);
-        return CommandExecutor.run("inventory clear " + name);
+        PlayerRef player = findPlayer(name);
+        if (player == null) return new ActionResult(false, "Player not found: " + name);
+        try {
+            WorldThread.supplyForPlayer(player, (ref, store, world) -> {
+                InventoryComponent.getCombined(store, ref, InventoryComponent.EVERYTHING).clear();
+                InventoryComponent.Tool tools = store.getComponent(ref, InventoryComponent.Tool.getComponentType());
+                if (tools != null) tools.getInventory().clear();
+                return Boolean.TRUE;
+            }).get(WorldThread.DEFAULT_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS);
+            return new ActionResult(true, "Cleared the inventory of " + player.getUsername());
+        } catch (TimeoutException timeout) {
+            return new ActionResult(false, "The player's world did not answer in time");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return new ActionResult(false, "Interrupted");
+        } catch (ExecutionException failed) {
+            Throwable cause = failed.getCause() != null ? failed.getCause() : failed;
+            if (cause instanceof ApiException api) return new ActionResult(false, api.getMessage());
+            if (cause instanceof TimeoutException) {
+                return new ActionResult(false, "The player's world did not answer in time");
+            }
+            // The details only go to the server log; the panel gets a fixed message.
+            LOGGER.warning("Clearing the inventory of " + name + " failed: " + cause);
+            return new ActionResult(false, "Clearing the inventory failed; see the server log");
+        }
     }
 
     /**

@@ -17,8 +17,8 @@ const installPlugin = ref(true) // Default to install (recommended)
 
 // Plugin information
 const pluginInfo = {
-  version: '2.0.0',
-  compatibility: 'Hytale Server 2.x',
+  version: '2.1.1',
+  compatibility: 'Hytale 0.7',
   port: 18085,
 }
 

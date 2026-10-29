@@ -80,6 +80,51 @@ export interface QuickSettings {
   defaultGameMode: string
 }
 
+/** live: the running server takes it at once (by command); restart: read at start. */
+export type SettingApply = 'live' | 'restart'
+
+/** A setting an older panel stored under a name Hytale never read, and what was done with it. */
+export interface ConfigMigrationNote {
+  file: string
+  key: string
+  action: 'removed' | 'renamed' | 'repaired'
+  /** The value found */
+  value?: unknown
+  to?: string
+  /** Explanation in English, for the log */
+  note: string
+  at: string
+}
+
+export interface QuickSettingsResponse extends QuickSettings {
+  fields: Record<keyof QuickSettings, SettingApply>
+  limits: {
+    serverName: number
+    motd: number
+    password: number
+    maxPlayers: number
+    minViewRadius: number
+    maxViewRadius: number
+    gameModes: string[]
+  }
+  serverRunning: boolean
+  /** The plugin can apply live settings on the running server. */
+  liveAvailable: boolean
+  /** What the running server uses right now (it saves a live change about a minute later). */
+  liveValues: Partial<Pick<QuickSettings, 'maxPlayers' | 'maxViewRadius'>> | null
+  legacyKeys: string[]
+  notes: ConfigMigrationNote[]
+}
+
+export interface ServerFileSaveResponse {
+  success: boolean
+  changed?: boolean
+  applied?: 'live' | 'file' | 'restart'
+  restarted?: boolean
+  warnings?: string[]
+  message?: string
+}
+
 export interface UpdateCheckResponse {
   installedVersion: string
   latestVersion: string
@@ -752,22 +797,43 @@ export const serverApi = {
     return response.data
   },
 
-  async saveConfigContent(filename: string, content: string): Promise<ActionResponse> {
-    const response = await api.put<ActionResponse>(
+  // With `restart` the panel stops the server, writes and starts it again,
+  // which outlasts the default timeout.
+  async saveConfigContent(
+    filename: string,
+    content: string,
+    options: { restart?: boolean } = {},
+  ): Promise<ServerFileSaveResponse> {
+    const response = await api.put<ServerFileSaveResponse>(
       `/server/config/${encodeURIComponent(filename)}`,
-      { content },
+      { content, ...(options.restart ? { restart: true } : {}) },
+      options.restart ? { timeout: LIFECYCLE_TIMEOUT_MS } : undefined,
     )
     return response.data
   },
 
-  async getQuickSettings(): Promise<QuickSettings> {
-    const response = await api.get<QuickSettings>('/server/quick-settings')
+  /** `live` also asks the running server for the values it uses. */
+  async getQuickSettings(options: { live?: boolean } = {}): Promise<QuickSettingsResponse> {
+    const response = await api.get<QuickSettingsResponse>('/server/quick-settings', {
+      params: options.live ? { live: 1 } : undefined,
+    })
     return response.data
   },
 
-  async saveQuickSettings(settings: Partial<QuickSettings>): Promise<ActionResponse> {
-    const response = await api.put<ActionResponse>('/server/quick-settings', settings)
+  async saveQuickSettings(
+    settings: Partial<QuickSettings>,
+    options: { restart?: boolean } = {},
+  ): Promise<ServerFileSaveResponse> {
+    const response = await api.put<ServerFileSaveResponse>(
+      '/server/quick-settings',
+      { ...settings, ...(options.restart ? { restart: true } : {}) },
+      options.restart ? { timeout: LIFECYCLE_TIMEOUT_MS } : undefined,
+    )
     return response.data
+  },
+
+  async dismissConfigNotes(): Promise<void> {
+    await api.delete('/server/quick-settings/notes')
   },
 
   async checkForUpdates(): Promise<UpdateCheckResponse> {

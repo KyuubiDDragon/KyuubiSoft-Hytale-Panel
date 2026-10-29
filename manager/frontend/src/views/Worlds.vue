@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { worldsApi, type WorldInfo, type WorldConfig, type WorldBackup, type PregenStatus } from '@/api/management'
+import {
+  worldsApi,
+  type WorldInfo,
+  type WorldConfig,
+  type WorldConfigResponse,
+  type WorldBackup,
+  type PregenStatus,
+} from '@/api/management'
 import { waitForBackupJob } from '@/api/backup'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useServerFileSave } from '@/composables/useServerFileSave'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Icon from '@/components/ui/Icon.vue'
+import ApplyBadge from '@/components/config/ApplyBadge.vue'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const authStore = useAuthStore()
 const { addToast } = useToast()
 const { ask } = useConfirm()
+const { saveWithRestartPrompt, saveErrorMessage } = useServerFileSave()
 
 // ===== World tools (backup / restore / upload / pregen) =====
 const canManageWorlds = computed(() => authStore.hasPermission('worlds.manage'))
@@ -166,17 +176,58 @@ async function cancelWorldPregen() {
 const worlds = ref<WorldInfo[]>([])
 const selectedWorld = ref<string | null>(null)
 const selectedFile = ref<string | null>(null) // File path within world
-const worldConfig = ref<WorldConfig | null>(null)
+const worldConfig = ref<WorldConfigResponse | null>(null)
 const fileContent = ref<string>('')
 const loading = ref(true)
 const loadingFile = ref(false)
 const saving = ref(false)
 const error = ref('')
 const saveSuccess = ref(false)
+const saveMessage = ref('')
 const expandedWorlds = ref<Set<string>>(new Set())
 
 // Editable form state (for config.json special handling)
 const form = ref<Partial<WorldConfig>>({})
+
+/** How a world field takes effect right now: live only while the plugin can run the command. */
+function worldApply(field: string): 'live' | 'restart' {
+  const config = worldConfig.value
+  const mode = config?.fields[field] ?? 'restart'
+  return mode === 'live' && (!config?.serverRunning || config.liveAvailable) ? 'live' : 'restart'
+}
+
+function worldFieldLabel(field: string): string {
+  const key = WORLD_FIELD_LABELS[field]
+  return key && te(key) ? t(key) : field
+}
+
+const WORLD_FIELD_LABELS: Record<string, string> = {
+  isPvpEnabled: 'worlds.pvpEnabled',
+  isFallDamageEnabled: 'worlds.fallDamage',
+  isSpawningNPC: 'worlds.npcSpawning',
+  isAllNPCFrozen: 'worlds.freezeNpcs',
+  isCompassUpdating: 'worlds.compassUpdating',
+  isGameTimePaused: 'worlds.timePaused',
+  isBlockSpawnersEnabled: 'worlds.blockSpawners',
+  gameMode: 'worlds.gameMode',
+  gameplayConfig: 'worlds.gameplayConfig',
+  isTicking: 'worlds.worldTicking',
+  isBlockTicking: 'worlds.blockTicking',
+  isSavingPlayers: 'worlds.savePlayers',
+  isSavingChunks: 'worlds.saveChunks',
+  saveNewChunks: 'worlds.saveNewChunks',
+  isUnloadingChunks: 'worlds.unloadChunks',
+  daytimeDurationSeconds: 'worlds.daytimeDuration',
+  nighttimeDurationSeconds: 'worlds.nighttimeDuration',
+  deleteOnUniverseStart: 'worlds.dangerZone.deleteOnUniverseStart',
+  deleteOnRemove: 'worlds.dangerZone.deleteOnRemove',
+}
+
+function worldSavedMessage(applied: string | undefined, restarted: boolean | undefined): string {
+  if (applied === 'live') return t('serverFiles.appliedLive')
+  if (restarted || applied === 'restart') return t('serverFiles.savedRestarted')
+  return t('serverFiles.savedForStart')
+}
 
 // Edit mode for config.json: 'form' or 'text'
 const configEditMode = ref<'form' | 'text'>('form')
@@ -309,20 +360,22 @@ async function selectFile(worldName: string, filePath: string) {
         saveNewChunks: worldConfig.value.saveNewChunks,
         isUnloadingChunks: worldConfig.value.isUnloadingChunks,
         isCompassUpdating: worldConfig.value.isCompassUpdating,
+        isBlockSpawnersEnabled: worldConfig.value.isBlockSpawnersEnabled,
         gameplayConfig: worldConfig.value.gameplayConfig,
+        gameMode: worldConfig.value.gameMode ?? null,
         deleteOnUniverseStart: worldConfig.value.deleteOnUniverseStart,
         deleteOnRemove: worldConfig.value.deleteOnRemove,
-        daytimeDurationSecondsOverride: worldConfig.value.daytimeDurationSecondsOverride,
-        nighttimeDurationSecondsOverride: worldConfig.value.nighttimeDurationSecondsOverride,
+        daytimeDurationSeconds: worldConfig.value.daytimeDurationSeconds ?? null,
+        nighttimeDurationSeconds: worldConfig.value.nighttimeDurationSeconds ?? null,
         clientEffects: worldConfig.value.clientEffects ? { ...worldConfig.value.clientEffects } : {},
       }
-      // Store raw JSON for text editor mode
-      configRawText.value = JSON.stringify(worldConfig.value.raw, null, 2)
+      // The file text as it is: parsing it here would round a seed beyond 2^53.
+      configRawText.value = worldConfig.value.rawText ?? JSON.stringify(worldConfig.value.raw, null, 2)
       fileContent.value = ''
     } else {
       // Use generic file endpoint for other files
       const data = await worldsApi.getFile(worldName, filePath)
-      fileContent.value = JSON.stringify(data.content, null, 2)
+      fileContent.value = data.raw ?? JSON.stringify(data.content, null, 2)
       worldConfig.value = null
     }
   } catch (e) {
@@ -337,33 +390,33 @@ async function selectFile(worldName: string, filePath: string) {
 async function saveFile() {
   if (!selectedWorld.value || !selectedFile.value) return
 
+  const world = selectedWorld.value
+  const file = selectedFile.value
   saving.value = true
   error.value = ''
   saveSuccess.value = false
 
   try {
-    if (selectedFile.value === 'config.json') {
-      if (configEditMode.value === 'text') {
-        // Save raw JSON text directly as file content
-        const content = JSON.parse(configRawText.value)
-        await worldsApi.updateFile(selectedWorld.value, 'config.json', content)
-      } else {
-        // Use specialized config endpoint for form mode
-        await worldsApi.updateConfig(selectedWorld.value, form.value)
-      }
+    let save: (restart: boolean) => Promise<{ applied?: string; restarted?: boolean }>
+    if (file === 'config.json' && configEditMode.value === 'form') {
+      // An empty gameplay config means "leave it": the server needs an id there.
+      const updates = { ...form.value, gameplayConfig: form.value.gameplayConfig || undefined }
+      save = (restart) => worldsApi.updateConfig(world, updates, { restart })
     } else {
-      // Parse and save generic file
-      const content = JSON.parse(fileContent.value)
-      await worldsApi.updateFile(selectedWorld.value, selectedFile.value, content)
+      // Sent as text (checked here, parsed by the panel without rounding big numbers).
+      const text = file === 'config.json' ? configRawText.value : fileContent.value
+      JSON.parse(text)
+      save = (restart) => worldsApi.updateFile(world, file, text, { restart })
     }
+    const saved = await saveWithRestartPrompt(save, worldFieldLabel)
+    if (!saved) return
+    // Reload what was written (a live change is kept by the server and shown as sent).
+    if (file === 'config.json' && saved.result.applied !== 'live') await selectFile(world, file)
+    saveMessage.value = worldSavedMessage(saved.result.applied, saved.result.restarted)
     saveSuccess.value = true
-    setTimeout(() => saveSuccess.value = false, 3000)
+    setTimeout(() => (saveSuccess.value = false), 4000)
   } catch (e) {
-    if (e instanceof SyntaxError) {
-      error.value = t('worlds.invalidJson')
-    } else {
-      error.value = t('worlds.saveFailed')
-    }
+    error.value = e instanceof SyntaxError ? t('worlds.invalidJson') : saveErrorMessage(e)
   } finally {
     saving.value = false
   }
@@ -602,7 +655,7 @@ onUnmounted(() => {
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
-              {{ t('worlds.saved') }}
+              {{ saveMessage || t('worlds.saved') }}
             </span>
             <button
               v-if="authStore.hasPermission('worlds.manage')"
@@ -616,6 +669,35 @@ onUnmounted(() => {
               {{ saving ? t('worlds.saving') : t('worlds.saveChanges') }}
             </button>
           </div>
+        </div>
+
+        <!-- When changes take effect (the server owns these files) -->
+        <div class="flex items-start gap-3 p-3 bg-surface-raised border border-border/60 rounded-lg">
+          <svg class="w-5 h-5 text-ink-muted flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-sm text-ink-muted">
+            {{
+              isConfigJson && worldConfig
+                ? !worldConfig.serverRunning
+                  ? t('serverFiles.stoppedInfo')
+                  : worldConfig.liveAvailable
+                    ? t('worlds.runningInfo')
+                    : t('serverFiles.runningNoPluginInfo')
+                : t('worlds.fileEditorInfo')
+            }}
+          </p>
+        </div>
+
+        <!-- Keys older panels wrote instead of the real ones (cleaned up at the next start) -->
+        <div
+          v-if="isConfigJson && worldConfig && worldConfig.warnings.length > 0"
+          class="p-3 bg-hytale-orange/10 border border-hytale-orange/30 rounded-lg"
+        >
+          <p class="text-sm text-ink-muted">{{ t('worlds.legacyKeys') }}</p>
+          <ul class="text-xs text-ink-muted font-mono list-disc pl-5 mt-1">
+            <li v-for="w in worldConfig.warnings" :key="w">{{ w }}</li>
+          </ul>
         </div>
 
         <!-- Specialized config.json editor -->
@@ -688,7 +770,15 @@ onUnmounted(() => {
               <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isPvpEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
-                  <span class="text-ink">{{ t('worlds.pvpEnabled') }}</span>
+                  <span class="text-ink">{{ t('worlds.pvpEnabled') }}<ApplyBadge :mode="worldApply('isPvpEnabled')" /></span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isGameTimePaused" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-ink">{{ t('worlds.timePaused') }}<ApplyBadge :mode="worldApply('isGameTimePaused')" /></span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" v-model="form.isBlockSpawnersEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <span class="text-ink">{{ t('worlds.blockSpawners') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" v-model="form.isFallDamageEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
@@ -707,15 +797,54 @@ onUnmounted(() => {
                   <span class="text-ink">{{ t('worlds.compassUpdating') }}</span>
                 </label>
               </div>
-              <div class="mt-4">
-                <label class="block text-sm text-ink-muted mb-2">{{ t('worlds.gameplayConfig') }}</label>
-                <input
-                  type="text"
-                  v-model="form.gameplayConfig"
-                  class="w-full px-3 py-2 bg-surface-overlay border border-border rounded-lg text-ink-muted focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
-                  :placeholder="t('worlds.defaultPlaceholder')"
-                />
+              <p class="text-xs text-ink-subtle mt-3">{{ t('worlds.restartFieldsHint') }}</p>
+              <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm text-ink-muted mb-2">{{ t('worlds.gameMode') }}</label>
+                  <select
+                    v-model="form.gameMode"
+                    class="w-full px-3 py-2 bg-surface-overlay border border-border rounded-lg text-ink-muted focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+                  >
+                    <option :value="null">{{ t('worlds.gameModeInherit') }}</option>
+                    <option v-for="mode in worldConfig.limits.gameModes" :key="mode" :value="mode">
+                      {{ t(`players.gamemodes.${mode.toLowerCase()}`) }}
+                    </option>
+                  </select>
+                  <p class="text-xs text-ink-subtle mt-1">{{ t('worlds.gameModeHint') }}</p>
+                </div>
+                <div>
+                  <label class="block text-sm text-ink-muted mb-2">{{ t('worlds.gameplayConfig') }}</label>
+                  <input
+                    type="text"
+                    v-model="form.gameplayConfig"
+                    class="w-full px-3 py-2 bg-surface-overlay border border-border rounded-lg text-ink-muted focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+                    :placeholder="t('worlds.defaultPlaceholder')"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm text-ink-muted mb-2">{{ t('worlds.daytimeDuration') }}</label>
+                  <input
+                    type="number"
+                    min="1"
+                    :max="worldConfig.limits.maxDurationSeconds"
+                    v-model.number="form.daytimeDurationSeconds"
+                    class="w-full px-3 py-2 bg-surface-overlay border border-border rounded-lg text-ink-muted focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+                    :placeholder="t('worlds.durationDefault')"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm text-ink-muted mb-2">{{ t('worlds.nighttimeDuration') }}</label>
+                  <input
+                    type="number"
+                    min="1"
+                    :max="worldConfig.limits.maxDurationSeconds"
+                    v-model.number="form.nighttimeDurationSeconds"
+                    class="w-full px-3 py-2 bg-surface-overlay border border-border rounded-lg text-ink-muted focus:border-hytale-orange focus:ring-1 focus:ring-hytale-orange"
+                    :placeholder="t('worlds.durationDefault')"
+                  />
+                </div>
               </div>
+              <p class="text-xs text-ink-subtle mt-2">{{ t('worlds.durationHint') }}</p>
             </div>
           </div>
 

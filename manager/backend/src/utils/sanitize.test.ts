@@ -4,12 +4,10 @@ import {
   isValidItemId,
   isValidUUID,
   isValidGamemode,
-  isCommandSafe,
   validateCommand,
-  isCommandAllowed,
-  getCommandRequiredPermission,
   escapeShellArg,
   sanitizeMessage,
+  toCommandText,
   containsControlChars,
   stripControlChars,
 } from './sanitize.js';
@@ -42,11 +40,9 @@ describe('sanitize: console line injection (control characters)', () => {
   for (const [label, command] of smuggled) {
     it(`rejects a command with ${label}`, () => {
       expect(containsControlChars(command)).toBe(true);
-      expect(isCommandSafe(command)).toBe(false);
       const result = validateCommand(command);
       expect(result.valid).toBe(false);
       expect(result.error).toMatch(/single line/);
-      expect(getCommandRequiredPermission(command)).toBeNull();
     });
   }
 
@@ -70,40 +66,6 @@ describe('sanitize: console line injection (control characters)', () => {
     expect(sanitizeMessage(`a\nb${LINE_SEPARATOR}c\td${NEL}e`)).toBe('a b c d e');
     expect(containsControlChars(sanitizeMessage(`x\r\n/op add Evil${ESC}`))).toBe(false);
   });
-
-  it('classifies a suffixed admin command by its base name', () => {
-    expect(getCommandRequiredPermission('/op:add steve')).toBe('console.execute.admin');
-    expect(getCommandRequiredPermission('/say:x hello')).toBe('console.execute');
-  });
-
-  it('puts every /auth subcommand and /save-off on the admin tier', () => {
-    for (const cmd of [
-      '/auth',
-      '/auth status',
-      '/auth logout',
-      '/auth login device',
-      '/auth select 1',
-      '/auth cancel',
-      '/auth persistence Memory',
-      '/AUTH LOGOUT',
-      '/auth:logout',
-      '/save-off',
-    ]) {
-      expect(getCommandRequiredPermission(cmd)).toBe('console.execute.admin');
-    }
-    // Deliberately unchanged: these stay on the plain tier.
-    for (const cmd of [
-      '/save',
-      '/save-on',
-      '/save-all',
-      '/setspawn',
-      '/worldborder 100',
-      '/tp a b',
-      '/teleport a b',
-    ]) {
-      expect(getCommandRequiredPermission(cmd)).toBe('console.execute');
-    }
-  });
 });
 
 describe('sanitize.isValidPlayerName', () => {
@@ -120,51 +82,62 @@ describe('sanitize.isValidPlayerName', () => {
   it('rejects empty and overlong', () => {
     expect(isValidPlayerName('')).toBe(false);
     expect(isValidPlayerName('a'.repeat(33))).toBe(false);
+    expect(isValidPlayerName('a'.repeat(32))).toBe(true);
   });
-});
-
-describe('sanitize.isCommandSafe', () => {
-  it('blocks command chaining', () => {
-    expect(isCommandSafe('/kick steve; rm -rf')).toBe(false);
-    expect(isCommandSafe('/kick steve | curl evil')).toBe(false);
-    expect(isCommandSafe('/kick steve && reboot')).toBe(false);
-  });
-  it('blocks substitutions and redirection', () => {
-    expect(isCommandSafe('/say $(whoami)')).toBe(false);
-    expect(isCommandSafe('/say ${HOME}')).toBe(false);
-    expect(isCommandSafe('/say hi > /etc/passwd')).toBe(false);
-  });
-  it('allows ordinary content', () => {
-    expect(isCommandSafe('/kick steve grief')).toBe(true);
-    expect(isCommandSafe('/give @p adamantite_sword 1')).toBe(true);
+  it('rejects a leading hyphen, which the command parser reads as an option', () => {
+    expect(isValidPlayerName('--confirm')).toBe(false);
+    expect(isValidPlayerName('-x')).toBe(false);
+    expect(isValidPlayerName('_x-y')).toBe(true);
   });
 });
 
 describe('sanitize.validateCommand', () => {
-  it('only allows whitelisted prefixes', () => {
+  it('accepts the commands of the server', () => {
     expect(validateCommand('/kick steve').valid).toBe(true);
+    expect(validateCommand('/world save --all --confirm').valid).toBe(true);
     expect(validateCommand('/eval Math.random()').valid).toBe(false);
+    expect(validateCommand('/save').valid).toBe(false);
   });
   it('requires a leading slash', () => {
     expect(validateCommand('kick steve').valid).toBe(false);
   });
+  it('no longer blocks characters that only mean something to a shell', () => {
+    // The console is no shell: these are ordinary text for /say and /notify.
+    for (const cmd of [
+      '/say <3 A & B; (x) > z | w',
+      '/say $(whoami) ${HOME} `id`',
+      '/notify Restart in 5 min! #1 ~ ^ *',
+      '/say a/../b',
+    ]) {
+      expect(validateCommand(cmd), cmd).toEqual({ valid: true });
+    }
+  });
+  it('rejects overlong lines', () => {
+    expect(validateCommand(`/say ${'x'.repeat(5000)}`).valid).toBe(false);
+  });
 });
 
-describe('sanitize.getCommandRequiredPermission', () => {
-  it('returns admin scope for privileged commands', () => {
-    expect(getCommandRequiredPermission('/op steve')).toBe('console.execute.admin');
-    expect(getCommandRequiredPermission('/ban steve')).toBe('console.execute.admin');
-    expect(getCommandRequiredPermission('/stop')).toBe('console.execute.admin');
-    expect(getCommandRequiredPermission('/give @p sword 1')).toBe('console.execute.admin');
+describe('sanitize.toCommandText', () => {
+  it('keeps text a shell would care about', () => {
+    expect(toCommandText('<3 A & B; (x) > z | w $HOME')).toBe('<3 A & B; (x) > z | w $HOME');
+    expect(toCommandText("it's fine, isn't it?")).toBe("it's fine, isn't it?");
   });
-  it('returns plain execute for ordinary commands', () => {
-    expect(getCommandRequiredPermission('/say hello')).toBe('console.execute');
-    expect(getCommandRequiredPermission('/help')).toBe('console.execute');
-    expect(getCommandRequiredPermission('/list')).toBe('console.execute');
+  it('replaces what the Hytale command parser would reject', () => {
+    expect(toCommandText('say "hi')).toBe('say \u201dhi');
+    expect(toCommandText("'quoted")).toBe('\u2019quoted');
+    expect(toCommandText("a ,'b")).toBe('a ,\u2019b');
+    expect(toCommandText('a]b [c [d]')).toBe('a)b (c (d)');
+    expect(toCommandText('C:\\path')).toBe('C:/path');
+    expect(toCommandText('wait,,, what , , now')).toBe('wait, what , now');
+    expect(toCommandText(', starts with a comma')).toBe('starts with a comma');
+    expect(toCommandText('hello --world and,--x')).toBe('hello \u2013world and,\u2013x');
+    expect(toCommandText('{"text":"json"}')).toBe('(\u201dtext\u201d:\u201djson\u201d}');
   });
-  it('returns null for unknown commands', () => {
-    expect(getCommandRequiredPermission('/eval x()')).toBeNull();
-    expect(getCommandRequiredPermission('not a command')).toBeNull();
+  it('makes one line and cuts to the limit', () => {
+    expect(toCommandText(`a\r\n/op add Evil${CTRL_C}`)).toBe('a /op add Evil');
+    expect(toCommandText('  many    spaces  ')).toBe('many spaces');
+    expect(toCommandText('x'.repeat(300), 10)).toBe('x'.repeat(10));
+    expect(toCommandText(undefined as unknown as string)).toBe('');
   });
 });
 
@@ -183,9 +156,9 @@ describe('sanitize.isValidUUID', () => {
 });
 
 describe('sanitize.sanitizeMessage', () => {
-  it('strips shell metacharacters but keeps spaces and punctuation', () => {
-    expect(sanitizeMessage('Hello, world!')).toBe('Hello, world');
-    expect(sanitizeMessage('a$b`c')).toBe('abc');
+  it('keeps punctuation and symbols, only control characters go', () => {
+    expect(sanitizeMessage('Hello, world!')).toBe('Hello, world!');
+    expect(sanitizeMessage('a$b`c <3 & ;')).toBe('a$b`c <3 & ;');
   });
   it('truncates', () => {
     expect(sanitizeMessage('x'.repeat(500)).length).toBeLessThanOrEqual(256);

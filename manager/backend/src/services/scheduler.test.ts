@@ -134,3 +134,79 @@ describe('carryOverRestartBackup', () => {
     expect(carryOverRestartBackup(null)).toBeNull();
   });
 });
+
+describe('quick commands for Hytale 0.7', () => {
+  const legacy = [
+    { id: '1', name: 'Save World', command: '/save', icon: 'save', category: 'server' },
+    { id: '2', name: 'List Players', command: '/list', icon: 'users', category: 'players' },
+    { id: '3', name: 'Set Day', command: '/time set day', icon: 'sun', category: 'world' },
+    { id: '4', name: 'Set Night', command: '/time set night', icon: 'moon', category: 'world' },
+    { id: '5', name: 'Clear Weather', command: '/weather clear', icon: 'cloud', category: 'world' },
+    { id: '6', name: 'Rain', command: '/weather rain', icon: 'cloud-rain', category: 'world' },
+  ];
+
+  it('replaces the untouched pre-0.7 defaults and keeps edited or own entries', async () => {
+    const { migrateQuickCommands } = await import('./scheduler.js');
+    const edited = { ...legacy[1], name: 'Who is online' };
+    const own = { id: '99', name: 'Mine', command: '/save', icon: 'save', category: 'custom' };
+    const { quickCommands, replaced } = migrateQuickCommands([
+      legacy[0],
+      edited,
+      legacy[2],
+      legacy[4],
+      legacy[5],
+      own,
+    ]);
+    expect(quickCommands.map((c) => c.command)).toEqual([
+      '/world save --all --confirm',
+      '/list',
+      '/time set day',
+      '/weather reset',
+      '/weather set Zone1_Rain',
+      '/save',
+    ]);
+    expect(quickCommands[3].name).toBe('Reset Weather');
+    expect(replaced).toHaveLength(3);
+    // Already migrated: nothing more to do.
+    expect(migrateQuickCommands(quickCommands).replaced).toEqual([]);
+  });
+
+  it('migrates a stored config when it is loaded', async () => {
+    const { loadConfig, getConfig } = await import('./scheduler.js');
+    fs.writeFileSync(
+      path.join(secondDataDir, 'manager-config.json'),
+      JSON.stringify({ quickCommands: legacy }),
+    );
+    await loadConfig('secondary');
+    expect(getConfig('secondary').quickCommands.map((c) => c.command)).toEqual([
+      '/world save --all --confirm',
+      '/who',
+      '/time set day',
+      '/time set night',
+      '/weather reset',
+      '/weather set Zone1_Rain',
+    ]);
+  });
+
+  it('ships defaults that exist in 0.7 and need only console.execute', async () => {
+    const { getQuickCommands } = await import('./scheduler.js');
+    const { classifyCommand, VANILLA_COMMANDS } = await import('../utils/commandWhitelist.js');
+    const defaults = getQuickCommands('no-such-server');
+    expect(defaults.length).toBeGreaterThanOrEqual(8);
+    for (const qc of defaults) {
+      expect(classifyCommand(qc.command, VANILLA_COMMANDS), qc.command).toMatchObject({
+        known: true,
+        tier: 'console.execute',
+      });
+    }
+  });
+
+  it('hands out copies of the defaults (also the demo list)', async () => {
+    const { defaultQuickCommands, getQuickCommands } = await import('./scheduler.js');
+    const copy = defaultQuickCommands();
+    expect(copy).toEqual(getQuickCommands('no-such-server'));
+    expect(copy.map((c) => c.command)).not.toContain('/save-all');
+    copy[0].command = '/changed';
+    expect(defaultQuickCommands()[0].command).toBe('/world save --all --confirm');
+  });
+});

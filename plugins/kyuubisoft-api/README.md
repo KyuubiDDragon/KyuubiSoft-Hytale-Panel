@@ -8,6 +8,17 @@ REST API and WebSocket plugin for KyuubiSoft Panel - provides accurate player da
 > before each server start, so panel users don't have to do anything. See
 > [Upgrading from 1.4.x](#upgrading-from-14x) if you call the API yourself.
 
+## What's new in 2.1.1
+
+- **Player actions with the Hytale 0.7 syntax:** heal restores health and
+  stamina (`player stats settomax`), respawn uses the variant that takes the
+  player, and clearing an inventory is done directly on the player's world
+  thread (the server's `/inventory clear` only clears whoever runs it).
+  2.1.0 sent the old syntax and these three actions failed.
+- **No exception text in answers:** when clearing an inventory fails
+  unexpectedly, the answer is a fixed message and the details go to the
+  server log only, like for every other endpoint.
+
 ## What's new in 2.1
 
 - **Real TPS per world.** Hytale ticks at 30 TPS and every world on its own
@@ -61,7 +72,9 @@ REST API and WebSocket plugin for KyuubiSoft Panel - provides accurate player da
 - **Accurate Player Data** - Direct access to server player list (no log parsing),
   incl. real gamemode (Adventure/Creative) and health via the entity-stats component
 - **Player Actions** - heal, kill, respawn, teleport, gamemode and clear-inventory,
-  executed in-process through the server's own commands (no console round-trip)
+  executed in-process through the server's own commands (no console round-trip);
+  clearing another player's inventory is done directly on the player's world thread,
+  since the server's `/inventory clear` only clears the sender
 - **World Information** - List all worlds with live player counts / tick state,
   entities and loaded chunks
 - **Server Statistics** - real TPS and tick time per world (the server's own tick
@@ -149,12 +162,12 @@ server cannot provide them.
 
 | Endpoint | Body | Description |
 |----------|------|-------------|
-| `POST /api/players/{name}/heal` | – | Restore stats to full |
+| `POST /api/players/{name}/heal` | – | Health and stamina to their maximum |
 | `POST /api/players/{name}/kill` | – | Kill the player |
 | `POST /api/players/{name}/respawn` | – | Respawn at spawn point |
 | `POST /api/players/{name}/teleport` | `{x,y,z}` or `{target}` | Teleport to coords/player |
 | `POST /api/players/{name}/gamemode` | `{gamemode}` | `creative` or `adventure` only |
-| `POST /api/players/{name}/inventory/clear` | – | Clear inventory |
+| `POST /api/players/{name}/inventory/clear` | – | Clear the whole inventory, tools included |
 
 Actions return `{ "success": true|false, "message": "..." }`. The plugin
 runs the server's own commands as `Panel:player-action` and reports their real
@@ -455,7 +468,7 @@ config file.
 ## Installation
 
 1. Build the plugin (see below).
-2. Copy `build/libs/KyuubiSoftAPI-2.1.0.jar` to your server's `mods/` folder
+2. Copy `build/libs/KyuubiSoftAPI-2.1.1.jar` to your server's `mods/` folder
    (the KyuubiSoft Panel bundles this jar and can install it for you).
 3. Put a token into the config (the panel does this for you) and restart the server.
 4. API will be available at `http://localhost:18085`
@@ -484,11 +497,11 @@ cd plugins/kyuubisoft-api
 javac --release 21 -encoding UTF-8 -cp lib/HytaleServer.jar -d build/classes \
     $(find src/main/java -name '*.java')
 cp src/main/resources/manifest.json build/classes/
-jar --create --file build/libs/KyuubiSoftAPI-2.1.0.jar -C build/classes .
+jar --create --file build/libs/KyuubiSoftAPI-2.1.1.jar -C build/classes .
 ```
 
-Output: `build/libs/KyuubiSoftAPI-2.1.0.jar`. `gradle assemble` (or
-`gradle panelApiJar`) also writes `build/libs/KyuubiSoftAPI-panel-api-2.1.0.jar`,
+Output: `build/libs/KyuubiSoftAPI-2.1.1.jar`. `gradle assemble` (or
+`gradle panelApiJar`) also writes `build/libs/KyuubiSoftAPI-panel-api-2.1.1.jar`,
 the compile-only jar for mods (see [Integrating your mod](#integrating-your-mod)).
 
 The manifest targets server `0.7.0`, i.e. `>=0.7.0 <0.8.0`. Build against the

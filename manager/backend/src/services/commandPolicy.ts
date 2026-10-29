@@ -2,10 +2,12 @@
  * Console command policy shared by every feature that stores or replays
  * console commands (scheduler, quick commands, event actions).
  *
- * It applies exactly the console's own rules: the command whitelist plus the
- * injection guard (validateCommand), then the permission tier derived from the
- * command (console.execute or console.execute.admin), scoped to the server the
- * command will run on. Without this, scheduler.edit alone was enough to plan
+ * It applies exactly the console's own rules: the single-line guard
+ * (validateCommand), then the command must exist on the server it will run on
+ * (that server's command registry, or the vanilla 0.7.3 list when there is
+ * none) and the caller must hold the tier the panel policy sets for it
+ * (console.execute or console.execute.admin, see utils/commandWhitelist.ts),
+ * scoped to that server. Without this, scheduler.edit alone was enough to plan
  * /op, /stop or /ban and have the panel run it later with full console rights.
  *
  *  - authorizeCommand: an interactive actor (the user saving or running it now)
@@ -14,11 +16,18 @@
  */
 import { hasPermission } from './roles.js';
 import { audit } from './audit.js';
+import { getCommandRegistry } from './commandRegistry.js';
 import { logger } from '../utils/logger.js';
-import { validateCommand, getCommandRequiredPermission } from '../utils/sanitize.js';
+import { validateCommand } from '../utils/sanitize.js';
+import {
+  VANILLA_COMMANDS,
+  classifyCommand,
+  type CommandShape,
+  type CommandTier,
+} from '../utils/commandWhitelist.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
-export type CommandTier = 'console.execute' | 'console.execute.admin';
+export type { CommandTier } from '../utils/commandWhitelist.js';
 
 export interface CommandActor {
   username?: string | null;
@@ -43,8 +52,32 @@ export function scopeAllows(apiKeyScopes: string[] | undefined, permission: stri
   return !apiKeyScopes || apiKeyScopes.includes('*') || apiKeyScopes.includes(permission);
 }
 
-function requiredTier(command: string): CommandTier {
-  return getCommandRequiredPermission(command) ?? 'console.execute';
+/**
+ * The commands of the server a command will run on: its registry (fresh or
+ * the last snapshot), otherwise the vanilla list. Omitting serverId means the
+ * default server.
+ */
+export async function commandsOf(serverId?: string): Promise<readonly CommandShape[]> {
+  try {
+    const registry = await getCommandRegistry(serverId);
+    if (registry) return registry.commands;
+  } catch (err) {
+    logger.debug(
+      `[commandPolicy] no command registry for "${serverId ?? 'default'}": ${err instanceof Error ? err.message : err}`,
+    );
+  }
+  return VANILLA_COMMANDS;
+}
+
+type TierCheck = { ok: true; permission: CommandTier } | { ok: false; error: string };
+
+/** The single-line guard, then existence on the target server and the tier. */
+async function requiredTier(command: string, serverId?: string): Promise<TierCheck> {
+  const validation = validateCommand(command);
+  if (!validation.valid) return { ok: false, error: validation.error || 'Invalid command' };
+  const classified = classifyCommand(command, await commandsOf(serverId));
+  if (!classified.known) return { ok: false, error: classified.error };
+  return { ok: true, permission: classified.tier };
 }
 
 // Fail closed: if the rights can't be read (e.g. an unreadable users file),
@@ -81,19 +114,17 @@ export async function holdsCommandTier(
 
 /**
  * May this actor run `command` on `serverId` right now? Omitting serverId
- * checks the global role only, which is also the right answer for entries
- * that apply to every server.
+ * checks the global role only (and the default server's commands), which is
+ * also the right answer for entries that apply to every server.
  */
 export async function authorizeCommand(
   actor: CommandActor,
   command: string,
   serverId?: string,
 ): Promise<CommandAuthorization> {
-  const validation = validateCommand(command);
-  if (!validation.valid) {
-    return { allowed: false, status: 400, error: validation.error || 'Invalid command' };
-  }
-  const permission = requiredTier(command);
+  const tier = await requiredTier(command, serverId);
+  if (!tier.ok) return { allowed: false, status: 400, error: tier.error };
+  const { permission } = tier;
   const denied = {
     allowed: false as const,
     status: 403 as const,
@@ -117,11 +148,9 @@ export async function authorizeStoredCommand(
   command: string,
   serverId?: string,
 ): Promise<CommandAuthorization> {
-  const validation = validateCommand(command);
-  if (!validation.valid) {
-    return { allowed: false, status: 400, error: validation.error || 'Invalid command' };
-  }
-  const permission = requiredTier(command);
+  const tier = await requiredTier(command, serverId);
+  if (!tier.ok) return { allowed: false, status: 400, error: tier.error };
+  const { permission } = tier;
   if (!createdBy) {
     if (permission === 'console.execute') return { allowed: true, permission };
     return {

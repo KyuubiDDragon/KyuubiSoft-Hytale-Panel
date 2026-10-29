@@ -586,6 +586,173 @@ working as before (stdin console, log-based status).
   see refused joins; subscribe to `player.join_denied` explicitly if you need
   them.
 
+### Hytale 0.7 compatibility and KyuubiSoft API 2.1.1
+
+The panel now speaks Hytale 0.7 everywhere it touches the game server: access
+files, server and world configs, console, commands and player actions. Tested
+against Hytale 0.7.3 and 0.7.4. Rebuild the manager image; it bundles
+KyuubiSoft API **2.1.1**. See **Upgrade notes** at the end of this section.
+
+**Whitelist, permissions and bans**
+- The whitelist page reads and changes the Hytale 0.7 join permission
+  (`RequireJoinPermission` plus `hytale.server.join` per player) instead of the
+  retired `whitelist.json`, live from the running server or from its files
+  while it is stopped.
+- The permissions editor no longer writes player names as keys into
+  `permissions.json` (which kept the server from starting). Groups keep their
+  parent and all unknown fields, and changes on a running server go through
+  `/perm` and are verified.
+- The ban list reads the 0.7 `bans.json` format (and the old one), shows
+  expiry, author and unreadable entries, and bans or unbans through `/ban` and
+  `/unban` or, with the server stopped, in the file. Bans from the player list,
+  the ban list and bulk actions use the same path and send the player's UUID.
+- Hytale 0.7 has no temporary bans: the panel issues a normal ban and lifts it
+  when it expires, by UUID and only while the server's ban is still the one
+  the panel issued. If the server does not confirm the unban (for example
+  while it cannot look up offline players), the panel keeps the ban open and
+  tries again later. A temporary ban on a player who is already banned is
+  refused, and every permanent ban or unban closes the panel's temporary bans
+  of that player.
+- A one-time migration of access files from before Hytale 0.7 runs before
+  every start through the panel or on demand (player names resolved to UUIDs,
+  backups kept, safe to run again); its report, including whitelist names that
+  could not be resolved, is shown on the access pages.
+- The access pages show whether data is live or from the files, what the
+  server cannot read, and clear error messages in every panel language.
+
+**Server and world configuration**
+- The configuration page shows only real Hytale 0.7 settings with help, limits
+  and a "Live"/"Restart" badge per field. Max players and view radius apply
+  instantly on a running server and count only when the server confirms them.
+- Saving a setting the server only reads at start asks to "Save and restart"
+  while the server is running, instead of writing a file the server would
+  overwrite. Config files are validated, backed up as `.bak` and written
+  atomically without following links; unknown keys and large world seeds are
+  kept exactly.
+- The world editor uses the server's real field names (day/night length, game
+  mode, block spawners, time pause); PvP and the time pause switch live. World
+  configs belong to the default server; requests scoped to another server are
+  refused instead of acting on the default server.
+- The setup wizard writes only settings Hytale knows (join permission for the
+  whitelist, max view radius, update mode), offers only Adventure and
+  Creative, keeps the OP switch off and needs only one restart at the end.
+- Settings older panel versions stored under names Hytale never read
+  (whitelist, OP, view radius, invalid game mode, world day/night overrides)
+  are cleaned up once, with a notice on the configuration page.
+- `SentryDsn` (new in Hytale 0.7.4) is a known setting: an empty value or a
+  URL is kept, any other type is refused.
+
+**Console and logs**
+- One shared log stream per server: two consoles opening at once both get the
+  live log, Docker log streams are no longer leaked, and a late stream error
+  can no longer crash the panel. Lines split across chunks, stack traces and
+  multi-line command answers stay together; times are UTC and shown in local
+  time, with the logger name and a Debug filter.
+- Commands typed while connecting are sent once connected, a heartbeat detects
+  dead connections, a slow connection skips log entries and says how many,
+  console rights are checked again every 30 seconds, and commands are rate
+  limited.
+- Without the plugin, one shared, serialized stdin console per server
+  re-attaches after a container restart, so parallel commands are neither lost
+  nor reported as sent when they were not. Backslashes and `!` are escaped for
+  the server console's line editor, which used to drop backslashes and replace
+  `!!`, `!$` and `!word` with earlier console lines.
+- "Load all" reads the server's own log files (newest 5 files, up to 8 MiB and
+  10,000 entries), never follows links and says when older entries were left
+  out.
+- Join/leave tracking uses the plugin's events. Without the plugin it follows
+  the server's join/leave log records, even while no console is open, and only
+  trusts lines exactly as the server's log formatter writes them.
+
+**Commands and player actions**
+- The console only runs commands the game server actually has: the panel reads
+  the server's own command list (vanilla and mod commands, cached and kept
+  while the server is offline) and falls back to the Hytale 0.7.3 commands. A
+  fixed policy decides the permission: information, announcements, time,
+  weather and saving need `console.execute`; everything else, including every
+  mod command, needs `console.execute.admin`.
+- Player actions use the Hytale 0.7 syntax (heal, respawn, effects, kick),
+  report the server's real answer and say when a command only reached the
+  console without confirmation.
+- Hytale 0.7 has no chat mute and no private messages: the mute and message
+  actions answer "not supported" instead of pretending to work,
+  auto-moderation warns instead of muting, and kicks no longer send a reason
+  (it stays in the punishment history).
+- Text in announcements, the Discord relay, the welcome message and ban
+  reasons is no longer cut down by a shell filter; only characters the Hytale
+  command parser would reject are replaced.
+- The default quick commands are Hytale 0.7 commands (save worlds, list
+  players, time, weather, memory, performance); unedited old defaults are
+  updated automatically, also in demo mode.
+- The help page, the console command reference, autocomplete and
+  `docs/COMMANDS.md` list Hytale 0.7 commands with the panel permission each
+  needs, plus every command of the connected server.
+
+**Event actions**
+- Joins and leaves the panel reads from the server log (no plugin connection)
+  no longer run command rules; announcements, backups, webhooks and the online
+  list still get them, and events from the plugin run every rule as before.
+  Saving a command rule on joins or leaves for a server without the plugin
+  returns a warning saying so.
+- Saving a command rule whose template uses free-text placeholders (such as
+  `{message}`) returns a warning, since whoever causes the event can add words
+  or arguments to the command.
+- Player names starting with a hyphen are refused wherever the panel puts a
+  name into a command, so a name like `--confirm` cannot be read as an option.
+
+**KyuubiSoft API 2.1.1**
+- Player actions use the Hytale 0.7 syntax: heal restores health and stamina,
+  respawn uses the variant that takes the player, and clearing an inventory is
+  done directly on the player's world thread (the server's `/inventory clear`
+  only clears whoever runs it). An unexpected error answers with a fixed
+  message and logs the details on the server only.
+- The public API for mods is unchanged; mods built against 2.1.0 keep working.
+
+**Security**
+- Changing the server's own rights through the permissions page always needs
+  `players.op` as well: any `hytale.*` permission (granted or denied) or
+  wildcard over it, the default group, groups that carry such rights, moving
+  players into or out of them, and deleting such groups. Mod permissions on
+  single players stay free. The change goes to the exact player it was checked
+  for.
+- The file manager and the generic config routes no longer read or write the
+  server's access files (permissions, bans, whitelist and their copies). The
+  configuration page's file editor asks for the access rights to read or
+  write them and refuses content the server could not read.
+- Turning on the server's `--allow-op` start flag needs `players.op` in
+  addition to `config.edit`, since every player could then make themselves an
+  operator; turning it off still needs only `config.edit`. It stays off by
+  default.
+
+**Upgrade notes**
+- Install the 2.1.1 update from the dashboard and restart the server from the
+  panel.
+- Existing `config.json`, world configs and access files are rewritten once
+  (with `.bak` backups) on the next panel start while the server is stopped,
+  or before the next start through the panel.
+- Custom roles with `players.permissions` but without `players.op` can no
+  longer change Hytale core permissions, the default group or groups with core
+  rights. "Save and restart" on a running server needs `server.restart` as
+  well.
+- The built-in Operator role can no longer open the access files in the file
+  manager or the generic config routes; use the whitelist, permissions and ban
+  pages. Groups with names longer than 64 characters (created outside the
+  panel) can no longer be deleted through the panel.
+- Scheduled commands and event actions with commands Hytale 0.7 does not have
+  (for example `/save-all`, `/list`, `/mute`) no longer run; the scheduler
+  marks them. The admin console tier may now run every server command,
+  including mod commands; the plain tier is narrower (`/tp`, `/spawn`,
+  `/warp`, `/effect` and `/heal` need admin).
+- The setup wizard and the quick settings no longer offer Survival or
+  Spectator, and the wizard's whitelist switch is off by default.
+- API changes: the console WebSocket sends logs as `log_batch` (the panel
+  understands both forms; adapt your own clients); the world API renames the
+  day/night override fields and returns `seed` as a string; groups use
+  `parent` instead of `inherits`; `POST /api/players/:name/mute` and
+  `/message` answer `501`; world config routes for a server other than the
+  default answer `409` (`default_server_only`); a temporary ban on a banned
+  player answers `409` (`already_banned`).
+
 ### New features
 
 - **Update Center** (`/updates`): a dedicated view over the native Hytale update

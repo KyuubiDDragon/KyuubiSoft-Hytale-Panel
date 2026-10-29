@@ -7,256 +7,135 @@
 
 </div>
 
-This document lists all available commands for the Hytale server. Commands can be executed through the Admin Panel console or directly in the server console.
+This document lists the Hytale 0.7 console commands the panel uses and documents. Commands can be run from the panel console or directly in the server console. Append `--help` to any command to see its full syntax (`/kick --help`).
+
+The full list of a server, including the commands of its mods, is in the panel under **Help** ("This server") and in the console autocomplete. It comes from the server itself through the KyuubiSoft API plugin.
 
 ## Table of Contents
 
-- [Player Commands](#player-commands)
-- [Administration Commands](#administration-commands)
-- [World Commands](#world-commands)
-- [Server Commands](#server-commands)
-- [Teleportation Commands](#teleportation-commands)
-- [Game Mechanics Commands](#game-mechanics-commands)
-- [Debug Commands](#debug-commands)
+- [Which commands the panel runs](#which-commands-the-panel-runs)
+- [Players](#players)
+- [Access](#access)
+- [Server](#server)
+- [World, Time & Weather](#world-time--weather)
+- [Announcements](#announcements)
+- [Not in Hytale 0.7](#not-in-hytale-07)
+- [Text in commands](#text-in-commands)
 
 ---
 
-## Player Commands
+## Which commands the panel runs
 
-### Player Management
+The panel only sends commands that exist on the server: the server's own command list (read through the KyuubiSoft API plugin, cached, and kept as a snapshot while the server is offline), or the vanilla Hytale 0.7.3 commands when there is no list yet.
+
+Each command needs one of two panel permissions:
+
+| Panel permission | Commands |
+|------------------|----------|
+| `console.execute` | `/help`, `/who`, `/version`, `/whoami`, `/whereami`, `/server stats` (`cpu`, `gc`, `memory`), `/world list`, `/world perf` (`graph`, `reset`), `/world save`, `/plugin list`, `/packs list`, `/warp list`, `/whitelist status`, `/whitelist list`, `/say`, `/notify`, `/eventtitle`, `/time` and its subcommands except `/time dilation`, `/weather` (`get`, `set`, `reset`) |
+| `console.execute.admin` | Every other command, among them `/op`, `/perm`, `/setgroup`, `/auth`, `/stop`, `/update`, `/backup`, `/ban`, `/unban`, `/kick`, `/whitelist add/remove/enable/disable/clear`, `/give`, `/kill`, `/gamemode`, `/sudo`, `/plugin load/unload/reload`, `/world add/remove/load/prune`, `/maxplayers`, and every command of a mod |
+
+Aliases count as the command they stand for (`/shutdown` is `/stop`, `/gm` is `/gamemode`). A subcommand a server update adds starts on the admin tier until the panel lists it. Scheduled commands, quick commands and event actions are checked the same way, against the rights of the user who saved them.
+
+---
+
+## Players
 
 | Command | Description | Usage |
 |---------|-------------|-------|
-| `/kick` | Kick a player from the server | `/kick <player> [reason]` |
-| `/ban` | Ban a player from the server | `/ban <player> [reason]` |
-| `/unban` | Remove a player's ban | `/unban <player>` |
-| `/op add` | Give operator permissions | `/op add <player>` |
-| `/op remove` | Remove operator permissions | `/op remove <player>` |
-| `/whitelist add` | Add player to whitelist | `/whitelist add <player>` |
-| `/whitelist remove` | Remove player from whitelist | `/whitelist remove <player>` |
+| `/who` | List the online players per world | `/who` |
+| `/whoami` | Show a player's UUID | `/whoami <player>` |
+| `/whereami` | Show a player's world and position | `/whereami <player>` |
+| `/kick` | Disconnect a player (no reason in Hytale 0.7; the panel keeps the reason in its history) | `/kick <player>` |
 | `/kill` | Kill a player | `/kill <player>` |
+| `/gamemode` | Set a player's game mode | `/gamemode <adventure\|creative> <player>` |
+| `/give` | Give a player an item | `/give <player> <item> --quantity=<n>` |
+| `/player stats settomax` | Restore a stat (the panel's heal uses `Health` and `Stamina`) | `/player stats settomax Health --player <player>` |
+| `/player respawn` | Respawn a dead player | `/player respawn <player>` |
+| `/player effect apply` | Apply an effect | `/player effect apply <player> <effect> [--duration=<seconds>]` |
+| `/player effect clear` | Remove all effects | `/player effect clear <player>` |
+| `/tp` | Teleport a player to another player | `/tp <player> <targetPlayer>` |
+| `/tp` | Teleport a player to coordinates | `/tp <player> <x> <y> <z>` |
 
-### Player Stats & Effects
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/player stats settomax` | Set a player stat to maximum | `/player stats settomax <player> health` |
-| `/player stats set` | Set a specific stat value | `/player stats set <player> <stat> <value>` |
-| `/player effect apply` | Apply an effect to a player | `/player effect apply <player> <effect>` |
-| `/player effect clear` | Clear all effects from a player | `/player effect clear <player>` |
-| `/player respawn` | Force respawn a player | `/player respawn <player>` |
-
-### Inventory Management
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/give` | Give items to a player | `/give <player> <item> [amount]` |
-| `/inventory clear` | Clear a player's inventory | `/inventory clear <player>` |
-| `/inventory open` | Open inventory management | `/inventory open <player>` |
-
-### Gamemode
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/gamemode survival` | Set survival mode | `/gamemode survival [player]` |
-| `/gamemode creative` | Set creative mode | `/gamemode creative [player]` |
-| `/gamemode adventure` | Set adventure mode | `/gamemode adventure [player]` |
-| `/gamemode spectator` | Set spectator mode | `/gamemode spectator [player]` |
+`/inventory clear` only clears the inventory of whoever runs it. Clearing another player's inventory from the panel needs the KyuubiSoft API plugin.
 
 ---
 
-## Administration Commands
-
-### Server Management
+## Access
 
 | Command | Description | Usage |
 |---------|-------------|-------|
-| `/stop` | Stop the server | `/stop` |
-| `/restart` | Restart the server | `/restart` |
-| `/save` | Force save all worlds | `/save` |
-| `/reload` | Reload server configuration | `/reload` |
-
-### Messaging
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/say` | Broadcast a message | `/say <message>` |
-| `/tell` | Send private message | `/tell <player> <message>` |
-| `/broadcast` | Server-wide broadcast | `/broadcast <message>` |
-
-### Server Info
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/list` | List online players | `/list` |
-| `/info` | Show server information | `/info` |
-| `/help` | Show command help | `/help [command]` |
-| `/version` | Show server version | `/version` |
-| `/status` | Show server status | `/status` |
-| `/performance` | Show performance stats | `/performance` |
+| `/whitelist status` | Show whether the whitelist is on | `/whitelist status` |
+| `/whitelist list` | List the whitelisted players | `/whitelist list` |
+| `/whitelist enable` / `disable` | Turn the whitelist on or off | `/whitelist enable` |
+| `/whitelist add` / `remove` | Add or remove a player | `/whitelist add <player>` |
+| `/ban` | Ban a player; the server disconnects them | `/ban <player> [reason]` |
+| `/unban` | Lift a ban | `/unban <player>` |
+| `/op add` / `remove` | Give or take operator rights | `/op add <player>` |
+| `/perm user add` | Give a player (by UUID) a permission | `/perm user add <uuid> <permission>` |
+| `/perm group add` | Give a group a permission | `/perm group add <group> <permission>` |
 
 ---
 
-## World Commands
-
-### World Management
+## Server
 
 | Command | Description | Usage |
 |---------|-------------|-------|
-| `/world list` | List all worlds | `/world list` |
-| `/world create` | Create a new world | `/world create <name>` |
-| `/world delete` | Delete a world | `/world delete <name>` |
+| `/help` | Show the syntax of a command | `/help <command>` |
+| `/version` | Show the server version | `/version` |
+| `/server stats` | Memory, CPU or garbage collection statistics | `/server stats <memory\|cpu\|gc>` |
+| `/plugin list` | List the loaded plugins and mods | `/plugin list` |
+| `/maxplayers` | Show or set the player limit (the new limit is an option, a bare number is refused) | `/maxplayers [--amount <n>]` |
+| `/backup` | The server's own backup (needs `--backup-dir` at start) | `/backup` |
+| `/update` | Check, download and apply server updates | `/update <status\|check\|download\|apply --confirm>` |
+| `/auth status` | Show the server's Hytale sign-in | `/auth status` |
+| `/stop` | Stop the server (alias `/shutdown`) | `/stop` |
+
+---
+
+## World, Time & Weather
+
+| Command | Description | Usage |
+|---------|-------------|-------|
+| `/world list` | List the loaded worlds | `/world list` |
+| `/world save` | Save all worlds now | `/world save --all --confirm` |
+| `/world perf` | Ticks per second of a world | `/world perf` |
+| `/world add` | Create a world | `/world add <name>` |
 | `/world load` | Load a world | `/world load <name>` |
-| `/world unload` | Unload a world | `/world unload <name>` |
-
-### Time & Weather
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/time set` | Set world time | `/time set <day|night|noon|midnight|value>` |
-| `/time add` | Add to world time | `/time add <value>` |
-| `/weather clear` | Set clear weather | `/weather clear [duration]` |
-| `/weather rain` | Set rain | `/weather rain [duration]` |
-| `/weather storm` | Set thunderstorm | `/weather storm [duration]` |
-
-### Difficulty & Rules
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/difficulty` | Set game difficulty | `/difficulty <peaceful|easy|normal|hard>` |
-| `/gamerule` | Set game rules | `/gamerule <rule> <value>` |
+| `/time set` | Set the time of day (`day`, `noon`, `night` work too) | `/time set <dawn\|midday\|dusk\|midnight>` |
+| `/time pause` | Pause the time of day | `/time pause` |
+| `/weather set` | Force a weather | `/weather set Zone1_Rain` |
+| `/weather reset` | Back to the natural weather (alias `/weather clear`) | `/weather reset` |
+| `/warp list` | List the warp points | `/warp list` |
 
 ---
 
-## Teleportation Commands
+## Announcements
 
 | Command | Description | Usage |
 |---------|-------------|-------|
-| `/tp` | Teleport player to player | `/tp <player> <target>` |
-| `/tp` | Teleport to coordinates | `/tp <player> <x> <y> <z>` |
-| `/tp` | Teleport self to player | `/tp <target>` |
-| `/tp` | Teleport self to coords | `/tp <x> <y> <z>` |
-| `/tp` | Teleport to world | `/tp <player> <x> <y> <z> --world <name>` |
-| `/top` | Teleport to top | `/top` |
-| `/spawn` | Teleport to spawn | `/spawn [player]` |
-| `/home` | Teleport to home | `/home [player]` |
-| `/sethome` | Set home location | `/sethome [player]` |
-| `/warp` | Teleport to warp point | `/warp <name> [player]` |
-| `/setwarp` | Create warp point | `/setwarp <name>` |
-| `/delwarp` | Delete warp point | `/delwarp <name>` |
+| `/say` | Chat message to all players (alias `/broadcast`) | `/say <message>` |
+| `/notify` | Notice to all players, optionally styled | `/notify [warning\|danger\|success] <message>` |
+| `/eventtitle` | Large title on every player's screen | `/eventtitle <title> [--secondary=<text>]` |
 
 ---
 
-## Game Mechanics Commands
+## Not in Hytale 0.7
 
-### Entities & NPCs
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/summon` | Spawn an entity | `/summon <entity> [x] [y] [z]` |
-| `/entity kill` | Kill entities | `/entity kill <type|all>` |
-| `/npc create` | Create an NPC | `/npc create <name>` |
-| `/npc remove` | Remove an NPC | `/npc remove <id>` |
-
-### Blocks & Items
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/setblock` | Set a block | `/setblock <x> <y> <z> <block>` |
-| `/fill` | Fill area with blocks | `/fill <x1> <y1> <z1> <x2> <y2> <z2> <block>` |
-| `/clone` | Clone area | `/clone <x1> <y1> <z1> <x2> <y2> <z2> <x> <y> <z>` |
-
-### Experience & Skills
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/xp add` | Add experience | `/xp add <player> <amount>` |
-| `/xp set` | Set experience | `/xp set <player> <amount>` |
-| `/level add` | Add levels | `/level add <player> <amount>` |
-| `/level set` | Set level | `/level set <player> <amount>` |
+These commands from other games or older panel versions do not exist: `/save`, `/save-all`, `/save-on`, `/save-off`, `/list`, `/tps`, `/tell`, `/msg`, `/whisper`, `/mute`, `/unmute`, `/difficulty`, `/gamerule`, `/xp`, `/home`, `/sethome`, `/restart`, `/weather rain`. The panel therefore has no chat mute and no private messages; its kick sends no reason.
 
 ---
 
-## Debug Commands
+## Text in commands
 
-These commands are useful for server administration and debugging.
-
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `/debug` | Toggle debug mode | `/debug [on|off]` |
-| `/tps` | Show ticks per second | `/tps` |
-| `/gc` | Run garbage collection | `/gc` |
-| `/memory` | Show memory usage | `/memory` |
-| `/chunk load` | Force load chunks | `/chunk load <x> <z>` |
-| `/chunk unload` | Unload chunks | `/chunk unload <x> <z>` |
-| `/entity count` | Count entities | `/entity count` |
-| `/log level` | Set log level | `/log level <debug|info|warn|error>` |
-
----
-
-## Permissions
-
-Commands require appropriate permissions. The permission format typically follows:
-- `hytale.command.<command>` - Basic command permission
-- `hytale.admin.*` - All admin permissions
-- `hytale.mod.*` - All moderator permissions
-
-Example permissions:
-- `hytale.command.kick` - Permission to kick players
-- `hytale.command.ban` - Permission to ban players
-- `hytale.command.teleport` - Permission to teleport
-- `hytale.command.gamemode` - Permission to change gamemode
-- `hytale.command.give` - Permission to give items
-
----
-
-## Notes
-
-1. **Case Sensitivity**: Commands are generally case-insensitive, but player names may be case-sensitive.
-
-2. **Tab Completion**: The server supports tab completion for most commands and arguments.
-
-3. **Aliases**: Some commands may have aliases (e.g., `/tp` for `/teleport`).
-
-4. **Console vs In-Game**: Some commands may behave differently when run from console vs in-game.
-
-5. **Coordinates**:
-   - `~` represents relative coordinates (e.g., `~ ~1 ~` means current position + 1 on Y axis)
-   - Coordinates can be decimal values
-
-6. **Selectors**: Target selectors may be supported:
-   - `@a` - All players
-   - `@p` - Nearest player
-   - `@r` - Random player
-   - `@s` - Self (command executor)
-
----
-
-## Quick Reference
-
-### Most Common Commands
-
-```
-/kick <player>                    - Kick player
-/ban <player>                     - Ban player
-/op add <player>                  - Give OP
-/tp <player> <target>             - Teleport player to player
-/tp <player> <x> <y> <z>          - Teleport to coordinates
-/gamemode creative <player>       - Set creative mode
-/give <player> <item> <amount>    - Give items
-/time set day                     - Set daytime
-/weather clear                    - Clear weather
-/server stats memory              - Show memory stats
-/save                            - Save worlds
-/stop                            - Stop server
-```
+The server console is no shell: `< > & ; | $` are ordinary text. The Hytale command parser reads the whole line first, though, and rejects a command with an unbalanced `"` (or `'` at the start of a word), a backslash, a stray or nested `[ ]`, two commas in a row or a word starting with `--`. When the panel puts free text into a command (announcements, the Discord relay, the welcome message, ban reasons), it replaces exactly those characters with look-alikes. A message starting with `{` would be read as a formatted (JSON) message, so the panel replaces that brace too.
 
 ---
 
 <div align="center">
 
-*Last updated: January 2025*
-*Based on Hytale Server JAR analysis*
+*Last updated: October 2026*
+*Based on the command list of a Hytale 0.7.3 server*
 
 ---
 

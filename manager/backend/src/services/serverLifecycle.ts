@@ -26,7 +26,7 @@ import { clearOnlinePlayers } from './players.js';
 import { publish } from './eventBus.js';
 import { getServer, resolveServerId } from './servers.js';
 import { isDemoMode } from './demoData.js';
-import { stripControlChars } from '../utils/sanitize.js';
+import { toCommandText } from '../utils/sanitize.js';
 
 export type LifecycleReason =
   | 'user'
@@ -188,22 +188,11 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * Make free text safe as a console argument. Control characters would start a
- * new console command; quotes and brackets have a meaning for the Hytale 0.7
- * command parser (an unbalanced one rejects the whole command), and a leading
- * `{` makes `/notify` parse the text as a formatted message.
+ * Free text (countdown and shutdown messages) as one console argument the
+ * Hytale 0.7 command parser takes literally; see toCommandText.
  */
 export function toConsoleText(text: string): string {
-  return stripControlChars(text)
-    .replace(/"/g, '”')
-    .replace(/'/g, '’')
-    .replace(/\[/g, '(')
-    .replace(/\]/g, ')')
-    .replace(/\\/g, '/')
-    .replace(/^\s*\{/, '(')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_TEXT_LENGTH);
+  return toCommandText(text, MAX_TEXT_LENGTH);
 }
 
 function fillTemplate(template: string, secondsLeft: number): string {
@@ -412,6 +401,27 @@ async function clearExitGuard(id: string): Promise<void> {
   }
 }
 
+// Work on the server's files that has to happen while it is still down, right
+// before every start through the panel (the access files are brought to the
+// form the server reads). A failing hook is logged; the start goes ahead.
+type BeforeStartHook = (serverId: string) => Promise<void>;
+const beforeStartHooks = new Map<string, BeforeStartHook>();
+
+/** Registers (or replaces) a hook under `name`; see runBeforeStartHooks. */
+export function registerBeforeStartHook(name: string, hook: BeforeStartHook): void {
+  beforeStartHooks.set(name, hook);
+}
+
+async function runBeforeStartHooks(id: string): Promise<void> {
+  for (const [name, hook] of beforeStartHooks) {
+    try {
+      await hook(id);
+    } catch (error) {
+      console.error(`[Lifecycle:${id}] Before-start step "${name}" failed:`, error);
+    }
+  }
+}
+
 async function startLocked(
   id: string,
   opts: GracefulOptions,
@@ -422,6 +432,7 @@ async function startLocked(
   if (state.running) return { ok: true, method: 'already_running' };
 
   await clearExitGuard(id);
+  await runBeforeStartHooks(id);
   publish('server.starting', eventPayload(opts, action), id);
   const r = await dockerService.startContainer(id);
   if (!r.success) return { ok: false, method: 'docker', error: r.error };
@@ -572,6 +583,27 @@ export async function stopServerAndRun<T>(
       }
     }
     return fn();
+  });
+}
+
+/**
+ * Runs fn under the server's lock if the server is stopped, so no start
+ * through the panel can begin while fn edits files the server reads when it
+ * starts. Does not stop or start anything: a running server resolves to
+ * { ran: false } without calling fn. A container that does not exist counts
+ * as stopped; a Docker error rejects.
+ */
+export async function runWhileServerStopped<T>(
+  serverId: string | undefined,
+  opts: Pick<GracefulOptions, 'reason' | 'rejectIfBusy'>,
+  fn: () => Promise<T>,
+): Promise<{ ran: true; value: T } | { ran: false }> {
+  if (isDemoMode()) return { ran: true, value: await fn() };
+  const id = await resolveServerId(serverId);
+  return exclusive(id, opts, async () => {
+    const state = await dockerService.getContainerState(id);
+    if (state?.running) return { ran: false } as const;
+    return { ran: true, value: await fn() } as const;
   });
 }
 

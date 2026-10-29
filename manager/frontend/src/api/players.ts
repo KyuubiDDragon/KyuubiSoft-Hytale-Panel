@@ -51,6 +51,8 @@ export interface ActionResponse {
   success: boolean
   message?: string
   error?: string
+  /** false: the command only reached the server console (no plugin), its result is unknown. */
+  confirmed?: boolean
 }
 
 // Death position from player file (with day info)
@@ -156,11 +158,6 @@ export const playersApi = {
 
   async deop(playerName: string): Promise<ActionResponse> {
     const response = await api.delete<ActionResponse>(`/players/${playerName}/op`)
-    return response.data
-  },
-
-  async sendMessage(playerName: string, message: string): Promise<ActionResponse> {
-    const response = await api.post<ActionResponse>(`/players/${playerName}/message`, { message })
     return response.data
   },
 

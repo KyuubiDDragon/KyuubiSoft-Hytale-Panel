@@ -1,5 +1,4 @@
 import { logger } from '../utils/logger.js';
-import { getLogs } from './docker.js';
 import { readFile, writeFile, readdir } from 'fs/promises';
 import path from 'path';
 import { config } from '../config.js';
@@ -342,117 +341,26 @@ async function savePlayers(): Promise<void> {
   await writeFile(await getPlayersPath(), JSON.stringify(data, null, 2), 'utf-8');
 }
 
-// Patterns for player events
-const JOIN_PATTERNS = [
-  /\[Universe\|P\]\s+Adding player '(\w+)/i,
-  /\[World\|.*?\]\s+Player '(\w+)' joined world/i,
-  /\[World\|.*?\]\s+Adding player '(\w+)' to world/i,
-  /Starting authenticated flow for (\w+)/i,
-  /Connection complete for (\w+)/i,
-  /Identity token validated for (\w+)/i,
-  /Player\s+(\w+)\s+joined/i,
-  /Player\s+(\w+)\s+connected to the server/i,
-  /(\w+)\s+joined the game/i,
-  /(\w+)\s+joined the server/i,
-  /(\w+)\s+has joined the game/i,
-  /(\w+)\s+logged in with entity id/i,
-];
-
-const LEAVE_PATTERNS = [
-  /Disconnecting (\w+) at/i,
-  /\[Universe\|P\]\s+Removing player '(\w+)/i,
-  /\[PlayerSystems\]\s+Removing player '(\w+)/i,
-  /Player\s+(\w+)\s+left/i,
-  /Player\s+(\w+)\s+disconnected/i,
-  /(\w+)\s+left the game/i,
-  /(\w+)\s+left the server/i,
-  /(\w+)\s+has left/i,
-  /(\w+)\s+disconnected/i,
-  /(\w+)\s+logged out/i,
-  /(\w+)\s+quit/i,
-  /(\w+)\s+timed out/i,
-  /(\w+)\s+lost connection/i,
-];
-
-// Patterns to extract additional info
-const UUID_PATTERNS = [
-  /UUID of player (\w+) is ([a-f0-9-]+)/i,
-  /(\w+)\[.*?([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i,
-  /Identity token validated for (\w+).*?([a-f0-9-]{36})/i,
-];
-
-const IP_PATTERNS = [
-  /(\w+)\[\/([0-9.]+):\d+\]/i,
-  /(\w+) logged in with.*from \/([0-9.]+)/i,
-  /Connection from \/([0-9.]+):\d+.*player[:\s]+(\w+)/i,
-  /(\w+).*connected from ([0-9.]+)/i,
-];
-
-const WORLD_PATTERNS = [
-  /\[World\|(\w+)\]\s+Player '(\w+)'/i,
-  /(\w+) joined world '?(\w+)'?/i,
-  /Adding player '(\w+)' to world '?(\w+)'?/i,
-];
-
-// Extract extra info from log line
-function extractPlayerInfo(
-  line: string,
-  playerName: string,
-): { uuid?: string; ip?: string; world?: string } {
-  const info: { uuid?: string; ip?: string; world?: string } = {};
-
-  for (const pattern of UUID_PATTERNS) {
-    const match = pattern.exec(line);
-    if (match) {
-      if (match[1]?.toLowerCase() === playerName.toLowerCase()) info.uuid = match[2];
-      else if (match[2]?.toLowerCase() === playerName.toLowerCase()) info.uuid = match[1];
-      break;
-    }
-  }
-
-  for (const pattern of IP_PATTERNS) {
-    const match = pattern.exec(line);
-    if (match) {
-      if (match[1]?.toLowerCase() === playerName.toLowerCase()) info.ip = match[2];
-      else if (match[2]?.toLowerCase() === playerName.toLowerCase()) info.ip = match[1];
-      break;
-    }
-  }
-
-  for (const pattern of WORLD_PATTERNS) {
-    const match = pattern.exec(line);
-    if (match) {
-      if (match[1]?.toLowerCase() === playerName.toLowerCase()) info.world = match[2];
-      else if (match[2]?.toLowerCase() === playerName.toLowerCase()) info.world = match[1];
-      break;
-    }
-  }
-
-  return info;
-}
-
 // Set player online
-function setPlayerOnline(
-  name: string,
-  extraInfo: { uuid?: string; ip?: string; world?: string } = {},
-): void {
+function setPlayerOnline(name: string, extraInfo: { uuid?: string; world?: string } = {}): void {
   const now = new Date().toISOString();
   const existing = players.get(name);
 
   if (existing) {
-    existing.online = true;
     existing.lastSeen = now;
-    existing.currentSessionStart = now;
-    existing.sessionCount++;
     if (extraInfo.uuid) existing.uuid = extraInfo.uuid;
-    if (extraInfo.ip) existing.ip = extraInfo.ip;
     if (extraInfo.world) existing.world = extraInfo.world;
+    // A repeated join of someone already online does not start a new session.
+    if (!existing.online) {
+      existing.online = true;
+      existing.currentSessionStart = now;
+      existing.sessionCount++;
+    }
   } else {
     players.set(name, {
       name,
       online: true,
       uuid: extraInfo.uuid,
-      ip: extraInfo.ip,
       world: extraInfo.world,
       firstSeen: now,
       lastSeen: now,
@@ -466,19 +374,18 @@ function setPlayerOnline(
   debouncedSavePlayers();
 }
 
-// Set player offline
-function setPlayerOffline(name: string): void {
+// Set player offline; the session ends `at` (now by default).
+function setPlayerOffline(name: string, at: Date = new Date()): void {
   const player = players.get(name);
-  if (!player) return;
+  if (!player || !player.online) return;
 
-  const now = new Date();
   player.online = false;
-  player.lastSeen = now.toISOString();
+  player.lastSeen = at.toISOString();
 
   // Calculate session duration if we have session start
   if (player.currentSessionStart) {
     const sessionStart = new Date(player.currentSessionStart);
-    const sessionDuration = Math.floor((now.getTime() - sessionStart.getTime()) / 1000);
+    const sessionDuration = Math.max(0, Math.floor((at.getTime() - sessionStart.getTime()) / 1000));
     player.playTime += sessionDuration;
     player.currentSessionStart = undefined;
   }
@@ -495,46 +402,40 @@ function formatDuration(ms: number): string {
   return `${minutes}m`;
 }
 
-// Scan logs to sync state
-export async function scanLogs(): Promise<void> {
+/** Runs fn once players.json is loaded, so the load cannot overwrite the change. */
+function whenLoaded(fn: () => void): void {
+  if (playersLoaded) fn();
+  else void loadPlayers().then(fn);
+}
+
+/**
+ * A player came online on some server (services/playerPresence.ts, which
+ * reports each join once). For someone already online only the details change.
+ */
+export function notePlayerOnline(name: string, info: { uuid?: string; world?: string } = {}): void {
+  if (!isValidPlayerName(name)) return;
+  whenLoaded(() => setPlayerOnline(name, info));
+}
+
+/** A player is offline on every server now. */
+export function notePlayerOffline(name: string): void {
+  whenLoaded(() => setPlayerOffline(name));
+}
+
+/**
+ * The online flags of players.json set to who is online now (panel start).
+ * Someone still marked online from before is closed at the time last seen,
+ * since when they left is unknown.
+ */
+export async function syncOnlinePlayers(online: Set<string>): Promise<void> {
   await loadPlayers();
-
-  const logs = await getLogs(500);
-  if (!logs) return;
-
-  const lines = logs.split('\n');
-
-  for (const line of lines) {
-    // Check for join
-    for (const pattern of JOIN_PATTERNS) {
-      const match = pattern.exec(line);
-      if (match) {
-        const player = match[1];
-        if (isValidPlayerName(player)) {
-          const existing = players.get(player);
-          if (!existing || !existing.online) {
-            const extraInfo = extractPlayerInfo(line, player);
-            setPlayerOnline(player, extraInfo);
-          }
-        }
-        break;
-      }
+  for (const player of players.values()) {
+    if (player.online && !online.has(player.name)) {
+      setPlayerOffline(player.name, new Date(player.lastSeen));
     }
-
-    // Check for leave
-    for (const pattern of LEAVE_PATTERNS) {
-      const match = pattern.exec(line);
-      if (match) {
-        const player = match[1];
-        if (isValidPlayerName(player)) {
-          const existing = players.get(player);
-          if (existing && existing.online) {
-            setPlayerOffline(player);
-          }
-        }
-        break;
-      }
-    }
+  }
+  for (const name of online) {
+    if (isValidPlayerName(name) && !players.get(name)?.online) setPlayerOnline(name);
   }
 }
 
@@ -579,7 +480,24 @@ export async function getOnlinePlayers(serverId?: string): Promise<PlayerInfo[]>
     // Plugin unavailable / errored — fall back to log-based tracking below.
   }
 
-  // Fallback: log-parsed in-memory tracking.
+  // Fallback: who the panel saw join on this server (the plugin's events, or
+  // the server's join/leave log records while there is no plugin).
+  const { onlinePlayers, isWatching } = await import('./playerPresence.js');
+  const { resolveServerId } = await import('./servers.js');
+  const id = await resolveServerId(serverId).catch(() => null);
+  if (id && isWatching(id)) {
+    return onlinePlayers(id).map((p) => {
+      const start = players.get(p.name)?.currentSessionStart ?? p.since;
+      const durationMs = Math.max(0, now.getTime() - new Date(start).getTime());
+      return {
+        name: p.name,
+        joined_at: start,
+        session_duration_seconds: Math.floor(durationMs / 1000),
+        session_duration: formatDuration(durationMs),
+      };
+    });
+  }
+
   const result: PlayerInfo[] = [];
   for (const player of players.values()) {
     if (player.online && player.currentSessionStart) {
@@ -646,11 +564,10 @@ export function removePlayer(name: string): void {
   }
 }
 
-// Initialize player tracking
+// Initialize player tracking. Who is online comes from services/playerPresence.ts.
 export async function initializePlayerTracking(): Promise<void> {
   logger.info('[Players] Initializing player tracking...');
   await loadPlayers();
-  await scanLogs();
   const onlineCount = Array.from(players.values()).filter((p) => p.online).length;
   logger.info(`[Players] Initialized with ${players.size} total players, ${onlineCount} online`);
 }
@@ -663,47 +580,6 @@ export function clearOnlinePlayers(): void {
     }
   }
   logger.info('[Players] Cleared all online players (server stop/restart)');
-}
-
-// Process log line in real-time
-// SECURITY: This function is synchronous for WebSocket performance
-// It relies on loadPlayers() being called during initialization
-export function processLogLine(line: string): { event: 'join' | 'leave'; player: string } | null {
-  // SECURITY: Ensure players are loaded before processing
-  // This is a synchronous check - if not loaded yet, skip processing
-  // The initialization should have loaded players already
-  if (!playersLoaded) {
-    // Trigger async load but don't block - the next log line will be processed correctly
-    loadPlayers().catch(() => {});
-    return null;
-  }
-
-  // Check for join
-  for (const pattern of JOIN_PATTERNS) {
-    const match = pattern.exec(line);
-    if (match) {
-      const player = match[1];
-      if (!isValidPlayerName(player)) continue;
-
-      const extraInfo = extractPlayerInfo(line, player);
-      setPlayerOnline(player, extraInfo);
-      return { event: 'join', player };
-    }
-  }
-
-  // Check for leave
-  for (const pattern of LEAVE_PATTERNS) {
-    const match = pattern.exec(line);
-    if (match) {
-      const player = match[1];
-      if (!isValidPlayerName(player)) continue;
-
-      setPlayerOffline(player);
-      return { event: 'leave', player };
-    }
-  }
-
-  return null;
 }
 
 // Player statistics

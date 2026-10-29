@@ -16,7 +16,7 @@ import path from 'path';
 import { config } from '../config.js';
 import { createBackup, listBackups, deleteBackup, isAutomaticBackupId } from './backup.js';
 import * as dockerService from './docker.js';
-import { validateCommand, stripControlChars } from '../utils/sanitize.js';
+import { validateCommand, stripControlChars, toCommandText } from '../utils/sanitize.js';
 import {
   authorizeCommand,
   authorizeStoredCommand,
@@ -130,16 +130,83 @@ const DEFAULT_CONFIG: ScheduleConfig = {
     createBackup: true,
     onlyWhenEmpty: false,
   },
+  // Hytale 0.7 commands; all of them need only console.execute.
   quickCommands: [
-    { id: '1', name: 'Save World', command: '/save', icon: 'save', category: 'server' },
-    { id: '2', name: 'List Players', command: '/list', icon: 'users', category: 'players' },
+    {
+      id: '1',
+      name: 'Save World',
+      command: '/world save --all --confirm',
+      icon: 'save',
+      category: 'server',
+    },
+    { id: '2', name: 'List Players', command: '/who', icon: 'users', category: 'players' },
     { id: '3', name: 'Set Day', command: '/time set day', icon: 'sun', category: 'world' },
     { id: '4', name: 'Set Night', command: '/time set night', icon: 'moon', category: 'world' },
-    { id: '5', name: 'Clear Weather', command: '/weather clear', icon: 'cloud', category: 'world' },
-    { id: '6', name: 'Rain', command: '/weather rain', icon: 'cloud-rain', category: 'world' },
+    { id: '5', name: 'Reset Weather', command: '/weather reset', icon: 'cloud', category: 'world' },
+    {
+      id: '6',
+      name: 'Rain',
+      command: '/weather set Zone1_Rain',
+      icon: 'cloud-rain',
+      category: 'world',
+    },
+    {
+      id: '7',
+      name: 'Memory Usage',
+      command: '/server stats memory',
+      icon: 'cpu',
+      category: 'server',
+    },
+    {
+      id: '8',
+      name: 'World Performance',
+      command: '/world perf',
+      icon: 'activity',
+      category: 'server',
+    },
   ],
   scheduledCommands: [],
 };
+
+// Defaults of panel versions before Hytale 0.7 whose commands no longer exist
+// (/save, /list, /weather rain) or do something else (/weather clear only
+// resets the forced weather). A stored entry that still equals one of them
+// was never edited and gets the 0.7 default with the same id.
+const LEGACY_QUICK_COMMANDS: QuickCommand[] = [
+  { id: '1', name: 'Save World', command: '/save', icon: 'save', category: 'server' },
+  { id: '2', name: 'List Players', command: '/list', icon: 'users', category: 'players' },
+  { id: '5', name: 'Clear Weather', command: '/weather clear', icon: 'cloud', category: 'world' },
+  { id: '6', name: 'Rain', command: '/weather rain', icon: 'cloud-rain', category: 'world' },
+];
+
+function sameQuickCommand(a: QuickCommand, b: QuickCommand): boolean {
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.command === b.command &&
+    a.icon === b.icon &&
+    a.category === b.category
+  );
+}
+
+/**
+ * Replace unedited pre-0.7 default quick commands with their 0.7 defaults.
+ * Entries the user changed, added or removed are left as they are.
+ */
+export function migrateQuickCommands(stored: QuickCommand[]): {
+  quickCommands: QuickCommand[];
+  replaced: string[];
+} {
+  const replaced: string[] = [];
+  const quickCommands = stored.map((entry) => {
+    const legacy = LEGACY_QUICK_COMMANDS.find((old) => sameQuickCommand(old, entry));
+    const current = legacy && DEFAULT_CONFIG.quickCommands.find((c) => c.id === legacy.id);
+    if (!current) return entry;
+    replaced.push(`${entry.command} -> ${current.command}`);
+    return { ...current };
+  });
+  return { quickCommands, replaced };
+}
 
 // Per-server configuration cache (keyed by serverId).
 const schedulerConfig: Record<string, ScheduleConfig> = {};
@@ -264,6 +331,15 @@ export async function loadConfig(serverId?: string): Promise<ScheduleConfig> {
         );
       }
       cfg = { ...cfg, scheduledRestarts: plan };
+      if (Array.isArray(cfg.quickCommands)) {
+        const migrated = migrateQuickCommands(cfg.quickCommands);
+        if (migrated.replaced.length > 0) {
+          console.log(
+            `[Scheduler:${id}] Quick commands updated to Hytale 0.7: ${migrated.replaced.join(', ')}`,
+          );
+          cfg = { ...cfg, quickCommands: migrated.quickCommands };
+        }
+      }
       console.log(`[Scheduler:${id}] Config loaded from file:`, filePath);
     } else {
       console.log(`[Scheduler:${id}] No config file found, using defaults`);
@@ -397,8 +473,9 @@ async function cleanOldBackups(serverId: string): Promise<void> {
 
 // Send announcement to a specific server
 async function sendAnnouncement(message: string, serverId: string): Promise<void> {
-  // A multi-line announcement becomes one line instead of extra console commands.
-  const text = stripControlChars(message).trim();
+  // One line of plain text: no extra console commands, nothing the server's
+  // command parser would reject.
+  const text = toCommandText(message, 500);
   if (!text) return;
 
   try {
@@ -1014,6 +1091,12 @@ function normalizeRestartPlan(raw: unknown): ScheduleConfig['scheduledRestarts']
 }
 
 // Quick commands
+
+/** A copy of the default quick commands (new installs, the demo). */
+export function defaultQuickCommands(): QuickCommand[] {
+  return DEFAULT_CONFIG.quickCommands.map((c) => ({ ...c }));
+}
+
 export function getQuickCommands(serverId?: string): QuickCommand[] {
   const id = serverId ?? Object.keys(schedulerConfig)[0] ?? 'default';
   return schedulerConfig[id]?.quickCommands ?? DEFAULT_CONFIG.quickCommands;
@@ -1143,14 +1226,17 @@ export async function reviewScheduledCommands(
       };
     }
     seen.add(next.id);
-    const check = validateCommand(next.command);
-    if (!check.valid) {
-      return { ok: false, status: 400, error: `Scheduled command "${label}": ${check.error}` };
-    }
+    // An unchanged entry is kept as it is, even when its command no longer
+    // exists (e.g. /save from before Hytale 0.7): it is checked again before
+    // every run and flagged through blockedReason instead of blocking the save.
     const prevRaw = stored.get(next.id);
     if (prevRaw && !changesExecution(normalizeScheduledCommand(prevRaw), next)) {
       reviewed.push(prevRaw.createdBy ? { ...next, createdBy: prevRaw.createdBy } : next);
       continue;
+    }
+    const check = validateCommand(next.command);
+    if (!check.valid) {
+      return { ok: false, status: 400, error: `Scheduled command "${label}": ${check.error}` };
     }
     const invalidSchedule = scheduleError(next);
     if (invalidSchedule) {

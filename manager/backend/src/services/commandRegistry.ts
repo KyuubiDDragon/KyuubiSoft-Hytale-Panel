@@ -9,15 +9,21 @@
  * written to `<dataPath>/command-registry/<serverId>.json`, so the list stays
  * available while the server is offline (served with `stale: true`).
  *
- * Meant as the data source for the console autocomplete today and, later,
- * for a command whitelist derived from what the server really offers
- * (flattenCommands / resolveCommandLine).
+ * The data source for the console autocomplete and for the panel's command
+ * whitelist (utils/commandWhitelist.ts). Every list read here is also
+ * remembered there, so the synchronous check in validateCommand knows the
+ * server's mod commands.
  */
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { getCommandRequiredPermission } from '../utils/sanitize.js';
+import {
+  annotateCommands,
+  rememberServerCommands,
+  type CommandShape,
+  type WithPanelPolicy,
+} from '../utils/commandWhitelist.js';
 import { resolveServerId } from './servers.js';
 import {
   fetchCommandRegistry,
@@ -35,14 +41,6 @@ export interface CommandRegistry extends PluginCommandRegistry {
   stale: boolean;
   fetchedAt: string;
 }
-
-/** A root command as the panel's current whitelist treats it. */
-export interface PanelCommandPolicy {
-  allowed: boolean;
-  permission: 'console.execute' | 'console.execute.admin' | null;
-}
-
-export type AnnotatedCommandNode = CommandNode & { panel?: PanelCommandPolicy };
 
 export const REGISTRY_TTL_MS = 60_000;
 const SNAPSHOT_DIR = 'command-registry';
@@ -101,6 +99,7 @@ async function readSnapshot(serverId: string): Promise<CacheEntry | null> {
     if (!registry || typeof registry.revision !== 'string' || !Array.isArray(registry.commands)) {
       return null;
     }
+    rememberServerCommands(serverId, registry.commands);
     // checkedAt 0: a snapshot is never trusted as fresh.
     return { registry, fetchedAt: stat.mtimeMs, checkedAt: 0 };
   } catch {
@@ -142,6 +141,7 @@ async function refresh(
   if (result.kind === 'registry') {
     const entry = { registry: result.registry, fetchedAt: now, checkedAt };
     cache.set(serverId, entry);
+    rememberServerCommands(serverId, result.registry.commands);
     void writeSnapshot(serverId, result.registry);
     return view(serverId, entry, 'plugin', false);
   }
@@ -239,43 +239,13 @@ export function flattenCommands(registry: Pick<PluginCommandRegistry, 'commands'
   return out;
 }
 
-function matches(node: CommandNode, token: string): boolean {
-  const t = token.toLowerCase();
-  return node.name.toLowerCase() === t || (node.aliases ?? []).some((a) => a.toLowerCase() === t);
-}
-
 /**
- * Which registered command a console line addresses: the root (by name or
- * alias, with or without "/") and every subcommand it descends into. Null
- * when the root command does not exist on the server.
+ * Commands and subcommands annotated with the console tier the panel requires
+ * for each (utils/commandWhitelist.ts resolves console lines the same way),
+ * so the UI can mark admin commands.
  */
-export function resolveCommandLine(
-  registry: Pick<PluginCommandRegistry, 'commands'>,
-  line: string,
-): { root: CommandNode; chain: CommandNode[]; consumedTokens: number } | null {
-  const tokens = line.trim().replace(/^\//, '').split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return null;
-  const root = registry.commands.find((c) => matches(c, tokens[0]));
-  if (!root) return null;
-  const chain = [root];
-  let current = root;
-  for (const token of tokens.slice(1)) {
-    const sub = (current.subcommands ?? []).find((c) => matches(c, token));
-    if (!sub) break;
-    chain.push(sub);
-    current = sub;
-  }
-  return { root, chain, consumedTokens: chain.length };
-}
-
-/**
- * Root commands annotated with what the panel's CURRENT whitelist does with
- * them, so the UI can show which real commands are blocked. This reads the
- * whitelist; it does not change it.
- */
-export function withPanelPolicy(commands: CommandNode[]): AnnotatedCommandNode[] {
-  return commands.map((node) => {
-    const permission = getCommandRequiredPermission(`/${node.name}`);
-    return { ...node, panel: { allowed: permission !== null, permission } };
-  });
+export function withPanelPolicy<T extends CommandShape = CommandNode>(
+  commands: readonly T[],
+): WithPanelPolicy<T>[] {
+  return annotateCommands(commands);
 }

@@ -444,6 +444,16 @@ router.post('/complete', async (_req: Request, res: Response) => {
       // Note: In production, jwtSecret should be written to a secure config
       // and the user should be instructed to set JWT_SECRET env var
       jwtSecretGenerated: true,
+      // written / pending (at the restart that follows) / skipped / error of
+      // the server's config.json
+      serverConfig: result.serverConfig
+        ? {
+            written: result.serverConfig.written,
+            pending: result.serverConfig.pending,
+            skipped: result.serverConfig.skipped,
+            error: result.serverConfig.error,
+          }
+        : undefined,
     });
   } catch (error) {
     logger.error('[Setup] Failed to complete setup:', error);

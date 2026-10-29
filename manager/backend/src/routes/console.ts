@@ -1,12 +1,20 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import * as dockerService from '../services/docker.js';
-import { parseLogs } from '../services/logs.js';
+import { assembleLogLines, parseLogs } from '../services/logs.js';
+import { readServerLogTail } from '../services/serverLogStream.js';
+import { readServerLogFiles } from '../services/serverLogFiles.js';
 import { isDemoMode, getDemoLogs } from '../services/demoData.js';
-import { actorFromRequest, authorizeCommand, holdsCommandTier } from '../services/commandPolicy.js';
+import {
+  actorFromRequest,
+  authorizeCommand,
+  commandsOf,
+  holdsCommandTier,
+} from '../services/commandPolicy.js';
 import { asyncRoute } from '../utils/asyncRoute.js';
-import { containsControlChars, getCommandRequiredPermission } from '../utils/sanitize.js';
+import { containsControlChars } from '../utils/sanitize.js';
+import { VANILLA_COMMANDS, lowestTierWithin } from '../utils/commandWhitelist.js';
 import { getCommandRegistry, withPanelPolicy } from '../services/commandRegistry.js';
 import { fetchCommandCompletions } from '../services/pluginCommands.js';
 import { resolveServerId } from '../services/servers.js';
@@ -20,6 +28,12 @@ const MAX_COMPLETION_LINE = 512;
 const FORCED_REFRESH_INTERVAL_MS = 10_000;
 const lastForcedRefresh = new Map<string, number>();
 
+// Limits of the console's log reads: a tail, and "load all".
+const MAX_TAIL_LINES = 10_000;
+const MAX_TAIL_BYTES = 4 * 1024 * 1024;
+const LOAD_ALL = { maxFiles: 5, maxBytes: 8 * 1024 * 1024, maxEntries: 10_000 };
+const loadingAll = new Set<string>();
+
 function claimForcedRefresh(serverId: string): boolean {
   const now = Date.now();
   if (now - (lastForcedRefresh.get(serverId) ?? 0) < FORCED_REFRESH_INTERVAL_MS) return false;
@@ -29,50 +43,79 @@ function claimForcedRefresh(serverId: string): boolean {
 
 /**
  * The server completes arguments with live data (player names, groups, …), so
- * suggestions are only given for a command the caller may run: one on the
- * panel's whitelist and within the caller's console tier on that server.
+ * suggestions are only given for a command the caller may run on that server,
+ * or that has a subcommand the caller may run (to complete its name).
  */
 async function mayComplete(req: AuthenticatedRequest, line: string): Promise<boolean> {
-  const root = line.trim().split(/\s+/)[0] ?? '';
-  if (!root) return false;
-  const tier = getCommandRequiredPermission(root.startsWith('/') ? root : `/${root}`);
+  const trimmed = line.trimStart();
+  if (!trimmed) return false;
+  const tier = lowestTierWithin(
+    trimmed.startsWith('/') ? trimmed : `/${trimmed}`,
+    await commandsOf(req.serverId),
+  );
   if (!tier) return false;
   return holdsCommandTier(actorFromRequest(req), tier, req.serverId);
 }
 
-// GET /api/console/logs
+// GET /api/console/logs?tail=N - the last N lines of the console (1..10000).
+// GET /api/console/logs?tail=0 - "load all": the server's own log files,
+// newest first within the limits below; the container log when the panel
+// cannot see the server's logs folder.
 router.get(
   '/logs',
   authMiddleware,
   requirePermission('console.view'),
-  async (req: Request, res: Response) => {
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const tailParam = parseInt(req.query.tail as string);
+
     // Demo mode: return simulated logs
     if (isDemoMode()) {
-      const tailParam = parseInt(req.query.tail as string);
       const tail = tailParam === 0 ? 100 : Math.min(Math.max(tailParam || 100, 1), 100);
-      const demoLogs = getDemoLogs(tail);
-      const logs = parseLogs(demoLogs);
-
-      res.json({
-        logs,
-        count: logs.length,
-      });
+      const logs = parseLogs(getDemoLogs(tail));
+      res.json({ logs, count: logs.length, truncated: false, source: 'container' });
       return;
     }
 
-    // Allow 0 for all logs, otherwise limit between 1 and 10000
-    const tailParam = parseInt(req.query.tail as string);
-    const tail = tailParam === 0 ? 0 : Math.min(Math.max(tailParam || 100, 1), 10000);
+    const serverId = await resolveServerId(req.serverId);
+    if (tailParam === 0) {
+      // One full read per server at a time; each one parses megabytes.
+      if (loadingAll.has(serverId)) {
+        res.status(429).json({ error: 'The full log is already being loaded; try again shortly' });
+        return;
+      }
+      loadingAll.add(serverId);
+      try {
+        const files = await readServerLogFiles(serverId, LOAD_ALL);
+        if (files) {
+          res.json({
+            logs: files.entries,
+            count: files.entries.length,
+            truncated: files.truncated,
+            source: 'files',
+            files: files.files,
+          });
+          return;
+        }
+        res.json(await containerLog(serverId, LOAD_ALL.maxEntries, LOAD_ALL.maxBytes));
+      } finally {
+        loadingAll.delete(serverId);
+      }
+      return;
+    }
 
-    const rawLogs = await dockerService.getLogs(tail);
-    const logs = parseLogs(rawLogs);
-
-    res.json({
-      logs,
-      count: logs.length,
-    });
-  },
+    const tail = Math.min(Math.max(tailParam || 100, 1), MAX_TAIL_LINES);
+    res.json(await containerLog(serverId, tail, MAX_TAIL_BYTES));
+  }),
 );
+
+/** The newest entries of the container log, from at most `tail` lines. */
+async function containerLog(serverId: string, tail: number, maxBytes: number) {
+  const read = await readServerLogTail(serverId, { tail, maxBytes });
+  const logs = assembleLogLines(read.lines).map((e) => e.entry);
+  // As many lines as asked for: the log most likely goes back further.
+  const truncated = read.truncated || read.lines.length >= tail;
+  return { logs, count: logs.length, truncated, source: 'container' as const };
+}
 
 // POST /api/console/command
 router.post(
@@ -126,21 +169,29 @@ router.post(
 );
 
 // GET /api/console/commands - the server's real command list for autocomplete,
-// each root command annotated with what the panel's whitelist does with it.
+// each command annotated with the console tier the panel requires for it.
+// Without a registry (no plugin, never ran with it) the vanilla 0.7.3 list
+// the panel checks against is returned, marked `source: 'fallback'`.
 router.get(
   '/commands',
   authMiddleware,
   requirePermission('console.execute'),
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const fallback = {
+      available: true,
+      source: 'fallback',
+      stale: true,
+      commands: withPanelPolicy(VANILLA_COMMANDS),
+    };
     if (isDemoMode()) {
-      res.json({ available: false, commands: [] });
+      res.json(fallback);
       return;
     }
     const serverId = await resolveServerId(req.serverId);
     const force = req.query.refresh === '1' && claimForcedRefresh(serverId);
     const registry = await getCommandRegistry(serverId, { force });
     if (!registry) {
-      res.json({ available: false, commands: [] });
+      res.json({ ...fallback, serverId });
       return;
     }
     res.json({ available: true, ...registry, commands: withPanelPolicy(registry.commands) });

@@ -1,7 +1,8 @@
 /**
  * The command policy is what keeps stored commands (scheduler, quick commands,
  * event actions) inside the console's admin gate. Roles are mocked so the
- * tests pin the decision itself: whitelist first, then the tier of the
+ * tests pin the decision itself: the command must exist on the server (here
+ * the vanilla 0.7.3 list, no plugin is installed), then the tier of the
  * command for the actor (when saving) or the stored creator (when firing).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -45,9 +46,13 @@ describe('commandPolicy.authorizeCommand (saving / running now)', () => {
       '/op add Evil',
       '/stop',
       '/ban Steve',
-      '/give @p sword 1',
+      '/give Steve Weapon_Sword_Iron',
       '/auth logout',
-      '/save-off',
+      '/perm group add Default *',
+      '/sudo Steve op self',
+      '/world remove default',
+      '/plugin unload KyuubiDDragon:KyuubiSoftAPI',
+      '/shutdown',
     ]) {
       const r = await authorizeCommand({ username: 'operator' }, cmd);
       expect(r.allowed).toBe(false);
@@ -67,8 +72,24 @@ describe('commandPolicy.authorizeCommand (saving / running now)', () => {
     expect(r.allowed).toBe(false);
   });
 
-  it('rejects non-whitelisted or multi-line commands with 400 before any rights check', async () => {
-    for (const cmd of ['/eval x()', '/say hi\n/op add Evil']) {
+  it('lets an operator save the worlds, read the stats and set time and weather', async () => {
+    for (const cmd of [
+      '/world save --all --confirm',
+      '/who',
+      '/server stats memory',
+      '/time set day',
+      '/weather set Zone1_Rain',
+      '/notify Restart <3 & more',
+    ]) {
+      expect(await authorizeCommand({ username: 'operator' }, cmd), cmd).toEqual({
+        allowed: true,
+        permission: 'console.execute',
+      });
+    }
+  });
+
+  it('rejects unknown or multi-line commands with 400 before any rights check', async () => {
+    for (const cmd of ['/eval x()', '/save', '/mute Steve', '/say hi\n/op add Evil']) {
       const r = await authorizeCommand({ username: 'admin' }, cmd);
       expect(r).toMatchObject({ allowed: false, status: 400 });
     }
@@ -103,7 +124,7 @@ describe('commandPolicy.authorizeStoredCommand (firing later)', () => {
   });
 
   it('lets legacy entries without creator run only plain commands', async () => {
-    expect((await authorizeStoredCommand(undefined, '/save', 'default')).allowed).toBe(true);
+    expect((await authorizeStoredCommand(undefined, '/who', 'default')).allowed).toBe(true);
     const r = await authorizeStoredCommand(undefined, '/op add Evil', 'default');
     expect(r.allowed).toBe(false);
     if (!r.allowed) expect(r.error).toMatch(/no recorded creator/);

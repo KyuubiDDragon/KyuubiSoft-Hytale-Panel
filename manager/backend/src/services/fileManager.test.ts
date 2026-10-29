@@ -10,6 +10,7 @@ import {
   resolveSafe,
   isDenied,
   isAbsolutePathAllowed,
+  accessFilePatterns,
   listDir,
   readFile,
   writeFile,
@@ -178,6 +179,49 @@ describe('fileManager.isAbsolutePathAllowed', () => {
   it('allows legitimate mod/server config files', () => {
     expect(isAbsolutePathAllowed(path.join(mods, 'SomeMod', 'config.yml'), 'write')).toBe(true);
     expect(isAbsolutePathAllowed(path.join(server, 'server.properties'), 'write')).toBe(true);
+  });
+  it('leaves the access files of the server folder to the access pages', () => {
+    for (const name of [
+      'permissions.json',
+      'permissions.json.bak',
+      'bans.json',
+      'bans.json.tmp-1-abcd',
+      'whitelist.json',
+      'whitelist.json.migrated',
+      'permissions-names.json',
+      'bans-names.json',
+    ]) {
+      expect(isAbsolutePathAllowed(path.join(server, name), 'write'), name).toBe(false);
+      expect(isAbsolutePathAllowed(path.join(server, name), 'read'), name).toBe(false);
+    }
+    // Only those of the server itself: a mod may have a file of the same name.
+    expect(isAbsolutePathAllowed(path.join(mods, 'SomeMod', 'permissions.json'), 'write')).toBe(
+      true,
+    );
+    expect(isAbsolutePathAllowed(path.join(server, 'mybans.json'), 'write')).toBe(true);
+  });
+});
+
+describe('fileManager.accessFilePatterns', () => {
+  const denies = (configRaw: unknown, rel: string) =>
+    accessFilePatterns(configRaw).some((re) => re.test(rel.toLowerCase()));
+
+  it('adds the ban file config.json names, and its copies', () => {
+    const cfg = { BanStorage: { Type: 'Disk', Path: './data/MyBans.json' } };
+    expect(denies(cfg, 'data/mybans.json')).toBe(true);
+    expect(denies(cfg, 'data/MyBans.json.bak')).toBe(true);
+    expect(denies(cfg, 'data/mybans.json5')).toBe(false);
+    expect(denies(cfg, 'bans.json')).toBe(true);
+  });
+
+  it('ignores a ban file outside the server folder, or none at all', () => {
+    expect(accessFilePatterns({ BanStorage: { Path: '../x.json' } }).length).toBe(
+      accessFilePatterns(null).length,
+    );
+    expect(accessFilePatterns({ BanStorage: { Path: '/abs/x.json' } }).length).toBe(
+      accessFilePatterns(null).length,
+    );
+    expect(denies(null, 'sub/permissions.json')).toBe(false);
   });
 });
 

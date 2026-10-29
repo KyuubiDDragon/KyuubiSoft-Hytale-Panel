@@ -2,9 +2,7 @@
  * Input Sanitization Utilities
  * Prevents command injection and other security vulnerabilities
  */
-
-// Dangerous shell characters that could be used for command injection
-const SHELL_METACHARACTERS = /[;&|`$(){}[\]<>\\!#*?~^\n\r]/g;
+import { isKnownCommandLine } from './commandWhitelist.js';
 
 // C0 controls (incl. \t \n \r), DEL, C1 controls and the Unicode line/paragraph
 // separators. The game console executes every stdin line with full console
@@ -16,10 +14,16 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTER_RUNS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g;
 
+/**
+ * A player name as the panel puts it into a command: letters, digits,
+ * underscore and hyphen, but no hyphen first, where the server's command
+ * parser would read `--word` as an option.
+ */
+export const PLAYER_NAME_SOURCE = '[A-Za-z0-9_][A-Za-z0-9_-]{0,31}';
+
 // Valid patterns for different input types
 const PATTERNS = {
-  // Player names: alphanumeric, underscore, hyphen (Minecraft/Hytale standard)
-  playerName: /^[a-zA-Z0-9_-]{1,32}$/,
+  playerName: new RegExp(`^${PLAYER_NAME_SOURCE}$`),
   // Item IDs: item_name format (with optional namespace:prefix)
   itemId: /^[a-z][a-z0-9_]*(:[a-z][a-z0-9_/]*)?$/,
   // Numeric values
@@ -38,16 +42,6 @@ const PATTERNS = {
   // UUID
   uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
 };
-
-/**
- * Sanitize a string by removing shell metacharacters
- */
-export function sanitizeString(input: string): string {
-  if (typeof input !== 'string') {
-    return '';
-  }
-  return input.replace(SHELL_METACHARACTERS, '').trim();
-}
 
 /**
  * Escape a string for safe use in shell commands
@@ -166,181 +160,61 @@ export function isValidUUID(uuid: string): boolean {
 }
 
 /**
- * Sanitize a message/reason (remove dangerous chars but keep spaces)
+ * A reason or note as one line of plain text: control characters become a
+ * space, nothing else is removed. Text that goes into a console command also
+ * needs toCommandText.
  */
 export function sanitizeMessage(message: string, maxLength: number = 256): string {
   if (typeof message !== 'string') {
     return '';
   }
-  // Remove shell metacharacters but keep basic punctuation and spaces. Control
-  // characters become a space so a reason can never start a second console line.
-  return stripControlChars(message)
-    .replace(/[;&|`$(){}[\]<>\\!#*~^]/g, '')
-    .trim()
-    .substring(0, maxLength);
+  return stripControlChars(message).trim().substring(0, maxLength);
 }
 
 /**
- * Validate a command is safe (no injection attempts)
+ * Free text (announcements, chat relays, reasons) as a command argument the
+ * server takes literally. The console is no shell, so < > & ; | $ stay. The
+ * Hytale command parser reads the whole line first, though, and rejects the
+ * command on an unbalanced " (or ' at the start of a word), a backslash, a
+ * stray or nested [ ], two commas in a row or a word starting with "--" (an
+ * option name). Those get a look-alike; a comma at the very start (it would
+ * make the preceding word a list, e.g. the player of /ban) is dropped. A
+ * leading "{" would make /say and /notify parse the text as a formatted
+ * (JSON) message.
  */
-export function isCommandSafe(command: string): boolean {
-  if (typeof command !== 'string') return false;
-
-  // Check for common injection patterns
-  const dangerousPatterns = [
-    CONTROL_CHARACTERS, // Second console line, TTY key presses (Ctrl-C, ESC, …)
-    /[;&|`]/, // Command chaining
-    /\$\(/, // Command substitution
-    /\$\{/, // Variable expansion
-    /[<>]/, // Redirection
-    /\\\n/, // Line continuation
-    /\/\.\.\//, // Path traversal
-  ];
-
-  return !dangerousPatterns.some((pattern) => pattern.test(command));
-}
-
-/**
- * SECURITY: Whitelist of allowed game server commands
- * Only these commands can be executed via the console
- */
-const ALLOWED_COMMAND_PREFIXES = [
-  // Player management
-  '/kick',
-  '/ban',
-  '/unban',
-  '/pardon',
-  '/mute',
-  '/unmute',
-  // Communication
-  '/say',
-  '/tell',
-  '/msg',
-  '/whisper',
-  '/me',
-  '/broadcast',
-  // Game management
-  '/stop',
-  '/save',
-  '/save-all',
-  '/save-on',
-  '/save-off',
-  '/time',
-  '/weather',
-  '/difficulty',
-  '/gamemode',
-  '/gamerule',
-  // Player interaction
-  '/tp',
-  '/teleport',
-  '/give',
-  '/clear',
-  '/effect',
-  '/heal',
-  '/kill',
-  '/spawn',
-  '/setspawn',
-  '/home',
-  '/warp',
-  // World management
-  '/seed',
-  '/worldborder',
-  // Server info
-  '/list',
-  '/players',
-  '/help',
-  '/version',
-  '/tps',
-  '/status',
-  // Whitelist
-  '/whitelist',
-  // Op management (admin only)
-  '/op',
-  '/deop',
-  // Authentication (for server auth during setup)
-  '/auth',
-  // Native update system (Hytale 24.01.2026+)
-  '/update',
-  // Native backup (Hytale 0.7, needs --backup-dir)
-  '/backup',
-];
-
-/**
- * Commands that grant elevated privileges, irreversibly remove state, or
- * touch other players' accounts. Even users with console.execute should
- * not be able to run these without a second permission grant.
- */
-const ADMIN_COMMAND_PREFIXES = new Set([
-  '/op',
-  '/deop',
-  '/ban',
-  '/unban',
-  '/pardon',
-  '/kick',
-  '/mute',
-  '/unmute',
-  '/stop',
-  '/gamemode',
-  '/gamerule',
-  '/difficulty',
-  '/give',
-  '/clear',
-  '/kill',
-  '/whitelist',
-  '/update',
-  // Every /auth subcommand: logout/select/persistence take the server's Hytale
-  // sign-in away. Classified by base name, so this covers all of them.
-  '/auth',
-  // Turning saving off silently risks losing world data.
-  '/save-off',
-  // Holds chunk saving while it writes a full copy of the universe to disk.
-  '/backup',
-]);
-
-/**
- * Returns the permission name required to run a given command. Returns null
- * if the command isn't on the whitelist or contains control characters
- * (caller should reject regardless).
- */
-export function getCommandRequiredPermission(
-  command: string,
-): 'console.execute' | 'console.execute.admin' | null {
-  if (typeof command !== 'string') return null;
-  if (containsControlChars(command)) return null;
-  const trimmed = command.trim();
-  if (!trimmed.startsWith('/')) return null;
-  // The whitelist also accepts "/name:suffix"; classify by the base name so a
-  // suffixed admin command can never fall into the plain tier.
-  const cmdName = trimmed.split(/\s+/)[0].toLowerCase().split(':')[0];
-  if (!isCommandAllowed(trimmed)) return null;
-  return ADMIN_COMMAND_PREFIXES.has(cmdName) ? 'console.execute.admin' : 'console.execute';
-}
-
-/**
- * SECURITY: Validate command against whitelist
- * Returns true only if the command starts with an allowed prefix
- */
-export function isCommandAllowed(command: string): boolean {
-  if (typeof command !== 'string') return false;
-
-  const trimmed = command.trim();
-  if (!trimmed) return false;
-
-  // Command must start with /
-  if (!trimmed.startsWith('/')) return false;
-
-  // Extract command name (first word)
-  const cmdName = trimmed.split(/\s+/)[0].toLowerCase();
-
-  // Check against whitelist
-  return ALLOWED_COMMAND_PREFIXES.some(
-    (prefix) => cmdName === prefix.toLowerCase() || cmdName.startsWith(prefix.toLowerCase() + ':'),
+export function toCommandText(text: string, maxLength: number = 256): string {
+  if (typeof text !== 'string') {
+    return '';
+  }
+  return (
+    stripControlChars(text)
+      .replace(/"/g, '”')
+      .replace(/(^|[\s,])'/g, '$1’')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')')
+      .replace(/\\/g, '/')
+      .replace(/,(\s*,)+/g, ',')
+      .replace(/(^|[\s,])--/g, '$1–')
+      .replace(/\s+/g, ' ')
+      .trim()
+      // A leading comma would turn the word before the text into a list.
+      .replace(/^[,\s]+/, '')
+      .replace(/^\{/, '(')
+      .slice(0, maxLength)
+      .trim()
   );
 }
 
+// The plugin refuses longer command lines.
+const MAX_COMMAND_LENGTH = 4096;
+
 /**
- * SECURITY: Full command validation
- * Combines whitelist check with injection pattern check
+ * SECURITY: the central check for every line that goes to the game console
+ * (docker.execCommand runs it on both delivery paths). A command must be one
+ * line without control characters and start with a command that exists: on a
+ * vanilla 0.7.3 server or in a server registry the panel has loaded (see
+ * utils/commandWhitelist.ts). Which permission tier a command needs, on which
+ * server, is decided by services/commandPolicy.ts.
  */
 export function validateCommand(command: string): { valid: boolean; error?: string } {
   if (typeof command !== 'string' || !command.trim()) {
@@ -353,57 +227,22 @@ export function validateCommand(command: string): { valid: boolean; error?: stri
     return { valid: false, error: 'Command must be a single line without control characters' };
   }
 
-  const trimmed = command.trim();
-
-  // Must start with /
-  if (!trimmed.startsWith('/')) {
+  if (!command.trim().startsWith('/')) {
     return { valid: false, error: 'Command must start with /' };
   }
 
-  // Check against command whitelist
-  if (!isCommandAllowed(trimmed)) {
-    return { valid: false, error: 'Command not allowed. Use /help for available commands.' };
+  if (command.length > MAX_COMMAND_LENGTH) {
+    return { valid: false, error: `Command is longer than ${MAX_COMMAND_LENGTH} characters` };
   }
 
-  // Check for injection patterns
-  if (!isCommandSafe(trimmed)) {
-    return { valid: false, error: 'Command contains invalid characters' };
+  if (!isKnownCommandLine(command)) {
+    return { valid: false, error: "Unknown command. Use /help for the server's commands." };
   }
 
   return { valid: true };
 }
 
-/**
- * Build a safe command string from validated parts
- */
-export function buildSafeCommand(
-  command: string,
-  args: Record<string, string | number>,
-): string | null {
-  // Validate base command
-  if (!command.startsWith('/')) {
-    return null;
-  }
-
-  // Build command with validated arguments
-  let result = command;
-
-  for (const [key, value] of Object.entries(args)) {
-    const strValue = String(value);
-
-    // Each argument must pass safety check
-    if (!isCommandSafe(strValue)) {
-      return null;
-    }
-
-    result += ' ' + sanitizeString(strValue);
-  }
-
-  return result;
-}
-
 export default {
-  sanitizeString,
   escapeShellArg,
   containsControlChars,
   stripControlChars,
@@ -419,9 +258,6 @@ export default {
   isValidFileName,
   isValidUUID,
   sanitizeMessage,
-  isCommandSafe,
-  isCommandAllowed,
+  toCommandText,
   validateCommand,
-  buildSafeCommand,
-  getCommandRequiredPermission,
 };

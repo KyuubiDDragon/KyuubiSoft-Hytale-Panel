@@ -42,6 +42,14 @@ export interface CompleteSetupResponse {
   success: boolean
   redirectUrl: string
   error?: string
+  /** How the wizard's server settings reached the server's config.json. */
+  serverConfig?: {
+    written: boolean
+    /** The server runs: written during the restart that ends the setup. */
+    pending: boolean
+    skipped?: string
+    error?: string
+  }
 }
 
 // Types for admin account creation

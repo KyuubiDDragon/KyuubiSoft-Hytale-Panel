@@ -14,7 +14,7 @@
 import type Docker from 'dockerode';
 import { config } from '../config.js';
 import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.js';
-import { validateCommand, containsControlChars } from '../utils/sanitize.js';
+import { validateCommand, containsControlChars, PLAYER_NAME_SOURCE } from '../utils/sanitize.js';
 import { clearOnlinePlayers } from './players.js';
 import { isDemoMode, getDemoStatus, getDemoStats, getDemoLogs } from './demoData.js';
 import { ensureLoaded, getDefaultId, getServer, resolveServerId } from './servers.js';
@@ -230,17 +230,27 @@ export async function wasRecentlyStoppedIntentionally(
   return ts !== undefined && Date.now() - ts < withinMs;
 }
 
+// The line as the server reads it: surrounding spaces and one leading "/" go,
+// and so do spaces after that slash (the server accepts "/ stop" too). The
+// stop detection must not depend on every caller having validated the line.
+function commandWords(command: string): string {
+  return command.trim().replace(/^\/\s*/, '');
+}
+
 // Hytale 0.7 registers `stop` with the alias `shutdown`; `--crash` makes it
 // shut down as a crash, which the watchdog should still report as one.
 function isStopCommand(command: string): boolean {
-  return /^\/?(stop|shutdown)\b/i.test(command.trim()) && !/--crash\b/i.test(command);
+  return /^(stop|shutdown)\b/i.test(commandWords(command)) && !/--crash\b/i.test(command);
 }
 
 // Commands that take the server, and the plugin with it, down: a stop, and
 // `/update apply --confirm`, which restarts into the staged update (exit 8).
 function takesServerDown(command: string): boolean {
-  return isStopCommand(command) || /^\/?update\s+apply\b.*\s--confirm\b/i.test(command.trim());
+  return isStopCommand(command) || /^update\s+apply\b.*\s--confirm\b/i.test(commandWords(command));
 }
+
+/** Test hook. */
+export const __stopDetection = { isStopCommand, takesServerDown };
 
 export async function startContainer(serverId?: string): Promise<ActionResponse> {
   if (isDemoMode()) return { success: true, message: '[DEMO] Container started' };
@@ -322,21 +332,83 @@ export async function getLogs(tail: number = 100, serverId?: string): Promise<st
   }
 }
 
-// Stdin streams are kept per-server so we don't accidentally pipe a command
-// for server A into server B's container shell.
-const stdinStreams = new Map<string, NodeJS.WritableStream>();
+// The stdin console of each server: one attach per server (keyed by the
+// registry id, so a command for server A never reaches server B), shared by
+// every caller and written to one line at a time.
+//  - It belongs to the container run it was made for. After a restart the old
+//    socket still looks writable until Docker closes it and would swallow the
+//    next commands, so a changed container id or start time replaces it.
+//  - Callers that need it at the same time wait for the same attach.
+//  - Writes are queued per server and only count once the socket took them.
+interface StdinConsole {
+  stream: NodeJS.WritableStream;
+  containerId: string | undefined;
+  startedAt: string | undefined;
+  closed: boolean;
+}
+const stdinConsoles = new Map<string, StdinConsole>();
+const stdinAttaching = new Map<string, Promise<StdinConsole | null>>();
+const consoleQueues = new Map<string, { tail: Promise<unknown>; waiting: number }>();
+// Console lines of one server waiting for their turn at most.
+const MAX_QUEUED_CONSOLE_LINES = 100;
+const CONSOLE_WRITE_TIMEOUT_MS = 5_000;
 
-async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; key: string }> {
-  // Same key for legacy and scoped callers, otherwise one container gets two
-  // concurrent stdin attaches.
-  const key = await resolveServerId(serverId);
-  const existing = stdinStreams.get(key);
-  if (existing) return { ok: true, key };
+type ConsoleRun = Pick<Docker.ContainerInspectInfo, 'Id'> & {
+  State: Pick<Docker.ContainerInspectInfo['State'], 'StartedAt'>;
+};
+
+function isUsable(c: StdinConsole, info: ConsoleRun): boolean {
+  const s = c.stream as NodeJS.WritableStream & { destroyed?: boolean; writableEnded?: boolean };
+  return (
+    !c.closed &&
+    !s.destroyed &&
+    !s.writableEnded &&
+    s.writable !== false &&
+    c.containerId === info.Id &&
+    c.startedAt === info.State?.StartedAt
+  );
+}
+
+function dropConsole(key: string, c: StdinConsole): void {
+  c.closed = true;
+  if (stdinConsoles.get(key) === c) stdinConsoles.delete(key);
+  const s = c.stream as NodeJS.WritableStream & { destroy?: () => void };
+  s.removeAllListeners?.('error');
+  s.on?.('error', () => {}); // a dead socket may still report its error
   try {
-    const container = await getContainer(serverId);
-    if (!container) return { ok: false, key };
-    const info = await withTimeout('inspect', container.inspect());
-    if (!info.State.Running) return { ok: false, key };
+    s.destroy?.();
+  } catch {
+    // already gone
+  }
+}
+
+/** Writes and resolves once the socket took the bytes (or rejects). */
+function writeToConsole(c: StdinConsole, data: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('the console did not take the line in time')),
+      CONSOLE_WRITE_TIMEOUT_MS,
+    );
+    try {
+      c.stream.write(data, (error?: Error | null) => {
+        clearTimeout(timer);
+        if (error) reject(error);
+        else resolve();
+      });
+    } catch (error) {
+      clearTimeout(timer);
+      reject(error);
+    }
+  });
+}
+
+async function attachConsole(
+  key: string,
+  container: Docker.Container,
+  info: ConsoleRun,
+): Promise<StdinConsole | null> {
+  let c: StdinConsole | undefined;
+  try {
     const stream = await container.attach({
       stream: true,
       stdin: true,
@@ -344,20 +416,71 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
       stderr: false,
       hijack: true,
     });
+    const own: StdinConsole = {
+      stream,
+      containerId: info.Id,
+      startedAt: info.State?.StartedAt,
+      closed: false,
+    };
+    c = own;
+    const gone = () => {
+      own.closed = true;
+      if (stdinConsoles.get(key) === own) stdinConsoles.delete(key);
+    };
+    stream.on('error', gone);
+    stream.on('close', gone);
     // dockerode sends the attach options as a JSON request body, and Docker
     // forwards those bytes to the container's stdin. Without a line break they
     // would be glued in front of the first real command, which the server then
     // rejects as unknown. Terminate them so they stay one harmless line.
-    stream.write('\n');
-    stdinStreams.set(key, stream);
-    stream.on('error', () => stdinStreams.delete(key));
-    stream.on('close', () => stdinStreams.delete(key));
-    return { ok: true, key };
+    await writeToConsole(own, '\n');
+    stdinConsoles.set(key, own);
+    return own;
   } catch (error) {
     console.error('Failed to attach stdin:', error);
-    return { ok: false, key };
+    // A socket that would not even take the first line is not kept open.
+    if (c) dropConsole(key, c);
+    return null;
   }
 }
+
+/** The server's stdin console for this container run, attached if needed. */
+async function consoleFor(
+  key: string,
+  container: Docker.Container,
+  info: ConsoleRun,
+): Promise<StdinConsole | null> {
+  const current = stdinConsoles.get(key);
+  if (current && isUsable(current, info)) return current;
+  if (current) dropConsole(key, current);
+  let attaching = stdinAttaching.get(key);
+  if (!attaching) {
+    attaching = attachConsole(key, container, info).finally(() => stdinAttaching.delete(key));
+    stdinAttaching.set(key, attaching);
+  }
+  return attaching;
+}
+
+/** Runs console writes of one server strictly one after another. */
+function inConsoleQueue<T>(key: string, task: () => Promise<T>, busy: T): Promise<T> {
+  let queue = consoleQueues.get(key);
+  if (!queue) {
+    queue = { tail: Promise.resolve(), waiting: 0 };
+    consoleQueues.set(key, queue);
+  }
+  if (queue.waiting >= MAX_QUEUED_CONSOLE_LINES) return Promise.resolve(busy);
+  const own = queue;
+  own.waiting++;
+  const run = own.tail.then(task, task);
+  own.tail = run.catch(() => undefined);
+  return run.finally(() => {
+    own.waiting--;
+    if (own.waiting === 0 && consoleQueues.get(key) === own) consoleQueues.delete(key);
+  });
+}
+
+// Errors after which the line certainly did not leave the panel.
+const NOT_WRITTEN_CODES = new Set(['ERR_STREAM_WRITE_AFTER_END', 'ERR_STREAM_DESTROYED']);
 
 export interface ExecCommandOptions {
   /** Panel user the command runs for; defaults to the user of the current request. */
@@ -463,6 +586,41 @@ export async function sendLifecycleCommand(
   return deliverCommand(command, serverId);
 }
 
+// The access pages' commands (services/accessCommands.ts): whitelist, bans
+// and permissions. `/perm` is not on the operator console whitelist, so only
+// these exact shapes pass here; the routes check the access rights.
+const ACCESS_UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+const ACCESS_PLAYER = `(?:${PLAYER_NAME_SOURCE}|${ACCESS_UUID})`;
+const ACCESS_GROUP = '[A-Za-z0-9][A-Za-z0-9_:-]{0,63}';
+const ACCESS_NODE = '-?\\w[\\w-]*(?:\\.[\\w*][\\w*-]*){0,31}';
+// Free text after the player, as words with single spaces: no quote, backslash,
+// bracket or comma the server's tokenizer would act on, no word it reads as an option.
+const ACCESS_WORD = '(?!--)[^\\s"\'\\\\\\[\\],]+';
+const ACCESS_REASON = `(?=.{1,200}$)${ACCESS_WORD}(?: ${ACCESS_WORD})*`;
+const ACCESS_COMMAND = new RegExp(
+  '^/(?:' +
+    [
+      'whitelist (?:enable|disable|status|list)',
+      `whitelist (?:add|remove) ${ACCESS_PLAYER}`,
+      `ban ${ACCESS_PLAYER}(?: ${ACCESS_REASON})?`,
+      `unban ${ACCESS_PLAYER}`,
+      `perm user (?:add|remove) ${ACCESS_UUID} ${ACCESS_NODE}`,
+      `perm user group (?:add|remove) ${ACCESS_UUID} ${ACCESS_GROUP}`,
+      `perm group (?:add|remove) ${ACCESS_GROUP} ${ACCESS_NODE}`,
+    ].join('|') +
+    ')$',
+);
+
+export async function sendAccessCommand(
+  command: string,
+  serverId?: string,
+): Promise<CommandExecResult> {
+  if (containsControlChars(command) || !ACCESS_COMMAND.test(command)) {
+    return { success: false, error: 'Not an access command' };
+  }
+  return deliverCommand(command, serverId);
+}
+
 // The two ways a command reaches the server, both behind the caller's gate.
 // Preferred: the plugin runs the command and returns its answer. The stdin
 // console is only used when the plugin did not take the command (not
@@ -491,33 +649,71 @@ async function deliverCommand(
   return writeConsoleLine(command, serverId);
 }
 
+/**
+ * A checked command line as the server's stdin console must receive it.
+ *
+ * The console reads stdin through a line editor that rewrites a line before
+ * the server runs it: a backslash escapes the next character and is dropped
+ * (`d\ilation` becomes `dilation`), and `!!`, `!$` or `!word` are replaced
+ * with text of earlier console lines, inside quotes too. Each backslash and
+ * each `!` is escaped with a backslash, so the server gets back exactly the
+ * line the panel checked and classified. The plugin path takes the line as
+ * it is.
+ */
+export function toConsoleLine(command: string): string {
+  return command.replace(/[\\!]/g, '\\$&');
+}
+
 // The fallback: the server's console stdin. There used to be a `docker exec`
 // fallback behind it that echoed into /proc/1/fd/0; with a TTY that lands in
 // the terminal's output, not its input, so it reported success for commands
 // that never ran. A missing console is now reported as an error.
 async function writeConsoleLine(command: string, serverId?: string): Promise<CommandExecResult> {
+  let key: string;
+  try {
+    // Same key for legacy and scoped callers, otherwise one container gets two
+    // concurrent stdin attaches.
+    key = await resolveServerId(serverId);
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+  return inConsoleQueue(key, () => writeConsoleLineNow(command, serverId, key), {
+    success: false,
+    error: `Too many console commands waiting (${MAX_QUEUED_CONSOLE_LINES}); try again shortly`,
+    via: 'stdin',
+  });
+}
+
+async function writeConsoleLineNow(
+  command: string,
+  serverId: string | undefined,
+  key: string,
+): Promise<CommandExecResult> {
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
 
-    const attached = await ensureStdinAttached(serverId);
-    const stream = attached.ok ? stdinStreams.get(attached.key) : undefined;
-    if (!stream) {
-      return { success: false, error: 'Server console is not reachable', via: 'stdin' };
-    }
-    try {
-      stream.write(command + '\n');
-      return { success: true, message: `Command executed: ${command}`, via: 'stdin' };
-    } catch (error) {
-      stdinStreams.delete(attached.key);
-      const reason = error instanceof Error ? error.message : 'Unknown error';
-      return {
-        success: false,
-        error: `Writing to the server console failed: ${reason}`,
-        via: 'stdin',
-      };
+    const line = toConsoleLine(command) + '\n';
+    // A socket that turns out dead before taking the line gets one fresh attach.
+    for (let attempt = 0; ; attempt++) {
+      const c = await consoleFor(key, container, info);
+      if (!c) return { success: false, error: 'Server console is not reachable', via: 'stdin' };
+      try {
+        await writeToConsole(c, line);
+        return { success: true, message: `Command executed: ${command}`, via: 'stdin' };
+      } catch (error) {
+        dropConsole(key, c);
+        const code = (error as NodeJS.ErrnoException).code;
+        if (attempt === 0 && code && NOT_WRITTEN_CODES.has(code)) continue;
+        const reason = error instanceof Error ? error.message : 'Unknown error';
+        return {
+          success: false,
+          error: `Writing to the server console failed: ${reason}`,
+          via: 'stdin',
+        };
+      }
     }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

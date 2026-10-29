@@ -23,7 +23,15 @@ vi.mock('./dockerClient.js', () => ({
   createDockerClient: () => ({
     getContainer: () => ({
       inspect: async () => ({ State: { Running: true } }),
-      attach: async () => ({ write: stdinWrite, on: () => undefined }),
+      // Like a socket: the write callback runs once the data is handed off.
+      attach: async () => ({
+        write: (data: string, cb?: (error?: Error | null) => void) => {
+          stdinWrite(data);
+          queueMicrotask(() => cb?.());
+          return true;
+        },
+        on: () => undefined,
+      }),
       exec: containerExec,
     }),
   }),
@@ -350,5 +358,19 @@ describe('docker.execCommand through the KyuubiSoft API plugin', () => {
     );
     await sent;
     expect(sentBody()).toMatchObject({ actor: 'scheduler/alice' });
+  });
+});
+
+describe('docker stop detection', () => {
+  it('recognises a stop however the slash and the name are written', async () => {
+    const { __stopDetection } = await import('./docker.js');
+    for (const line of ['/stop', 'stop', '/ stop', '  /  SHUTDOWN  ', '/Stop now']) {
+      expect(__stopDetection.isStopCommand(line), line).toBe(true);
+    }
+    for (const line of ['/stop --crash', '/stopwatch', '/say stop', '/ /stop']) {
+      expect(__stopDetection.isStopCommand(line), line).toBe(false);
+    }
+    expect(__stopDetection.takesServerDown('/ update  apply --confirm')).toBe(true);
+    expect(__stopDetection.takesServerDown('/update apply')).toBe(false);
   });
 });

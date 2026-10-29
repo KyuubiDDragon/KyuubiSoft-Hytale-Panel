@@ -8,7 +8,9 @@
  * The plugin runs commands as "Panel:<user>" with console rights, so callers
  * must have passed the panel's own checks (validateCommand / commandPolicy, or
  * the fixed command set of the lifecycle) before calling runCommandViaPlugin.
- * docker.execCommand and docker.sendLifecycleCommand are the only callers.
+ * docker.execCommand and docker.sendLifecycleCommand are the callers, plus the
+ * fixed setting commands built from validated values in serverSettings.ts and
+ * worldSettings.ts (/maxplayers, /maxviewradius, /world config).
  */
 import { z } from 'zod';
 import { getPluginAuthHeaders, isPluginInstalled, resolvePluginEndpoint } from './kyuubiApi.js';

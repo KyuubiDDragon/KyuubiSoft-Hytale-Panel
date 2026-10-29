@@ -5,7 +5,8 @@ import { consoleApi, type CommandNode } from '@/api/console'
  * Console autocomplete. With the KyuubiSoft API plugin it uses the server's
  * real command list (vanilla and mod commands, subcommands, syntax) plus the
  * server's own completion for argument values such as player names. Without
- * the plugin it falls back to a short built-in list of common commands.
+ * the plugin the panel sends the vanilla Hytale 0.7 commands instead; a short
+ * built-in list is left for when the panel does not answer at all.
  */
 
 export interface CommandSuggestion {
@@ -28,11 +29,19 @@ const COMPLETION_DEBOUNCE_MS = 250
 // that was offline before, or plugins loaded since.
 const RELOAD_INTERVAL_MS = 60_000
 
-// Used only when the server's command list is not available (no plugin):
-// common commands that exist in Hytale and that the panel lets through.
+// Used only when the panel cannot answer with a command list at all (it
+// normally sends the server's list, or the vanilla Hytale 0.7 list without
+// one): common Hytale 0.7 commands.
 const FALLBACK_COMMANDS = [
   '/help',
+  '/who',
   '/say',
+  '/notify',
+  '/world save --all --confirm',
+  '/world list',
+  '/server stats memory',
+  '/time set',
+  '/weather set',
   '/kick',
   '/ban',
   '/unban',
@@ -44,11 +53,7 @@ const FALLBACK_COMMANDS = [
   '/gamemode',
   '/give',
   '/kill',
-  '/tp',
-  '/time',
-  '/weather',
   '/update status',
-  '/update check',
   '/auth status',
   '/stop',
 ]
@@ -56,6 +61,12 @@ const FALLBACK_COMMANDS = [
 function matchesName(node: CommandNode, token: string): boolean {
   const t = token.toLowerCase()
   return node.name.toLowerCase() === t || (node.aliases ?? []).some((a) => a.toLowerCase() === t)
+}
+
+/** Like the server: a command's name wins over another command's alias. */
+function findByName(nodes: CommandNode[] | undefined, token: string): CommandNode | undefined {
+  const t = token.toLowerCase()
+  return nodes?.find((c) => c.name.toLowerCase() === t) ?? nodes?.find((c) => matchesName(c, token))
 }
 
 function startsWithName(node: CommandNode, prefix: string): boolean {
@@ -91,12 +102,12 @@ function resolve(commands: CommandNode[], words: string[]): Resolved {
   const partial = words[words.length - 1] ?? ''
   const finished = words.slice(0, -1)
   if (finished.length === 0) return { path: [], partial }
-  const root = commands.find((c) => matchesName(c, finished[0]))
+  const root = findByName(commands, finished[0])
   if (!root) return { path: [], partial }
   let node = root
   const path = [finished[0]]
   for (const word of finished.slice(1)) {
-    const sub = node.subcommands?.find((c) => matchesName(c, word))
+    const sub = findByName(node.subcommands, word)
     if (!sub) break
     node = sub
     path.push(word)
@@ -164,9 +175,9 @@ export function useCommandAutocomplete(input: Ref<string>) {
     }
 
     const prefix = `/${state.path.join(' ')} `
-    const rootPolicy = state.root?.panel
     // Subcommands only directly after the command path, not after arguments.
     const atCommandEnd = state.path.length === splitLine(line).length - 1
+    // Each subcommand carries its own tier (e.g. /world save vs /world remove).
     const subs = (atCommandEnd ? (state.node.subcommands ?? []) : [])
       .filter((c) => startsWithName(c, state.partial))
       .map((c) => ({
@@ -174,8 +185,8 @@ export function useCommandAutocomplete(input: Ref<string>) {
         label: `${prefix}${c.name}`,
         hint: argHint(c),
         description: c.description,
-        blocked: rootPolicy ? !rootPolicy.allowed : false,
-        admin: rootPolicy?.permission === 'console.execute.admin',
+        blocked: c.panel ? !c.panel.allowed : false,
+        admin: c.panel?.permission === 'console.execute.admin',
       }))
     // Argument values from the server (player names, items, --options, …).
     const head = line.slice(0, line.length - state.partial.length)

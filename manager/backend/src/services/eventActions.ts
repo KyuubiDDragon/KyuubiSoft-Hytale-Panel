@@ -15,6 +15,8 @@
  * Placeholder values come from event payloads, some of them attacker-controlled
  * (the username of a failed login), so they are normalized before substitution:
  * name fields must look like a name, everything else loses control characters.
+ * Joins and leaves the panel read from the server log (no plugin connection)
+ * run no command rules at all, see commandFromLogEvent.
  *
  * Loops: an event published while a rule's action runs (backup.completed from
  * the rule's own backup) is tagged with the chain of running rules. A rule
@@ -28,7 +30,7 @@ import { logger } from '../utils/logger.js';
 import { subscribe } from './eventBus.js';
 import { PanelEventNames, eventPatternMatches, type PanelEvent } from '../schemas/events.js';
 import { KeyedTokenBucket } from '../utils/tokenBucket.js';
-import { isValidPlayerName, stripControlChars, containsControlChars } from '../utils/sanitize.js';
+import { isValidPlayerName, containsControlChars, toCommandText } from '../utils/sanitize.js';
 import {
   authorizeCommand,
   authorizeStoredCommand,
@@ -249,6 +251,26 @@ function withinRuleBudget(rule: EventAction, evt: PanelEvent): boolean {
   return false;
 }
 
+// A join or leave read from the server log (payload source 'log', only while
+// the server has no plugin connection) rests on text the server printed, and
+// a mod may print text a client sent. Such events run no console commands;
+// announcements, backups, webhooks and the online list still get them.
+const logSkipLoggedAt = new Map<string, number>();
+
+/** Is this a command rule the event must not run? The skip is logged once a minute per rule and event. */
+function commandFromLogEvent(rule: EventAction, evt: PanelEvent): boolean {
+  if (rule.actionType !== 'command' || evt.payload.source !== 'log') return false;
+  const key = `${rule.id}\u0000${evt.name}`;
+  const now = Date.now();
+  if (now - (logSkipLoggedAt.get(key) ?? 0) >= THROTTLE_LOG_INTERVAL_MS) {
+    logSkipLoggedAt.set(key, now);
+    logger.info(
+      `[EventAction] "${rule.name}" skipped for ${evt.name}: the event was read from the server log (no plugin connection), which runs no commands (logged at most once per minute)`,
+    );
+  }
+  return true;
+}
+
 export const ACTION_TYPES: readonly EventActionType[] = ['command', 'announce', 'backup'];
 const MAX_EVENT_PATTERN_LENGTH = 64;
 const MAX_RULE_NAME_LENGTH = 100;
@@ -370,6 +392,62 @@ const NAME_PLACEHOLDERS = new Set([
 ]);
 const MAX_PLACEHOLDER_LENGTH = 200;
 
+// Placeholders with a checked name or a value the panel or the server sets;
+// any other one carries text from the event (a chat message, a reason).
+const FIXED_PLACEHOLDERS = new Set([...NAME_PLACEHOLDERS, 'uuid', 'serverId', 'event']);
+
+// Events the panel reads from the server log while a server has no plugin
+// connection (services/playerPresence.ts); their payload has source 'log'.
+const LOG_SOURCED_EVENTS = ['player.joined', 'player.left'];
+
+export type EventActionWarning =
+  | { code: 'free_text_placeholder'; placeholders: string[]; message: string }
+  | { code: 'log_events_run_no_commands'; events: string[]; message: string };
+
+export interface EventActionWarningContext {
+  /** The rule's server (one of them, for a rule on every server) has no plugin connection now. */
+  withoutPlugin?: boolean;
+}
+
+/**
+ * Warnings for a rule the panel still saves:
+ *  - a command template with a free text placeholder lets whoever causes the
+ *    event (a player chatting, someone failing a login) add words or
+ *    arguments to the command; the rule keeps running with its creator's
+ *    rights, so this is a hint, not a refusal;
+ *  - a command rule on joins or leaves does not run while they come from the
+ *    server log (see commandFromLogEvent).
+ */
+export function eventActionWarnings(
+  rule: Pick<EventActionDraft, 'actionType' | 'actionPayload' | 'eventPattern'>,
+  context: EventActionWarningContext = {},
+): EventActionWarning[] {
+  if (rule.actionType !== 'command') return [];
+  const warnings: EventActionWarning[] = [];
+  const template = rule.actionPayload?.command;
+  const keys = new Set<string>();
+  for (const [, key] of (typeof template === 'string' ? template : '').matchAll(/\{(\w+)\}/g)) {
+    if (!FIXED_PLACEHOLDERS.has(key)) keys.add(key);
+  }
+  if (keys.size > 0) {
+    const placeholders = [...keys];
+    warnings.push({
+      code: 'free_text_placeholder',
+      placeholders,
+      message: `${placeholders.map((k) => `{${k}}`).join(', ')} put text from the event into the command: whoever causes the event can add words or arguments to it.`,
+    });
+  }
+  const events = LOG_SOURCED_EVENTS.filter((name) => eventPatternMatches(rule.eventPattern, name));
+  if (context.withoutPlugin && events.length > 0) {
+    warnings.push({
+      code: 'log_events_run_no_commands',
+      events,
+      message: `Without a connected KyuubiSoft API plugin the panel reads ${events.join(' and ')} from the server log, and those events run no commands. Install the plugin for this rule to run.`,
+    });
+  }
+  return warnings;
+}
+
 type RenderResult = { ok: true; text: string } | { ok: false; error: string };
 
 function renderTemplate(template: string, evt: PanelEvent): RenderResult {
@@ -391,7 +469,9 @@ function renderTemplate(template: string, evt: PanelEvent): RenderResult {
       unsafeKey ??= key;
       return '';
     }
-    return stripControlChars(value).trim().slice(0, MAX_PLACEHOLDER_LENGTH);
+    // Plain text for the command parser: no quotes, brackets or --options
+    // a chat message could slip into the command.
+    return toCommandText(value, MAX_PLACEHOLDER_LENGTH);
   });
   return unsafeKey
     ? { ok: false, error: `placeholder {${unsafeKey}} has an invalid value` }
@@ -433,7 +513,7 @@ async function runAction(rule: EventAction, evt: PanelEvent): Promise<void> {
       if (!rendered.ok) return skipAction(rule, evt, rendered.error);
       const { execCommand } = await import('./docker.js');
       const result = await execCommand(
-        `/broadcast ${stripControlChars(rendered.text).trim()}`,
+        `/broadcast ${toCommandText(rendered.text, MAX_TEMPLATE_LENGTH)}`,
         serverId,
         { actor: eventActor(rule) },
       );
@@ -509,6 +589,7 @@ export function startEventActions(): void {
       if (rule.serverId && evt.serverId && rule.serverId !== evt.serverId) continue;
       // Wildcards never cover events outsiders can cause (schemas/events.ts).
       if (!eventPatternMatches(rule.eventPattern, evt.name)) continue;
+      if (commandFromLogEvent(rule, evt)) continue;
       if (!mayFire(rule, evt, chain)) continue;
       void ruleChain.run([...chain, rule.id], () => runAction(rule, evt));
     }
