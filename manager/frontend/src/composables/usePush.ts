@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from '@/utils/apiErrors'
 import { ref } from 'vue'
 import { pushApi } from '@/api/push'
 
@@ -55,7 +56,7 @@ export function usePush() {
   }
 
   /** Ask permission, subscribe with the VAPID key, and register server-side. */
-  async function enable(): Promise<{ ok: boolean; error?: string }> {
+  async function enable(): Promise<{ ok: boolean; error?: string; message?: string }> {
     if (!supported.value) return { ok: false, error: 'unsupported' }
     busy.value = true
     try {
@@ -80,7 +81,8 @@ export function usePush() {
       subscribed.value = true
       return { ok: true }
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : 'failed' }
+      // `message` is the panel's own wording of what the server refused (translated).
+      return { ok: false, error: 'failed', message: getApiErrorMessage(e, '') || undefined }
     } finally {
       busy.value = false
     }

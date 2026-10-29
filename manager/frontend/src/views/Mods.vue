@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import ChangelogModal from '@/components/mods/ChangelogModal.vue'
+import { formatDate as formatShortDate, formatDateTime } from '@/utils/formatDate'
 import { getLocalizedText, getCategoryColor, type ModsTab } from '@/composables/useMods'
 import { useConfirm } from '@/composables/useConfirm'
 
@@ -624,7 +625,7 @@ function formatSize(bytes: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString()
+  return formatShortDate(dateStr)
 }
 
 const currentItems = computed(() => activeTab.value === 'mods' ? mods.value : plugins.value)
@@ -812,7 +813,7 @@ function getClassificationColor(classification: string): string {
     SAVE: 'bg-green-500/20 text-green-400',
     MODPACK: 'bg-orange-500/20 text-orange-400',
   }
-  return colors[classification] || 'bg-gray-500/20 text-ink-muted'
+  return colors[classification] || 'bg-ink-subtle/20 text-ink-muted'
 }
 
 function formatDownloads(num: number | null | undefined): string {
@@ -966,7 +967,7 @@ function getStackMartCategoryColor(category: string): string {
     scripts: 'bg-green-500/20 text-green-400',
     tools: 'bg-orange-500/20 text-orange-400',
   }
-  return colors[category?.toLowerCase()] || 'bg-gray-500/20 text-ink-muted'
+  return colors[category?.toLowerCase()] || 'bg-ink-subtle/20 text-ink-muted'
 }
 
 // Watch for StackMart search/filter changes
@@ -1226,7 +1227,7 @@ async function installTrackedMod(filename: string) {
 
 function formatUpdateDate(dateStr: string | null): string {
   if (!dateStr) return t('modupdates.never')
-  return new Date(dateStr).toLocaleString()
+  return formatDateTime(dateStr)
 }
 
 onMounted(() => {
@@ -1285,7 +1286,7 @@ onUnmounted(() => {
           <svg class="w-12 h-12 text-hytale-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          <p class="text-lg font-semibold text-white">{{ t('mods.dropTitle') }}</p>
+          <p class="text-lg font-semibold text-ink">{{ t('mods.dropTitle') }}</p>
           <p class="text-sm text-ink-muted">{{ t('mods.dropHint') }}</p>
         </div>
       </div>
@@ -1294,7 +1295,7 @@ onUnmounted(() => {
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('mods.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('mods.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('mods.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-3">
@@ -1314,7 +1315,7 @@ onUnmounted(() => {
         </button>
         <button
           @click="loadData"
-          class="text-ink-muted hover:text-white transition-colors"
+          class="text-ink-muted hover:text-ink transition-colors"
           :class="{ 'animate-spin': loading }"
         >
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1337,7 +1338,7 @@ onUnmounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'mods'
             ? 'bg-hytale-orange text-dark'
-            : 'bg-surface-overlay text-ink-muted hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1351,7 +1352,7 @@ onUnmounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'plugins'
             ? 'bg-purple-500 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1365,7 +1366,7 @@ onUnmounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'store'
             ? 'bg-emerald-500 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1379,7 +1380,7 @@ onUnmounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'modtale'
             ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1393,7 +1394,7 @@ onUnmounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'stackmart'
             ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1407,7 +1408,7 @@ onUnmounted(() => {
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'curseforge'
             ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white'
-            : 'bg-surface-overlay text-ink-muted hover:text-white'
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1421,8 +1422,8 @@ onUnmounted(() => {
         :class="[
           'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
           activeTab === 'updates'
-            ? (updateStatus && updateStatus.updatesAvailable > 0 ? 'bg-status-warning text-dark' : 'bg-status-success text-dark')
-            : 'bg-surface-overlay text-ink-muted hover:text-white'
+            ? (updateStatus && updateStatus.updatesAvailable > 0 ? 'bg-status-warning text-ink-inverse' : 'bg-status-success text-ink-inverse')
+            : 'bg-surface-overlay text-ink-muted hover:text-ink'
         ]"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1444,7 +1445,7 @@ onUnmounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="font-semibold text-white">{{ enabledCount }} {{ t('mods.active') }}</h3>
+          <h3 class="font-semibold text-ink">{{ enabledCount }} {{ t('mods.active') }}</h3>
           <p class="text-sm text-ink-muted mt-1">{{ t('mods.path') }}: <code class="text-xs bg-surface-overlay px-2 py-0.5 rounded">{{ currentPath }}</code></p>
           <p class="text-sm text-ink-subtle mt-2">{{ t('mods.restartNote') }}</p>
         </div>
@@ -1460,7 +1461,7 @@ onUnmounted(() => {
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="font-semibold text-white">{{ t('mods.storeTitle') }}</h3>
+          <h3 class="font-semibold text-ink">{{ t('mods.storeTitle') }}</h3>
           <p class="text-sm text-ink-muted mt-1">{{ t('mods.storeDescription') }}</p>
           <p class="text-sm text-ink-subtle mt-2">{{ t('mods.restartNote') }}</p>
         </div>
@@ -1493,7 +1494,7 @@ onUnmounted(() => {
                 'w-12 h-12 rounded-lg flex items-center justify-center',
                 item.enabled
                   ? (activeTab === 'mods' ? 'bg-hytale-orange/20' : 'bg-purple-500/20')
-                  : 'bg-gray-600/20'
+                  : 'bg-ink-subtle/20'
               ]"
             >
               <svg
@@ -1510,14 +1511,14 @@ onUnmounted(() => {
 
             <!-- Info -->
             <div>
-              <p :class="['font-medium', item.enabled ? 'text-white' : 'text-ink-subtle']">{{ item.name }}</p>
+              <p :class="['font-medium', item.enabled ? 'text-ink' : 'text-ink-subtle']">{{ item.name }}</p>
               <div class="flex items-center gap-3 text-sm text-ink-subtle">
                 <span>{{ formatSize(item.size) }}</span>
                 <span>{{ formatDate(item.lastModified) }}</span>
                 <span
                   :class="[
                     'px-2 py-0.5 rounded text-xs',
-                    item.enabled ? 'bg-status-success/20 text-status-success' : 'bg-gray-600/20 text-ink-subtle'
+                    item.enabled ? 'bg-status-success/20 text-status-success' : 'bg-ink-subtle/20 text-ink-subtle'
                   ]"
                 >
                   {{ item.enabled ? t('mods.enabled') : t('mods.disabled') }}
@@ -1538,7 +1539,7 @@ onUnmounted(() => {
                   <button
                     v-if="item.updateChangelog"
                     @click.stop="openChangelogModal(item.name, item.updateChangelog)"
-                    class="ml-1 hover:text-white transition-colors"
+                    class="ml-1 hover:text-ink transition-colors"
                     :title="t('mods.viewChangelog')"
                   >
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1652,7 +1653,7 @@ onUnmounted(() => {
             <!-- Info -->
             <div class="flex-1">
               <div class="flex items-center gap-2 flex-wrap">
-                <p class="font-medium text-white">{{ mod.name }}</p>
+                <p class="font-medium text-ink">{{ mod.name }}</p>
                 <span :class="['px-2 py-0.5 rounded text-xs', getCategoryColor(mod.category)]">
                   {{ mod.category }}
                 </span>
@@ -1764,7 +1765,7 @@ onUnmounted(() => {
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <h3 class="font-semibold text-white">Modtale</h3>
+                <h3 class="font-semibold text-ink">Modtale</h3>
                 <a
                   href="https://modtale.net"
                   target="_blank"
@@ -1824,7 +1825,7 @@ onUnmounted(() => {
                 v-model="modtaleSearch"
                 type="text"
                 :placeholder="t('mods.searchModtale')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-cyan-500"
               />
             </div>
           </div>
@@ -1832,7 +1833,7 @@ onUnmounted(() => {
           <!-- Sort -->
           <select
             v-model="modtaleSort"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-cyan-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-cyan-500"
           >
             <option value="downloads">{{ t('mods.sortDownloads') }}</option>
             <option value="updated">{{ t('mods.sortUpdated') }}</option>
@@ -1844,7 +1845,7 @@ onUnmounted(() => {
           <!-- Classification Filter -->
           <select
             v-model="modtaleClassification"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-cyan-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-cyan-500"
           >
             <option value="">{{ t('mods.allTypes') }}</option>
             <option value="PLUGIN">Plugins</option>
@@ -1898,7 +1899,7 @@ onUnmounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-medium text-white truncate">{{ mod.title }}</p>
+                  <p class="font-medium text-ink truncate">{{ mod.title }}</p>
                   <span :class="['px-2 py-0.5 rounded text-xs', getClassificationColor(mod.classification)]">
                     {{ mod.classification }}
                   </span>
@@ -1989,7 +1990,7 @@ onUnmounted(() => {
           <button
             @click="modtalePage = Math.max(0, modtalePage - 1)"
             :disabled="modtalePage === 0"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-white disabled:opacity-50"
+            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
           >
             &larr;
           </button>
@@ -1999,7 +2000,7 @@ onUnmounted(() => {
           <button
             @click="modtalePage = Math.min(modtaleTotalPages - 1, modtalePage + 1)"
             :disabled="modtalePage >= modtaleTotalPages - 1"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-white disabled:opacity-50"
+            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
           >
             &rarr;
           </button>
@@ -2011,8 +2012,8 @@ onUnmounted(() => {
     <div v-if="showModtaleSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-md">
         <div class="p-4 border-b border-border/50 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.modtaleApiSettings') }}</h2>
-          <button @click="showModtaleSettings = false" class="text-ink-muted hover:text-white">
+          <h2 class="text-xl font-bold text-ink">{{ t('mods.modtaleApiSettings') }}</h2>
+          <button @click="showModtaleSettings = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2021,7 +2022,7 @@ onUnmounted(() => {
 
         <div class="p-6 space-y-4">
           <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
@@ -2082,8 +2083,8 @@ onUnmounted(() => {
     <div v-if="showModtaleDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
         <div class="p-4 border-b border-border/50 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ modtaleDetailProject?.title || t('common.loading') }}</h2>
-          <button @click="showModtaleDetail = false" class="text-ink-muted hover:text-white">
+          <h2 class="text-xl font-bold text-ink">{{ modtaleDetailProject?.title || t('common.loading') }}</h2>
+          <button @click="showModtaleDetail = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2140,7 +2141,7 @@ onUnmounted(() => {
 
             <!-- Versions -->
             <div v-if="modtaleDetailProject.versions?.length" class="mb-6">
-              <h3 class="font-semibold text-white mb-3">{{ t('mods.versions') }}</h3>
+              <h3 class="font-semibold text-ink mb-3">{{ t('mods.versions') }}</h3>
               <div class="space-y-2">
                 <div
                   v-for="version in modtaleDetailProject.versions.slice(0, 5)"
@@ -2148,7 +2149,7 @@ onUnmounted(() => {
                   class="flex items-center justify-between p-3 bg-surface-overlay rounded-lg hover:bg-surface-muted transition-colors"
                 >
                   <div>
-                    <span class="text-white font-medium">{{ version.versionNumber }}</span>
+                    <span class="text-ink font-medium">{{ version.versionNumber }}</span>
                     <span v-if="version.channel && version.channel !== 'RELEASE'" class="ml-2 px-2 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400">
                       {{ version.channel }}
                     </span>
@@ -2169,7 +2170,7 @@ onUnmounted(() => {
 
             <!-- Description -->
             <div v-if="modtaleDetailProject.about" class="prose prose-invert max-w-none">
-              <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
+              <h3 class="font-semibold text-ink mb-3">{{ t('mods.description') }}</h3>
               <div class="text-ink-muted whitespace-pre-wrap">{{ modtaleDetailProject.about }}</div>
             </div>
           </template>
@@ -2190,7 +2191,7 @@ onUnmounted(() => {
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <h3 class="font-semibold text-white">StackMart</h3>
+                <h3 class="font-semibold text-ink">StackMart</h3>
                 <a
                   href="https://stackmart.org"
                   target="_blank"
@@ -2247,7 +2248,7 @@ onUnmounted(() => {
                 v-model="stackmartSearch"
                 type="text"
                 :placeholder="t('mods.searchStackMart')"
-                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                class="w-full pl-10 pr-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>
@@ -2255,7 +2256,7 @@ onUnmounted(() => {
           <!-- Sort -->
           <select
             v-model="stackmartSort"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-amber-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-amber-500"
           >
             <option value="popular">{{ t('mods.sortPopular') }}</option>
             <option value="recent">{{ t('mods.sortRecent') }}</option>
@@ -2265,7 +2266,7 @@ onUnmounted(() => {
           <!-- Category Filter -->
           <select
             v-model="stackmartCategory"
-            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-amber-500"
+            class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-amber-500"
           >
             <option value="">{{ t('mods.allCategories') }}</option>
             <option value="plugins">Plugins</option>
@@ -2318,7 +2319,7 @@ onUnmounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <p class="font-medium text-white truncate">{{ resource.name }}</p>
+                  <p class="font-medium text-ink truncate">{{ resource.name }}</p>
                   <span :class="['px-2 py-0.5 rounded text-xs', getStackMartCategoryColor(resource.category)]">
                     {{ resource.category }}
                   </span>
@@ -2405,7 +2406,7 @@ onUnmounted(() => {
           <button
             @click="stackmartPage = Math.max(1, stackmartPage - 1)"
             :disabled="stackmartPage === 1"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-white disabled:opacity-50"
+            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
           >
             &larr;
           </button>
@@ -2415,7 +2416,7 @@ onUnmounted(() => {
           <button
             @click="stackmartPage = Math.min(stackmartTotalPages, stackmartPage + 1)"
             :disabled="stackmartPage >= stackmartTotalPages"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-white disabled:opacity-50"
+            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
           >
             &rarr;
           </button>
@@ -2435,10 +2436,10 @@ onUnmounted(() => {
           </div>
           <div class="flex-1">
             <div class="flex items-center gap-3">
-              <h3 class="font-semibold text-white">CurseForge</h3>
+              <h3 class="font-semibold text-ink">CurseForge</h3>
               <button
                 @click="showCurseForgeSettings = true"
-                class="p-1 text-ink-muted hover:text-white transition-colors"
+                class="p-1 text-ink-muted hover:text-ink transition-colors"
                 title="API Settings"
               >
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2486,12 +2487,12 @@ onUnmounted(() => {
                 v-model="curseforgeSearch"
                 type="text"
                 :placeholder="t('mods.searchCurseForge')"
-                class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-orange-500"
+                class="w-full px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-orange-500"
               />
             </div>
             <select
               v-model="curseforgeSortField"
-              class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-white focus:outline-none focus:border-orange-500"
+              class="px-4 py-2 bg-surface-overlay border border-border rounded-lg text-ink focus:outline-none focus:border-orange-500"
             >
               <option value="Popularity">{{ t('mods.sortPopular') }}</option>
               <option value="TotalDownloads">{{ t('mods.sortDownloads') }}</option>
@@ -2541,7 +2542,7 @@ onUnmounted(() => {
 
               <!-- Mod Info -->
               <div class="flex-1 min-w-0">
-                <h4 class="font-semibold text-white truncate">{{ mod.name }}</h4>
+                <h4 class="font-semibold text-ink truncate">{{ mod.name }}</h4>
                 <p class="text-sm text-ink-muted line-clamp-2 mt-1">{{ mod.summary }}</p>
                 <div class="flex items-center gap-3 mt-2 text-xs text-ink-subtle">
                   <span class="flex items-center gap-1">
@@ -2618,7 +2619,7 @@ onUnmounted(() => {
           <button
             @click="curseforgePage = Math.max(0, curseforgePage - 1)"
             :disabled="curseforgePage === 0"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-white disabled:opacity-50"
+            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
           >
             &larr;
           </button>
@@ -2628,7 +2629,7 @@ onUnmounted(() => {
           <button
             @click="curseforgePage = Math.min(curseforgeTotalPages - 1, curseforgePage + 1)"
             :disabled="curseforgePage >= curseforgeTotalPages - 1"
-            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-white disabled:opacity-50"
+            class="px-3 py-1 bg-surface-overlay rounded text-ink-muted hover:text-ink disabled:opacity-50"
           >
             &rarr;
           </button>
@@ -2640,8 +2641,8 @@ onUnmounted(() => {
     <div v-if="showCurseForgeSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-md">
         <div class="p-4 border-b border-border/50 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.curseforgeApiSettings') }}</h2>
-          <button @click="showCurseForgeSettings = false" class="text-ink-muted hover:text-white">
+          <h2 class="text-xl font-bold text-ink">{{ t('mods.curseforgeApiSettings') }}</h2>
+          <button @click="showCurseForgeSettings = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2650,7 +2651,7 @@ onUnmounted(() => {
 
         <div class="p-6 space-y-4">
           <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
@@ -2701,8 +2702,8 @@ onUnmounted(() => {
     <div v-if="showStackMartSettings" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-md">
         <div class="p-4 border-b border-border/50 flex items-center justify-between">
-          <h2 class="text-xl font-bold text-white">StackMart API Settings</h2>
-          <button @click="showStackMartSettings = false" class="text-ink-muted hover:text-white">
+          <h2 class="text-xl font-bold text-ink">StackMart API Settings</h2>
+          <button @click="showStackMartSettings = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2711,7 +2712,7 @@ onUnmounted(() => {
 
         <div class="p-6 space-y-4">
           <div class="p-4 bg-surface-overlay rounded-lg">
-            <h3 class="font-medium text-white mb-2">{{ t('mods.apiStatus') }}</h3>
+            <h3 class="font-medium text-ink mb-2">{{ t('mods.apiStatus') }}</h3>
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-ink-muted">{{ t('mods.statusLabel') }}:</span>
@@ -2768,8 +2769,8 @@ onUnmounted(() => {
     <div v-if="showStackMartDetail" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-surface-raised rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
         <div class="p-4 border-b border-border/50 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ stackmartDetailResource?.name || t('common.loading') }}</h2>
-          <button @click="showStackMartDetail = false" class="text-ink-muted hover:text-white">
+          <h2 class="text-xl font-bold text-ink">{{ stackmartDetailResource?.name || t('common.loading') }}</h2>
+          <button @click="showStackMartDetail = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2834,7 +2835,7 @@ onUnmounted(() => {
 
             <!-- Features -->
             <div v-if="stackmartDetailResource.features?.length" class="mb-6">
-              <h3 class="font-semibold text-white mb-3">Features</h3>
+              <h3 class="font-semibold text-ink mb-3">Features</h3>
               <ul class="list-disc list-inside text-ink-muted space-y-1">
                 <li v-for="feature in stackmartDetailResource.features" :key="feature">{{ feature }}</li>
               </ul>
@@ -2842,7 +2843,7 @@ onUnmounted(() => {
 
             <!-- Description -->
             <div v-if="stackmartDetailResource.description" class="mb-6">
-              <h3 class="font-semibold text-white mb-3">{{ t('mods.description') }}</h3>
+              <h3 class="font-semibold text-ink mb-3">{{ t('mods.description') }}</h3>
               <div class="text-ink-muted whitespace-pre-wrap">{{ stackmartDetailResource.description }}</div>
             </div>
 
@@ -2869,7 +2870,7 @@ onUnmounted(() => {
       <Card>
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-semibold text-white">{{ t('modupdates.status') }}</h2>
+            <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.status') }}</h2>
             <p class="text-sm text-ink-muted mt-1">
               {{ t('modupdates.lastChecked') }}: {{ formatUpdateDate(updateStatus?.lastChecked || null) }}
             </p>
@@ -2914,7 +2915,7 @@ onUnmounted(() => {
             </div>
             <div>
               <p class="text-ink-muted text-sm">{{ t('modupdates.tracked') }}</p>
-              <p class="text-2xl font-bold text-white">{{ updateStatus.totalTracked }}</p>
+              <p class="text-2xl font-bold text-ink">{{ updateStatus.totalTracked }}</p>
             </div>
           </div>
         </Card>
@@ -2944,7 +2945,7 @@ onUnmounted(() => {
             </div>
             <div>
               <p class="text-ink-muted text-sm">{{ t('modupdates.autoCheck') }}</p>
-              <p class="text-lg font-medium text-white">1h</p>
+              <p class="text-lg font-medium text-ink">1h</p>
             </div>
           </div>
         </Card>
@@ -2961,14 +2962,14 @@ onUnmounted(() => {
       <!-- Tracked Mods List -->
       <Card v-else-if="updateStatus">
         <template #header>
-          <h2 class="text-lg font-semibold text-white">{{ t('modupdates.tracked') }}</h2>
+          <h2 class="text-lg font-semibold text-ink">{{ t('modupdates.tracked') }}</h2>
         </template>
 
         <div v-if="updateStatus.mods.length === 0" class="text-center py-8 text-ink-muted">
           {{ t('modupdates.noTrackedMods') }}
         </div>
 
-        <div v-else class="divide-y divide-gray-700">
+        <div v-else class="divide-y divide-border">
           <div
             v-for="mod in updateStatus.mods"
             :key="mod.filename"
@@ -2983,7 +2984,7 @@ onUnmounted(() => {
                   :alt="mod.projectTitle"
                   class="w-12 h-12 rounded-lg object-cover"
                 />
-                <div v-else class="w-12 h-12 rounded-lg bg-gray-700 flex items-center justify-center">
+                <div v-else class="w-12 h-12 rounded-lg bg-surface-muted flex items-center justify-center">
                   <svg class="w-6 h-6 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
@@ -2993,7 +2994,7 @@ onUnmounted(() => {
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <h3 class="font-medium text-white truncate">{{ mod.projectTitle || mod.filename }}</h3>
+                  <h3 class="font-medium text-ink truncate">{{ mod.projectTitle || mod.filename }}</h3>
                   <!-- Wishlist item (not installed) -->
                   <span
                     v-if="mod.installed === false"
@@ -3097,9 +3098,9 @@ onUnmounted(() => {
 
     <!-- Track Mod Dialog -->
     <div v-if="showTrackDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div class="bg-gray-800 rounded-xl shadow-xl max-w-md w-full">
+      <div class="bg-surface-overlay rounded-xl shadow-xl max-w-md w-full">
         <div class="p-6">
-          <h3 class="text-lg font-semibold text-white mb-4">{{ t('modupdates.trackMod') }}</h3>
+          <h3 class="text-lg font-semibold text-ink mb-4">{{ t('modupdates.trackMod') }}</h3>
 
           <!-- Error -->
           <div v-if="trackError" class="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
@@ -3125,7 +3126,7 @@ onUnmounted(() => {
                 id="track-wishlist"
                 v-model="trackAsWishlist"
                 type="checkbox"
-                class="w-4 h-4 rounded border-gray-600 bg-surface-overlay text-hytale-orange focus:ring-hytale-orange"
+                class="w-4 h-4 rounded border-border-strong bg-surface-overlay text-hytale-orange focus:ring-hytale-orange"
               />
               <label for="track-wishlist" class="text-sm text-ink-muted">
                 {{ t('modupdates.trackAsWishlist') }}
@@ -3192,8 +3193,8 @@ onUnmounted(() => {
       <div class="bg-surface-raised rounded-xl w-full max-w-7xl h-[85vh] flex flex-col">
         <!-- Modal Header -->
         <div class="p-4 border-b border-border/50 flex items-center justify-between shrink-0">
-          <h2 class="text-xl font-bold text-white">{{ t('mods.configEditor') }}: {{ editingItem?.name }}</h2>
-          <button @click="showConfigModal = false" class="text-ink-muted hover:text-white">
+          <h2 class="text-xl font-bold text-ink">{{ t('mods.configEditor') }}: {{ editingItem?.name }}</h2>
+          <button @click="showConfigModal = false" class="text-ink-muted hover:text-ink">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -3263,7 +3264,7 @@ onUnmounted(() => {
               <textarea
                 v-else
                 v-model="configContent"
-                class="flex-1 w-full p-4 bg-surface-sunken border border-border rounded-lg text-white font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange min-h-[400px]"
+                class="flex-1 w-full p-4 bg-surface-sunken border border-border rounded-lg text-ink font-mono text-sm resize-none focus:outline-none focus:border-hytale-orange min-h-[400px]"
                 spellcheck="false"
               />
             </template>

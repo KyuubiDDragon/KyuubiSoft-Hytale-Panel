@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getApiErrorMessage } from '@/utils/apiErrors'
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
@@ -289,7 +290,7 @@ async function startServerDeviceCodeFlow() {
       isWaitingForServerAuth.value = false
     }
   } catch (err) {
-    serverAuthError.value = err instanceof Error ? err.message : t('setup.authStartFailed')
+    serverAuthError.value = getApiErrorMessage(err, t('setup.authStartFailed'))
     isWaitingForServerAuth.value = false
   }
 }
@@ -440,7 +441,7 @@ async function setupPersistence() {
       isPersistenceSetup.value = false
     }
   } catch (err) {
-    setupStore.setError(err instanceof Error ? err.message : t('setup.persistenceFailed'))
+    setupStore.setError(getApiErrorMessage(err, t('setup.persistenceFailed')))
     isPersistenceSetup.value = false
   }
 }

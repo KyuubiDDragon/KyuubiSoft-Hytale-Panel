@@ -74,7 +74,7 @@ afterAll(async () => {
 });
 
 interface SaveAnswer {
-  rule: { id: string; actionPayload: { command?: string } };
+  rule: { id: string; enabled: boolean; actionPayload: { command?: string } };
   warnings: Array<{ code: string }>;
 }
 
@@ -104,6 +104,25 @@ describe('saving event actions', () => {
     const { status, json } = await call('POST', '/', rule('/say Welcome {player}'));
     expect(status).toBe(200);
     expect(json.warnings).toEqual([]);
+  });
+
+  it('creates a rule enabled unless the request says otherwise', async () => {
+    const omitted = await call('POST', '/', rule('/say hi {player}'));
+    expect(omitted.json.rule.enabled).toBe(true);
+
+    const off = await call('POST', '/', { ...rule('/say hi {player}'), enabled: false });
+    expect(off.status).toBe(200);
+    expect(off.json.rule.enabled).toBe(false);
+
+    const listed = await fetch(baseUrl).then(
+      (r) => r.json() as Promise<{ rules: Array<{ id: string; enabled: boolean }> }>,
+    );
+    expect(listed.rules.find((r) => r.id === off.json.rule.id)?.enabled).toBe(false);
+  });
+
+  it('refuses a rule whose enabled flag is not a boolean', async () => {
+    const { status } = await call('POST', '/', { ...rule('/say hi {player}'), enabled: 'no' });
+    expect(status).toBe(400);
   });
 
   it('saves a rule with a free-text placeholder and warns about it, also on update', async () => {

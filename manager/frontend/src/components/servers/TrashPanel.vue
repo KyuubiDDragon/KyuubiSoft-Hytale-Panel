@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
@@ -97,7 +98,7 @@ onMounted(load)
         <div class="flex-1 min-w-0">
           <p class="font-mono text-sm text-ink truncate">{{ entry.name }}</p>
           <p class="text-[11px] text-ink-subtle">
-            {{ t('servers.adm.trash.entryInfo', { id: entry.serverId, date: new Date(entry.deletedAt).toLocaleString() }) }}
+            {{ t('servers.adm.trash.entryInfo', { id: entry.serverId, date: formatDateTime(entry.deletedAt) }) }}
           </p>
         </div>
         <Button variant="danger" size="sm" @click="askPurge(entry)">

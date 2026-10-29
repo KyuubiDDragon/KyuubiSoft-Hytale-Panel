@@ -36,7 +36,7 @@ function toggleLocale() {
   const currentIndex = locales.indexOf(currentLocale.value as typeof locales[number])
   const nextIndex = (currentIndex + 1) % locales.length
   const newLocale = locales[nextIndex]
-  setLocale(newLocale)
+  void setLocale(newLocale)
   currentLocale.value = newLocale
 }
 
@@ -71,9 +71,8 @@ function openWebMap() {
 
 async function checkWebMapStatus() {
   try {
-    const result = await modStoreApi.getAvailable()
-    const webMap = result.mods.find(m => m.id === 'easywebmap')
-    webMapInstalled.value = !!(webMap && webMap.installed)
+    const result = await modStoreApi.isInstalled('easywebmap')
+    webMapInstalled.value = result.installed
   } catch (e) {
     // Silently fail
   }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
@@ -82,7 +83,7 @@ function resetFilter() {
 }
 
 function formatTime(ts: string): string {
-  return new Date(ts).toLocaleString()
+  return formatDateTime(ts)
 }
 
 onMounted(() => {

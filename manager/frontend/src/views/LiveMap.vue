@@ -14,6 +14,7 @@ import api from '@/api/client'
 import { authApi } from '@/api/auth'
 import { useServersStore } from '@/stores/servers'
 import { scopedWsUrl } from '@/api/scope'
+import { usePolling } from '@/composables/usePolling'
 
 interface LocationSample {
   playerName: string
@@ -32,7 +33,8 @@ const samples = ref<LocationSample[]>([])
 const showHeatmap = ref(true)
 const playbackOffsetMs = ref(0) // 0 = live, >0 = seconds in the past
 let ws: WebSocket | null = null
-let pollTimer: number | null = null
+// True while the live socket is open; the snapshot is only polled without it.
+const wsConnected = ref(false)
 const BUFFER_MS = 10 * 60 * 1000
 
 // History buffer, keyed by uuid -> samples sorted by ts. It's a plain Map (not
@@ -143,6 +145,7 @@ async function connectWebSocket() {
       return
     }
     ws = new WebSocket(scopedWsUrl('players/locations/ws', ticket))
+    ws.onopen = () => { wsConnected.value = true }
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data)
@@ -153,8 +156,8 @@ async function connectWebSocket() {
         }
       } catch { /* ignore malformed frames */ }
     }
-    ws.onerror = () => { /* fall back to polling silently */ }
-    ws.onclose = () => { ws = null }
+    ws.onerror = () => { wsConnected.value = false }
+    ws.onclose = () => { ws = null; wsConnected.value = false }
   } catch (err) {
     console.warn('[live-map] WS unavailable, falling back to polling:', err)
   }
@@ -163,12 +166,13 @@ async function connectWebSocket() {
 onMounted(() => {
   refreshSnapshot()
   connectWebSocket()
-  pollTimer = window.setInterval(refreshSnapshot, 2000) as unknown as number
 })
+
+// Fallback while the socket is not connected: every 2 s, paused in a hidden tab.
+usePolling(refreshSnapshot, 2000, { enabled: () => !wsConnected.value, immediate: false })
 
 onBeforeUnmount(() => {
   if (ws) { try { ws.close() } catch { /* noop */ } ws = null }
-  if (pollTimer) window.clearInterval(pollTimer)
 })
 
 // Map a world coord into the SVG 1000x1000 unit space.
@@ -180,7 +184,7 @@ function projectZ(z: number) { return ((z - viewBox.value.minZ) / viewBox.value.
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('liveMap.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('liveMap.title') }}</h1>
         <p class="text-ink-muted text-sm mt-1">{{ t('liveMap.subtitle') }}</p>
       </div>
       <label class="flex items-center gap-2 text-ink-muted text-sm">

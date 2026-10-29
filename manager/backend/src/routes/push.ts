@@ -60,7 +60,10 @@ router.post('/subscribe', authMiddleware, async (req: AuthenticatedRequest, res:
     return;
   }
   if (!isAllowedPushEndpoint(sub.endpoint)) {
-    res.status(400).json({ error: 'The endpoint is not a known browser push service' });
+    res.status(400).json({
+      error: 'The endpoint is not a known browser push service',
+      code: 'PUSH_ENDPOINT_UNKNOWN',
+    });
     return;
   }
   try {
@@ -70,7 +73,10 @@ router.post('/subscribe', authMiddleware, async (req: AuthenticatedRequest, res:
       String(req.headers['user-agent'] || '').slice(0, 256),
     );
     if (!saved) {
-      res.status(409).json({ error: 'This subscription belongs to another account' });
+      res.status(409).json({
+        error: 'This subscription belongs to another account',
+        code: 'PUSH_SUBSCRIPTION_FOREIGN',
+      });
       return;
     }
     res.json({ success: true, devices: countSubscriptions(req.user || '') });

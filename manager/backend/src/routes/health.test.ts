@@ -95,8 +95,14 @@ describe('/api/health/permissions', () => {
     const res = await get('/api/health/permissions', 'admin');
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; issues: Array<{ name: string }> };
+    const body = (await res.json()) as {
+      ok: boolean;
+      issues: Array<{ name: string }>;
+      hostDataPath: string;
+    };
     expect(body.issues.map((i) => i.name)).not.toContain('Data');
+    // The fix command names the configured host folder, not a fixed one.
+    expect(body.hostDataPath).toBe(config.hostDataPath);
     expect(fs.readdirSync(config.dataPath)).toEqual(before);
   });
 });

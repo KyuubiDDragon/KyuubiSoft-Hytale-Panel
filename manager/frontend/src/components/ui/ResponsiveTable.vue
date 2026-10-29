@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="T extends Record<string, any>">
+import { useI18n } from 'vue-i18n'
 /**
  * ResponsiveTable
  *
@@ -37,6 +38,8 @@ export interface TableColumn {
   /** Whether to suppress whitespace wrap on desktop cell */
   nowrap?: boolean
 }
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   columns: TableColumn[]
@@ -91,7 +94,7 @@ function valueOf(row: T, col: TableColumn): unknown {
               {{ col.label }}
             </th>
             <th v-if="$slots.actions" scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider">
-              <span class="sr-only">{{ $slots['actions-label'] ? '' : 'Actions' }}</span>
+              <span class="sr-only">{{ $slots['actions-label'] ? '' : t('common.actions') }}</span>
               <slot name="actions-label" />
             </th>
           </tr>

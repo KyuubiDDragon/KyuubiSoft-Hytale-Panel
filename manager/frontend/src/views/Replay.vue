@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatDateTime, formatTime } from '@/utils/formatDate'
+import { getApiErrorMessage } from '@/utils/apiErrors'
 /**
  * Replay segments list + lightweight in-browser player.
  *
@@ -69,8 +71,7 @@ async function load() {
     cfg.value = c.data
     cfgDraft.value = { ...c.data }
   } catch (err: unknown) {
-    const e = err as { response?: { data?: { error?: string } }, message?: string }
-    error.value = e.response?.data?.error || e.message || 'Failed to load'
+    error.value = getApiErrorMessage(err, t('replay.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -83,8 +84,7 @@ async function saveConfig() {
     cfg.value = data
     cfgDraft.value = { ...data }
   } catch (err: unknown) {
-    const e = err as { response?: { data?: { error?: string } }, message?: string }
-    error.value = e.response?.data?.error || e.message || 'Save failed'
+    error.value = getApiErrorMessage(err, t('replay.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -165,7 +165,7 @@ function formatDuration(ms: number): string {
 }
 
 function formatTs(iso: string): string {
-  return new Date(iso).toLocaleString()
+  return formatDateTime(iso)
 }
 
 onMounted(load)
@@ -176,7 +176,7 @@ onBeforeUnmount(closePlayer)
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('replay.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('replay.title') }}</h1>
         <p class="text-ink-muted text-sm mt-1">{{ t('replay.subtitle') }}</p>
       </div>
     </div>
@@ -209,7 +209,7 @@ onBeforeUnmount(closePlayer)
 
     <!-- Segments table -->
     <div class="flex-1 bg-surface-raised rounded-xl p-4 min-h-0 overflow-auto">
-      <h2 class="text-lg font-semibold text-white mb-3">{{ t('replay.segments') }}</h2>
+      <h2 class="text-lg font-semibold text-ink mb-3">{{ t('replay.segments') }}</h2>
       <div v-if="error" class="text-red-400 text-sm mb-2">{{ error }}</div>
       <div v-if="!loading && segments.length === 0" class="text-ink-subtle py-8 text-center">
         {{ t('replay.noSegments') }}
@@ -250,15 +250,15 @@ onBeforeUnmount(closePlayer)
     <div v-if="activeSegment" class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" @click.self="closePlayer">
       <div class="bg-surface-raised rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between p-4 border-b border-border/30">
-          <h3 class="text-lg font-semibold text-white">{{ t('replay.playerModal') }} — {{ activeSegment.id }}</h3>
-          <button @click="closePlayer" class="text-ink-muted hover:text-white">{{ t('common.close') }}</button>
+          <h3 class="text-lg font-semibold text-ink">{{ t('replay.playerModal') }} — {{ activeSegment.id }}</h3>
+          <button @click="closePlayer" class="text-ink-muted hover:text-ink">{{ t('common.close') }}</button>
         </div>
         <div class="p-4 flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
           <div class="flex flex-col min-h-0">
             <h4 class="text-sm font-semibold text-ink-muted mb-2">{{ t('replay.events') }}</h4>
             <div class="flex-1 overflow-auto bg-surface-sunken rounded p-2 font-mono text-xs">
               <div v-for="(e, i) in visibleEvents.slice(-200)" :key="i" class="text-ink-muted mb-0.5">
-                <span class="text-ink-subtle">{{ new Date(e.ts).toLocaleTimeString() }}</span>
+                <span class="text-ink-subtle">{{ formatTime(e.ts) }}</span>
                 <span class="text-hytale-orange ml-2">{{ e.name }}</span>
                 <span class="text-ink-muted ml-2">{{ JSON.stringify(e.payload) }}</span>
               </div>
@@ -268,7 +268,7 @@ onBeforeUnmount(closePlayer)
             <h4 class="text-sm font-semibold text-ink-muted mb-2">{{ t('replay.chat') }}</h4>
             <div class="flex-1 overflow-auto bg-surface-sunken rounded p-2 text-sm">
               <div v-for="(c, i) in chatMessages.slice(-200)" :key="i" class="text-ink mb-0.5">
-                <span class="text-ink-subtle text-xs">{{ new Date(c.ts).toLocaleTimeString() }}</span>
+                <span class="text-ink-subtle text-xs">{{ formatTime(c.ts) }}</span>
                 <span class="font-semibold ml-2">{{ String(c.payload.player ?? '?') }}:</span>
                 <span class="ml-1">{{ String(c.payload.message ?? '') }}</span>
               </div>
@@ -294,7 +294,7 @@ onBeforeUnmount(closePlayer)
               v-model.number="playbackTs"
               class="flex-1 accent-hytale-orange"
             />
-            <span class="text-xs text-ink-muted font-mono">{{ new Date(playbackTs).toLocaleTimeString() }}</span>
+            <span class="text-xs text-ink-muted font-mono">{{ formatTime(playbackTs) }}</span>
           </div>
         </div>
       </div>

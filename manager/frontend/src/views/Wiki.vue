@@ -101,10 +101,10 @@ function renderMarkdown(md: string): string {
     }
     if (rawLine.startsWith('# ')) {
       flushList()
-      out.push(`<h1 class="text-2xl font-bold text-white mt-4 mb-2">${renderInline(rawLine.slice(2))}</h1>`)
+      out.push(`<h1 class="text-2xl font-bold text-ink mt-4 mb-2">${renderInline(rawLine.slice(2))}</h1>`)
     } else if (rawLine.startsWith('## ')) {
       flushList()
-      out.push(`<h2 class="text-xl font-semibold text-white mt-4 mb-2">${renderInline(rawLine.slice(3))}</h2>`)
+      out.push(`<h2 class="text-xl font-semibold text-ink mt-4 mb-2">${renderInline(rawLine.slice(3))}</h2>`)
     } else if (rawLine.startsWith('### ')) {
       flushList()
       out.push(`<h3 class="text-lg font-semibold text-ink mt-3 mb-1">${renderInline(rawLine.slice(4))}</h3>`)
@@ -127,7 +127,7 @@ function renderInline(s: string): string {
   // `inline code`
   h = h.replace(/`([^`]+)`/g, '<code class="bg-surface-sunken px-1 rounded text-hytale-orange text-sm">$1</code>')
   // **bold**
-  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-ink">$1</strong>')
   // *italic*
   h = h.replace(/(^|[\s_])\*([^*\n]+)\*/g, '$1<em>$2</em>')
   return h
@@ -168,7 +168,7 @@ async function regenerate() {
   message.value = ''
   try {
     const { data } = await api.post<{ count: number; generatedAt: string }>('/wiki/regenerate')
-    message.value = t('wiki.regenerated', { n: data.count })
+    message.value = t('wiki.regenerated', { n: data.count }, data.count)
     await loadIndex()
   } catch (err) {
     console.error('[wiki] regenerate failed', err)
@@ -192,7 +192,7 @@ onMounted(async () => {
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('wiki.title') }}</h1>
+        <h1 class="text-2xl font-bold text-ink">{{ t('wiki.title') }}</h1>
         <p class="text-ink-muted text-sm mt-1">{{ t('wiki.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
@@ -226,7 +226,7 @@ onMounted(async () => {
               v-for="e in entries"
               :key="e.slug"
               @click="select(e)"
-              :class="['block w-full text-left px-2 py-1 rounded text-sm', selected?.entry.slug === e.slug ? 'bg-surface-overlay text-white' : 'text-ink-muted hover:bg-surface-overlay']"
+              :class="['block w-full text-left px-2 py-1 rounded text-sm', selected?.entry.slug === e.slug ? 'bg-surface-overlay text-ink' : 'text-ink-muted hover:bg-surface-overlay']"
             >
               {{ e.name }}
               <span v-if="e.version" class="text-ink-subtle text-xs ml-1">v{{ e.version }}</span>

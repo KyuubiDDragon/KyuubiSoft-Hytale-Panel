@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getApiErrorMessage } from '@/utils/apiErrors'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
@@ -212,7 +213,7 @@ async function startDeviceCodeFlow() {
       isWaitingForAuth.value = false
     }
   } catch (err) {
-    authError.value = err instanceof Error ? err.message : t('setup.authStartFailed')
+    authError.value = getApiErrorMessage(err, t('setup.authStartFailed'))
     isWaitingForAuth.value = false
   }
 }
@@ -326,7 +327,7 @@ async function startDownload() {
 
     await setupApi.startDownload(downloadRequest)
   } catch (err) {
-    handleDownloadError(err instanceof Error ? err.message : t('setup.downloadStartFailed'))
+    handleDownloadError(getApiErrorMessage(err, t('setup.downloadStartFailed')))
   }
 }
 
@@ -391,7 +392,7 @@ async function verifyDownload() {
       setupStore.setError(result.error || t('setup.verificationFailed'))
     }
   } catch (err) {
-    setupStore.setError(err instanceof Error ? err.message : t('setup.verificationFailed'))
+    setupStore.setError(getApiErrorMessage(err, t('setup.verificationFailed')))
   } finally {
     isVerifying.value = false
   }
@@ -510,8 +511,8 @@ watch(deviceCodeState, () => {
         >
           <svg class="w-5 h-5 text-status-success mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           <div class="flex-1">
-            <p class="text-white font-semibold">Existing Hytale installation detected</p>
-            <p class="text-sm text-gray-300 mt-1">
+            <p class="text-ink font-semibold">Existing Hytale installation detected</p>
+            <p class="text-sm text-ink-muted mt-1">
               Server files found{{ existingInstall.version ? ` (v${existingInstall.version})` : '' }}<span v-if="existingInstall.worldCount > 0">, {{ existingInstall.worldCount }} world{{ existingInstall.worldCount === 1 ? '' : 's' }} on disk</span>. Skip the download &amp; keep your existing <code class="text-xs">config.json</code> and worlds.
             </p>
             <button

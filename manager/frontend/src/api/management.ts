@@ -758,6 +758,18 @@ export const modStoreApi = {
     return response.data
   },
 
+  /** Cheap installed check for one registry mod (no release lookups, unlike getAvailable). */
+  async isInstalled(
+    modId: string,
+  ): Promise<{ installed: boolean; filename?: string; installedVersion?: string }> {
+    const response = await api.get<{
+      installed: boolean
+      filename?: string
+      installedVersion?: string
+    }>(`/management/modstore/${encodeURIComponent(modId)}/installed`)
+    return response.data
+  },
+
   async getRelease(modId: string): Promise<ModReleaseInfo> {
     const response = await api.get<ModReleaseInfo>(`/management/modstore/${modId}/release`)
     return response.data

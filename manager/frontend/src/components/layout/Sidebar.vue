@@ -3,11 +3,14 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { computed, inject, watch, type Ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useServersStore } from '@/stores/servers'
+import { visibleEntries, type NavGroup } from '@/router/navigation'
 import Icon from '@/components/ui/Icon.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const authStore = useAuthStore()
+const serversStore = useServersStore()
 
 // Close sidebar on mobile after navigation
 const sidebarOpen = inject<Ref<boolean>>('sidebarOpen')
@@ -15,64 +18,24 @@ watch(() => route.path, () => {
   if (sidebarOpen) sidebarOpen.value = false
 })
 
-type Permission = string | 'all'
+const navItems = computed(() =>
+  visibleEntries(authStore.hasPermission, { hasServerList: serversStore.hasServerList }).map((entry) => ({ ...entry, label: t(entry.labelKey) })),
+)
 
-interface NavItem {
-  name: string
-  path: string
-  icon: string
-  label: string
-  group?: string
-  permission?: Permission
-}
+const SECTIONS: Array<{ key: NavGroup; labelKey: string }> = [
+  { key: 'main', labelKey: 'nav.server' },
+  { key: 'management', labelKey: 'nav.management' },
+  { key: 'data', labelKey: 'nav.data' },
+  { key: 'admin', labelKey: 'nav.admin' },
+]
 
-function hasPermission(permission?: Permission): boolean {
-  if (!permission || permission === 'all') return true
-  return authStore.hasPermission(permission)
-}
-
-const navItems = computed<NavItem[]>(() => [
-  { name: 'dashboard', path: '/', icon: 'dashboard', label: t('nav.dashboard'), group: 'main', permission: 'dashboard.view' },
-  { name: 'console', path: '/console', icon: 'console', label: t('nav.console'), group: 'main', permission: 'console.view' },
-  { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), group: 'main', permission: 'performance.view' },
-  { name: 'statistics', path: '/statistics', icon: 'statistics', label: t('nav.statistics'), group: 'main', permission: 'dashboard.stats' },
-  { name: 'crashes', path: '/crashes', icon: 'console', label: t('nav.crashes'), group: 'main', permission: 'server.view_status' },
-  { name: 'updates', path: '/updates', icon: 'download', label: t('nav.updates'), group: 'main', permission: 'updates.view' },
-  { name: 'help', path: '/help', icon: 'help', label: t('nav.help'), group: 'main', permission: 'all' },
-  { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), group: 'management', permission: 'players.view' },
-  { name: 'playtime', path: '/playtime', icon: 'statistics', label: t('nav.playtime'), group: 'management', permission: 'players.view' },
-  { name: 'liveMap', path: '/live-map', icon: 'worlds', label: t('nav.liveMap'), group: 'management', permission: 'players.view' },
-  { name: 'avatarInventory', path: '/avatar-inventory', icon: 'avatarInventory', label: t('nav.avatarInventory'), group: 'management', permission: 'players.view' },
-  { name: 'chat', path: '/chat', icon: 'chat', label: t('nav.chat'), group: 'management', permission: 'chat.view' },
-  { name: 'whitelist', path: '/whitelist', icon: 'whitelist', label: t('nav.whitelist'), group: 'management', permission: 'players.whitelist' },
-  { name: 'permissions', path: '/permissions', icon: 'permissions', label: t('nav.permissions'), group: 'management', permission: 'players.permissions' },
-  { name: 'worlds', path: '/worlds', icon: 'worlds', label: t('nav.worlds'), group: 'management', permission: 'worlds.view' },
-  { name: 'mods', path: '/mods', icon: 'mods', label: t('nav.mods'), group: 'management', permission: 'mods.view' },
-  { name: 'modStatus', path: '/mod-status', icon: 'statistics', label: t('nav.modStatus'), group: 'management', permission: 'mods.panel.view' },
-  { name: 'assets', path: '/assets', icon: 'assets', label: t('nav.assets'), group: 'management', permission: 'assets.view' },
-  { name: 'backups', path: '/backups', icon: 'backup', label: t('nav.backups'), group: 'data', permission: 'backups.view' },
-  { name: 'scheduler', path: '/scheduler', icon: 'scheduler', label: t('nav.scheduler'), group: 'data', permission: 'scheduler.view' },
-  { name: 'replay', path: '/replay', icon: 'backup', label: t('nav.replay'), group: 'data', permission: 'replay.view' },
-  { name: 'wiki', path: '/wiki', icon: 'help', label: t('nav.wiki'), group: 'main', permission: 'wiki.view' },
-  { name: 'configuration', path: '/configuration', icon: 'configuration', label: t('nav.configuration'), group: 'data', permission: 'config.view' },
-  { name: 'files', path: '/files', icon: 'files', label: t('nav.files'), group: 'data', permission: 'files.read' },
-  { name: 'settings', path: '/settings', icon: 'settings', label: t('nav.settings'), group: 'data', permission: 'settings.view' },
-  { name: 'servers', path: '/servers', icon: 'configuration', label: 'Servers', group: 'admin', permission: 'servers.list' },
-  { name: 'users', path: '/users', icon: 'users', label: t('nav.users'), group: 'admin', permission: 'users.view' },
-  { name: 'roles', path: '/roles', icon: 'roles', label: t('nav.roles'), group: 'admin', permission: 'roles.view' },
-  { name: 'activity', path: '/activity', icon: 'activity', label: t('nav.activityLog'), group: 'admin', permission: 'activity.view' },
-  // v3 alpha additions — gated by the new permissions added in services/types.
-  { name: 'audit', path: '/audit', icon: 'activity', label: 'Audit Log', group: 'admin', permission: 'audit.view' },
-  { name: 'webhooks', path: '/webhooks', icon: 'scheduler', label: 'Webhooks', group: 'admin', permission: 'webhooks.view' },
-  { name: 'security', path: '/security', icon: 'settings', label: 'Security', group: 'admin', permission: 'all' },
-])
-
-const navSections = computed(() => [
-  { key: 'main', label: t('nav.server'), items: navItems.value.filter(i => i.group === 'main' && hasPermission(i.permission)) },
-  { key: 'management', label: t('nav.management'), items: navItems.value.filter(i => i.group === 'management' && hasPermission(i.permission)) },
-  { key: 'data', label: t('nav.data'), items: navItems.value.filter(i => i.group === 'data' && hasPermission(i.permission)) },
-  { key: 'admin', label: t('nav.admin'), items: navItems.value.filter(i => i.group === 'admin' && hasPermission(i.permission)) },
-])
+const navSections = computed(() =>
+  SECTIONS.map((section) => ({
+    key: section.key,
+    label: t(section.labelKey),
+    items: navItems.value.filter((i) => i.group === section.key),
+  })),
+)
 
 function isActive(path: string): boolean {
   return route.path === path

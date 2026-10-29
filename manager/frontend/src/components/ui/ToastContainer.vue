@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast'
+
+const { t } = useI18n()
 
 const { toasts, removeToast } = useToast()
 
@@ -33,7 +36,14 @@ function iconColorClass(type: string) {
 
 <template>
   <Teleport to="body">
-    <div class="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm">
+    <!-- A live region: screen readers announce toasts as they appear. -->
+    <div
+      class="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm"
+      role="region"
+      aria-live="polite"
+      aria-relevant="additions"
+      :aria-label="t('common.notifications')"
+    >
       <TransitionGroup
         enter-active-class="transition ease-out duration-200"
         enter-from-class="transform translate-x-full opacity-0"
@@ -45,6 +55,7 @@ function iconColorClass(type: string) {
         <div
           v-for="toast in toasts"
           :key="toast.id"
+          :role="toast.type === 'error' ? 'alert' : 'status'"
           :class="['flex items-start gap-3 px-4 py-3 rounded-lg border shadow-lg backdrop-blur-sm', colorClass(toast.type)]"
         >
           <svg :class="['w-5 h-5 flex-shrink-0 mt-0.5', iconColorClass(toast.type)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -52,6 +63,8 @@ function iconColorClass(type: string) {
           </svg>
           <p class="text-sm text-ink flex-1">{{ toast.message }}</p>
           <button
+            type="button"
+            :aria-label="t('common.close')"
             @click="removeToast(toast.id)"
             class="text-ink-muted hover:text-ink flex-shrink-0"
           >

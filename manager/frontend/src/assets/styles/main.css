@@ -1,3 +1,11 @@
+/* Self-hosted fonts (latin subset, only the weights in use). */
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/jetbrains-mono/latin-400.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,7 +22,7 @@
 
     --ink: 15 18 25;
     --ink-muted: 71 80 96;
-    --ink-subtle: 120 128 144;
+    --ink-subtle: 100 107 122;  /* 4.5:1+ on every light surface */
     --ink-inverse: 255 255 255;
 
     --border: 225 228 235;
@@ -24,6 +32,22 @@
     --accent: 255 107 53;
     --accent-strong: 229 90 43;
     --accent-soft: 255 133 85;
+
+    /* Brand orange darkened just enough for white text on it and for orange
+       text on light surfaces (>= 4.5:1). Same hue as --accent. */
+    --accent-solid: 200 53 0;
+    --accent-solid-strong: 168 44 0;
+    --accent-text: 187 50 0;
+
+    /* Status colors: darker than the dark-theme values to reach 4.5:1 on light
+       surfaces (and on their own 20% tint). */
+    --status-success: 18 101 49;
+    --status-warning: 115 83 2;
+    --status-error: 170 15 15;
+    --status-info: 6 83 179;
+    --status-success-solid: 21 128 61;
+    --status-success-on: 255 255 255;
+    --status-error-solid: 220 38 38;
   }
 
   .dark {
@@ -39,7 +63,7 @@
 
     --ink: 244 246 250;
     --ink-muted: 168 175 191;
-    --ink-subtle: 122 130 148;
+    --ink-subtle: 135 143 159;  /* 4.5:1+ on base, raised and overlay */
     --ink-inverse: 15 18 25;
 
     --border: 48 54 70;
@@ -49,6 +73,18 @@
     --accent: 255 107 53;
     --accent-strong: 229 90 43;
     --accent-soft: 255 133 85;
+
+    --accent-solid: 200 53 0;
+    --accent-solid-strong: 168 44 0;
+    --accent-text: 255 107 53;
+
+    --status-success: 74 222 128;
+    --status-warning: 251 191 36;
+    --status-error: 239 68 68;
+    --status-info: 96 165 250;
+    --status-success-solid: 74 222 128;
+    --status-success-on: 15 18 25;
+    --status-error-solid: 220 38 38;
   }
 }
 
@@ -112,8 +148,8 @@
   }
 
   .btn-primary {
-    @apply bg-gradient-to-r from-hytale-orange to-hytale-orange-dark text-white;
-    @apply hover:from-hytale-orange-light hover:to-hytale-orange hover:shadow-glow-orange;
+    @apply bg-gradient-to-r from-accent-solid to-accent-solid-strong text-white;
+    @apply hover:from-accent-solid-strong hover:to-accent-solid hover:shadow-glow-orange;
     @apply focus-visible:ring-hytale-orange;
   }
 
@@ -130,14 +166,14 @@
   }
 
   .btn-danger {
-    @apply bg-status-error text-white;
-    @apply hover:bg-red-600 hover:shadow-glow-error;
+    @apply bg-status-error-solid text-white;
+    @apply hover:bg-red-700 hover:shadow-glow-error;
     @apply focus-visible:ring-status-error;
   }
 
   .btn-success {
-    @apply bg-status-success text-dark;
-    @apply hover:bg-green-400 hover:shadow-glow-success;
+    @apply bg-status-success-solid text-status-success-on;
+    @apply hover:brightness-110 hover:shadow-glow-success;
     @apply focus-visible:ring-status-success;
   }
 
@@ -403,4 +439,128 @@
 .cv-auto {
   content-visibility: auto;
   contain-intrinsic-size: auto 40px;
+}
+
+/* Contrast: orange used as text follows --accent-text (darker on light
+   surfaces), and the orange fill that carries white text is the darker solid;
+   dark text keeps the bright brand orange. Kept as
+   plain rules after the utilities so they win over the generated classes. */
+.text-hytale-orange {
+  color: rgb(var(--accent-text) / var(--tw-text-opacity, 1));
+}
+.hover\:text-hytale-orange:hover {
+  color: rgb(var(--accent-text) / var(--tw-text-opacity, 1));
+}
+.group:hover .group-hover\:text-hytale-orange {
+  color: rgb(var(--accent-text) / var(--tw-text-opacity, 1));
+}
+.bg-hytale-orange.text-white,
+:root:not(.dark) .bg-hytale-orange.text-ink-inverse {
+  background-color: rgb(var(--accent-solid) / var(--tw-bg-opacity, 1));
+}
+
+/* Dark label text on the amber warning fill stays readable now that the
+   light theme's amber is darker: flip it to the inverse ink. */
+:root:not(.dark) .bg-status-warning.text-dark,
+:root:not(.dark) .bg-status-warning.text-dark-400 {
+  color: rgb(var(--ink-inverse));
+}
+
+/* Light theme: the 300/400 shades of the palette colors are too pale on light
+   surfaces. They map to the status tokens (or a dark shade of the same hue). */
+:root:not(.dark) .text-green-300:not(.dark *),
+:root:not(.dark) .hover\:text-green-300:hover:not(.dark *),
+:root:not(.dark) .text-green-400:not(.dark *),
+:root:not(.dark) .hover\:text-green-400:hover:not(.dark *) {
+  color: rgb(var(--status-success));
+}
+:root:not(.dark) .text-emerald-300:not(.dark *),
+:root:not(.dark) .hover\:text-emerald-300:hover:not(.dark *),
+:root:not(.dark) .text-emerald-400:not(.dark *),
+:root:not(.dark) .hover\:text-emerald-400:hover:not(.dark *) {
+  color: rgb(var(--status-success));
+}
+:root:not(.dark) .text-red-300:not(.dark *),
+:root:not(.dark) .hover\:text-red-300:hover:not(.dark *),
+:root:not(.dark) .text-red-400:not(.dark *),
+:root:not(.dark) .hover\:text-red-400:hover:not(.dark *) {
+  color: rgb(var(--status-error));
+}
+:root:not(.dark) .text-rose-300:not(.dark *),
+:root:not(.dark) .hover\:text-rose-300:hover:not(.dark *),
+:root:not(.dark) .text-rose-400:not(.dark *),
+:root:not(.dark) .hover\:text-rose-400:hover:not(.dark *) {
+  color: rgb(var(--status-error));
+}
+:root:not(.dark) .text-yellow-300:not(.dark *),
+:root:not(.dark) .hover\:text-yellow-300:hover:not(.dark *),
+:root:not(.dark) .text-yellow-400:not(.dark *),
+:root:not(.dark) .hover\:text-yellow-400:hover:not(.dark *) {
+  color: rgb(var(--status-warning));
+}
+:root:not(.dark) .text-amber-300:not(.dark *),
+:root:not(.dark) .hover\:text-amber-300:hover:not(.dark *),
+:root:not(.dark) .text-amber-400:not(.dark *),
+:root:not(.dark) .hover\:text-amber-400:hover:not(.dark *) {
+  color: rgb(var(--status-warning));
+}
+:root:not(.dark) .text-blue-300:not(.dark *),
+:root:not(.dark) .hover\:text-blue-300:hover:not(.dark *),
+:root:not(.dark) .text-blue-400:not(.dark *),
+:root:not(.dark) .hover\:text-blue-400:hover:not(.dark *) {
+  color: rgb(var(--status-info));
+}
+:root:not(.dark) .text-sky-300:not(.dark *),
+:root:not(.dark) .hover\:text-sky-300:hover:not(.dark *),
+:root:not(.dark) .text-sky-400:not(.dark *),
+:root:not(.dark) .hover\:text-sky-400:hover:not(.dark *) {
+  color: rgb(var(--status-info));
+}
+:root:not(.dark) .text-orange-300:not(.dark *),
+:root:not(.dark) .hover\:text-orange-300:hover:not(.dark *),
+:root:not(.dark) .text-orange-400:not(.dark *),
+:root:not(.dark) .hover\:text-orange-400:hover:not(.dark *) {
+  color: rgb(var(--accent-text));
+}
+:root:not(.dark) .text-purple-300:not(.dark *),
+:root:not(.dark) .hover\:text-purple-300:hover:not(.dark *),
+:root:not(.dark) .text-purple-400:not(.dark *),
+:root:not(.dark) .hover\:text-purple-400:hover:not(.dark *) {
+  color: #6b21a8;
+}
+:root:not(.dark) .text-violet-300:not(.dark *),
+:root:not(.dark) .hover\:text-violet-300:hover:not(.dark *),
+:root:not(.dark) .text-violet-400:not(.dark *),
+:root:not(.dark) .hover\:text-violet-400:hover:not(.dark *) {
+  color: #5b21b6;
+}
+:root:not(.dark) .text-indigo-300:not(.dark *),
+:root:not(.dark) .hover\:text-indigo-300:hover:not(.dark *),
+:root:not(.dark) .text-indigo-400:not(.dark *),
+:root:not(.dark) .hover\:text-indigo-400:hover:not(.dark *) {
+  color: #3730a3;
+}
+:root:not(.dark) .text-pink-300:not(.dark *),
+:root:not(.dark) .hover\:text-pink-300:hover:not(.dark *),
+:root:not(.dark) .text-pink-400:not(.dark *),
+:root:not(.dark) .hover\:text-pink-400:hover:not(.dark *) {
+  color: #9d174d;
+}
+:root:not(.dark) .text-teal-300:not(.dark *),
+:root:not(.dark) .hover\:text-teal-300:hover:not(.dark *),
+:root:not(.dark) .text-teal-400:not(.dark *),
+:root:not(.dark) .hover\:text-teal-400:hover:not(.dark *) {
+  color: #115e59;
+}
+:root:not(.dark) .text-cyan-300:not(.dark *),
+:root:not(.dark) .hover\:text-cyan-300:hover:not(.dark *),
+:root:not(.dark) .text-cyan-400:not(.dark *),
+:root:not(.dark) .hover\:text-cyan-400:hover:not(.dark *) {
+  color: #155e75;
+}
+:root:not(.dark) .text-lime-300:not(.dark *),
+:root:not(.dark) .hover\:text-lime-300:hover:not(.dark *),
+:root:not(.dark) .text-lime-400:not(.dark *),
+:root:not(.dark) .hover\:text-lime-400:hover:not(.dark *) {
+  color: #3f6212;
 }

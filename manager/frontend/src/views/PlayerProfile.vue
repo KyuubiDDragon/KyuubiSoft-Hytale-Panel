@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -167,7 +168,7 @@ onMounted(load)
           <li v-for="n in notes" :key="n.id" class="flex items-start justify-between gap-2 p-3 rounded-lg bg-surface-muted/40">
             <div class="min-w-0">
               <p class="text-sm text-ink break-words">{{ n.note }}</p>
-              <p class="text-xs text-ink-subtle mt-1">{{ n.byUser }} · {{ new Date(n.createdAt).toLocaleString() }}</p>
+              <p class="text-xs text-ink-subtle mt-1">{{ n.byUser }} · {{ formatDateTime(n.createdAt) }}</p>
             </div>
             <button v-if="canEdit" @click="deleteNote(n.id)" class="text-ink-subtle hover:text-status-error text-xs flex-shrink-0" :title="t('common.delete')">✕</button>
           </li>
@@ -185,8 +186,8 @@ onMounted(load)
             </div>
             <p v-if="p.reason" class="text-sm text-ink">{{ p.reason }}</p>
             <p class="text-xs text-ink-subtle mt-1">
-              {{ p.byUser }} · {{ new Date(p.createdAt).toLocaleString() }}
-              <template v-if="p.expiresAt"> · {{ t('profile.until') }} {{ new Date(p.expiresAt).toLocaleString() }}</template>
+              {{ p.byUser }} · {{ formatDateTime(p.createdAt) }}
+              <template v-if="p.expiresAt"> · {{ t('profile.until') }} {{ formatDateTime(p.expiresAt) }}</template>
             </p>
           </li>
         </ul>

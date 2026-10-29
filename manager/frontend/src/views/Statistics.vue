@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { getLocale } from '@/i18n'
+import { intlTag } from '@/utils/formatDate'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
@@ -40,7 +42,7 @@ function formatPlaytime(seconds: number): string {
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
-  return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })
+  return date.toLocaleDateString(intlTag(getLocale()), { weekday: 'short', day: 'numeric' })
 }
 
 const maxActivityValue = computed(() => {

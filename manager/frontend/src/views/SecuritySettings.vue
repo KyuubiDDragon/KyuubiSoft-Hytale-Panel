@@ -3,14 +3,17 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
 import { useServersStore } from '@/stores/servers'
-import { apiErrorMessage } from '@/utils/apiErrors'
+import { useToast } from '@/composables/useToast'
+import { getApiErrorMessage } from '@/utils/apiErrors'
+import { formatDate } from '@/utils/formatDate'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Modal from '@/components/ui/Modal.vue'
 import Button from '@/components/ui/Button.vue'
 import ServerAccessEditor from '@/components/access/ServerAccessEditor.vue'
 
-const { t, te } = useI18n()
+const { t } = useI18n()
 const serversStore = useServersStore()
+const toast = useToast()
 
 // ---------- 2FA ----------
 const twoFAEnabled = ref(false)
@@ -27,26 +30,38 @@ async function load2fa() {
 }
 
 async function startSetup() {
-  const { data } = await api.post<{ secret: string; otpauthUrl: string; qrDataUrl: string }>('/auth/2fa/setup')
-  setupQr.value = data.qrDataUrl
-  setupSecret.value = data.secret
+  try {
+    const { data } = await api.post<{ secret: string; otpauthUrl: string; qrDataUrl: string }>('/auth/2fa/setup')
+    setupQr.value = data.qrDataUrl
+    setupSecret.value = data.secret
+  } catch (err) {
+    toast.error(getApiErrorMessage(err, t('security.twoFactor.setupFailed')))
+  }
 }
 
 async function confirmSetup() {
-  const { data } = await api.post<{ backupCodes: string[] }>('/auth/2fa/verify-enable', { code: code.value })
-  backupCodes.value = data.backupCodes
-  setupQr.value = null
-  setupSecret.value = null
-  code.value = ''
-  await load2fa()
+  try {
+    const { data } = await api.post<{ backupCodes: string[] }>('/auth/2fa/verify-enable', { code: code.value })
+    backupCodes.value = data.backupCodes
+    setupQr.value = null
+    setupSecret.value = null
+    code.value = ''
+    await load2fa()
+  } catch (err) {
+    toast.error(getApiErrorMessage(err, t('security.twoFactor.confirmFailed')))
+  }
 }
 
 async function disable2fa() {
-  await api.post('/auth/2fa/disable', { password: disablePassword.value, code: disableCode.value })
-  disablePassword.value = ''
-  disableCode.value = ''
-  backupCodes.value = null
-  await load2fa()
+  try {
+    await api.post('/auth/2fa/disable', { password: disablePassword.value, code: disableCode.value })
+    disablePassword.value = ''
+    disableCode.value = ''
+    backupCodes.value = null
+    await load2fa()
+  } catch (err) {
+    toast.error(getApiErrorMessage(err, t('security.twoFactor.disableFailed')))
+  }
 }
 
 // ---------- API Keys ----------
@@ -93,7 +108,7 @@ async function createKey() {
     newKey.value = { name: '', scopes: '' }
     newKeyServers.value = null
   } catch (err) {
-    keyError.value = apiErrorMessage(err, t, te, t('errors.serverError'))
+    keyError.value = getApiErrorMessage(err, t('errors.serverError'))
   }
   await loadKeys()
 }
@@ -108,6 +123,15 @@ function serverTitle(k: ApiKey): string {
   return (k.serverIds ?? [])
     .map((id) => serversStore.servers.find((s) => s.id === id)?.name ?? id)
     .join(', ')
+}
+
+/** "3 scopes · created … · last used …" */
+function keyMeta(k: ApiKey): string {
+  return t('security.apiKeys.meta', {
+    scopes: t('security.apiKeys.scopeCount', { count: k.scopes.length }, k.scopes.length),
+    created: formatDate(k.createdAt),
+    lastUsed: k.lastUsedAt ? formatDate(k.lastUsedAt) : t('security.apiKeys.never'),
+  })
 }
 
 function editServers(k: ApiKey) {
@@ -125,7 +149,7 @@ async function saveServers() {
     serversTarget.value = null
     await loadKeys()
   } catch (err) {
-    keyError.value = apiErrorMessage(err, t, te, t('errors.serverError'))
+    keyError.value = getApiErrorMessage(err, t('errors.serverError'))
   } finally {
     savingServers.value = false
   }
@@ -145,7 +169,11 @@ function askRevoke(key: ApiKey) {
 
 async function confirmRevoke() {
   if (!revokeTargetId.value) return
-  await api.delete(`/auth/api-keys/${revokeTargetId.value}`)
+  try {
+    await api.delete(`/auth/api-keys/${revokeTargetId.value}`)
+  } catch (err) {
+    toast.error(getApiErrorMessage(err, t('security.apiKeys.revokeFailed')))
+  }
   revokeDialogOpen.value = false
   revokeTargetId.value = null
   await loadKeys()
@@ -160,89 +188,89 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6 max-w-3xl">
-    <h1 class="text-2xl font-bold text-white">Security</h1>
+    <h1 class="text-2xl font-bold text-ink">{{ t('security.title') }}</h1>
 
     <!-- 2FA -->
     <section class="bg-surface-raised border border-border/40 rounded-xl p-5">
       <div class="flex items-center justify-between mb-4">
         <div>
-          <h2 class="text-lg font-semibold text-white">Two-factor authentication</h2>
-          <p class="text-sm text-ink-muted">{{ twoFAEnabled ? 'Active — your account is protected by a TOTP authenticator.' : 'Disabled. Enable to require a TOTP code at login.' }}</p>
+          <h2 class="text-lg font-semibold text-ink">{{ t('security.twoFactor.title') }}</h2>
+          <p class="text-sm text-ink-muted">{{ twoFAEnabled ? t('security.twoFactor.activeDesc') : t('security.twoFactor.disabledDesc') }}</p>
         </div>
         <span class="text-xs px-2 py-1 rounded-full" :class="twoFAEnabled ? 'bg-status-success/20 text-status-success' : 'bg-surface-overlay text-ink-muted'">
-          {{ twoFAEnabled ? 'ENABLED' : 'DISABLED' }}
+          {{ twoFAEnabled ? t('security.twoFactor.badgeEnabled') : t('security.twoFactor.badgeDisabled') }}
         </span>
       </div>
 
       <div v-if="!twoFAEnabled && !setupQr">
-        <button @click="startSetup" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm">Enable 2FA</button>
+        <button @click="startSetup" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm">{{ t('security.twoFactor.enable') }}</button>
       </div>
 
       <div v-if="setupQr" class="space-y-3">
-        <p class="text-sm text-ink-muted">Scan the QR with your authenticator (1Password, Bitwarden, Aegis, Google Authenticator), then enter the 6-digit code to confirm.</p>
-        <img :src="setupQr" alt="2FA QR code" class="w-48 h-48 bg-white p-2 rounded" />
-        <p class="text-xs text-ink-subtle font-mono break-all">Secret: {{ setupSecret }}</p>
+        <p class="text-sm text-ink-muted">{{ t('security.twoFactor.scanHint') }}</p>
+        <img :src="setupQr" :alt="t('security.twoFactor.qrAlt')" class="w-48 h-48 bg-white p-2 rounded" />
+        <p class="text-xs text-ink-subtle font-mono break-all">{{ t('security.twoFactor.secret', { secret: setupSecret }) }}</p>
         <div class="flex gap-2">
-          <input v-model="code" type="text" inputmode="numeric" maxlength="6" placeholder="123456" class="bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-white font-mono w-32" />
-          <button @click="confirmSetup" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm">Confirm</button>
+          <input v-model="code" type="text" inputmode="numeric" maxlength="6" placeholder="123456" :aria-label="t('security.twoFactor.codeLabel')" class="bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-ink font-mono w-32" />
+          <button @click="confirmSetup" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm">{{ t('security.twoFactor.confirm') }}</button>
         </div>
       </div>
 
       <div v-if="backupCodes" class="mt-4 p-4 bg-status-warning/10 border border-status-warning/40 rounded-lg">
-        <h3 class="font-semibold text-status-warning mb-2">Save these backup codes</h3>
-        <p class="text-xs text-ink-muted mb-3">Each can be used once if you lose access to your authenticator. They will NOT be shown again.</p>
+        <h3 class="font-semibold text-status-warning mb-2">{{ t('security.twoFactor.backupTitle') }}</h3>
+        <p class="text-xs text-ink-muted mb-3">{{ t('security.twoFactor.backupHint') }}</p>
         <div class="grid grid-cols-2 gap-2 font-mono text-sm">
           <span v-for="c in backupCodes" :key="c" class="bg-surface-overlay px-2 py-1 rounded">{{ c }}</span>
         </div>
       </div>
 
       <div v-if="twoFAEnabled && !backupCodes" class="mt-4 space-y-2">
-        <h3 class="text-sm font-semibold text-white">Disable 2FA</h3>
+        <h3 class="text-sm font-semibold text-ink">{{ t('security.twoFactor.disableTitle') }}</h3>
         <div class="flex flex-wrap gap-2">
-          <input v-model="disablePassword" type="password" placeholder="Current password" class="bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-white" />
-          <input v-model="disableCode" placeholder="TOTP or backup code" class="bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-white font-mono" />
-          <button @click="disable2fa" :disabled="!disablePassword || !disableCode" class="px-3 py-1.5 rounded-lg bg-status-error/30 hover:bg-status-error/50 text-status-error text-sm disabled:opacity-50">Disable</button>
+          <input v-model="disablePassword" type="password" autocomplete="current-password" :placeholder="t('security.twoFactor.currentPassword')" :aria-label="t('security.twoFactor.currentPassword')" class="bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-ink" />
+          <input v-model="disableCode" :placeholder="t('security.twoFactor.disableCodePlaceholder')" :aria-label="t('security.twoFactor.disableCodePlaceholder')" class="bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-ink font-mono" />
+          <button @click="disable2fa" :disabled="!disablePassword || !disableCode" class="px-3 py-1.5 rounded-lg bg-status-error/30 hover:bg-status-error/50 text-status-error text-sm disabled:opacity-50">{{ t('security.twoFactor.disable') }}</button>
         </div>
       </div>
     </section>
 
     <!-- API Keys -->
     <section class="bg-surface-raised border border-border/40 rounded-xl p-5">
-      <h2 class="text-lg font-semibold text-white mb-1">REST API keys</h2>
-      <p class="text-sm text-ink-muted mb-4">For CI pipelines, monitoring scripts, and external integrations. Each key carries an explicit scope set — never broader than your own permissions.</p>
+      <h2 class="text-lg font-semibold text-ink mb-1">{{ t('security.apiKeys.title') }}</h2>
+      <p class="text-sm text-ink-muted mb-4">{{ t('security.apiKeys.intro') }}</p>
 
       <div v-if="justCreatedToken" class="p-4 bg-status-success/10 border border-status-success/40 rounded-lg mb-4">
-        <p class="text-xs text-ink-muted mb-2">Your new token (shown once — copy it now):</p>
+        <p class="text-xs text-ink-muted mb-2">{{ t('security.apiKeys.newTokenHint') }}</p>
         <code class="block font-mono text-sm bg-surface-sunken p-2 rounded break-all text-status-success">{{ justCreatedToken }}</code>
-        <button @click="justCreatedToken = null" class="mt-2 text-xs text-ink-muted hover:text-white">Dismiss</button>
+        <button @click="justCreatedToken = null" class="mt-2 text-xs text-ink-muted hover:text-ink">{{ t('common.dismiss') }}</button>
       </div>
 
       <div class="space-y-2 mb-4">
         <div v-for="k in apiKeys" :key="k.id" class="flex items-center gap-3 p-3 bg-surface-overlay border border-border/40 rounded-lg">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="font-medium text-white">{{ k.name }}</span>
+              <span class="font-medium text-ink">{{ k.name }}</span>
               <code class="text-xs font-mono text-ink-muted">{{ k.prefix }}…</code>
             </div>
-            <div class="text-xs text-ink-subtle mt-0.5">{{ k.scopes.length }} scopes · created {{ new Date(k.createdAt).toLocaleDateString() }} · last used {{ k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : 'never' }}</div>
+            <div class="text-xs text-ink-subtle mt-0.5">{{ keyMeta(k) }}</div>
             <div class="text-xs text-ink-muted mt-0.5" :title="serverTitle(k)">{{ t('serverAccess.servers') }}: {{ serversLabel(k) }}</div>
           </div>
-          <button v-if="!k.revokedAt" @click="editServers(k)" :aria-label="t('serverAccess.editKeyAria', { name: k.name })" class="px-2 py-1 text-xs rounded bg-surface-raised hover:bg-surface-sunken text-ink-muted hover:text-white">{{ t('serverAccess.servers') }}</button>
+          <button v-if="!k.revokedAt" @click="editServers(k)" :aria-label="t('serverAccess.editKeyAria', { name: k.name })" class="px-2 py-1 text-xs rounded bg-surface-raised hover:bg-surface-sunken text-ink-muted hover:text-ink">{{ t('serverAccess.servers') }}</button>
           <button @click="askRevoke(k)" :aria-label="t('security.revokeApiKeyAria', { name: k.name })" class="px-2 py-1 text-xs rounded bg-status-error/20 hover:bg-status-error/40 text-status-error">{{ t('common.revoke') }}</button>
         </div>
-        <div v-if="apiKeys.length === 0" class="text-center text-sm text-ink-muted py-4">No API keys yet.</div>
+        <div v-if="apiKeys.length === 0" class="text-center text-sm text-ink-muted py-4">{{ t('security.apiKeys.empty') }}</div>
       </div>
 
       <div class="space-y-2">
-        <input v-model="newKey.name" placeholder="Key name (e.g. 'CI deploy bot')" class="w-full bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-white" />
-        <input v-model="newKey.scopes" placeholder="Comma-separated scopes (e.g. server.view_status, backups.create)" class="w-full bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-white" />
+        <input v-model="newKey.name" :placeholder="t('security.apiKeys.namePlaceholder')" :aria-label="t('security.apiKeys.namePlaceholder')" class="w-full bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-ink" />
+        <input v-model="newKey.scopes" :placeholder="t('security.apiKeys.scopesPlaceholder')" :aria-label="t('security.apiKeys.scopesPlaceholder')" class="w-full bg-surface-overlay border border-border/40 rounded-lg px-3 py-2 text-sm text-ink" />
         <ServerAccessEditor
           v-model="newKeyServers"
           :all-label="t('serverAccess.keyAll')"
           :all-hint="t('serverAccess.keyAllHint')"
         />
         <p v-if="keyError" class="text-sm text-status-error" role="alert">{{ keyError }}</p>
-        <button @click="createKey" :disabled="!newKey.name || !newKey.scopes" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm disabled:opacity-50">Create key</button>
+        <button @click="createKey" :disabled="!newKey.name || !newKey.scopes" class="px-3 py-1.5 rounded-lg bg-hytale-orange hover:bg-hytale-orange-dark text-white text-sm disabled:opacity-50">{{ t('security.apiKeys.create') }}</button>
       </div>
     </section>
 

@@ -51,16 +51,16 @@ function glyph(icon: string): string {
   <li>
     <div
       class="flex items-center gap-1 px-2 py-1 rounded cursor-pointer hover:bg-surface-overlay/40"
-      :class="isSelected ? 'bg-hytale-orange/20 text-hytale-orange' : 'text-gray-300'"
+      :class="isSelected ? 'bg-hytale-orange/20 text-hytale-orange' : 'text-ink-muted'"
       :style="{ paddingLeft: indentPx }"
       @click="onClick"
     >
-      <span class="w-3 inline-block text-xs text-gray-500">
+      <span class="w-3 inline-block text-xs text-ink-subtle">
         {{ node.type === 'directory' ? (node.expanded ? '▾' : '▸') : '' }}
       </span>
       <span class="w-4 text-center text-xs">{{ glyph(iconFor(node)) }}</span>
       <span class="truncate text-sm">{{ node.name }}</span>
-      <span v-if="node.loading" class="text-xs text-gray-500">…</span>
+      <span v-if="node.loading" class="text-xs text-ink-subtle">…</span>
     </div>
     <ul v-if="node.expanded && node.children.length > 0">
       <TreeItem

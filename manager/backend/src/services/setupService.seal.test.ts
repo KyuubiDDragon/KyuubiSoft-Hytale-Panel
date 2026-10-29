@@ -155,6 +155,8 @@ describe('the admin account of the wizard', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/already exists/i);
+    // The wizard translates this code instead of showing the English text.
+    expect(result.code).toBe('ADMIN_NAME_TAKEN');
   });
 
   it('does not replace the password or role of an existing account at the end', async () => {

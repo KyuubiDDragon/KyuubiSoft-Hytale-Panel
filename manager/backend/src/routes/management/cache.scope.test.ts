@@ -52,8 +52,9 @@ vi.mock('../../services/serverContext.js', async (importOriginal) => {
 });
 vi.mock('../../services/modStore.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/modStore.js')>()),
-  ...stubs(['getAvailableMods', 'installMod', 'uninstallMod', 'updateMod'], (name) =>
-    name === 'getAvailableMods' ? [] : { success: true },
+  ...stubs(
+    ['getAvailableMods', 'isModInstalled', 'installMod', 'uninstallMod', 'updateMod'],
+    (name) => (name === 'getAvailableMods' ? [] : { success: true }),
   ),
   getModRegistry: async () => [{ id: 'store-mod', name: 'Store Mod' }],
 }));
@@ -131,6 +132,7 @@ beforeEach(() => calls.mockReset());
 // [method, route, body, service function, the arguments after the server]
 const ROUTES: [string, string, unknown, string, unknown[]][] = [
   ['GET', '/modstore', undefined, 'getAvailableMods', []],
+  ['GET', '/modstore/store-mod/installed', undefined, 'isModInstalled', ['store-mod']],
   ['POST', '/modstore/store-mod/install', undefined, 'installMod', ['store-mod']],
   ['DELETE', '/modstore/store-mod/uninstall', undefined, 'uninstallMod', ['store-mod']],
   ['POST', '/modstore/store-mod/update', undefined, 'updateMod', ['store-mod']],

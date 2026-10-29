@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
@@ -72,7 +73,7 @@ onMounted(load)
               <svg class="w-5 h-5 text-status-error flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0L3.18 16.25A2 2 0 005 19z" />
               </svg>
-              <span class="text-sm text-ink">{{ new Date(c.detectedAt).toLocaleString() }}</span>
+              <span class="text-sm text-ink">{{ formatDateTime(c.detectedAt) }}</span>
               <span v-if="c.autoRestarted" class="badge badge-success">{{ t('crashes.autoRestarted') }}</span>
             </div>
             <svg class="w-4 h-4 text-ink-subtle transition-transform" :class="{ 'rotate-180': expanded === c.id }" fill="none" viewBox="0 0 24 24" stroke="currentColor">

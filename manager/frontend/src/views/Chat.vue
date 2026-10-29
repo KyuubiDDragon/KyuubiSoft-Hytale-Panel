@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime, formatTime as formatTimeOnly } from '@/utils/formatDate'
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
@@ -64,13 +65,11 @@ const filteredMessages = computed(() => {
 })
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleString()
+  return formatDateTime(dateStr)
 }
 
 function formatTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleTimeString()
+  return formatTimeOnly(dateStr)
 }
 
 // Get unique color for player name based on hash
@@ -190,9 +189,9 @@ onUnmounted(() => {
       </div>
 
       <div class="text-sm text-ink-muted">
-        {{ t('chat.messageCount', { count: total }) }}
+        {{ t('chat.messageCount', { count: total }, total) }}
         <span v-if="availableDays > 0" class="text-ink-subtle">
-          ({{ t('chat.daysAvailable', { count: availableDays }) }})
+          ({{ t('chat.daysAvailable', { count: availableDays }, availableDays) }})
         </span>
       </div>
     </div>

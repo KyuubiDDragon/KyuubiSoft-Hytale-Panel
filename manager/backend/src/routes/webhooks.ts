@@ -4,6 +4,7 @@ import {
   ALL_SERVERS_REQUIRED,
   SERVER_NOT_ALLOWED,
   accessibleServerIds,
+  effectivePermissions,
   requirePermission,
 } from '../middleware/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
@@ -26,6 +27,28 @@ import { asyncRoute } from '../utils/asyncRoute.js';
 import { z } from 'zod';
 
 const router = Router();
+
+/** A webhook as the API shows it: never with its secret, and without `webhooks.manage` with a masked URL. */
+type PublicWebhook = Omit<Webhook, 'secret'> & { hasSecret: boolean };
+
+/** Scheme and host of a URL followed by an ellipsis: enough to recognise it, not to use it. */
+export function maskUrl(url: string): string {
+  try {
+    return `${new URL(url).origin}/…`;
+  } catch {
+    return '…';
+  }
+}
+
+export function toPublicWebhook(wh: Webhook, canManage: boolean): PublicWebhook {
+  const { secret, ...rest } = wh;
+  return { ...rest, url: canManage ? wh.url : maskUrl(wh.url), hasSecret: !!secret };
+}
+
+async function mayManage(req: AuthenticatedRequest): Promise<boolean> {
+  const permissions = await effectivePermissions(req);
+  return permissions.includes('*') || permissions.includes('webhooks.manage');
+}
 
 const upsertSchema = z.object({
   name: z.string().min(1).max(100),
@@ -129,7 +152,11 @@ router.get(
     for (const wh of listWebhooks()) {
       if (!(await serverAccessProblem(req, wh.serverIds))) visible.push(wh);
     }
-    res.json({ webhooks: visible, availableEvents: PanelEventNames });
+    const canManage = await mayManage(req);
+    res.json({
+      webhooks: visible.map((wh) => toPublicWebhook(wh, canManage)),
+      availableEvents: PanelEventNames,
+    });
   }),
 );
 
@@ -153,7 +180,7 @@ router.post(
       target: `webhook:${wh.id}`,
       metadata: { name: wh.name, type: wh.type, serverIds: wh.serverIds },
     });
-    res.json({ webhook: wh });
+    res.json({ webhook: toPublicWebhook(wh, true) });
   }),
 );
 
@@ -181,7 +208,7 @@ router.put(
       target: `webhook:${wh.id}`,
       metadata: { serverIds: wh.serverIds },
     });
-    res.json({ webhook: wh });
+    res.json({ webhook: toPublicWebhook(wh, true) });
   }),
 );
 

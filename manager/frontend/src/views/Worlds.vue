@@ -16,6 +16,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useServerFileSave } from '@/composables/useServerFileSave'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import Icon from '@/components/ui/Icon.vue'
+import { formatDateTime } from '@/utils/formatDate'
 import ApplyBadge from '@/components/config/ApplyBadge.vue'
 
 const { t, te } = useI18n()
@@ -501,7 +502,7 @@ onUnmounted(() => {
               <Icon name="worlds" class="w-4 h-4 text-ink-muted shrink-0" />
               <div class="flex-1 min-w-0">
                 <p class="text-ink font-medium truncate">{{ b.world }}</p>
-                <p class="text-xs text-ink-subtle">{{ new Date(b.createdAt).toLocaleString() }} · {{ fmtBytes(b.sizeBytes) }}</p>
+                <p class="text-xs text-ink-subtle">{{ formatDateTime(b.createdAt) }} · {{ fmtBytes(b.sizeBytes) }}</p>
               </div>
               <button @click="restoreWorldBackup(b)" :disabled="worldToolsBusy" class="px-2.5 py-1 text-xs bg-surface-overlay rounded hover:bg-hytale-orange/20 hover:text-hytale-orange transition-colors disabled:opacity-50">
                 {{ t('worlds.tools.restore') }}
@@ -582,7 +583,7 @@ onUnmounted(() => {
             <!-- World folder -->
             <button
               @click="toggleWorld(world.name)"
-              class="w-full px-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2 border-b border-gray-700"
+              class="w-full px-4 py-2 text-left hover:bg-surface-muted/50 flex items-center gap-2 border-b border-border"
             >
               <svg
                 class="w-4 h-4 text-ink-muted transition-transform"
@@ -599,13 +600,13 @@ onUnmounted(() => {
             </button>
 
             <!-- Files in world -->
-            <div v-if="expandedWorlds.has(world.name) && selectedWorld === world.name" class="bg-gray-800/50">
+            <div v-if="expandedWorlds.has(world.name) && selectedWorld === world.name" class="bg-surface-muted/50">
               <!-- Root files -->
               <button
                 v-for="file in selectedWorldFiles.root"
                 :key="file.path"
                 @click="selectFile(world.name, file.path)"
-                class="w-full pl-10 pr-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                class="w-full pl-10 pr-4 py-2 text-left hover:bg-surface-muted/50 flex items-center gap-2"
                 :class="{ 'bg-hytale-orange/20 border-l-2 border-hytale-orange': selectedFile === file.path }"
               >
                 <svg class="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -628,7 +629,7 @@ onUnmounted(() => {
                 v-for="file in selectedWorldFiles.resources"
                 :key="file.path"
                 @click="selectFile(world.name, file.path)"
-                class="w-full pl-14 pr-4 py-2 text-left hover:bg-gray-700/50 flex items-center gap-2"
+                class="w-full pl-14 pr-4 py-2 text-left hover:bg-surface-muted/50 flex items-center gap-2"
                 :class="{ 'bg-hytale-orange/20 border-l-2 border-hytale-orange': selectedFile === file.path }"
               >
                 <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -661,7 +662,7 @@ onUnmounted(() => {
               v-if="authStore.hasPermission('worlds.manage')"
               @click="saveFile"
               :disabled="saving"
-              class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/80 disabled:bg-gray-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+              class="px-4 py-2 bg-hytale-orange hover:bg-accent-solid-strong disabled:bg-surface-muted disabled:text-ink-subtle text-white font-medium rounded-lg transition-colors flex items-center gap-2"
             >
               <svg v-if="saving" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -769,31 +770,31 @@ onUnmounted(() => {
             <div class="card-body">
               <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isPvpEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isPvpEnabled" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.pvpEnabled') }}<ApplyBadge :mode="worldApply('isPvpEnabled')" /></span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isGameTimePaused" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isGameTimePaused" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.timePaused') }}<ApplyBadge :mode="worldApply('isGameTimePaused')" /></span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isBlockSpawnersEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isBlockSpawnersEnabled" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.blockSpawners') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isFallDamageEnabled" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isFallDamageEnabled" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.fallDamage') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isSpawningNPC" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isSpawningNPC" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.npcSpawning') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isAllNPCFrozen" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isAllNPCFrozen" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.freezeNpcs') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isCompassUpdating" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isCompassUpdating" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.compassUpdating') }}</span>
                 </label>
               </div>
@@ -856,11 +857,11 @@ onUnmounted(() => {
             <div class="card-body">
               <div class="grid grid-cols-2 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isTicking" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.worldTicking') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isBlockTicking" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isBlockTicking" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.blockTicking') }}</span>
                 </label>
               </div>
@@ -875,19 +876,19 @@ onUnmounted(() => {
             <div class="card-body">
               <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isSavingPlayers" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isSavingPlayers" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.savePlayers') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isSavingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isSavingChunks" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.saveChunks') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.saveNewChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.saveNewChunks" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.saveNewChunks') }}</span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" v-model="form.isUnloadingChunks" class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-hytale-orange focus:ring-hytale-orange">
+                  <input type="checkbox" v-model="form.isUnloadingChunks" class="w-5 h-5 rounded bg-surface-muted border-border-strong text-hytale-orange focus:ring-hytale-orange">
                   <span class="text-ink">{{ t('worlds.unloadChunks') }}</span>
                 </label>
               </div>
@@ -907,7 +908,7 @@ onUnmounted(() => {
                     type="checkbox"
                     :checked="form.deleteOnUniverseStart"
                     @change="onDangerCheckboxChange('deleteOnUniverseStart', $event)"
-                    class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-status-error focus:ring-status-error"
+                    class="w-5 h-5 rounded bg-surface-muted border-border-strong text-status-error focus:ring-status-error"
                   >
                   <div>
                     <span class="text-ink">{{ t('worlds.dangerZone.deleteOnUniverseStart') }}</span>
@@ -919,7 +920,7 @@ onUnmounted(() => {
                     type="checkbox"
                     :checked="form.deleteOnRemove"
                     @change="onDangerCheckboxChange('deleteOnRemove', $event)"
-                    class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-status-error focus:ring-status-error"
+                    class="w-5 h-5 rounded bg-surface-muted border-border-strong text-status-error focus:ring-status-error"
                   >
                   <div>
                     <span class="text-ink">{{ t('worlds.dangerZone.deleteOnRemove') }}</span>
@@ -932,11 +933,11 @@ onUnmounted(() => {
 
           <!-- Raw JSON (collapsible) -->
           <details class="card">
-            <summary class="card-header cursor-pointer hover:bg-gray-700/50">
+            <summary class="card-header cursor-pointer hover:bg-surface-muted/50">
               <h3 class="text-lg font-semibold text-ink">{{ t('worlds.rawConfigJson') }}</h3>
             </summary>
             <div class="card-body">
-              <pre class="bg-gray-900 p-4 rounded-lg text-sm text-ink-muted overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
+              <pre class="bg-surface-sunken p-4 rounded-lg text-sm text-ink-muted overflow-x-auto max-h-96">{{ JSON.stringify(worldConfig.raw, null, 2) }}</pre>
             </div>
           </details>
           </template>

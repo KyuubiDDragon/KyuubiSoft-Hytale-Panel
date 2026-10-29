@@ -20,6 +20,11 @@ import type { AuthenticatedRequest } from '../types/index.js';
 
 const router = Router();
 
+/** A path as one safe shell word: single quotes, with any quote inside escaped. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 router.get('/', (_req, res) => {
   res.json({ status: 'ok', service: 'hytale-manager' });
 });
@@ -36,6 +41,8 @@ interface PermissionCheckResult {
 interface PermissionHealthResponse {
   ok: boolean;
   issues: PermissionCheckResult[];
+  /** Host folder the data directories live under (HOST_DATA_PATH). */
+  hostDataPath: string;
   message?: string;
 }
 
@@ -78,9 +85,13 @@ router.get(
     }
     const issues = results.filter((r) => !r.readable || !r.writable);
 
-    const response: PermissionHealthResponse = { ok: issues.length === 0, issues };
+    const response: PermissionHealthResponse = {
+      ok: issues.length === 0,
+      issues,
+      hostDataPath: config.hostDataPath,
+    };
     if (issues.length > 0) {
-      response.message = `Some directories have permission issues. This may happen after upgrading to v2.0.0 which runs as non-root. Run: sudo chown -R 9999:9999 ${config.hostDataPath}`;
+      response.message = `Some directories have permission issues. This may happen after upgrading to v2.0.0 which runs as non-root. Run: sudo chown -R 9999:9999 ${shellQuote(config.hostDataPath)}`;
     }
 
     res.json(response);

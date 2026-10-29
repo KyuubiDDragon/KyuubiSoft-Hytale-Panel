@@ -463,13 +463,13 @@ onBeforeUnmount(() => {
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-border/50 px-6 py-3">
       <div>
-        <h1 class="text-lg font-semibold text-white">{{ t('files.title') }}</h1>
+        <h1 class="text-lg font-semibold text-ink">{{ t('files.title') }}</h1>
         <p class="text-xs text-ink-muted">{{ t('files.subtitle') }}</p>
       </div>
       <div class="flex items-center gap-2">
         <select
           v-model="activeRootId"
-          class="bg-surface-overlay border border-border text-sm text-white rounded px-2 py-1"
+          class="bg-surface-overlay border border-border text-sm text-ink rounded px-2 py-1"
         >
           <option v-for="r in roots" :key="r.id" :value="r.id">
             {{ r.label }} {{ r.rw ? '' : '(RO)' }}
@@ -513,7 +513,7 @@ onBeforeUnmount(() => {
             v-model="searchTerm"
             type="text"
             :placeholder="t('common.search')"
-            class="w-full bg-surface-overlay border border-border text-sm text-white rounded px-2 py-1"
+            class="w-full bg-surface-overlay border border-border text-sm text-ink rounded px-2 py-1"
           />
         </div>
         <div class="flex-1 overflow-y-auto p-2 text-sm">
@@ -613,7 +613,7 @@ onBeforeUnmount(() => {
       class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
     >
       <div class="bg-surface-overlay rounded-lg p-6 max-w-md w-full mx-4 border border-border">
-        <h3 class="text-lg font-semibold text-white mb-2">{{ t('files.conflict.title') }}</h3>
+        <h3 class="text-lg font-semibold text-ink mb-2">{{ t('files.conflict.title') }}</h3>
         <p class="text-sm text-ink-muted mb-4">{{ t('files.conflict.message') }}</p>
         <div class="flex justify-end gap-2">
           <button class="btn-secondary text-sm" @click="showConflictDialog = false">

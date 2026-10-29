@@ -4,10 +4,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+import { visibleEntries } from '@/router/navigation'
 import { useServersStore } from '@/stores/servers'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
-import { apiErrorMessage } from '@/utils/apiErrors'
+import { getApiErrorMessage } from '@/utils/apiErrors'
 import api from '@/api/client'
 import { LIFECYCLE_TIMEOUT_MS } from '@/api/server'
 
@@ -15,13 +16,15 @@ interface Command {
   id: string
   title: string
   hint?: string
-  group: 'Action' | 'Navigation' | 'Theme'
+  group: 'action' | 'navigation' | 'theme'
+  /** Toast after the action went through. */
+  doneText?: string
   /** Asked before running; for actions that interrupt the server. */
   confirm?: { title: string; message: string; confirmText: string }
   run: () => void | Promise<void>
 }
 
-const { t, te } = useI18n()
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -40,24 +43,25 @@ function close() {
   selectedIndex.value = 0
 }
 
-// Navigation entries derive from the existing router so we don't keep a
-// second list in sync. Filter routes that have a title and need auth.
-const navigationCommands = computed<Command[]>(() => {
-  const routes = router.getRoutes()
-  return routes
-    .filter(r => !!r.name && !r.path.includes(':') && r.path !== '/' && r.path !== '/login' && r.path !== '/setup')
-    .map(r => ({
-      id: `nav:${String(r.name)}`,
-      title: String(r.name).charAt(0).toUpperCase() + String(r.name).slice(1),
-      hint: r.path,
-      group: 'Navigation' as const,
-      run: () => { void router.push(r.path) },
-    }))
-})
+// Navigation entries come from the shared page list, so the palette offers
+// exactly the pages the sidebar shows for this account.
+const navigationCommands = computed<Command[]>(() =>
+  visibleEntries(authStore.hasPermission, { hasServerList: serversStore.hasServerList })
+    .filter((entry) => entry.path !== '/')
+    .map((entry) => ({
+      id: `nav:${entry.name}`,
+      title: t(entry.labelKey),
+      hint: entry.path,
+      group: 'navigation' as const,
+      run: () => {
+        void router.push(entry.path)
+      },
+    })),
+)
 
 // The confirmation names the server the action will hit.
 function interruptConfirm(kind: 'stop' | 'restart'): NonNullable<Command['confirm']> {
-  const server = serversStore.activeServer?.name ?? t('cmd.thisServer', 'the server')
+  const server = serversStore.activeServer?.name ?? t('cmd.thisServer')
   return {
     title: t(`cmd.${kind}ConfirmTitle`),
     message: t(`cmd.${kind}ConfirmMessage`, { server }),
@@ -71,28 +75,28 @@ const actionCommands = computed<Command[]>(() => {
   const c: Command[] = []
   if (authStore.hasPermission('server.start')) {
     c.push({
-      id: 'action:start', title: t('cmd.startServer', 'Start server'),
-      group: 'Action', run: () => api.post('/server/start'),
+      id: 'action:start', title: t('cmd.startServer'), doneText: t('cmd.startedDone'),
+      group: 'action', run: () => api.post('/server/start'),
     })
   }
   if (authStore.hasPermission('server.stop')) {
     c.push({
-      id: 'action:stop', title: t('cmd.stopServer', 'Stop server'),
-      group: 'Action', confirm: interruptConfirm('stop'),
+      id: 'action:stop', title: t('cmd.stopServer'), doneText: t('cmd.stoppedDone'),
+      group: 'action', confirm: interruptConfirm('stop'),
       run: () => api.post('/server/stop', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
     })
   }
   if (authStore.hasPermission('server.restart')) {
     c.push({
-      id: 'action:restart', title: t('cmd.restartServer', 'Restart server'),
-      group: 'Action', confirm: interruptConfirm('restart'),
+      id: 'action:restart', title: t('cmd.restartServer'), doneText: t('cmd.restartedDone'),
+      group: 'action', confirm: interruptConfirm('restart'),
       run: () => api.post('/server/restart', undefined, { timeout: LIFECYCLE_TIMEOUT_MS }),
     })
   }
   if (authStore.hasPermission('backups.create')) {
     c.push({
-      id: 'action:backup', title: t('cmd.createBackup', 'Create backup'),
-      group: 'Action', run: () => api.post('/backups'),
+      id: 'action:backup', title: t('cmd.createBackup'), doneText: t('cmd.backupDone'),
+      group: 'action', run: () => api.post('/backups'),
     })
   }
   return c
@@ -100,8 +104,8 @@ const actionCommands = computed<Command[]>(() => {
 
 const themeCommands = computed<Command[]>(() => [{
   id: 'theme:toggle',
-  title: themeStore.theme === 'dark' ? t('cmd.lightMode', 'Switch to light mode') : t('cmd.darkMode', 'Switch to dark mode'),
-  group: 'Theme',
+  title: themeStore.theme === 'dark' ? t('cmd.lightMode') : t('cmd.darkMode'),
+  group: 'theme',
   run: () => themeStore.toggle(),
 }])
 
@@ -131,8 +135,9 @@ async function runSelected() {
   }
   try {
     await cmd.run()
+    if (cmd.doneText) toast.success(cmd.doneText)
   } catch (err) {
-    toast.error(apiErrorMessage(err, t, te, t('cmd.failed', 'The action failed')))
+    toast.error(getApiErrorMessage(err, t('cmd.failed')))
   }
 }
 
@@ -175,15 +180,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               ref="inputRef"
               v-model="query"
               type="text"
-              :placeholder="t('cmd.placeholder', 'Type a command or search…')"
+              :placeholder="t('cmd.placeholder')"
               class="flex-1 bg-transparent outline-none text-base text-ink placeholder:text-ink-muted"
-              aria-label="Command palette"
+              :aria-label="t('cmd.ariaLabel')"
             />
             <kbd class="hidden sm:block text-xs px-1.5 py-0.5 rounded bg-surface-overlay text-ink-muted border border-border">esc</kbd>
           </div>
           <div class="max-h-80 overflow-y-auto p-2" role="listbox">
             <template v-if="results.length === 0">
-              <div class="p-6 text-center text-sm text-ink-muted">{{ t('cmd.noResults', 'No results') }}</div>
+              <div class="p-6 text-center text-sm text-ink-muted">{{ t('cmd.noResults') }}</div>
             </template>
             <template v-else>
               <template v-for="(cmd, i) in results" :key="cmd.id">
@@ -199,17 +204,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                     <span class="text-sm">{{ cmd.title }}</span>
                     <span v-if="cmd.hint" class="text-xs text-ink-muted">{{ cmd.hint }}</span>
                   </div>
-                  <span class="text-[10px] uppercase tracking-wider text-ink-muted">{{ cmd.group }}</span>
+                  <span class="text-[10px] uppercase tracking-wider text-ink-muted">{{ t(`cmd.group.${cmd.group}`) }}</span>
                 </div>
               </template>
             </template>
           </div>
           <div class="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-ink-muted">
             <div class="flex gap-3">
-              <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">↑↓</kbd> navigate</span>
-              <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">↵</kbd> run</span>
+              <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">↑↓</kbd> {{ t('cmd.hintNavigate') }}</span>
+              <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">↵</kbd> {{ t('cmd.hintRun') }}</span>
             </div>
-            <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">⌘K</kbd> toggle</span>
+            <span><kbd class="px-1 py-0.5 rounded bg-surface-overlay">⌘K</kbd> {{ t('cmd.hintToggle') }}</span>
           </div>
         </div>
       </div>

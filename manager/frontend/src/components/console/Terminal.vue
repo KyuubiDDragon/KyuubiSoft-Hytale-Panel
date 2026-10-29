@@ -1,17 +1,29 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, nextTick, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useConsoleStore } from '@/stores/console'
-import { useWebSocket } from '@/composables/useWebSocket'
+import { useServersStore } from '@/stores/servers'
+import { useWebSocket, MAX_RECONNECT_ATTEMPTS } from '@/composables/useWebSocket'
 import { formatLogMessage } from '@/utils/formatItemPath'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import CommandReplyBlock from '@/components/console/CommandReplyBlock.vue'
 import { useCommandAutocomplete, type CommandSuggestion } from '@/composables/useCommandAutocomplete'
+import {
+  FRESH_CURSOR,
+  addToHistory,
+  loadHistory,
+  removeLegacyHistory,
+  saveHistory,
+  stepHistory,
+  type HistoryCursor,
+} from '@/utils/commandHistory'
+import { formatLogForDownload, logFileName } from '@/utils/consoleLog'
 
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const consoleStore = useConsoleStore()
+const serversStore = useServersStore()
 const { sendCommand, reconnect, loadAllLogs, isLoadingLogs } = useWebSocket()
 
 const terminalRef = ref<HTMLDivElement | null>(null)
@@ -22,6 +34,36 @@ const levelFilter = ref<'all' | 'error' | 'warn' | 'info' | 'debug'>('all')
 const showClearConfirm = ref(false)
 // Outcome of the last "load all", shown next to the button.
 const loadAllNote = ref<{ text: string; error: boolean } | null>(null)
+
+// Commands sent from here, per server, to step through with the arrow keys.
+const historyStorage = typeof localStorage !== 'undefined' ? localStorage : null
+// Histories are kept per account; an account without a name keeps none.
+removeLegacyHistory(historyStorage)
+const historyOwner = () => authStore.username ?? ''
+const commandHistory = ref<string[]>(
+  loadHistory(historyStorage, historyOwner(), serversStore.scopeId),
+)
+const historyCursor = ref<HistoryCursor>(FRESH_CURSOR)
+const browsingHistory = computed(() => historyCursor.value.index !== null)
+
+watch(
+  () => serversStore.scopeId,
+  (serverId) => {
+    commandHistory.value = loadHistory(historyStorage, historyOwner(), serverId)
+    historyCursor.value = FRESH_CURSOR
+  },
+)
+
+function stepThroughHistory(direction: 'older' | 'newer') {
+  const step = stepHistory(commandHistory.value, historyCursor.value, direction, commandInput.value)
+  historyCursor.value = step.cursor
+  commandInput.value = step.text
+}
+
+// Typing ends the walk through the history; the line becomes a fresh one.
+function onCommandInput() {
+  historyCursor.value = FRESH_CURSOR
+}
 
 // Log times are UTC; they are shown in the viewer's time zone.
 function formatTime(iso: string): string {
@@ -37,8 +79,8 @@ async function loadAll() {
     const response = await loadAllLogs(0)
     const parts = [
       response.source === 'files' && response.files?.length
-        ? t('console.loadAllFiles', { count: response.count, files: response.files.length })
-        : t('console.loadAllDone', { count: response.count }),
+        ? t('console.loadAllFiles', { count: response.count, files: response.files.length }, response.count)
+        : t('console.loadAllDone', { count: response.count }, response.count),
     ]
     if (response.truncated) parts.push(t('console.loadAllTruncated'))
     loadAllNote.value = { text: parts.join(' · '), error: false }
@@ -63,7 +105,14 @@ function selectSuggestion(suggestion: CommandSuggestion) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (!showSuggestions.value || suggestions.value.length === 0) return
+  if (!showSuggestions.value || suggestions.value.length === 0) {
+    // Without a suggestion list the arrow keys walk through earlier commands.
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      stepThroughHistory(e.key === 'ArrowUp' ? 'older' : 'newer')
+    }
+    return
+  }
 
   if (e.key === 'ArrowDown') {
     e.preventDefault()
@@ -87,7 +136,8 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 watch([commandInput, suggestions], ([val]) => {
-  showSuggestions.value = inputFocused.value && val.startsWith('/') && suggestions.value.length > 0
+  showSuggestions.value =
+    inputFocused.value && !browsingHistory.value && val.startsWith('/') && suggestions.value.length > 0
   if (selectedSuggestion.value >= suggestions.value.length) selectedSuggestion.value = 0
 })
 
@@ -147,6 +197,9 @@ async function handleSubmit() {
   showSuggestions.value = false
   const sent = sendCommand(commandInput.value)
   if (sent) {
+    commandHistory.value = addToHistory(commandHistory.value, commandInput.value)
+    saveHistory(historyStorage, historyOwner(), serversStore.scopeId, commandHistory.value)
+    historyCursor.value = FRESH_CURSOR
     commandInput.value = ''
   } else {
     // Keep the typed command so the user can retry, and tell them why nothing
@@ -158,14 +211,33 @@ async function handleSubmit() {
     })
   }
 
-  // Auto-scroll to bottom after command is sent
+  // A command the user just sent is the one place that always jumps to the end.
   await nextTick()
-  setTimeout(() => {
-    if (terminalRef.value) {
-      terminalRef.value.scrollTop = terminalRef.value.scrollHeight
-    }
-  }, 100)
+  scrollToBottom()
 }
+
+function downloadLog() {
+  const blob = new Blob([formatLogForDownload(filteredLogs.value)], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = logFileName(serversStore.scopeId)
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+// "Connected", or how far the reconnecting has got.
+const statusText = computed(() => {
+  if (consoleStore.connected) return t('console.connected')
+  if (consoleStore.reconnectPaused) return t('console.reconnectPaused')
+  if (consoleStore.reconnectAttempt > 0) {
+    return t('console.reconnectingAttempt', {
+      attempt: consoleStore.reconnectAttempt,
+      max: MAX_RECONNECT_ATTEMPTS,
+    })
+  }
+  return t('console.disconnected')
+})
 
 function clearLogs() {
   consoleStore.clearLogs()
@@ -186,24 +258,39 @@ function getLogClass(level: string): string {
   }
 }
 
-// Scroll to bottom helper - scrolls multiple times to ensure it works
-function scrollToBottom(retries = 3) {
-  if (!terminalRef.value) return
+// Close enough to the end to count as "at the bottom".
+const BOTTOM_TOLERANCE_PX = 24
+const atBottom = ref(true)
+// Lines that arrived while the user was reading further up.
+const unreadLines = ref(0)
+let lastSeenId: string | null = null
 
+function scrollToBottom() {
   const el = terminalRef.value
+  if (!el) return
   el.scrollTop = el.scrollHeight
+  atBottom.value = true
+  unreadLines.value = 0
+}
 
-  // Retry a few times to handle delayed renders
-  if (retries > 0) {
-    requestAnimationFrame(() => {
-      if (el.scrollTop < el.scrollHeight - el.clientHeight - 10) {
-        el.scrollTop = el.scrollHeight
-        if (retries > 1) {
-          requestAnimationFrame(() => scrollToBottom(retries - 1))
-        }
-      }
-    })
+function onTerminalScroll() {
+  const el = terminalRef.value
+  if (!el) return
+  atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_TOLERANCE_PX
+  if (atBottom.value) unreadLines.value = 0
+}
+
+/** How many entries came in since the last one this view has seen. */
+function countNewEntries(): number {
+  const logs = consoleStore.logs
+  const newest = logs.length > 0 ? logs[logs.length - 1].id : null
+  let fresh = 0
+  if (newest !== null && newest !== lastSeenId) {
+    const seenAt = lastSeenId === null ? -1 : logs.findIndex((log) => log.id === lastSeenId)
+    fresh = logs.length - 1 - seenAt
   }
+  lastSeenId = newest
+  return fresh
 }
 
 // Hide the command suggestions shortly after blur (delayed so a click on a
@@ -219,43 +306,35 @@ function onInputFocus(): void {
   refreshCommands()
 }
 
-// Auto-scroll interval - more reliable than watchers for continuous updates
-let autoScrollInterval: ReturnType<typeof setInterval> | null = null
-
 onMounted(() => {
   if (authStore.hasPermission('console.execute')) void loadCommands()
-
-  // Initial scroll
+  lastSeenId = consoleStore.logs.length > 0 ? consoleStore.logs[consoleStore.logs.length - 1].id : null
   scrollToBottom()
-
-  // Poll-based auto-scroll - checks every 100ms if we should scroll
-  autoScrollInterval = setInterval(() => {
-    if (consoleStore.autoScroll && terminalRef.value) {
-      const el = terminalRef.value
-      // Only scroll if not already at bottom
-      if (el.scrollHeight - el.scrollTop - el.clientHeight > 5) {
-        el.scrollTop = el.scrollHeight
-      }
-    }
-  }, 100)
 })
 
-onUnmounted(() => {
-  if (autoScrollInterval) {
-    clearInterval(autoScrollInterval)
-    autoScrollInterval = null
-  }
-})
-
-// Also trigger scroll on log changes for immediate response
+// New lines follow the end only while the user is there; anyone who scrolled
+// up to read keeps their place and gets a note about what arrived.
 watch(
   () => consoleStore.logsUpdated,
   () => {
-    if (consoleStore.autoScroll) {
+    const fresh = countNewEntries()
+    if (consoleStore.autoScroll && atBottom.value) {
       scrollToBottom()
+    } else {
+      // Content grew below the viewport without a scroll event: measure again.
+      onTerminalScroll()
+      if (!atBottom.value) unreadLines.value += fresh
     }
   },
-  { flush: 'post' }
+  { flush: 'post' },
+)
+
+// Turning auto-scroll on takes the user to the end.
+watch(
+  () => consoleStore.autoScroll,
+  (on) => {
+    if (on) scrollToBottom()
+  },
 )
 </script>
 
@@ -327,10 +406,12 @@ watch(
     </div>
 
     <!-- Terminal Output -->
+    <div class="relative flex-1 min-h-0 flex flex-col">
     <div
       ref="terminalRef"
       class="terminal flex-1 min-h-0 overflow-y-auto"
       style="max-height: calc(100vh - 340px);"
+      @scroll.passive="onTerminalScroll"
     >
       <div v-if="filteredLogs.length === 0" class="text-ink-subtle text-center py-8">
         {{ searchFilter || levelFilter !== 'all' ? t('console.noLogs') + ' ' + t('console.filtered') : t('console.noLogs') }}
@@ -362,6 +443,16 @@ watch(
         <CommandReplyBlock v-if="log.reply" :reply="log.reply" />
       </div>
     </div>
+    <!-- Lines that arrived while reading further up -->
+    <button
+      v-if="unreadLines > 0"
+      type="button"
+      class="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-hytale-orange text-dark text-xs font-medium shadow-lg hover:bg-hytale-orange-light"
+      @click="scrollToBottom"
+    >
+      {{ t('console.newLines', { count: unreadLines }, unreadLines) }}
+    </button>
+    </div>
 
     <!-- Command Input - Always visible at bottom -->
     <div class="mt-4 flex-shrink-0">
@@ -372,6 +463,7 @@ watch(
               ref="inputRef"
               v-model="commandInput"
               @keydown="handleKeyDown"
+              @input="onCommandInput"
               @blur="hideSuggestionsSoon"
               @focus="onInputFocus"
               type="text"
@@ -472,6 +564,19 @@ watch(
             :class="['text-xs', loadAllNote.error ? 'text-status-error' : 'text-ink-subtle']"
           >{{ loadAllNote.text }}</span>
 
+          <!-- Download the shown lines as a text file -->
+          <button
+            type="button"
+            @click="downloadLog"
+            :disabled="filteredLogs.length === 0"
+            class="text-sm text-ink-muted hover:text-ink flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {{ t('console.download') }}
+          </button>
+
           <label class="flex items-center gap-2 text-sm text-ink-muted cursor-pointer">
             <input
               type="checkbox"
@@ -509,8 +614,8 @@ watch(
                 consoleStore.connected ? 'bg-status-success' : 'bg-status-error'
               ]"
             />
-            <span class="text-sm text-ink-muted">
-              {{ consoleStore.connected ? t('console.connected') : t('console.disconnected') }}
+            <span class="text-sm text-ink-muted" role="status" aria-live="polite">
+              {{ statusText }}
             </span>
           </div>
         </div>

@@ -12,6 +12,8 @@ export interface PermissionCheckResult {
 export interface PermissionHealthResponse {
   ok: boolean
   issues: PermissionCheckResult[]
+  /** Host folder the data directories live under (HOST_DATA_PATH). */
+  hostDataPath?: string
   message?: string
 }
 

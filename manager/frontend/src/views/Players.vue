@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDate as formatDay } from '@/utils/formatDate'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -171,7 +172,7 @@ function formatPlayTime(seconds: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString()
+  return formatDay(dateStr)
 }
 
 function showSuccess(msg: string) {

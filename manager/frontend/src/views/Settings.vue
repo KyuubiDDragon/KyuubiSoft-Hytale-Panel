@@ -311,7 +311,7 @@ async function subscribeThisDevice() {
   } else if (res.error === 'denied') {
     toast.error(t('settings.webpush.permissionDenied'))
   } else {
-    toast.error(t('settings.webpush.subscribeFailed'))
+    toast.error(res.message || t('settings.webpush.subscribeFailed'))
   }
 }
 

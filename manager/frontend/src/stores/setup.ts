@@ -1,3 +1,4 @@
+import { getApiErrorMessage, isTransientFailure } from '@/utils/apiErrors'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
@@ -291,6 +292,8 @@ export const useSetupStore = defineStore('setup', () => {
       return true
     } catch (err) {
       console.error('Failed to load setup status:', err)
+      // No answer or a server error says nothing about the setup: the caller decides.
+      if (isTransientFailure(err)) throw err
       // If status endpoint fails (404), setup is needed
       setupRequired.value = true
       return true
@@ -308,7 +311,7 @@ export const useSetupStore = defineStore('setup', () => {
       setupData.value.systemCheck = result
       return result.canProceed
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'System check failed'
+      error.value = getApiErrorMessage(err, 'System check failed')
       return false
     } finally {
       isLoading.value = false
@@ -329,7 +332,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save language'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save language'
+      error.value = getApiErrorMessage(err, 'Failed to save language')
       return false
     } finally {
       isLoading.value = false
@@ -350,7 +353,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to create admin account'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to create admin account'
+      error.value = getApiErrorMessage(err, 'Failed to create admin account')
       return false
     } finally {
       isLoading.value = false
@@ -371,7 +374,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save download method'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save download method'
+      error.value = getApiErrorMessage(err, 'Failed to save download method')
       return false
     } finally {
       isLoading.value = false
@@ -402,7 +405,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save server authentication'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save server authentication'
+      error.value = getApiErrorMessage(err, 'Failed to save server authentication')
       return false
     } finally {
       isLoading.value = false
@@ -423,7 +426,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save server configuration'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save server configuration'
+      error.value = getApiErrorMessage(err, 'Failed to save server configuration')
       return false
     } finally {
       isLoading.value = false
@@ -444,7 +447,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save security settings'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save security settings'
+      error.value = getApiErrorMessage(err, 'Failed to save security settings')
       return false
     } finally {
       isLoading.value = false
@@ -465,7 +468,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save automation settings'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save automation settings'
+      error.value = getApiErrorMessage(err, 'Failed to save automation settings')
       return false
     } finally {
       isLoading.value = false
@@ -486,7 +489,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save performance settings'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save performance settings'
+      error.value = getApiErrorMessage(err, 'Failed to save performance settings')
       return false
     } finally {
       isLoading.value = false
@@ -507,7 +510,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save plugin installation'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save plugin installation'
+      error.value = getApiErrorMessage(err, 'Failed to save plugin installation')
       return false
     } finally {
       isLoading.value = false
@@ -528,7 +531,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save integrations'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save integrations'
+      error.value = getApiErrorMessage(err, 'Failed to save integrations')
       return false
     } finally {
       isLoading.value = false
@@ -549,7 +552,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save network configuration'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save network configuration'
+      error.value = getApiErrorMessage(err, 'Failed to save network configuration')
       return false
     } finally {
       isLoading.value = false
@@ -588,7 +591,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to save step'
       return false
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to save step'
+      error.value = getApiErrorMessage(err, 'Failed to save step')
       return false
     } finally {
       isLoading.value = false
@@ -661,7 +664,7 @@ export const useSetupStore = defineStore('setup', () => {
       error.value = result.error || 'Failed to complete setup'
       return null
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to complete setup'
+      error.value = getApiErrorMessage(err, 'Failed to complete setup')
       return null
     } finally {
       isLoading.value = false

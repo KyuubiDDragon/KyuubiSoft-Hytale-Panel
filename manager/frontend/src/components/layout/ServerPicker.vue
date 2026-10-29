@@ -76,7 +76,7 @@ function pick(id: string) {
     <button
       type="button"
       @click="toggle"
-      class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-overlay hover:bg-surface-overlay text-sm text-white transition-colors min-h-9"
+      class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-overlay hover:bg-surface-overlay text-sm text-ink transition-colors min-h-9"
       :class="activeState === 'broken' ? 'border border-status-error' : 'border border-border/40'"
       :aria-expanded="open"
       :aria-haspopup="true"
@@ -87,7 +87,7 @@ function pick(id: string) {
       <span class="font-medium truncate max-w-[7rem] sm:max-w-[12rem]">
         {{ serversStore.activeServer?.name ?? t('serverScope.loading') }}
       </span>
-      <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      <svg class="w-4 h-4 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </button>
 
     <Transition
@@ -122,16 +122,16 @@ function pick(id: string) {
             />
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-white truncate">{{ s.name }}</span>
+                <span class="text-sm font-medium text-ink truncate">{{ s.name }}</span>
                 <span v-if="s.id === serversStore.defaultId" class="text-[10px] uppercase tracking-wider text-hytale-orange">{{ t('serverScope.defaultBadge') }}</span>
               </div>
-              <div class="text-xs text-gray-400 truncate">
+              <div class="text-xs text-ink-muted truncate">
                 {{ t(`serverScope.${stateOf(s.id)}`) }} · :{{ s.network.serverPort }}
               </div>
             </div>
           </button>
         </div>
-        <div class="border-t border-border/60 px-3 py-2 text-xs text-gray-400">
+        <div class="border-t border-border/60 px-3 py-2 text-xs text-ink-muted">
           {{ t('serverScope.count', { count: serversStore.servers.length }, serversStore.servers.length) }}
           · <span class="uppercase tracking-wider text-status-warning">{{ t('servers.guard.experimentalBadge') }}</span>
         </div>

@@ -60,6 +60,12 @@ jobs:
       # ESLint (vue3-essential). Errors fail the build; warnings are the backlog.
       - name: Lint (eslint)
         run: npm run lint
+      # Same keys in every language, no key used in the code that is missing.
+      - name: Language files (check-i18n)
+        run: npm run check:i18n
+      # Fixed gray utilities ignore the theme; the count may only go down.
+      - name: Theme colors (check-hardcoded-colors)
+        run: npm run check:colors
       - name: Vitest
         run: npx vitest run
       - name: Vite build

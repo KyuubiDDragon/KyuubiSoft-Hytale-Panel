@@ -1,4 +1,6 @@
-import { ref, onMounted, onUnmounted } from 'vue'
+import { getApiErrorMessage } from '@/utils/apiErrors'
+import { ref } from 'vue'
+import { usePolling } from '@/composables/usePolling'
 import { serverApi, type ServerStatus, type ServerStats } from '@/api/server'
 import { playersApi } from '@/api/players'
 import { HYTALE_TARGET_TPS, LEGACY_PLUGIN_TARGET_TPS } from '@/utils/tps'
@@ -24,8 +26,6 @@ export function useServerStats(pollInterval = 5000) {
   const patchline = ref<string | null>(null)
   const worldCount = ref<number | null>(null)
   const uptimeSeconds = ref<number | null>(null)
-
-  let intervalId: ReturnType<typeof setInterval> | null = null
 
   async function fetchData() {
     try {
@@ -103,31 +103,14 @@ export function useServerStats(pollInterval = 5000) {
 
       error.value = null
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch server data'
+      error.value = getApiErrorMessage(err, 'Failed to fetch server data')
     } finally {
       loading.value = false
     }
   }
 
-  function startPolling() {
-    fetchData()
-    intervalId = setInterval(fetchData, pollInterval)
-  }
-
-  function stopPolling() {
-    if (intervalId) {
-      clearInterval(intervalId)
-      intervalId = null
-    }
-  }
-
-  onMounted(() => {
-    startPolling()
-  })
-
-  onUnmounted(() => {
-    stopPolling()
-  })
+  // Pauses in a hidden tab and refreshes right away when it comes back.
+  usePolling(fetchData, pollInterval)
 
   return {
     status,

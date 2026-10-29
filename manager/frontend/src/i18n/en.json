@@ -81,7 +81,8 @@
     "lightMode": "Light mode",
     "darkMode": "Dark mode",
     "userMenu": "User menu",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "notifications": "Notifications"
   },
   "health": {
     "permissionIssue": "File Permission Issue Detected",
@@ -104,7 +105,14 @@
     "loginSubtitle": "Sign in to continue",
     "invalidCredentials": "Invalid credentials",
     "sessionExpired": "Session expired. Please login again.",
-    "subtitle": "Hytale Server Management"
+    "subtitle": "Hytale Server Management",
+    "logoutReason": {
+      "expired": "Your session has expired. Please sign in again.",
+      "userDeleted": "Your account has been deleted.",
+      "tokenInvalidated": "Your session ended because your account was changed. Please sign in again."
+    },
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "nav": {
     "admin": "Admin",
@@ -140,7 +148,12 @@
     "updates": "Updates",
     "liveMap": "Live Map",
     "replay": "Replay",
-    "wiki": "Wiki"
+    "wiki": "Wiki",
+    "servers": "Servers",
+    "audit": "Audit log",
+    "webhooks": "Webhooks",
+    "security": "Security",
+    "eventActions": "Event actions"
   },
   "files": {
     "title": "File Manager",
@@ -406,14 +419,16 @@
     "playerModal": "Replay player",
     "events": "Events",
     "chat": "Chat",
-    "speed": "Speed"
+    "speed": "Speed",
+    "loadFailed": "The replays could not be loaded.",
+    "saveFailed": "The replay settings could not be saved."
   },
   "wiki": {
     "title": "Wiki",
     "subtitle": "Auto-generated overview of all installed mods and plugins",
     "regenerate": "Regenerate",
     "regenerating": "Regenerating...",
-    "regenerated": "Wiki updated ({n} entries).",
+    "regenerated": "Wiki updated ({n} entry). | Wiki updated ({n} entries).",
     "publicAccess": "Public access",
     "publicHint": "When enabled, the wiki is reachable without authentication via ?public=true.",
     "noEntries": "No mod or plugin data found.",
@@ -577,7 +592,7 @@
     "disconnected": "Disconnected",
     "reconnecting": "Reconnecting...",
     "notConnected": "Not connected — command not sent. Reconnecting, please try again.",
-    "reconnect": "Reconnect",
+    "reconnect": "Connect now",
     "noLogs": "No logs available",
     "filter": "Filter",
     "filterPlaceholder": "Filter logs...",
@@ -591,10 +606,10 @@
     "suggestionBlocked": "not allowed in the panel",
     "suggestionAdmin": "admin",
     "showDebug": "Debug",
-    "droppedSlow": "{count} log entries were skipped: the connection could not keep up.",
-    "droppedBurst": "{count} log entries were skipped: the server wrote them faster than the panel could pass them on.",
-    "loadAllDone": "{count} entries loaded",
-    "loadAllFiles": "{count} entries loaded from {files} server log files",
+    "droppedSlow": "{count} log entry was skipped: the connection could not keep up. | {count} log entries were skipped: the connection could not keep up.",
+    "droppedBurst": "{count} log entry was skipped: the server wrote it faster than the panel could pass it on. | {count} log entries were skipped: the server wrote them faster than the panel could pass them on.",
+    "loadAllDone": "{count} entry loaded | {count} entries loaded",
+    "loadAllFiles": "{count} entry loaded from {files} server log files | {count} entries loaded from {files} server log files",
     "loadAllTruncated": "older entries left out (limit reached)",
     "loadAllFailed": "The full log could not be loaded. Try again shortly.",
     "permissionLost": "The console was closed: you are no longer allowed to view it.",
@@ -607,7 +622,11 @@
       "noAnswer": "No answer yet. The command may still have run; check the log.",
       "connectionLost": "Connection lost before the answer arrived. The command may still have run; check the log.",
       "notSent": "Not sent: the console was not connected in time. Send the command again."
-    }
+    },
+    "download": "Download log",
+    "newLines": "{count} new line | {count} new lines",
+    "reconnectingAttempt": "Reconnecting ({attempt} of {max})",
+    "reconnectPaused": "Disconnected, trying again shortly"
   },
   "backups": {
     "title": "Backup Management",
@@ -1240,7 +1259,9 @@
     "gameVersions": "Game Versions",
     "curseforgeApiSettings": "CurseForge API Settings",
     "thirdPartyDisabled": "This mod does not allow third-party downloads. Please download directly from CurseForge.",
-    "viewOnCurseforge": "View on CurseForge"
+    "viewOnCurseforge": "View on CurseForge",
+    "sortName": "Name",
+    "uninstalling": "Uninstalling…"
   },
   "modupdates": {
     "title": "Mod Updates",
@@ -1748,7 +1769,28 @@
     "stopConfirmButton": "Stop server",
     "restartConfirmTitle": "Restart the server?",
     "restartConfirmMessage": "This restarts {server}. Players on it are disconnected.",
-    "restartConfirmButton": "Restart server"
+    "restartConfirmButton": "Restart server",
+    "startServer": "Start server",
+    "stopServer": "Stop server",
+    "restartServer": "Restart server",
+    "createBackup": "Create backup",
+    "lightMode": "Switch to light theme",
+    "darkMode": "Switch to dark theme",
+    "placeholder": "Type a command or search…",
+    "noResults": "No results",
+    "ariaLabel": "Command palette",
+    "hintNavigate": "select",
+    "hintRun": "run",
+    "hintToggle": "toggle",
+    "group": {
+      "action": "Action",
+      "navigation": "Page",
+      "theme": "Theme"
+    },
+    "startedDone": "Server start requested.",
+    "stoppedDone": "Server stop requested.",
+    "restartedDone": "Server restart requested.",
+    "backupDone": "Backup started."
   },
   "servers": {
     "adm": {
@@ -1849,6 +1891,10 @@
         "downloading": "Login done; the container is downloading the game files.",
         "request": "Request Hytale login",
         "requestHint": "Shows a link and a code for this server."
+      },
+      "hints": {
+        "downloaderLogin": "The new server downloads the game files on its first start. The Hytale downloader needs a login for it: follow the link in the new server's console.",
+        "noGameFiles": "The new server has no game files yet and the Hytale downloader is off (USE_HYTALE_DOWNLOADER). It waits until HytaleServer.jar and Assets.zip are in {dir}."
       }
     },
     "title": "Servers",
@@ -1876,7 +1922,43 @@
   "security": {
     "confirmRevokeTitle": "Revoke API key?",
     "confirmRevokeMessage": "Revoke the key \"{name}\"? Any tool using it will immediately lose access.",
-    "revokeApiKeyAria": "Revoke API key {name}"
+    "revokeApiKeyAria": "Revoke API key {name}",
+    "title": "Security",
+    "twoFactor": {
+      "title": "Two-factor authentication",
+      "activeDesc": "Active: your account is protected by a TOTP authenticator app.",
+      "disabledDesc": "Disabled. Turn it on to require a TOTP code at login.",
+      "badgeEnabled": "ENABLED",
+      "badgeDisabled": "DISABLED",
+      "enable": "Enable 2FA",
+      "scanHint": "Scan the QR code with your authenticator app (1Password, Bitwarden, Aegis, Google Authenticator), then enter the 6-digit code to confirm.",
+      "qrAlt": "QR code for two-factor authentication",
+      "secret": "Secret: {secret}",
+      "codeLabel": "Confirmation code",
+      "confirm": "Confirm",
+      "backupTitle": "Save these backup codes",
+      "backupHint": "Each can be used once if you lose access to your authenticator app. They will NOT be shown again.",
+      "disableTitle": "Disable 2FA",
+      "currentPassword": "Current password",
+      "disableCodePlaceholder": "TOTP or backup code",
+      "disable": "Disable",
+      "setupFailed": "2FA could not be set up.",
+      "confirmFailed": "The code was not accepted.",
+      "disableFailed": "2FA could not be disabled."
+    },
+    "apiKeys": {
+      "title": "REST API keys",
+      "intro": "For CI pipelines, monitoring scripts and external integrations. Each key carries a fixed set of scopes, never broader than your own permissions.",
+      "newTokenHint": "Your new token (shown once, copy it now):",
+      "meta": "{scopes} · created {created} · last used: {lastUsed}",
+      "scopeCount": "{count} scope | {count} scopes",
+      "never": "never",
+      "empty": "No API keys yet.",
+      "namePlaceholder": "Key name (e.g. “CI deploy bot”)",
+      "scopesPlaceholder": "Comma-separated scopes (e.g. server.view_status, backups.create)",
+      "create": "Create key",
+      "revokeFailed": "The key could not be revoked."
+    }
   },
   "webhooks": {
     "title": "Webhooks",
@@ -1894,7 +1976,7 @@
     "servers": "Servers",
     "serversHint": "Empty = events of every server. Otherwise only those of the chosen servers.",
     "saveFailed": "The webhook could not be created.",
-    "eventCount": "{count} events",
+    "eventCount": "{count} event | {count} events",
     "status": "Status",
     "create": "Create",
     "test": "Test",
@@ -1902,20 +1984,22 @@
     "noHooks": "No webhooks configured",
     "noHooksSubtitle": "Add one to receive server events on Discord, Slack or a generic endpoint.",
     "confirmDelete": "Delete webhook \"{name}\"?",
-    "confirmDeleteTitle": "Delete webhook?"
+    "confirmDeleteTitle": "Delete webhook?",
+    "enable": "Enable",
+    "disable": "Disable"
   },
   "chat": {
     "title": "Chat Log",
     "description": "View all player chat messages",
     "noMessages": "No chat messages yet",
     "searchPlaceholder": "Search messages or player names...",
-    "messageCount": "{count} messages total",
+    "messageCount": "{count} message total | {count} messages total",
     "timeRange": "Time range:",
     "days7": "7 days",
     "days14": "14 days",
     "days30": "30 days",
     "all": "All",
-    "daysAvailable": "{count} day(s) available"
+    "daysAvailable": "{count} day available | {count} days available"
   },
   "commands": {
     "title": "Command Reference",
@@ -1937,7 +2021,6 @@
     "autoBackupsDesc": "Automatically create backups at a scheduled time every day",
     "backupTime": "Backup Time",
     "retentionDays": "Keep backups (days)",
-    "beforeRestart": "Backup before restart",
     "nextBackup": "Next backup",
     "lastBackup": "Last backup",
     "scheduledRestarts": "Scheduled Restarts",
@@ -1949,7 +2032,7 @@
     "warningMinutesPlaceholder": "30, 15, 5, 1",
     "warningMinutesHint": "Comma-separated list of minutes before restart for warnings",
     "warningMessage": "Warning Message",
-    "warningMessagePlaceholder": "Server restart in {time}!",
+    "warningMessagePlaceholder": "Server restart in {minutes} minute(s)!",
     "warningMessageHint": "Placeholders: {time} (remaining time in English, e.g. “5 minutes”) or {minutes} (number of minutes)",
     "restartMessage": "Restart Message",
     "restartMessagePlaceholder": "Server is restarting now!",
@@ -2058,7 +2141,11 @@
     "serverError": "Server error",
     "unauthorized": "Unauthorized",
     "notFound": "Not found",
-    "unknown": "Unknown error"
+    "unknown": "Unknown error",
+    "timeout": "The server did not answer in time.",
+    "forbidden": "You do not have permission for this.",
+    "conflict": "This conflicts with the current state.",
+    "rateLimited": "Too many requests. Please wait a moment and try again."
   },
   "header": {
     "openMap": "Open Web Map"
@@ -2623,7 +2710,6 @@
     "codeValidFor": "Code valid for {time}",
     "envConfigRequired": "Configuration Required",
     "followTheseSteps": "Follow these steps",
-
     "extractAssetsTitle": "Asset Extraction",
     "extractAssetsDescription": "Extract game assets for enhanced panel features like item icons and texture previews",
     "extractingAssetsTitle": "Extracting Assets",
@@ -2656,7 +2742,6 @@
     "extractionSkippedInfo": "You can extract assets later from Settings > Assets",
     "extractionStartFailed": "Failed to start extraction",
     "enabledFeatures": "Enabled Features",
-
     "firstServerStartTitle": "First Server Start",
     "firstServerStartDescription": "Starting the server for the first time to initiate authentication",
     "serverAuthTitle": "Server Authentication",
@@ -2692,7 +2777,6 @@
     "autoAuthEnabledDesc": "Your server will automatically re-authenticate on restart using the saved credentials. No manual intervention required.",
     "serverStartFailed": "Failed to start server",
     "persistenceFailed": "Failed to setup token persistence",
-
     "download": {
       "title": "Server Download",
       "description": "Choose how you want to set up the Hytale server files",
@@ -2983,7 +3067,8 @@
       "giveFailed": "Failed to give item",
       "clearConfirm": "Clear {player}'s entire inventory? This cannot be undone.",
       "cleared": "Inventory cleared",
-      "clearFailed": "Failed to clear inventory"
+      "clearFailed": "Failed to clear inventory",
+      "clearTitle": "Clear inventory?"
     },
     "searchPlayer": "Search player...",
     "selectPrompt": "Select a Player",
@@ -3028,6 +3113,143 @@
     "tooltip": {
       "amount": "Amount",
       "durability": "Durability"
+    }
+  },
+  "apiErrors": {
+    "ADMIN_NAME_TAKEN": "An account with this name already exists. Choose another name for the admin account.",
+    "PUSH_ENDPOINT_UNKNOWN": "This push service is not known. Notifications only work through the push services of common browsers.",
+    "PUSH_SUBSCRIPTION_FOREIGN": "This device is already subscribed for another account."
+  },
+  "forbidden": {
+    "title": "No access",
+    "message": "You do not have permission to open this page.",
+    "messageFor": "You do not have permission to open “{page}”.",
+    "hint": "Ask an administrator whether your account can get this permission.",
+    "back": "Back to the overview"
+  },
+  "eventActions": {
+    "title": "Event Actions",
+    "subtitle": "React to panel events automatically: send a message, create a backup or run a console command.",
+    "newRule": "New rule",
+    "listTitle": "Rules",
+    "loadError": "The rules could not be loaded.",
+    "viewOnly": "You can view rules but not change them.",
+    "rateNote": "Each rule runs at most 10 times per minute per event and server; further triggers are dropped.",
+    "empty": {
+      "title": "No rules yet",
+      "hint": "Create a rule or start from a template.",
+      "hintViewOnly": "There are no rules yet."
+    },
+    "editor": {
+      "titleNew": "New rule",
+      "titleEdit": "Edit rule",
+      "name": "Name",
+      "namePlaceholder": "e.g. Welcome message",
+      "server": "Server",
+      "allServers": "All servers",
+      "event": "Event",
+      "eventPlaceholder": "Choose an event …",
+      "everyEvent": "every event",
+      "everyInCategory": "all in this category",
+      "eventHint": "Refused joins (player.join_denied) only trigger rules that pick exactly that event, never * or player.*.",
+      "action": "Action",
+      "noCommandRight": "Command rules need the right to run console commands.",
+      "command": "Command",
+      "commandPlaceholder": "e.g. /say Hello {'{player}'}",
+      "message": "Message",
+      "messagePlaceholder": "e.g. Welcome, {'{player}'}!",
+      "placeholdersHint": "Placeholders are replaced with values from the event when the rule fires. Click to insert:",
+      "enabled": "Rule is active"
+    },
+    "actionTypes": {
+      "command": "Run a console command",
+      "announce": "Send a chat message",
+      "backup": "Create a backup"
+    },
+    "actionHints": {
+      "command": "The command runs with its creator's rights and is checked again every time it fires.",
+      "announce": "The message goes to all players on the server.",
+      "backup": "Starts a backup of the server. A backup rule runs at most once per cooldown."
+    },
+    "actionSummary": {
+      "backup": "Create a backup"
+    },
+    "rule": {
+      "when": "On",
+      "server": "Server",
+      "createdBy": "Created by {user}",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
+    "blocked": {
+      "badge": "Needs approval",
+      "approve": "Approve",
+      "needsApprover": "Someone with the right to run console commands must approve the rule.",
+      "invalid_command": "The command is invalid, so the rule is skipped. Edit it.",
+      "no_creator": "The rule has no creator; its command needs approval.",
+      "creator_lacks_permission": "The creator may no longer run this command. The rule is skipped until someone approves it."
+    },
+    "managed": {
+      "badge": "Managed by the scheduler",
+      "hint": "You maintain this welcome message in the scheduler."
+    },
+    "warnings": {
+      "heading": "Notes",
+      "freeText": "{placeholders} put text from the event into the command: whoever causes the event can add words or arguments to it.",
+      "noPluginLog": "Without a connected KyuubiSoft API plugin the panel reads {events} from the server log, and those events run no commands. Install the plugin for this rule to run."
+    },
+    "validation": {
+      "nameRequired": "Enter a name.",
+      "nameTooLong": "The name can have at most {max} characters.",
+      "eventRequired": "Choose an event.",
+      "eventUnknown": "The server does not know this event.",
+      "commandRequired": "Enter a command.",
+      "commandSlash": "The command must start with /, for example /say Hello.",
+      "messageRequired": "Enter a message.",
+      "textTooLong": "The text can have at most {max} characters.",
+      "textMultiline": "The text must be a single line without control characters."
+    },
+    "toasts": {
+      "created": "Rule created",
+      "updated": "Rule saved",
+      "deleted": "Rule deleted",
+      "enabled": "Rule enabled",
+      "disabled": "Rule disabled",
+      "approved": "Rule approved",
+      "saveFailed": "The rule could not be saved.",
+      "deleteFailed": "The rule could not be deleted.",
+      "approveFailed": "The rule could not be approved."
+    },
+    "confirmDelete": {
+      "title": "Delete rule?",
+      "message": "The rule “{name}” will be deleted permanently."
+    },
+    "templates": {
+      "title": "Templates",
+      "hint": "Start from a ready-made rule and adjust it before saving.",
+      "welcome": {
+        "name": "Welcome message",
+        "description": "Greets every player in chat when they join.",
+        "message": "Welcome to the server, {'{player}'}!"
+      },
+      "farewell": {
+        "name": "Farewell message",
+        "description": "Says goodbye in chat when players leave the server.",
+        "message": "See you soon, {'{player}'}!"
+      },
+      "backupAfterCrash": {
+        "name": "Backup after a crash",
+        "description": "Backs up the server after it has crashed."
+      },
+      "backupAfterModChange": {
+        "name": "Backup after a mod install",
+        "description": "Backs up the server as soon as a mod has been installed."
+      },
+      "announceBackupDone": {
+        "name": "Backup notice",
+        "description": "Announces in chat when a backup has finished.",
+        "message": "Backup {'{name}'} is done."
+      }
     }
   }
 }

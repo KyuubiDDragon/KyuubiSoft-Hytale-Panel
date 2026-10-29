@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { computed, inject } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { quickEntries } from '@/router/navigation'
 import Icon from '@/components/ui/Icon.vue'
 import ServerPicker from './ServerPicker.vue'
 import { useServersStore } from '@/stores/servers'
@@ -19,21 +20,12 @@ const authStore = useAuthStore()
 const serversStore = useServersStore()
 const toggleSidebar = inject<() => void>('toggleSidebar', () => {})
 
-interface QuickItem { name: string; path: string; icon: string; label: string; permission: string }
-
-const candidates = computed<QuickItem[]>(() => [
-  { name: 'dashboard', path: '/', icon: 'dashboard', label: t('nav.dashboard'), permission: 'dashboard.view' },
-  { name: 'console', path: '/console', icon: 'console', label: t('nav.console'), permission: 'console.view' },
-  { name: 'players', path: '/players', icon: 'players', label: t('nav.players'), permission: 'players.view' },
-  { name: 'performance', path: '/performance', icon: 'performance', label: t('nav.performance'), permission: 'performance.view' },
-])
-
 // At most four quick links so the bar plus the Menu button fit on one row;
 // the server picker takes one place while it is shown.
 const items = computed(() =>
-  candidates.value
-    .filter(i => authStore.hasPermission(i.permission))
-    .slice(0, serversStore.pickerVisible ? 3 : 4),
+  quickEntries(authStore.hasPermission, { hasServerList: serversStore.hasServerList })
+    .slice(0, serversStore.pickerVisible ? 3 : 4)
+    .map((entry) => ({ ...entry, label: t(entry.labelKey) })),
 )
 
 function isActive(path: string): boolean {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 /**
  * The game server's own backups (`/backup`, written to backups/native and
  * backups/native/archive). The server holds world saving while it packs, so
@@ -120,7 +121,7 @@ async function download(backup: NativeBackupInfo) {
 }
 
 function formatDate(isoString: string): string {
-  return new Date(isoString).toLocaleString()
+  return formatDateTime(isoString)
 }
 
 defineExpose({ refresh })

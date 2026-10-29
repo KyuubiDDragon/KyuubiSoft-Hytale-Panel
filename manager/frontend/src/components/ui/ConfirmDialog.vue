@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 import Button from './Button.vue'
 
 const props = defineProps<{
@@ -13,10 +14,23 @@ const props = defineProps<{
   loading?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   confirm: []
   cancel: []
 }>()
+
+const titleId = useId()
+const messageId = useId()
+const dialogRef = ref<HTMLElement | null>(null)
+
+// Escape cancels, Tab stays in the dialog (not while the action is running).
+useFocusTrap(
+  dialogRef,
+  () => props.show,
+  () => {
+    if (!props.loading) emit('cancel')
+  },
+)
 
 const { t } = useI18n()
 
@@ -47,7 +61,7 @@ const resolvedCancelText = computed(() => props.cancelText || t('common.cancel')
           leave-from-class="transform scale-100 opacity-100"
           leave-to-class="transform scale-95 opacity-0"
         >
-          <div v-if="show" role="dialog" aria-modal="true" class="relative bg-surface-overlay border border-border rounded-xl shadow-2xl w-full max-w-md p-6">
+          <div ref="dialogRef" v-if="show" role="dialog" aria-modal="true" :aria-labelledby="titleId" :aria-describedby="messageId" tabindex="-1" class="outline-none relative bg-surface-overlay border border-border rounded-xl shadow-2xl w-full max-w-md p-6">
             <!-- Icon -->
             <div class="flex items-center gap-3 mb-4">
               <div
@@ -65,11 +79,11 @@ const resolvedCancelText = computed(() => props.cancelText || t('common.cancel')
                   <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 class="text-lg font-semibold text-ink">{{ title }}</h3>
+              <h3 :id="titleId" class="text-lg font-semibold text-ink">{{ title }}</h3>
             </div>
 
             <!-- Message -->
-            <p class="text-ink-muted text-sm mb-6 ml-[52px]">{{ message }}</p>
+            <p :id="messageId" class="text-ink-muted text-sm mb-6 ml-[52px]">{{ message }}</p>
 
             <!-- Actions -->
             <div class="flex justify-end gap-3">

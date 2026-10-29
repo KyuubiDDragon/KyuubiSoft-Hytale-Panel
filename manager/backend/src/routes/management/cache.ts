@@ -23,6 +23,7 @@ import {
   refreshRegistry,
   getRegistryInfo,
   getModRegistry,
+  isModInstalled,
 } from '../../services/modStore.js';
 import { checkRegistryMod, checkInstalledJar } from '../../services/modCompat.js';
 import { onServer } from '../../services/managementHelpers.js';
@@ -118,6 +119,31 @@ router.get(
       res.json({ mods });
     } catch (error) {
       res.status(500).json({ error: 'Failed to get mod store' });
+    }
+  },
+);
+
+// GET /api/management/modstore/:modId/installed - whether one registry mod is
+// installed on this server. A cheap directory scan, unlike the full store
+// listing (which also looks up the latest releases).
+router.get(
+  '/modstore/:modId/installed',
+  authMiddleware,
+  requirePermission('mods.view'),
+  async (req: Request, res: Response) => {
+    const { modId } = req.params;
+
+    if (isDemoMode()) {
+      const entry = getDemoModStore().find((m) => m.id === modId);
+      res.json({ installed: !!entry?.installed });
+      return;
+    }
+
+    try {
+      const status = await isModInstalled(await serverOf(req), modId);
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to check mod installation' });
     }
   },
 );

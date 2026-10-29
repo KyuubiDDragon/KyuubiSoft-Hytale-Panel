@@ -1,7 +1,7 @@
 # V3 API Cheatsheet
 
 > **Stand: Ist-Zustand des Codes** (`manager/backend/src/routes/`, gemountet in `manager/backend/src/index.ts`).
-> Was hier mit **(geplant)** markiert ist, gibt es noch nicht. Die ursprüngliche Planung steht in [V3_ROADMAP.md](./V3_ROADMAP.md).
+> Was es nicht gibt, steht am Ende unter [Nicht vorhanden](#nicht-vorhanden). Die ursprüngliche Planung steht in [V3_ROADMAP.md](./V3_ROADMAP.md).
 > Im Zweifel gilt der Code: Diese Datei ist eine Übersicht, keine Spezifikation.
 
 ---
@@ -11,13 +11,13 @@
 Alles unter `/api/`:
 
 ```
-/api/auth/*           login, refresh, logout, me, ws-ticket, 2fa/*, api-keys, users, hytale/*, Server-Zugriff (s. u.)
+/api/auth/*           login, refresh, logout, me, ws-ticket, 2fa/*, api-keys, users, hytale/* (Server-Anmeldung), Server-Zugriff (s. u.)
 /api/auth/sso/*       providers, :providerId/start, :providerId/callback
 /api/server/*         status, stats, start, stop, restart, quick-settings, config, ...   (serverbezogen)
 /api/console/*        Konsole, Logs                                                       (serverbezogen)
 /api/backups/*        CRUD, Restore, Jobs, native Backups                                 (serverbezogen)
 /api/players/*        Liste, Aktionen, Statistik, Strafen, Notizen, bulk                   (serverbezogen)
-/api/players/locations   Live-Positionen (REST + WS)
+/api/players/locations   Live-Positionen (REST + WS)                                    (serverbezogen)
 /api/management/*     Welten, Mods/Plugins, Configs, Mod-Stores                          (serverbezogen)
 /api/scheduler/*      Aufgaben, Backups, Neustarts                                       (serverbezogen)
 /api/assets/*         Asset-Explorer, Item-Icons, Spieler-Avatare                          (serverbezogen)
@@ -30,11 +30,11 @@ Alles unter `/api/`:
 /api/audit-log/*      Audit-Log
 /api/me/notifications/*  Benachrichtigungen
 /api/push/*           Web-Push
-/api/replay/*         Replay-Recorder
-/api/wiki/*           Auto-Wiki
-/api/webmap/*         Sitzungen für die eingebettete Karte
+/api/replay/*         Replay-Recorder                                                    (serverbezogen)
+/api/wiki/*           Auto-Wiki                                                          (serverbezogen)
+/api/webmap/*         Sitzungen für die eingebettete Karte                               (serverbezogen)
 /api/settings/*       Panel-Einstellungen
-/api/metrics          Prometheus-Metriken
+/api/metrics          Prometheus-Metriken (Recht audit.view oder METRICS_TOKEN)
 /api/setup/*          Einrichtungsassistent
 /api/public/status    öffentliche Statusseite (abschaltbar)
 /api/health           öffentlich
@@ -46,6 +46,15 @@ Alles unter `/api/`:
 ---
 
 ## Auth
+
+### Anmeldung und Sitzung
+
+```
+POST /api/auth/login                   ← { username, password, totpCode? }   → Access-Token (JWT) + Refresh-Cookie
+POST /api/auth/refresh                 → neues Access-Token (Cookie `kp_refresh`)
+POST /api/auth/logout
+GET  /api/auth/me                      → eigenes Konto, Rolle, Rechte
+```
 
 ### 2FA / TOTP
 
@@ -69,8 +78,9 @@ GET    /api/auth/api-keys             → { keys[] }   (eigene Keys; jedes Objek
 POST   /api/auth/api-keys             ← { name, scopes[], expiresAt? }   → { key, token: 'kp_…' }
                                          token wird EINMAL gezeigt, gespeichert ist nur der bcrypt-Hash
 DELETE /api/auth/api-keys/:id         → widerruft
-GET    /api/auth/api-keys/:id/usage   (geplant)
 ```
+
+Die Scopes sind dieselben Namen wie die Berechtigungen der Rollen (`players.view`, `console.execute`, `console.execute.admin`, …). Verwalten darf Keys, wer `apikeys.manage` hat.
 
 **Header:** `Authorization: ApiKey kp_…` (Alternative zum Bearer-JWT).
 Ein Key darf höchstens, was **seine Scopes und die aktuellen Rechte des Owners** gemeinsam erlauben, auf höchstens den Servern, die **Owner und Key** gemeinsam haben (siehe [Server-Zugriff](#server-zugriff-pro-nutzer-und-api-key)).
@@ -94,7 +104,6 @@ GET    /api/auth/users                → { users[] }   (users.view; nur öffent
 POST   /api/auth/users                ← { username, password, roleId?, allowedServers? }        (users.create)
 PUT    /api/auth/users/:username      ← { password?, roleId? }                                  (users.edit)
 DELETE /api/auth/users/:username                                                                (users.delete)
-POST   /api/auth/users/bulk           (geplant)
 ```
 
 Regeln (gegen Rechteausweitung):
@@ -188,7 +197,6 @@ PUT    /api/webhooks/:id              ← Teilupdate
 DELETE /api/webhooks/:id
 POST   /api/webhooks/:id/test         → synthetisches Ereignis, liefert den Zustellstatus
 GET    /api/webhooks/:id/deliveries   → Zustellprotokoll
-POST   /api/webhooks/deliveries/:deliveryId/retry   (geplant)
 
 GET    /api/event-actions             → { rules[], events[], actionTypes[] }
 POST   /api/event-actions             ← { name, serverId|null, eventPattern, actionType, actionPayload, enabled }
@@ -196,6 +204,10 @@ PUT    /api/event-actions/:id
 DELETE /api/event-actions/:id
 POST   /api/event-actions/:id/approve → Befehlsregel als eigene übernehmen
 ```
+
+`actionType` ist `command`, `announce` oder `backup`. `eventPattern` ist `*`, ein Ereignisname (z. B. `player.joined`) oder `<kategorie>.*`. Befehlsregeln brauchen dieselbe Konsolen-Berechtigung wie der Befehl und laufen später mit den Rechten ihres Erstellers; Regeln, die das Panel deshalb nicht ausführt, haben `blockedReason`.
+
+Webhook-Ziele in privaten Netzen sind gesperrt, solange `ALLOW_INTERNAL_WEBHOOKS` nicht `true` ist.
 
 **Event-Katalog:** `manager/backend/src/schemas/events.ts` (einzige Quelle).
 
@@ -234,10 +246,11 @@ POST /api/me/notifications/dismiss-all
 GET  /api/me/notifications/preferences
 PUT  /api/me/notifications/preferences
 
+GET  /api/push/vapid-public-key       → { enabled, key, devices }   (enabled: false, solange Web-Push aus ist)
 POST /api/push/subscribe | /unsubscribe | /test
 ```
 
-Benachrichtigungen über den Konsolen-WS zu multiplexen (`subscribe`-Kanäle) ist **(geplant)**.
+Push-Endpunkte werden nur für die Push-Dienste der Browser angenommen; weitere Hosts über `WEB_PUSH_EXTRA_HOSTS`.
 
 ---
 
@@ -247,9 +260,9 @@ Benachrichtigungen über den Konsolen-WS zu multiplexen (`subscribe`-Kanäle) is
 GET /api/auth/sso/providers               → aktivierte Anbieter (für die Login-Seite)
 GET /api/auth/sso/:providerId/start       → 302 zum Anbieter, setzt State-Cookie
 GET /api/auth/sso/:providerId/callback    → JWT + Refresh-Cookie wie beim Passwort-Login
-POST   /api/me/sso/link                   (geplant)
-DELETE /api/me/sso/link/:providerId       (geplant)
 ```
+
+Umgesetzt ist nur der Typ `discord` (OAuth2). Ein anderer Typ antwortet auf `/start` mit 501. Die Anbieter stehen in `config.json` unter `sso.providers[]` (README, „Erweiterte Funktionen“).
 
 ---
 
@@ -257,9 +270,6 @@ DELETE /api/me/sso/link/:providerId       (geplant)
 
 ```
 POST /api/players/bulk          ← { names[], action: 'kick'|'ban'|'unban', reason? }
-POST /api/backups/bulk          (geplant)
-POST /api/mods/bulk             (geplant)
-POST /api/auth/users/bulk       (geplant)
 ```
 
 Die Permission wird pro Aktion geprüft (`players.kick` / `players.ban` / `players.unban`), gescopt auch für den jeweiligen Server.
@@ -272,6 +282,10 @@ Die Permission wird pro Aktion geprüft (`players.kick` / `players.ban` / `playe
 GET /api/players/locations              → letzte Positionen
 GET /api/players/locations/history      ?from=&to=&playerUuid=
 WS  /api/players/locations/ws?ticket=…  → snapshot + sample-Stream (Default-Server)
+
+POST /api/webmap/session                → { ticket, path, idleTimeoutSeconds, expiresInSeconds }   (players.view)
+POST /api/webmap/session/status         ← { ticket }   → { valid, expiresAt } | { valid: false, reason }
+POST /api/webmap/session/revoke         ← { ticket }
 
 GET    /api/replay                      → Segmente
 GET    /api/replay/config | PUT /api/replay/config
@@ -286,7 +300,9 @@ GET  /api/wiki/config | PUT /api/wiki/config
 POST /api/wiki/regenerate               (wiki.manage)
 ```
 
-Diese Routen sind nur unter `/api/…` gemountet, nicht unter `/api/servers/:serverId/…`. Ohne Server-Bezug arbeiten sie mit dem Default-Server. Eigene Routen pro Server sind **(geplant)**.
+Alle diese Routen gibt es auch unter `/api/servers/:serverId/…` (`players/locations`, `replay`, `wiki`, `webmap`); die Pfade ohne Server-ID arbeiten mit dem Default-Server.
+
+Die Karte selbst wird nicht über die REST-API geladen: `POST /api/webmap/session` liefert einen kurzlebigen, widerrufbaren Ticket-Pfad (`/api/webmap/t/<ticket>/`), unter dem das Panel die Karte des Servers ausliefert. Die Sitzung endet bei Panel-Neustart, nach 12 Stunden oder wenn das Recht `players.view` entfällt.
 
 ---
 
@@ -301,6 +317,11 @@ GET    /api/servers                     → { servers[], defaultId, multiserverE
 GET    /api/servers/:id                                                                  (servers.list; nur erlaubte Server)
 POST   /api/servers                     ← { name, serverPort?, webMapPort?, webMapWsPort?, autoStart?, limits? }
                                           legt Registry-Eintrag und Container an                (servers.create)
+                                          nur mit MULTISERVER_ENABLED (sonst 403 MULTISERVER_DISABLED); fehlende Ports vergibt das Panel.
+                                          Kein Feld publishWebMap: die Karte wird veröffentlicht, wenn webMapPort oder
+                                          webMapWsPort angegeben ist (die beiden Ports müssen verschieden sein).
+                                          image wird nur gelesen, um ein abweichendes Image abzulehnen; das Image bestimmt
+                                          das Panel (Primär-Container oder HYTALE_IMAGE).
 PUT    /api/servers/:id                 ← { name?, limits? }                                     (servers.manage)
 DELETE /api/servers/:id                 ?removeData=true | ?keepContainer=true                     (servers.delete)
                                           removeData verschiebt den Ordner in den Papierkorb
@@ -308,7 +329,6 @@ GET    /api/servers/_default            → { defaultId }   (servers.list; Alias
 PUT    /api/servers/_default            ← { id }          (servers.manage; Alias: PUT /api/servers/default)
 POST   /api/servers/_reconcile          → Abgleich Registry ↔ Container                          (servers.manage)
 GET    /api/servers/_trash | DELETE /api/servers/_trash/:entry                                    (servers.delete)
-POST   /api/servers/:id/clone           (geplant)
 ```
 
 Die genauen Felder und Fehlercodes stehen in `manager/backend/src/routes/servers.ts`. Mit Server-Liste gilt: `/:id` nur für erlaubte Server (403 `SERVER_NOT_ALLOWED`); Anlegen, Default setzen, Reconcile und Papierkorb nur mit Zugriff auf alle Server (403 `ALL_SERVERS_REQUIRED`).
@@ -328,18 +348,33 @@ Jede serverbezogene Ressource ist **zweimal gemountet**:
 | `/api/assets/*` | `/api/servers/:serverId/assets/*` |
 | `/api/files/*` | `/api/servers/:serverId/files/*` |
 | `/api/mod-panel/*` | `/api/servers/:serverId/mod-panel/*` |
+| `/api/replay/*` | `/api/servers/:serverId/replay/*` |
+| `/api/wiki/*` | `/api/servers/:serverId/wiki/*` |
+| `/api/webmap/*` | `/api/servers/:serverId/webmap/*` |
+| `/api/auth/hytale/*` | `/api/servers/:serverId/server/hytale-auth/*` |
 | WS `/api/console/ws?ticket=…` | WS `/api/servers/:serverId/console/ws?ticket=…` |
 
 Es gibt **keine** Redirects. Die Legacy-Routen setzen den Default-Server als Ziel. Rechte, Server-Listen und Per-Server-Rollen gelten auf beiden Wegen gleich. Unbekannte Server-ID → 404, Server ohne sichtbare Dateien → 409 `server_files_unavailable`.
 
 ### Per-Server-Rollen
 
-Intern kann ein Nutzer pro Server eine zusätzliche Rolle haben (`serverScopes`). Sie **ergänzt** die globale Rolle auf diesem Server, und zwar nur innerhalb von `allowedServers`.
+Intern kann ein Nutzer pro Server eine zusätzliche Rolle haben (`serverScopes`). Sie **ergänzt** die globale Rolle auf diesem Server, und zwar nur innerhalb von `allowedServers`. Dafür gibt es keine eigenen Endpunkte.
+
+---
+
+## Prometheus-Metriken
 
 ```
-GET /api/auth/users/:username/permissions?serverId=…   (geplant)
-PUT /api/auth/users/:username/server-roles             (geplant)
+GET /api/metrics                      → Text im Prometheus-Format
 ```
+
+Zugriff mit `Authorization: Bearer <JWT>` oder `ApiKey kp_…` bei Recht bzw. Scope `audit.view`, oder mit dem statischen Token aus der Umgebungsvariable `METRICS_TOKEN` (`Authorization: Bearer <METRICS_TOKEN>`, Vergleich in konstanter Zeit). Ohne gesetzten Token bleibt nur der Zugang per Anmeldung.
+
+---
+
+## Nicht vorhanden
+
+Diese Funktionen sind weder umgesetzt noch Teil der Routen und stehen höchstens in [V3_ROADMAP.md](./V3_ROADMAP.md): Klonen eines Servers, eigene Endpunkte für Per-Server-Rollen, Nutzungsstatistik pro API-Key, Sammelaktionen für Backups, Mods und Benutzer, erneutes Senden einer Webhook-Zustellung, Konten-Verknüpfung mit SSO-Anbietern, generisches OIDC (nur Discord) sowie Benachrichtigungskanäle über den Konsolen-WebSocket.
 
 ---
 
@@ -360,6 +395,8 @@ PUT /api/auth/users/:username/server-roles             (geplant)
 ├── users.json          # Konten, Rollen-Zuordnung, 2FA, allowedServers
 ├── roles.json          # Rollen und Permissions
 ├── servers.json        # Server-Registry
+├── config.json         # Panel-Konfiguration (Setup-Ergebnis, SSO, Web-Push, Discord, …)
+├── plugin-tokens.json  # Token je Server für das KyuubiSoft-API-Plugin (Modus 0600, nie über die API)
 ├── panel.sqlite        # audit_events, api_keys (inkl. server_ids), webhooks, webhook_deliveries,
 │                       # notifications, notification_prefs, punishments, event_actions, play_sessions,
 │                       # crash_reports, player_notes, push_subscriptions, schema_migrations
