@@ -1179,6 +1179,108 @@ has to pass.
   the middle of the line, because the label shared its translation key with
   the heap view. It has its own key now (`performance.storageFree`).
 
+### Interface, languages and documentation
+
+A pass over the web interface and the docs: easier console, consistent
+navigation and permissions, a working light theme with readable contrast,
+complete translations, a new page for event actions, fewer requests, and
+documentation that matches what the panel does. Rebuild the manager image.
+See **Upgrade notes** at the end of this section.
+
+**Console**
+- Command history per server and account: arrow up and down, the last 100
+  commands, kept in the browser and cleared on logout.
+- Reading older lines no longer jumps back down; a "N new lines" button jumps
+  to the end. The log can be downloaded as a text file.
+- The connection state is visible: "Reconnecting (n of 5)" and a "Connect
+  now" button once the quick retries are used up.
+
+**Navigation and permissions**
+- One page list drives the routes, the sidebar, the mobile bar and the command
+  palette. A page is shown and opened with the same permission the panel
+  checks for its data. Without it, a "No access" page appears instead of a
+  silent jump to the dashboard.
+- Users, Roles, Audit and Webhooks follow their view permission instead of the
+  admin role (the API always checked that permission). Statistics needs
+  `players.view`, the permission its data needs. The activity log stays hidden
+  for accounts limited to some servers, because its entries are not yet split
+  by server.
+- Webhooks: add, test, enable/disable and delete need `webhooks.manage`;
+  without it the URLs are masked.
+- Command palette: translated, filtered by permission; stop and restart ask
+  first and report the result.
+
+**Event actions**
+- New Event Actions page: create, edit, enable, disable, approve and delete
+  rules, with templates (welcome and farewell messages, backups after a crash
+  or a mod install, backup notice) and the warnings the panel already gives
+  for risky rules. Buttons follow the account's permissions and servers.
+- A rule created as disabled is now stored disabled right away.
+
+**Look and accessibility**
+- Light theme: no dark flash on load (the start-up script reads the theme the
+  same way the settings do), and Mods, Worlds, Assets and Dashboard follow the
+  theme instead of fixed grays. A CI check keeps the number of fixed grays
+  from growing.
+- Contrast reaches WCAG AA for white text on the primary orange, orange text,
+  the light-theme status colors and secondary text; the hue is unchanged.
+- Dialogs close with Escape, keep the focus inside and are labelled for
+  screen readers; form labels belong to their fields; toasts are announced.
+- The `lang` attribute is a valid language tag (`pt-BR`).
+
+**Languages and messages**
+- Security page fully translated, missing keys added, Brazilian Portuguese
+  accents fixed, dates and numbers follow the panel language, plural forms
+  where counts are shown. A CI check compares the three languages and the
+  keys the code uses.
+- API errors are shown in the panel language instead of "Request failed with
+  status code …"; the setup message for a taken admin name and the push
+  subscription errors are translated. After a forced sign-out the login page
+  says why.
+- The permission banner prints the fix command for the configured data
+  folder, quoted.
+
+**Performance and privacy**
+- Language files load on demand: the main bundle shrinks from 584 kB to
+  345 kB.
+- The service worker no longer precaches the code editor and the setup
+  wizard (4.4 MB to 1.8 MB); they are cached on first use.
+- Dashboard and live map polling pause in a background tab and refresh when it
+  is shown again; the live map only polls while its WebSocket is down. The
+  header checks for the web map with one small request instead of loading the
+  whole mod store.
+- Inter and JetBrains Mono are served by the panel; nothing is loaded from
+  Google anymore, and the content security policy no longer allows it.
+- Removed unused components and the unused packages `xterm`,
+  `xterm-addon-fit` and `zod`.
+
+**Documentation**
+- README (German and English) rewritten around the setup wizard, with a "Host
+  path and contents" table and a new chapter "Advanced features": multiple
+  servers and server access lists, SSO (Discord), API keys, `METRICS_TOKEN`,
+  `HYTALE_IMAGE`, event actions, the recovery CLI, Web Push and
+  `ALLOW_INTERNAL_WEBHOOKS`. "Upgrade to v2.0" and `docker attach` moved to an
+  appendix.
+- `docs/V3_API_CHEATSHEET.md` matches the routes again; endpoints that never
+  existed are gone.
+- `.env.example` documents `METRICS_TOKEN`; package versions and the README
+  badge read 3.0.0 instead of 3.0.0-alpha.
+
+**Fixed**
+- `METRICS_TOKEN` reaches the manager container (`docker-compose.yml` did not
+  pass it on).
+
+**Upgrade notes**
+- API: `GET`, `POST` and `PUT /api/webhooks` no longer return a webhook's
+  `secret`; they return `hasSecret` instead. An update without `secret` keeps
+  the stored one. Without `webhooks.manage`, `url` is masked.
+- API: `POST /api/event-actions` accepts `enabled` (default `true`, as before).
+- API: new error codes `ADMIN_NAME_TAKEN`, `PUSH_ENDPOINT_UNKNOWN` and
+  `PUSH_SUBSCRIPTION_FOREIGN`; `/api/health/permissions` also reports
+  `hostDataPath`; new route `GET /api/management/modstore/:modId/installed`.
+- Custom roles with `users.view`, `roles.view`, `audit.view` or `webhooks.view`
+  now see those pages; check your roles if that is not wanted.
+
 ### New features
 
 - **Update Center** (`/updates`): a dedicated view over the native Hytale update
