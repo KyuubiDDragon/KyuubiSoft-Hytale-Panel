@@ -579,7 +579,8 @@ export const useSetupStore = defineStore('setup', () => {
           // matching step expects. We don't have step-typed signatures here
           // so widen via unknown to satisfy the union without resorting to
           // `any`.
-          ;(setupData.value as Record<keyof SetupData, unknown>)[dataKey] = data
+          const target = setupData.value as Record<keyof SetupData, unknown>
+          target[dataKey] = data
         }
         markStepCompleted(stepId)
         return true

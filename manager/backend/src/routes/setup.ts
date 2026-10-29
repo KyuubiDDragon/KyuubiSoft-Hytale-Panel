@@ -499,7 +499,7 @@ function parseOAuthFromLogs(logs: string): {
   // Helper to clean ANSI escape codes from strings
   const cleanAnsi = (str: string): string => {
     return str
-      .replace(/\x1b\[[0-9;]*m/g, '') // Standard ANSI escapes
+      .replace(/\x1b\[[0-9;]*m/g, '') // eslint-disable-line no-control-regex -- standard ANSI escapes
       .replace(/\[m/g, '') // Standalone [m
       .replace(/\[\d+;\d+m/g, '') // Color codes like [0;32m without ESC
       .replace(/\[0m/g, '') // Reset codes
@@ -999,7 +999,7 @@ function parseDownloadProgress(logs: string): {
 
   // Parse byte progress - patterns like "50MB/100MB", "50 MB / 100 MB", "50MB of 100MB"
   const bytePatterns = [
-    /(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)\s*[\/of]+\s*(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)/i,
+    /(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)\s*[/of]+\s*(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)/i,
     /Downloaded[:\s]+(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)/i,
   ];
 
@@ -1066,12 +1066,12 @@ router.get('/download/progress', (req: Request, res: Response) => {
       }
 
       // Determine current file and estimate bytes if not available from logs
-      let currentFile =
+      const currentFile =
         downloadInfo.currentFile ||
         (oauthInfo.authenticated ? 'Downloading...' : 'Waiting for authentication...');
       let bytesDone = downloadInfo.bytesDone || 0;
       let bytesTotal = downloadInfo.bytesTotal || 0;
-      let percent = downloadInfo.percent || 0;
+      const percent = downloadInfo.percent || 0;
 
       // If we have percentage but not bytes, estimate bytes
       if (percent > 0 && bytesTotal === 0) {
@@ -1679,8 +1679,8 @@ router.get('/server/console', async (req: Request, res: Response) => {
         if (!trimmedLine) continue;
 
         // Clean ANSI escape codes for display - be more aggressive
-        let cleanLine = trimmedLine
-          .replace(/\x1b\[[0-9;]*m/g, '') // Standard ANSI escapes
+        const cleanLine = trimmedLine
+          .replace(/\x1b\[[0-9;]*m/g, '') // eslint-disable-line no-control-regex -- standard ANSI escapes
           .replace(/\[m/g, '') // Standalone [m
           .replace(/\[\d+;\d+m/g, '') // Color codes like [0;32m without ESC
           .replace(/\[0m/g, ''); // Reset codes

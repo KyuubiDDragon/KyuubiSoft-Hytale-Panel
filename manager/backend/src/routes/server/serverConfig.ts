@@ -362,6 +362,7 @@ router.get(
 /** A top-level config file name of the server folder, or null. */
 function configFileName(filename: string): string | null {
   if (!filename || filename !== path.basename(filename) || filename.includes('..')) return null;
+  // eslint-disable-next-line no-control-regex -- rejects control characters in file names
   if (filename.includes('\\') || /[\u0000-\u001f]/.test(filename)) return null;
   return CONFIG_EXTENSIONS.some((ext) => filename.toLowerCase().endsWith(ext)) ? filename : null;
 }

@@ -16,6 +16,7 @@ import { readServerFile } from '../utils/serverFiles.js';
 import { UnsafeFileError } from '../utils/noFollowFs.js';
 import { resolveRealPath } from '../utils/pathSecurity.js';
 
+// eslint-disable-next-line no-control-regex -- rejects control characters
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 // World names the server's world argument takes without quoting.
 const COMMAND_SAFE_WORLD = /^[A-Za-z0-9_-]{1,64}$/;

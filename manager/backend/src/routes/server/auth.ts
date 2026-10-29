@@ -213,7 +213,7 @@ router.post(
       let verificationUrl = urlMatch[1].trim();
 
       // Clean up URL - remove any trailing characters that might have been captured
-      verificationUrl = verificationUrl.replace(/[\]\)\}\s]+$/, '');
+      verificationUrl = verificationUrl.replace(/[\])}\s]+$/, '');
 
       // If URL doesn't have user_code, add it
       if (userCode && !verificationUrl.includes('user_code=')) {
