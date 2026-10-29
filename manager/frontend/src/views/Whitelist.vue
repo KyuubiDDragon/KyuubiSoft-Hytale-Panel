@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -214,8 +215,7 @@ function removeBan() {
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '—'
-  const date = new Date(dateStr)
-  return Number.isNaN(date.getTime()) ? dateStr : date.toLocaleString()
+  return formatDateTime(dateStr)
 }
 
 onMounted(loadData)

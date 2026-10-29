@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getApiErrorMessage } from '@/utils/apiErrors'
 import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
@@ -96,7 +97,7 @@ async function startExtraction() {
     // Trigger the extraction on the backend
     await setupApi.startAssetExtraction()
   } catch (err) {
-    handleExtractionError(err instanceof Error ? err.message : t('setup.extractionStartFailed'))
+    handleExtractionError(getApiErrorMessage(err, t('setup.extractionStartFailed')))
   }
 }
 

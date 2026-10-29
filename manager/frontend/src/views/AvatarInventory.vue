@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -8,6 +9,7 @@ import { assetsApi } from '@/api/assets'
 import Button from '@/components/ui/Button.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -177,10 +179,17 @@ async function submitGiveItem() {
   }
 }
 
+const { ask } = useConfirm()
+
 async function clearSelectedInventory() {
   const player = selectedPlayer.value
   if (!player) return
-  if (!window.confirm(t('avatarInventory.edit.clearConfirm', { player }))) return
+  const confirmed = await ask({
+    title: t('avatarInventory.edit.clearTitle'),
+    message: t('avatarInventory.edit.clearConfirm', { player }),
+    variant: 'danger',
+  })
+  if (!confirmed) return
   editBusy.value = true
   try {
     const res = await playersApi.clearInventory(player)
@@ -254,7 +263,7 @@ watch(activeTab, (tab) => {
 
 // Format chat timestamp
 function formatChatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString()
+  return formatDateTime(dateStr)
 }
 
 // Get unique color for player name in chat
@@ -441,7 +450,7 @@ function handleSearchBlur() {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-inv-bg">
+  <div class="dark h-full flex flex-col bg-inv-bg">
     <!-- Header with search -->
     <div class="bg-inv-panel border-b border-inv-border/30 px-4 py-2">
       <div class="flex items-center justify-between">
@@ -460,7 +469,7 @@ function handleSearchBlur() {
               v-model="searchQuery"
               type="text"
               :placeholder="t('avatarInventory.searchPlayer')"
-              class="w-full pl-10 pr-4 py-2.5 bg-inv-slot border border-inv-border/50 rounded-lg text-ink placeholder-gray-600 focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50"
+              class="w-full pl-10 pr-4 py-2.5 bg-inv-slot border border-inv-border/50 rounded-lg text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange/50 focus:ring-1 focus:ring-hytale-orange/50"
               @focus="showPlayerDropdown = true"
               @blur="handleSearchBlur"
             />
@@ -880,7 +889,7 @@ function handleSearchBlur() {
                     v-model="giveItemId"
                     type="text"
                     :placeholder="t('avatarInventory.edit.itemIdPlaceholder')"
-                    class="w-full px-2.5 py-1.5 bg-inv-slot border border-inv-border/50 rounded-lg text-sm text-ink placeholder-gray-600 focus:outline-none focus:border-hytale-orange/50"
+                    class="w-full px-2.5 py-1.5 bg-inv-slot border border-inv-border/50 rounded-lg text-sm text-ink placeholder-ink-subtle focus:outline-none focus:border-hytale-orange/50"
                   />
                 </div>
                 <div class="w-20">

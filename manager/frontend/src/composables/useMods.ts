@@ -11,8 +11,8 @@ import { getLocale } from '@/i18n'
 
 /**
  * The set of tabs rendered by views/Mods.vue. Kept here so the future
- * extracted ModsList / ModsStore / ModsFilter components can share the
- * same union without each redeclaring it.
+ * tab components extracted from it can share the same union without each
+ * redeclaring it.
  */
 export type ModsTab =
   'mods' | 'plugins' | 'store' | 'modtale' | 'stackmart' | 'curseforge' | 'updates'
@@ -53,8 +53,8 @@ export function getLocalizedText(text: string | LocalizedString | undefined | nu
 
 /**
  * Category color classes used in the mod tiles. Centralized here so that
- * a future extracted ModsFilter / ModsList / ModsStore can render the
- * same badge styling without duplicating the mapping.
+ * extracted tab components can render the same badge styling without
+ * duplicating the mapping.
  */
 export function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
@@ -62,7 +62,7 @@ export function getCategoryColor(category: string): string {
     utility: 'bg-green-500/20 text-green-400',
     gameplay: 'bg-purple-500/20 text-purple-400',
     admin: 'bg-red-500/20 text-red-400',
-    other: 'bg-gray-500/20 text-gray-400',
+    other: 'bg-ink-subtle/20 text-ink-muted',
   }
   return colors[category] || colors.other
 }

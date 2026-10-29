@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, onMounted, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from '@/components/ui/Card.vue'
@@ -467,7 +468,7 @@ function formatRelative(iso: string | null): string {
   if (mins < 60) return diff >= 0 ? t('scheduler.inMinutes', { n: mins }) : t('scheduler.minutesAgo', { n: mins })
   const hours = Math.round(mins / 60)
   if (hours < 24) return diff >= 0 ? t('scheduler.inHours', { n: hours }) : t('scheduler.hoursAgo', { n: hours })
-  return new Date(iso).toLocaleString()
+  return formatDateTime(iso)
 }
 
 onMounted(() => {
@@ -539,8 +540,8 @@ onMounted(() => {
 
           <!-- Status -->
           <div v-if="status?.backups" class="pt-4 border-t border-border text-sm text-ink-muted">
-            <p v-if="status.backups.nextRun">{{ t('scheduler.nextBackup') }}: {{ new Date(status.backups.nextRun).toLocaleString() }}</p>
-            <p v-if="status.backups.lastRun">{{ t('scheduler.lastBackup') }}: {{ new Date(status.backups.lastRun).toLocaleString() }}</p>
+            <p v-if="status.backups.nextRun">{{ t('scheduler.nextBackup') }}: {{ formatDateTime(status.backups.nextRun) }}</p>
+            <p v-if="status.backups.lastRun">{{ t('scheduler.lastBackup') }}: {{ formatDateTime(status.backups.lastRun) }}</p>
           </div>
 
           <!-- Save -->
@@ -699,7 +700,7 @@ onMounted(() => {
           <div v-if="status?.scheduledRestarts" class="pt-4 border-t border-border">
             <div class="text-sm text-ink-muted space-y-1">
               <p v-if="status.scheduledRestarts.nextRestart">
-                {{ t('scheduler.nextRestart') }}: {{ new Date(status.scheduledRestarts.nextRestart).toLocaleString() }}
+                {{ t('scheduler.nextRestart') }}: {{ formatDateTime(status.scheduledRestarts.nextRestart) }}
               </p>
               <div v-if="status.scheduledRestarts.pendingRestart" class="flex items-center gap-3 mt-2 p-3 bg-status-warning/10 border border-status-warning/20 rounded-lg">
                 <svg class="w-5 h-5 text-status-warning flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -713,7 +714,7 @@ onMounted(() => {
                       class="ml-2 px-2 py-0.5 rounded bg-status-warning/20 text-xs"
                     >{{ t('scheduler.restartPlan.countdownRunning') }}</span>
                   </p>
-                  <p class="text-ink-muted text-xs">{{ new Date(status.scheduledRestarts.pendingRestart.scheduledAt).toLocaleString() }}</p>
+                  <p class="text-ink-muted text-xs">{{ formatDateTime(status.scheduledRestarts.pendingRestart.scheduledAt) }}</p>
                   <p v-if="status.scheduledRestarts.countdownRunning" class="text-ink-subtle text-xs">{{ t('scheduler.restartPlan.cancelHint') }}</p>
                 </div>
                 <button

@@ -81,7 +81,8 @@
     "lightMode": "Helles Theme",
     "darkMode": "Dunkles Theme",
     "userMenu": "Benutzermenü",
-    "loadMore": "Mehr laden"
+    "loadMore": "Mehr laden",
+    "notifications": "Benachrichtigungen"
   },
   "health": {
     "permissionIssue": "Dateiberechtigungs-Problem erkannt",
@@ -104,7 +105,14 @@
     "loginSubtitle": "Melde dich an, um fortzufahren",
     "invalidCredentials": "Ungültige Anmeldedaten",
     "sessionExpired": "Sitzung abgelaufen. Bitte erneut anmelden.",
-    "subtitle": "Hytale Server-Verwaltung"
+    "subtitle": "Hytale Server-Verwaltung",
+    "logoutReason": {
+      "expired": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
+      "userDeleted": "Dein Konto wurde gelöscht.",
+      "tokenInvalidated": "Deine Sitzung wurde wegen Änderungen an deinem Konto beendet. Bitte melde dich erneut an."
+    },
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen"
   },
   "nav": {
     "admin": "Admin",
@@ -140,7 +148,12 @@
     "updates": "Updates",
     "liveMap": "Live-Karte",
     "replay": "Replay",
-    "wiki": "Wiki"
+    "wiki": "Wiki",
+    "servers": "Server",
+    "audit": "Audit-Log",
+    "webhooks": "Webhooks",
+    "security": "Sicherheit",
+    "eventActions": "Event-Aktionen"
   },
   "files": {
     "title": "Dateimanager",
@@ -406,14 +419,16 @@
     "playerModal": "Replay-Player",
     "events": "Events",
     "chat": "Chat",
-    "speed": "Geschwindigkeit"
+    "speed": "Geschwindigkeit",
+    "loadFailed": "Die Replays konnten nicht geladen werden.",
+    "saveFailed": "Die Replay-Einstellungen konnten nicht gespeichert werden."
   },
   "wiki": {
     "title": "Wiki",
     "subtitle": "Automatisch generierte Übersicht aller installierten Mods und Plugins",
     "regenerate": "Neu generieren",
     "regenerating": "Wird generiert...",
-    "regenerated": "Wiki wurde aktualisiert ({n} Einträge).",
+    "regenerated": "Wiki wurde aktualisiert ({n} Eintrag). | Wiki wurde aktualisiert ({n} Einträge).",
     "publicAccess": "Öffentlicher Zugriff",
     "publicHint": "Wenn aktiviert, ist die Wiki ohne Anmeldung über ?public=true erreichbar.",
     "noEntries": "Keine Mod- oder Plugin-Daten gefunden.",
@@ -577,7 +592,7 @@
     "disconnected": "Getrennt",
     "reconnecting": "Verbinde...",
     "notConnected": "Nicht verbunden — Befehl nicht gesendet. Verbinde neu, bitte erneut versuchen.",
-    "reconnect": "Verbinden",
+    "reconnect": "Jetzt verbinden",
     "noLogs": "Keine Logs vorhanden",
     "filter": "Filter",
     "filterPlaceholder": "Logs filtern...",
@@ -591,10 +606,10 @@
     "suggestionBlocked": "im Panel nicht erlaubt",
     "suggestionAdmin": "Admin",
     "showDebug": "Debug",
-    "droppedSlow": "{count} Log-Einträge ausgelassen: Die Verbindung kam nicht hinterher.",
-    "droppedBurst": "{count} Log-Einträge ausgelassen: Der Server hat sie schneller geschrieben, als das Panel sie weitergeben konnte.",
-    "loadAllDone": "{count} Einträge geladen",
-    "loadAllFiles": "{count} Einträge aus {files} Server-Logdateien geladen",
+    "droppedSlow": "{count} Log-Eintrag ausgelassen: Die Verbindung kam nicht hinterher. | {count} Log-Einträge ausgelassen: Die Verbindung kam nicht hinterher.",
+    "droppedBurst": "{count} Log-Eintrag ausgelassen: Der Server hat ihn schneller geschrieben, als das Panel ihn weitergeben konnte. | {count} Log-Einträge ausgelassen: Der Server hat sie schneller geschrieben, als das Panel sie weitergeben konnte.",
+    "loadAllDone": "{count} Eintrag geladen | {count} Einträge geladen",
+    "loadAllFiles": "{count} Eintrag aus {files} Server-Logdateien geladen | {count} Einträge aus {files} Server-Logdateien geladen",
     "loadAllTruncated": "ältere Einträge ausgelassen (Grenze erreicht)",
     "loadAllFailed": "Das vollständige Log konnte nicht geladen werden. Bitte gleich noch einmal versuchen.",
     "permissionLost": "Die Konsole wurde geschlossen: Du darfst sie nicht mehr ansehen.",
@@ -607,7 +622,11 @@
       "noAnswer": "Noch keine Antwort. Der Befehl kann trotzdem ausgeführt worden sein; bitte im Log prüfen.",
       "connectionLost": "Verbindung vor der Antwort getrennt. Der Befehl kann trotzdem ausgeführt worden sein; bitte im Log prüfen.",
       "notSent": "Nicht gesendet: Die Konsole war nicht rechtzeitig verbunden. Bitte den Befehl erneut senden."
-    }
+    },
+    "download": "Log herunterladen",
+    "newLines": "{count} neue Zeile | {count} neue Zeilen",
+    "reconnectingAttempt": "Verbinde neu ({attempt} von {max})",
+    "reconnectPaused": "Getrennt, nächster Versuch gleich"
   },
   "backups": {
     "title": "Backup Verwaltung",
@@ -1240,7 +1259,9 @@
     "gameVersions": "Spielversionen",
     "curseforgeApiSettings": "CurseForge API Einstellungen",
     "thirdPartyDisabled": "Dieser Mod erlaubt keine Third-Party Downloads. Bitte lade ihn direkt von CurseForge herunter.",
-    "viewOnCurseforge": "Auf CurseForge anzeigen"
+    "viewOnCurseforge": "Auf CurseForge anzeigen",
+    "sortName": "Name",
+    "uninstalling": "Wird deinstalliert…"
   },
   "modupdates": {
     "title": "Mod Updates",
@@ -1831,7 +1852,28 @@
     "stopConfirmButton": "Server stoppen",
     "restartConfirmTitle": "Server neu starten?",
     "restartConfirmMessage": "Das startet {server} neu. Spieler darauf werden getrennt.",
-    "restartConfirmButton": "Server neu starten"
+    "restartConfirmButton": "Server neu starten",
+    "startServer": "Server starten",
+    "stopServer": "Server stoppen",
+    "restartServer": "Server neu starten",
+    "createBackup": "Backup erstellen",
+    "lightMode": "Zum hellen Theme wechseln",
+    "darkMode": "Zum dunklen Theme wechseln",
+    "placeholder": "Befehl eingeben oder suchen…",
+    "noResults": "Keine Treffer",
+    "ariaLabel": "Befehlspalette",
+    "hintNavigate": "wählen",
+    "hintRun": "ausführen",
+    "hintToggle": "ein/aus",
+    "group": {
+      "action": "Aktion",
+      "navigation": "Seite",
+      "theme": "Theme"
+    },
+    "startedDone": "Server-Start ausgelöst.",
+    "stoppedDone": "Server-Stopp ausgelöst.",
+    "restartedDone": "Server-Neustart ausgelöst.",
+    "backupDone": "Backup gestartet."
   },
   "servers": {
     "adm": {
@@ -1932,6 +1974,10 @@
         "downloading": "Login abgeschlossen; der Container lädt die Spieldateien herunter.",
         "request": "Hytale-Login anfordern",
         "requestHint": "Zeigt Link und Code für diesen Server."
+      },
+      "hints": {
+        "downloaderLogin": "Der neue Server lädt die Spieldateien beim ersten Start herunter. Der Hytale-Downloader braucht dafür eine Anmeldung: Folge dem Link in der Konsole des neuen Servers.",
+        "noGameFiles": "Der neue Server hat noch keine Spieldateien, und der Hytale-Downloader ist aus (USE_HYTALE_DOWNLOADER). Er wartet, bis HytaleServer.jar und Assets.zip in {dir} liegen."
       }
     },
     "title": "Server",
@@ -1959,7 +2005,43 @@
   "security": {
     "confirmRevokeTitle": "API-Key widerrufen?",
     "confirmRevokeMessage": "Den Key „{name}\" widerrufen? Jedes Tool, das diesen Key benutzt, wird sofort den Zugriff verlieren.",
-    "revokeApiKeyAria": "API-Key {name} widerrufen"
+    "revokeApiKeyAria": "API-Key {name} widerrufen",
+    "title": "Sicherheit",
+    "twoFactor": {
+      "title": "Zwei-Faktor-Authentifizierung",
+      "activeDesc": "Aktiv: Dein Konto ist durch eine TOTP-Authenticator-App geschützt.",
+      "disabledDesc": "Deaktiviert. Aktiviere sie, um beim Login einen TOTP-Code zu verlangen.",
+      "badgeEnabled": "AKTIV",
+      "badgeDisabled": "INAKTIV",
+      "enable": "2FA aktivieren",
+      "scanHint": "Scanne den QR-Code mit deiner Authenticator-App (1Password, Bitwarden, Aegis, Google Authenticator) und gib dann zur Bestätigung den 6-stelligen Code ein.",
+      "qrAlt": "QR-Code für die Zwei-Faktor-Authentifizierung",
+      "secret": "Geheimer Schlüssel: {secret}",
+      "codeLabel": "Bestätigungscode",
+      "confirm": "Bestätigen",
+      "backupTitle": "Speichere diese Backup-Codes",
+      "backupHint": "Jeder Code gilt einmal, falls du keinen Zugriff mehr auf deine Authenticator-App hast. Sie werden NICHT noch einmal angezeigt.",
+      "disableTitle": "2FA deaktivieren",
+      "currentPassword": "Aktuelles Passwort",
+      "disableCodePlaceholder": "TOTP- oder Backup-Code",
+      "disable": "Deaktivieren",
+      "setupFailed": "2FA konnte nicht eingerichtet werden.",
+      "confirmFailed": "Der Code wurde nicht akzeptiert.",
+      "disableFailed": "2FA konnte nicht deaktiviert werden."
+    },
+    "apiKeys": {
+      "title": "REST-API-Keys",
+      "intro": "Für CI-Pipelines, Monitoring-Skripte und externe Integrationen. Jeder Key hat einen festen Satz an Scopes, nie weiter als deine eigenen Rechte.",
+      "newTokenHint": "Dein neuer Token (wird nur einmal angezeigt, jetzt kopieren):",
+      "meta": "{scopes} · erstellt am {created} · zuletzt benutzt: {lastUsed}",
+      "scopeCount": "{count} Scope | {count} Scopes",
+      "never": "nie",
+      "empty": "Noch keine API-Keys.",
+      "namePlaceholder": "Name des Keys (z. B. „CI-Deploy-Bot“)",
+      "scopesPlaceholder": "Scopes, durch Komma getrennt (z. B. server.view_status, backups.create)",
+      "create": "Key erstellen",
+      "revokeFailed": "Der Key konnte nicht widerrufen werden."
+    }
   },
   "webhooks": {
     "title": "Webhooks",
@@ -1977,7 +2059,7 @@
     "servers": "Server",
     "serversHint": "Leer = Ereignisse aller Server. Sonst nur die der gewählten Server.",
     "saveFailed": "Webhook konnte nicht angelegt werden.",
-    "eventCount": "{count} Ereignisse",
+    "eventCount": "{count} Ereignis | {count} Ereignisse",
     "status": "Status",
     "create": "Erstellen",
     "test": "Test",
@@ -1985,20 +2067,22 @@
     "noHooks": "Keine Webhooks konfiguriert",
     "noHooksSubtitle": "Füge einen hinzu, um Server-Events auf Discord, Slack oder einem generischen Endpunkt zu empfangen.",
     "confirmDelete": "Webhook \"{name}\" löschen?",
-    "confirmDeleteTitle": "Webhook löschen?"
+    "confirmDeleteTitle": "Webhook löschen?",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren"
   },
   "chat": {
     "title": "Chat-Protokoll",
     "description": "Alle Chat-Nachrichten der Spieler anzeigen",
     "noMessages": "Noch keine Chat-Nachrichten",
     "searchPlaceholder": "Nachrichten oder Spielernamen suchen...",
-    "messageCount": "{count} Nachrichten insgesamt",
+    "messageCount": "{count} Nachricht insgesamt | {count} Nachrichten insgesamt",
     "timeRange": "Zeitraum:",
     "days7": "7 Tage",
     "days14": "14 Tage",
     "days30": "30 Tage",
     "all": "Alle",
-    "daysAvailable": "{count} Tag(e) verfügbar"
+    "daysAvailable": "{count} Tag verfügbar | {count} Tage verfügbar"
   },
   "commands": {
     "title": "Befehlsreferenz",
@@ -2020,7 +2104,6 @@
     "autoBackupsDesc": "Täglich zu einer festgelegten Zeit automatisch Backups erstellen",
     "backupTime": "Backup-Zeit",
     "retentionDays": "Backups aufbewahren (Tage)",
-    "beforeRestart": "Backup vor Neustart",
     "nextBackup": "Nächstes Backup",
     "lastBackup": "Letztes Backup",
     "scheduledRestarts": "Geplante Neustarts",
@@ -2141,7 +2224,11 @@
     "serverError": "Server Fehler",
     "unauthorized": "Nicht autorisiert",
     "notFound": "Nicht gefunden",
-    "unknown": "Unbekannter Fehler"
+    "unknown": "Unbekannter Fehler",
+    "timeout": "Der Server hat nicht rechtzeitig geantwortet.",
+    "forbidden": "Dafür fehlt dir die Berechtigung.",
+    "conflict": "Das passt nicht zum aktuellen Stand (Konflikt).",
+    "rateLimited": "Zu viele Anfragen. Bitte kurz warten und noch einmal versuchen."
   },
   "header": {
     "openMap": "Web Map öffnen"
@@ -2418,20 +2505,20 @@
     "languageSelection": "Sprache",
     "adminAccount": "Admin-Account",
     "systemCheckTitle": "System-Check",
-    "systemCheckDescription": "Systemanforderungen fuer das Hytale Panel werden ueberprueft",
-    "runningSystemCheck": "System-Checks werden ausgefuehrt...",
+    "systemCheckDescription": "Systemanforderungen für das Hytale Panel werden überprüft",
+    "runningSystemCheck": "System-Checks werden ausgeführt...",
     "required": "Erforderlich",
     "optional": "Optional",
     "warnings": "Warnungen",
     "errors": "Fehler",
     "allChecksPassed": "Alle Checks bestanden",
-    "recheckSystem": "Erneut pruefen",
+    "recheckSystem": "Erneut prüfen",
     "continueAnyway": "Trotzdem fortfahren",
     "welcomeTitle": "Willkommen zum KyuubiSoft Panel",
-    "selectLanguage": "Bitte waehle deine Sprache",
-    "languageInfo": "Du kannst die Sprache jederzeit in den Einstellungen aendern.",
+    "selectLanguage": "Bitte wähle deine Sprache",
+    "languageInfo": "Du kannst die Sprache jederzeit in den Einstellungen ändern.",
     "createAdminTitle": "Administrator-Account erstellen",
-    "createAdminDescription": "Erstelle deinen Admin-Account fuer den Zugang zum Panel",
+    "createAdminDescription": "Erstelle deinen Admin-Account für den Zugang zum Panel",
     "username": "Benutzername",
     "usernamePlaceholder": "admin",
     "usernameHint": "3-32 Zeichen, nur Buchstaben, Zahlen und Unterstriche",
@@ -2444,11 +2531,11 @@
     "passwordHint": "Verwende ein starkes Passwort mit mindestens 12 Zeichen",
     "passwordRequired": "Passwort ist erforderlich",
     "passwordTooShort": "Passwort muss mindestens 12 Zeichen haben",
-    "confirmPassword": "Passwort bestaetigen",
+    "confirmPassword": "Passwort bestätigen",
     "confirmPasswordPlaceholder": "Passwort erneut eingeben",
-    "confirmPasswordRequired": "Bitte bestaetige dein Passwort",
-    "passwordsMatch": "Passwoerter stimmen ueberein",
-    "passwordsDoNotMatch": "Passwoerter stimmen nicht ueberein",
+    "confirmPasswordRequired": "Bitte bestätige dein Passwort",
+    "passwordsMatch": "Passwörter stimmen überein",
+    "passwordsDoNotMatch": "Passwörter stimmen nicht überein",
     "passwordWeak": "Schwach",
     "passwordMedium": "Mittel",
     "passwordStrong": "Stark",
@@ -2566,7 +2653,7 @@
     "performanceGuideTitle": "Performance-Richtlinien",
     "minutes": "Minuten",
     "serverDownloadTitle": "Server-Download",
-    "serverDownloadDescription": "Waehle wie die Hytale Server-Dateien eingerichtet werden sollen",
+    "serverDownloadDescription": "Wähle wie die Hytale Server-Dateien eingerichtet werden sollen",
     "patchlineLabel": "Server-Version",
     "patchlineRelease": "Release",
     "patchlineReleaseDesc": "Stabile Version (empfohlen)",
@@ -2577,15 +2664,15 @@
     "hytaleAuthDescription": "Bei Hytale authentifizieren um Server-Dateien herunterzuladen",
     "downloadingTitle": "Server-Dateien werden heruntergeladen",
     "downloadingDescription": "Server-Dateien werden heruntergeladen...",
-    "downloadInProgress": "Download laeuft...",
+    "downloadInProgress": "Download läuft...",
     "downloadCompleteTitle": "Download abgeschlossen",
-    "downloadVerifyDescription": "Heruntergeladene Dateien werden ueberprueft...",
+    "downloadVerifyDescription": "Heruntergeladene Dateien werden überprüft...",
     "downloadMethodOfficial": "Offizieller Hytale Downloader",
     "downloadMethodOfficialDesc": "Server-Dateien direkt von Hytale via OAuth-Authentifizierung herunterladen",
     "autoUpdates": "Auto-Updates",
     "latestVersion": "Neueste Version",
     "downloadMethodCustom": "Benutzerdefinierte Download-URLs",
-    "downloadMethodCustomDesc": "Eigene URLs fuer Server-JAR und Assets verwenden",
+    "downloadMethodCustomDesc": "Eigene URLs für Server-JAR und Assets verwenden",
     "serverJarUrl": "Server JAR URL",
     "serverJarUrlPlaceholder": "https://example.com/server.jar",
     "assetsZipUrl": "Assets ZIP URL",
@@ -2596,67 +2683,65 @@
     "startingDownload": "Download wird gestartet...",
     "authFailed": "Authentifizierung fehlgeschlagen",
     "retryAuth": "Erneut versuchen",
-    "openLinkInBrowser": "Oeffne diesen Link im Browser zur Authentifizierung:",
+    "openLinkInBrowser": "Öffne diesen Link im Browser zur Authentifizierung:",
     "verificationUrl": "Verifizierungs-URL",
     "copyLink": "Link kopieren",
     "openInBrowser": "Im Browser öffnen",
     "quickAuthOption": "Schnelle Authentifizierung (Empfohlen)",
-    "openAuthPage": "Auth-Seite oeffnen",
-    "directLinkHint": "Oeffnet direkt mit vorausgefuelltem Code",
+    "openAuthPage": "Auth-Seite öffnen",
+    "directLinkHint": "Öffnet direkt mit vorausgefülltem Code",
     "orAlternatively": "oder alternativ",
     "manualAuthOption": "Manuelle Authentifizierung mit Code",
     "enterCode": "Gib diesen Code ein:",
-    "waitingForConfirmation": "Warte auf Bestaetigung...",
+    "waitingForConfirmation": "Warte auf Bestätigung...",
     "initializingAuth": "Authentifizierung wird initialisiert...",
     "authSuccessful": "Authentifizierung erfolgreich",
     "remaining": "verbleibend",
-    "downloadInfoNotice": "Download-Zeiten haengen von deiner Internetverbindung ab",
-    "verifyingFiles": "Heruntergeladene Dateien werden ueberprueft...",
-    "integrityOk": "Integritaet verifiziert",
+    "downloadInfoNotice": "Download-Zeiten hängen von deiner Internetverbindung ab",
+    "verifyingFiles": "Heruntergeladene Dateien werden überprüft...",
+    "integrityOk": "Integrität verifiziert",
     "version": "Version",
     "enableAutoUpdate": "Auto-Update aktivieren",
-    "autoUpdateDescription": "Server-Dateien automatisch aktualisieren wenn eine neue Version verfuegbar ist",
+    "autoUpdateDescription": "Server-Dateien automatisch aktualisieren wenn eine neue Version verfügbar ist",
     "authStartFailed": "Authentifizierung konnte nicht gestartet werden",
     "authCodeExpired": "Authentifizierungscode abgelaufen",
     "downloadStartFailed": "Download konnte nicht gestartet werden",
     "verificationFailed": "Verifizierung fehlgeschlagen",
-    "codeValidFor": "Code gueltig fuer {time}",
+    "codeValidFor": "Code gültig für {time}",
     "envConfigRequired": "Konfiguration erforderlich",
     "followTheseSteps": "Folge diesen Schritten",
-
     "extractAssetsTitle": "Asset-Extraktion",
-    "extractAssetsDescription": "Extrahiere Spiel-Assets fuer erweiterte Panel-Funktionen wie Item-Icons und Textur-Vorschauen",
+    "extractAssetsDescription": "Extrahiere Spiel-Assets für erweiterte Panel-Funktionen wie Item-Icons und Textur-Vorschauen",
     "extractingAssetsTitle": "Assets werden extrahiert",
-    "extractingAssetsDescription": "Bitte warten, waehrend die Spiel-Assets extrahiert werden...",
+    "extractingAssetsDescription": "Bitte warten, während die Spiel-Assets extrahiert werden...",
     "extractionCompleteTitle": "Extraktion abgeschlossen",
     "extractionCompleteDescription": "Spiel-Assets wurden erfolgreich extrahiert",
-    "extractionSkippedDescription": "Asset-Extraktion wurde uebersprungen. Du kannst Assets spaeter ueber die Assets-Seite extrahieren.",
+    "extractionSkippedDescription": "Asset-Extraktion wurde übersprungen. Du kannst Assets später über die Assets-Seite extrahieren.",
     "extractAssetsOption": "Spiel-Assets extrahieren",
-    "extractAssetsOptionDesc": "Extrahiere Texturen, Icons und andere Assets aus Assets.zip fuer erweiterte Panel-Funktionen",
-    "skipExtractionOption": "Extraktion ueberspringen",
-    "skipExtractionOptionDesc": "Ueberspringe die Asset-Extraktion. Du kannst Assets spaeter ueber die Assets-Seite extrahieren.",
-    "extractStorageWarning": "Hinweis: Die Extraktion benoetigt ca. 2-3 GB zusaetzlichen Speicherplatz",
+    "extractAssetsOptionDesc": "Extrahiere Texturen, Icons und andere Assets aus Assets.zip für erweiterte Panel-Funktionen",
+    "skipExtractionOption": "Extraktion überspringen",
+    "skipExtractionOptionDesc": "Überspringe die Asset-Extraktion. Du kannst Assets später über die Assets-Seite extrahieren.",
+    "extractStorageWarning": "Hinweis: Die Extraktion benötigt ca. 2-3 GB zusätzlichen Speicherplatz",
     "featureItemImages": "Item- & Block-Icons",
-    "featureItemImagesDesc": "Zeige Icons fuer Items und Bloecke in Inventar-Ansichten",
+    "featureItemImagesDesc": "Zeige Icons für Items und Blöcke in Inventar-Ansichten",
     "featurePrefabPreviews": "Prefab-Vorschauen",
     "featurePrefabPreviewsDesc": "Vorschau von Prefabs und Strukturen im Welt-Editor",
     "featureAssetBrowser": "Asset-Browser",
     "featureAssetBrowserDesc": "Durchsuche alle Spiel-Assets direkt im Panel",
     "featureTexturePreviews": "Textur-Vorschauen",
-    "featureTexturePreviewsDesc": "Zeige Textur-Dateien fuer Bloecke, Items und Entities",
+    "featureTexturePreviewsDesc": "Zeige Textur-Dateien für Blöcke, Items und Entities",
     "extractionProgress": "Extraktions-Fortschritt",
     "currentFile": "Aktuelle Datei",
     "filesExtracted": "Dateien extrahiert",
-    "sizeExtracted": "Groesse extrahiert",
-    "estimatedTime": "Geschaetzte Zeit",
+    "sizeExtracted": "Größe extrahiert",
+    "estimatedTime": "Geschätzte Zeit",
     "extractionInfoNotice": "Die Extraktion kann je nach System mehrere Minuten dauern",
     "extractionSuccess": "Extraktion erfolgreich",
     "extractionSuccessDesc": "Alle Spiel-Assets wurden extrahiert und sind einsatzbereit",
-    "extractionSkipped": "Extraktion uebersprungen",
-    "extractionSkippedInfo": "Du kannst Assets spaeter unter Einstellungen > Assets extrahieren",
+    "extractionSkipped": "Extraktion übersprungen",
+    "extractionSkippedInfo": "Du kannst Assets später unter Einstellungen > Assets extrahieren",
     "extractionStartFailed": "Extraktion konnte nicht gestartet werden",
     "enabledFeatures": "Aktivierte Funktionen",
-
     "firstServerStartTitle": "Erster Server-Start",
     "firstServerStartDescription": "Server wird erstmals gestartet um Authentifizierung einzuleiten",
     "serverAuthTitle": "Server-Authentifizierung",
@@ -2692,10 +2777,9 @@
     "autoAuthEnabledDesc": "Dein Server authentifiziert sich automatisch bei Neustart mit den gespeicherten Anmeldedaten. Kein manueller Eingriff erforderlich.",
     "serverStartFailed": "Server konnte nicht gestartet werden",
     "persistenceFailed": "Token-Persistenz konnte nicht eingerichtet werden",
-
     "download": {
       "title": "Server-Download",
-      "description": "Waehle wie du die Hytale Server-Dateien einrichten moechtest",
+      "description": "Wähle wie du die Hytale Server-Dateien einrichten möchtest",
       "automatic": "Automatischer Download",
       "automaticDesc": "Server-Dateien automatisch von Hytale-Servern herunterladen",
       "manual": "Manueller Download",
@@ -2706,25 +2790,25 @@
       "release": "Release",
       "releaseDesc": "Stabile Version",
       "preRelease": "Pre-Release",
-      "preReleaseDesc": "Fruehzugang, kann instabil sein",
+      "preReleaseDesc": "Frühzugang, kann instabil sein",
       "start": "Download starten",
       "downloading": "Server-Dateien werden heruntergeladen...",
-      "estimatedTime": "Geschaetzte Zeit: {time}",
+      "estimatedTime": "Geschätzte Zeit: {time}",
       "complete": "Download abgeschlossen",
       "completeDesc": "Server-Dateien wurden erfolgreich heruntergeladen",
       "startFailed": "Download konnte nicht gestartet werden"
     },
     "assets": {
       "title": "Asset-Extraktion",
-      "description": "Extrahiere Spiel-Assets fuer Item-Icons und Texturen im Panel",
-      "notAvailable": "Assets nicht verfuegbar",
-      "notAvailableDesc": "Assets.zip wurde nicht gefunden. Du kannst Assets spaeter auf der Assets-Seite extrahieren.",
+      "description": "Extrahiere Spiel-Assets für Item-Icons und Texturen im Panel",
+      "notAvailable": "Assets nicht verfügbar",
+      "notAvailableDesc": "Assets.zip wurde nicht gefunden. Du kannst Assets später auf der Assets-Seite extrahieren.",
       "readyToExtract": "Bereit zur Extraktion",
       "extract": "Assets extrahieren",
       "extracting": "Assets werden extrahiert...",
       "complete": "Assets extrahiert",
       "completeDesc": "{count} Dateien erfolgreich extrahiert",
-      "skipForNow": "Vorerst ueberspringen",
+      "skipForNow": "Vorerst überspringen",
       "extractFailed": "Assets konnten nicht extrahiert werden",
       "whatIncluded": "Was enthalten ist:",
       "itemIcons": "Item- und Block-Icons",
@@ -2733,26 +2817,26 @@
     },
     "serverAuth": {
       "title": "Server-Authentifizierung",
-      "description": "Authentifiziere deinen Server bei Hytale fuer Online-Funktionen",
+      "description": "Authentifiziere deinen Server bei Hytale für Online-Funktionen",
       "howItWorks": "So funktioniert es:",
-      "step1": "Der Server wird voruebergehend gestartet",
-      "step2": "Du erhaeltst einen Code fuer die Hytale-Website",
+      "step1": "Der Server wird vorübergehend gestartet",
+      "step2": "Du erhältst einen Code für die Hytale-Website",
       "step3": "Authentifizierung im Browser abschliessen",
-      "step4": "Der Server wird gestoppt und ist bereit fuer die Konfiguration",
+      "step4": "Der Server wird gestoppt und ist bereit für die Konfiguration",
       "startAuth": "Authentifizierung starten",
       "startingServer": "Server wird gestartet...",
       "waitingForServer": "Warte auf Server-Bereitschaft...",
       "enterCode": "Gib diesen Code auf der Authentifizierungsseite ein",
       "copyCode": "Code kopieren",
-      "openAuthPage": "Authentifizierungsseite oeffnen",
-      "expiresIn": "Code laeuft ab in {time}",
+      "openAuthPage": "Authentifizierungsseite öffnen",
+      "expiresIn": "Code läuft ab in {time}",
       "waitingForCompletion": "Warte auf Abschluss der Authentifizierung im Browser...",
       "authenticated": "Server authentifiziert",
       "authenticatedDesc": "Dein Server wurde erfolgreich bei Hytale authentifiziert",
       "stoppingServer": "Server wird gestoppt...",
       "startFailed": "Server konnte nicht gestartet werden",
       "initFailed": "Authentifizierung konnte nicht initiiert werden",
-      "timeout": "Server-Start Zeitueberschreitung",
+      "timeout": "Server-Start Zeitüberschreitung",
       "expired": "Authentifizierungscode abgelaufen. Bitte erneut versuchen."
     },
     "serverConfig": {
@@ -2772,23 +2856,23 @@
         "creative": "Kreativ"
       },
       "password": "Server-Passwort",
-      "passwordPlaceholder": "Leer lassen fuer kein Passwort",
-      "passwordHint": "Spieler benoetigen dieses Passwort zum Beitreten",
-      "canChangeAnytime": "Du kannst diese Einstellungen jederzeit auf der Konfigurationsseite aendern."
+      "passwordPlaceholder": "Leer lassen für kein Passwort",
+      "passwordHint": "Spieler benötigen dieses Passwort zum Beitreten",
+      "canChangeAnytime": "Du kannst diese Einstellungen jederzeit auf der Konfigurationsseite ändern."
     },
     "security": {
       "title": "Sicherheitseinstellungen",
-      "description": "Konfiguriere Sicherheitsoptionen fuer deinen Server",
+      "description": "Konfiguriere Sicherheitsoptionen für deinen Server",
       "whitelist": "Whitelist",
-      "whitelistDesc": "Nur Whitelist-Spieler duerfen beitreten",
+      "whitelistDesc": "Nur Whitelist-Spieler dürfen beitreten",
       "opCommands": "OP-Befehle",
       "opCommandsDesc": "Operator-Befehle auf dem Server erlauben",
       "earlyPlugins": "Early Plugins",
-      "earlyPluginsDesc": "Fruehes Plugin-Laden erlauben (kann instabil sein)",
+      "earlyPluginsDesc": "Frühes Plugin-Laden erlauben (kann instabil sein)",
       "disableSentry": "Sentry deaktivieren",
-      "disableSentryDesc": "Absturzberichte deaktivieren (fuer Entwicklung empfohlen)",
+      "disableSentryDesc": "Absturzberichte deaktivieren (für Entwicklung empfohlen)",
       "sessionTimeout": "Sitzungs-Timeout",
-      "sessionTimeoutHint": "Minuten bis Panel-Sitzung ablaeuft",
+      "sessionTimeoutHint": "Minuten bis Panel-Sitzung abläuft",
       "maxLoginAttempts": "Max. Anmeldeversuche",
       "maxLoginAttemptsHint": "Fehlversuche bis zur Sperrung"
     },
@@ -2798,27 +2882,27 @@
       "backups": "Automatische Backups",
       "backupsDesc": "Backups automatisch nach Zeitplan erstellen",
       "backupTime": "Backup-Zeit",
-      "backupRetention": "Backups behalten fuer",
+      "backupRetention": "Backups behalten für",
       "backupRetentionDays": "Tage",
       "restarts": "Geplante Neustarts",
       "restartsDesc": "Server automatisch zu geplanten Zeiten neustarten",
       "restartTimes": "Neustart-Zeiten",
-      "restartTimesHint": "Klicken um Neustart-Zeiten hinzuzufuegen",
-      "addRestartTime": "Zeit hinzufuegen",
+      "restartTimesHint": "Klicken um Neustart-Zeiten hinzuzufügen",
+      "addRestartTime": "Zeit hinzufügen",
       "warningMinutes": "Warnminuten",
       "warningMinutesHint": "Minuten vor Neustart um Spieler zu warnen",
       "announcements": "Willkommensnachrichten",
       "announcementsDesc": "Willkommensnachricht senden wenn Spieler beitreten",
       "welcomeMessage": "Willkommensnachricht",
-      "welcomeMessageHint": "Verwende {player} fuer Spielername"
+      "welcomeMessageHint": "Verwende {player} für Spielername"
     },
     "performance": {
       "title": "Performance-Einstellungen",
-      "description": "Konfiguriere Performance-Optionen fuer deinen Server",
+      "description": "Konfiguriere Performance-Optionen für deinen Server",
       "memoryAllocation": "Speicherzuweisung",
-      "memoryAllocationHint": "RAM fuer den Server (z.B. 4G)",
+      "memoryAllocationHint": "RAM für den Server (z.B. 4G)",
       "jvmFlags": "JVM-Flags",
-      "jvmFlagsHint": "Zusaetzliche Java-Flags (erweitert)",
+      "jvmFlagsHint": "Zusätzliche Java-Flags (erweitert)",
       "performanceSaver": "Performance-Sparer",
       "performanceSaverDesc": "Sichtweite dynamisch an Serverlast anpassen",
       "maxViewDistance": "Maximale Sichtweite",
@@ -2891,7 +2975,7 @@
       "mostSecure": "Am sichersten",
       "localhost": {
         "title": "Nur Localhost",
-        "description": "Nur von diesem Geraet aus erreichbar"
+        "description": "Nur von diesem Gerät aus erreichbar"
       },
       "lan": {
         "title": "Lokales Netzwerk",
@@ -2911,7 +2995,7 @@
       },
       "domainRequired": "Domain ist erforderlich",
       "invalidProtocol": "URL muss mit http:// oder https:// beginnen",
-      "invalidUrl": "Ungueltiges URL-Format",
+      "invalidUrl": "Ungültiges URL-Format",
       "corsTitle": "CORS-Konfiguration",
       "corsExplanation": "Cross-Origin Resource Sharing wird basierend auf deiner Zugriffsmodus-Auswahl konfiguriert.",
       "panelUrl": "Panel-URL",
@@ -2983,7 +3067,8 @@
       "giveFailed": "Item konnte nicht gegeben werden",
       "clearConfirm": "Das gesamte Inventar von {player} leeren? Das kann nicht rückgängig gemacht werden.",
       "cleared": "Inventar geleert",
-      "clearFailed": "Inventar konnte nicht geleert werden"
+      "clearFailed": "Inventar konnte nicht geleert werden",
+      "clearTitle": "Inventar leeren?"
     },
     "searchPlayer": "Spieler suchen...",
     "selectPrompt": "Wähle einen Spieler aus",
@@ -3028,6 +3113,143 @@
     "tooltip": {
       "amount": "Anzahl",
       "durability": "Haltbarkeit"
+    }
+  },
+  "apiErrors": {
+    "ADMIN_NAME_TAKEN": "Ein Konto mit diesem Namen gibt es schon. Wähle einen anderen Namen für das Admin-Konto.",
+    "PUSH_ENDPOINT_UNKNOWN": "Dieser Push-Dienst ist nicht bekannt. Benachrichtigungen gehen nur über die Push-Dienste gängiger Browser.",
+    "PUSH_SUBSCRIPTION_FOREIGN": "Dieses Gerät ist bereits für ein anderes Konto angemeldet."
+  },
+  "forbidden": {
+    "title": "Kein Zugriff",
+    "message": "Du hast keine Berechtigung für diese Seite.",
+    "messageFor": "Du hast keine Berechtigung für „{page}“.",
+    "hint": "Frag eine Administratorin oder einen Administrator, ob dein Konto dieses Recht bekommen kann.",
+    "back": "Zur Übersicht"
+  },
+  "eventActions": {
+    "title": "Ereignis-Aktionen",
+    "subtitle": "Reagiere automatisch auf Ereignisse im Panel: eine Nachricht senden, ein Backup erstellen oder einen Konsolenbefehl ausführen.",
+    "newRule": "Neue Regel",
+    "listTitle": "Regeln",
+    "loadError": "Die Regeln konnten nicht geladen werden.",
+    "viewOnly": "Du darfst Regeln ansehen, aber nicht ändern.",
+    "rateNote": "Jede Regel läuft höchstens 10-mal pro Minute je Ereignis und Server; weitere Auslösungen werden verworfen.",
+    "empty": {
+      "title": "Noch keine Regeln",
+      "hint": "Lege eine Regel an oder starte mit einer Vorlage.",
+      "hintViewOnly": "Es gibt noch keine Regeln."
+    },
+    "editor": {
+      "titleNew": "Neue Regel",
+      "titleEdit": "Regel bearbeiten",
+      "name": "Name",
+      "namePlaceholder": "z. B. Willkommensnachricht",
+      "server": "Server",
+      "allServers": "Alle Server",
+      "event": "Ereignis",
+      "eventPlaceholder": "Ereignis wählen …",
+      "everyEvent": "jedes Ereignis",
+      "everyInCategory": "alle dieser Kategorie",
+      "eventHint": "Abgelehnte Beitritte (player.join_denied) lösen nur Regeln aus, die genau dieses Ereignis wählen, nie * oder player.*.",
+      "action": "Aktion",
+      "noCommandRight": "Für Befehlsregeln brauchst du das Recht, Konsolenbefehle auszuführen.",
+      "command": "Befehl",
+      "commandPlaceholder": "z. B. /say Hallo {'{player}'}",
+      "message": "Nachricht",
+      "messagePlaceholder": "z. B. Willkommen, {'{player}'}!",
+      "placeholdersHint": "Platzhalter werden beim Auslösen durch Werte des Ereignisses ersetzt. Zum Einfügen anklicken:",
+      "enabled": "Regel ist aktiv"
+    },
+    "actionTypes": {
+      "command": "Konsolenbefehl ausführen",
+      "announce": "Nachricht im Chat senden",
+      "backup": "Backup erstellen"
+    },
+    "actionHints": {
+      "command": "Der Befehl läuft mit den Rechten des Erstellers und wird bei jedem Auslösen erneut geprüft.",
+      "announce": "Die Nachricht geht an alle Spieler auf dem Server.",
+      "backup": "Startet ein Backup des Servers. Eine Backup-Regel läuft höchstens einmal pro Abkühlzeit."
+    },
+    "actionSummary": {
+      "backup": "Backup erstellen"
+    },
+    "rule": {
+      "when": "Bei",
+      "server": "Server",
+      "createdBy": "Erstellt von {user}",
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren"
+    },
+    "blocked": {
+      "badge": "Freigabe nötig",
+      "approve": "Freigeben",
+      "needsApprover": "Jemand mit dem Recht für Konsolenbefehle muss die Regel freigeben.",
+      "invalid_command": "Der Befehl ist ungültig, daher wird die Regel übersprungen. Bearbeite sie.",
+      "no_creator": "Die Regel hat keinen Ersteller; ihr Befehl braucht eine Freigabe.",
+      "creator_lacks_permission": "Der Ersteller darf diesen Befehl nicht mehr ausführen. Die Regel wird übersprungen, bis jemand sie freigibt."
+    },
+    "managed": {
+      "badge": "Vom Zeitplaner verwaltet",
+      "hint": "Diese Willkommensnachricht pflegst du im Zeitplaner."
+    },
+    "warnings": {
+      "heading": "Hinweise",
+      "freeText": "{placeholders} setzen Text aus dem Ereignis in den Befehl ein: Wer das Ereignis auslöst, kann dem Befehl Wörter oder Argumente hinzufügen.",
+      "noPluginLog": "Ohne verbundenes KyuubiSoft-API-Plugin liest das Panel {events} aus dem Serverlog, und diese Ereignisse führen keine Befehle aus. Installiere das Plugin, damit die Regel läuft."
+    },
+    "validation": {
+      "nameRequired": "Gib einen Namen ein.",
+      "nameTooLong": "Der Name darf höchstens {max} Zeichen haben.",
+      "eventRequired": "Wähle ein Ereignis.",
+      "eventUnknown": "Dieses Ereignis kennt der Server nicht.",
+      "commandRequired": "Gib einen Befehl ein.",
+      "commandSlash": "Der Befehl muss mit / beginnen, z. B. /say Hallo.",
+      "messageRequired": "Gib eine Nachricht ein.",
+      "textTooLong": "Der Text darf höchstens {max} Zeichen haben.",
+      "textMultiline": "Der Text muss in einer Zeile stehen, ohne Steuerzeichen."
+    },
+    "toasts": {
+      "created": "Regel angelegt",
+      "updated": "Regel gespeichert",
+      "deleted": "Regel gelöscht",
+      "enabled": "Regel aktiviert",
+      "disabled": "Regel deaktiviert",
+      "approved": "Regel freigegeben",
+      "saveFailed": "Die Regel konnte nicht gespeichert werden.",
+      "deleteFailed": "Die Regel konnte nicht gelöscht werden.",
+      "approveFailed": "Die Regel konnte nicht freigegeben werden."
+    },
+    "confirmDelete": {
+      "title": "Regel löschen?",
+      "message": "Die Regel „{name}“ wird endgültig gelöscht."
+    },
+    "templates": {
+      "title": "Vorlagen",
+      "hint": "Starte mit einer fertigen Regel und passe sie vor dem Speichern an.",
+      "welcome": {
+        "name": "Willkommensnachricht",
+        "description": "Begrüßt jeden Spieler im Chat, sobald er beitritt.",
+        "message": "Willkommen auf dem Server, {'{player}'}!"
+      },
+      "farewell": {
+        "name": "Verabschiedung",
+        "description": "Verabschiedet Spieler im Chat, wenn sie den Server verlassen.",
+        "message": "Bis bald, {'{player}'}!"
+      },
+      "backupAfterCrash": {
+        "name": "Backup nach Absturz",
+        "description": "Sichert den Server, nachdem er abgestürzt ist."
+      },
+      "backupAfterModChange": {
+        "name": "Backup nach Mod-Installation",
+        "description": "Sichert den Server, sobald eine Mod installiert wurde."
+      },
+      "announceBackupDone": {
+        "name": "Backup-Meldung",
+        "description": "Meldet im Chat, wenn ein Backup fertig ist.",
+        "message": "Backup {'{name}'} ist fertig."
+      }
     }
   }
 }

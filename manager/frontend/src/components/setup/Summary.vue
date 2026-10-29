@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getApiErrorMessage } from '@/utils/apiErrors'
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSetupStore } from '@/stores/setup'
@@ -127,7 +128,7 @@ async function handleComplete() {
       completionError.value = setupStore.error || t('setup.summary.completionFailed')
     }
   } catch (error) {
-    completionError.value = error instanceof Error ? error.message : t('setup.summary.completionFailed')
+    completionError.value = getApiErrorMessage(error, t('setup.summary.completionFailed'))
   } finally {
     isCompleting.value = false
   }

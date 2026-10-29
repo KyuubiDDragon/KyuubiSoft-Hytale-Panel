@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import type { BackupInfo } from '@/api/backup'
@@ -22,8 +23,7 @@ const emit = defineEmits<{
 }>()
 
 function formatDate(isoString: string): string {
-  const date = new Date(isoString)
-  return date.toLocaleString()
+  return formatDateTime(isoString)
 }
 </script>
 

@@ -3,6 +3,7 @@ import type { AxiosInstance, AxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { useServersStore } from '@/stores/servers'
 import { scopeUrl } from '@/utils/serverScope'
+import type { LogoutReason } from '@/utils/logoutReason'
 
 // Create axios instance.
 // `withCredentials: true` makes the browser send the HttpOnly kp_refresh
@@ -114,7 +115,7 @@ function isSessionDeadError(error: unknown): boolean {
   return status === 400 || status === 401 || status === 403
 }
 
-export function forceLogout(message?: string): void {
+export function forceLogout(reason: LogoutReason = 'expired'): void {
   const authStore = useAuthStore()
   // Actively clear the HttpOnly refresh cookie too. Without this the dead
   // session's kp_refresh cookie would linger and could silently revive the
@@ -125,7 +126,7 @@ export function forceLogout(message?: string): void {
   if (typeof fetch !== 'undefined') {
     void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
   }
-  authStore.logout(message ?? 'Your session has expired. Please log in again.')
+  authStore.logout(reason)
   if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
     window.location.href = '/login'
   }
@@ -167,11 +168,7 @@ function attachAuthRefreshInterceptor(client: AxiosInstance): void {
       if (error.response?.status === 401) {
         const invalidationCodes = ['USER_DELETED', 'TOKEN_INVALIDATED']
         if (responseData?.code && invalidationCodes.includes(responseData.code)) {
-          const message =
-            responseData.code === 'USER_DELETED'
-              ? 'Your account has been deleted.'
-              : 'Your session has expired due to account changes. Please log in again.'
-          forceLogout(message)
+          forceLogout(responseData.code === 'USER_DELETED' ? 'userDeleted' : 'tokenInvalidated')
           return Promise.reject(error)
         }
       }

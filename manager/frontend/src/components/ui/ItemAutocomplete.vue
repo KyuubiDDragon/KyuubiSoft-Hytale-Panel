@@ -159,7 +159,7 @@ onUnmounted(() => {
         type="button"
         :class="[
           'w-full px-3 py-2 flex items-center gap-3 text-left transition-colors',
-          index === selectedIndex ? 'bg-hytale-orange/20 text-white' : 'text-ink-muted hover:bg-surface-overlay'
+          index === selectedIndex ? 'bg-hytale-orange/20 text-ink' : 'text-ink-muted hover:bg-surface-overlay'
         ]"
         @click="selectItem(item)"
         @mouseenter="selectedIndex = index"

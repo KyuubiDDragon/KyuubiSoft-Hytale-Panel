@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatTime as formatClock } from '@/utils/formatDate'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -137,7 +138,7 @@ function unavailableText(reason?: string): string {
 }
 
 function formatTime(iso?: string): string {
-  return iso ? new Date(iso).toLocaleTimeString() : ''
+  return iso ? formatClock(iso) : ''
 }
 
 watch(selectedId, () => void loadSnapshot())

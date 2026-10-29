@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useServerStats } from '@/composables/useServerStats'
+import { usePolling } from '@/composables/usePolling'
+import { getApiErrorMessage } from '@/utils/apiErrors'
+import { formatDate, formatDateTime, formatTime } from '@/utils/formatDate'
 import { serverApi, type ServerMemoryStats, type UpdateCheckResponse, type DownloaderAuthStatus, type NewFeaturesStatus, type PanelVersionInfo } from '@/api/server'
 import { authApi, type HytaleAuthStatus } from '@/api/auth'
 import { schedulerApi, type SchedulerStatus } from '@/api/scheduler'
@@ -23,7 +26,6 @@ const { status, stats, playerCount, loading, error, refresh, pluginAvailable, tp
 
 // Server JVM memory stats
 const serverMemory = ref<ServerMemoryStats | null>(null)
-let memoryInterval: ReturnType<typeof setInterval> | null = null
 
 // Update check state
 const updateInfo = ref<UpdateCheckResponse | null>(null)
@@ -120,7 +122,7 @@ async function checkForUpdates() {
   try {
     updateInfo.value = await serverApi.checkForUpdates()
   } catch (err) {
-    updateCheckError.value = err instanceof Error ? err.message : t('dashboard.actionError.checkUpdates')
+    updateCheckError.value = getApiErrorMessage(err, t('dashboard.actionError.checkUpdates'))
   } finally {
     checkingUpdate.value = false
   }
@@ -144,7 +146,7 @@ async function initiateDownloaderReAuth() {
       pollDownloaderAuth()
     }
   } catch (err) {
-    updateCheckError.value = err instanceof Error ? err.message : t('dashboard.actionError.auth')
+    updateCheckError.value = getApiErrorMessage(err, t('dashboard.actionError.auth'))
     reAuthenticating.value = false
   }
 }
@@ -361,14 +363,11 @@ onMounted(() => {
   setTimeout(() => {
     lastKnownStartedAt.value = status.value?.started_at ?? null
   }, 1000)
-  memoryInterval = setInterval(tickDashboard, 10000) // Every 10 seconds
 })
 
-onUnmounted(() => {
-  if (memoryInterval) {
-    clearInterval(memoryInterval)
-  }
-})
+// Every 10 seconds; paused in a hidden tab, refreshed when it comes back. The
+// first load above already covers the initial run.
+usePolling(tickDashboard, 10000, { immediate: false })
 
 const serverStatusText = computed(() => {
   if (!status.value) return t('common.loading')
@@ -595,7 +594,7 @@ async function tickDashboard() {
         </button>
       </div>
       <p v-if="panelVersionInfo.publishedAt" class="text-xs text-ink-subtle mt-2">
-        {{ t('dashboard.panelUpdate.publishedAt') }}: {{ new Date(panelVersionInfo.publishedAt).toLocaleDateString() }}
+        {{ t('dashboard.panelUpdate.publishedAt') }}: {{ formatDate(panelVersionInfo.publishedAt) }}
       </p>
     </DashboardBanner>
 
@@ -877,7 +876,7 @@ async function tickDashboard() {
         <div class="card-body p-4">
           <div class="flex items-center gap-3">
             <div class="flex-shrink-0">
-              <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.backups.enabled ? 'bg-hytale-orange/20' : 'bg-gray-600/20'">
+              <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.backups.enabled ? 'bg-hytale-orange/20' : 'bg-ink-subtle/20'">
                 <svg class="w-5 h-5" :class="schedulerStatus.backups.enabled ? 'text-hytale-orange' : 'text-ink-subtle'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                 </svg>
@@ -888,10 +887,10 @@ async function tickDashboard() {
               <p v-if="!schedulerStatus.backups.enabled" class="text-sm text-ink-subtle">{{ t('dashboard.backupsDisabled') }}</p>
               <template v-else>
                 <p v-if="schedulerStatus.backups.lastRun" class="text-xs text-ink-muted">
-                  {{ t('scheduler.lastBackup') }}: {{ new Date(schedulerStatus.backups.lastRun).toLocaleString() }}
+                  {{ t('scheduler.lastBackup') }}: {{ formatDateTime(schedulerStatus.backups.lastRun) }}
                 </p>
                 <p v-if="schedulerStatus.backups.nextRun" class="text-sm font-medium text-hytale-orange">
-                  {{ t('scheduler.nextBackup') }}: {{ new Date(schedulerStatus.backups.nextRun).toLocaleTimeString() }}
+                  {{ t('scheduler.nextBackup') }}: {{ formatTime(schedulerStatus.backups.nextRun) }}
                 </p>
               </template>
             </div>
@@ -904,7 +903,7 @@ async function tickDashboard() {
         <div class="card-body p-4">
           <div class="flex items-center gap-3">
             <div class="flex-shrink-0">
-              <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.scheduledRestarts.enabled ? 'bg-hytale-orange/20' : 'bg-gray-600/20'">
+              <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.scheduledRestarts.enabled ? 'bg-hytale-orange/20' : 'bg-ink-subtle/20'">
                 <svg class="w-5 h-5" :class="schedulerStatus.scheduledRestarts.pendingRestart ? 'text-status-warning animate-pulse' : (schedulerStatus.scheduledRestarts.enabled ? 'text-hytale-orange' : 'text-ink-subtle')" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
@@ -915,10 +914,10 @@ async function tickDashboard() {
               <p v-if="!schedulerStatus.scheduledRestarts.enabled" class="text-sm text-ink-subtle">{{ t('dashboard.restartsDisabled') }}</p>
               <template v-else>
                 <p v-if="schedulerStatus.scheduledRestarts.pendingRestart" class="text-sm font-medium text-status-warning">
-                  {{ t('scheduler.pendingRestart') }}: {{ new Date(schedulerStatus.scheduledRestarts.pendingRestart.scheduledAt).toLocaleTimeString() }}
+                  {{ t('scheduler.pendingRestart') }}: {{ formatTime(schedulerStatus.scheduledRestarts.pendingRestart.scheduledAt) }}
                 </p>
                 <p v-else-if="schedulerStatus.scheduledRestarts.nextRestart" class="text-sm font-medium text-hytale-orange">
-                  {{ t('scheduler.nextRestart') }}: {{ new Date(schedulerStatus.scheduledRestarts.nextRestart).toLocaleTimeString() }}
+                  {{ t('scheduler.nextRestart') }}: {{ formatTime(schedulerStatus.scheduledRestarts.nextRestart) }}
                 </p>
               </template>
             </div>
@@ -931,7 +930,7 @@ async function tickDashboard() {
         <div class="card-body p-4">
           <div class="flex items-center gap-3">
             <div class="flex-shrink-0">
-              <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.announcements.enabled ? 'bg-hytale-orange/20' : 'bg-gray-600/20'">
+              <div class="w-10 h-10 rounded-lg flex items-center justify-center" :class="schedulerStatus.announcements.enabled ? 'bg-hytale-orange/20' : 'bg-ink-subtle/20'">
                 <svg class="w-5 h-5" :class="schedulerStatus.announcements.enabled ? 'text-hytale-orange' : 'text-ink-subtle'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                 </svg>
@@ -969,7 +968,7 @@ async function tickDashboard() {
             <div>
               <p class="text-3xl font-bold text-ink">{{ uptimeValue }}</p>
               <p v-if="status?.started_at" class="text-sm text-ink-muted">
-                {{ t('dashboard.serverStatus') }}: {{ new Date(status.started_at).toLocaleString() }}
+                {{ t('dashboard.serverStatus') }}: {{ formatDateTime(status.started_at) }}
               </p>
             </div>
           </div>
@@ -1043,7 +1042,7 @@ async function tickDashboard() {
         <button
           @click="checkForUpdates"
           :disabled="checkingUpdate"
-          class="px-4 py-2 bg-hytale-orange hover:bg-hytale-orange/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+          class="px-4 py-2 bg-hytale-orange hover:bg-accent-solid-strong disabled:bg-surface-muted disabled:text-ink-subtle disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
         >
           <svg
             class="w-4 h-4"
@@ -1133,7 +1132,7 @@ async function tickDashboard() {
             <button
               @click="initiateDownloaderReAuth"
               :disabled="reAuthenticating"
-              class="mt-3 px-3 py-1.5 bg-status-warning hover:bg-status-warning/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-dark-400 text-xs font-medium rounded transition-colors"
+              class="mt-3 px-3 py-1.5 bg-status-warning hover:bg-status-warning/80 disabled:bg-surface-muted disabled:text-ink-subtle disabled:cursor-not-allowed text-ink-inverse text-xs font-medium rounded transition-colors"
             >
               {{ reAuthenticating ? t('dashboard.hytaleUpdates.waitingForAuth') : t('dashboard.hytaleUpdates.reAuthenticate') }}
             </button>

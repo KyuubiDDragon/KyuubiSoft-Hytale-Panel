@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
@@ -31,7 +32,7 @@ function formatDuration(ms: number): string {
 
 function formatLastSeen(iso: string | null): string {
   if (!iso) return t('playtime.never')
-  return new Date(iso).toLocaleString()
+  return formatDateTime(iso)
 }
 
 async function load() {

@@ -23,8 +23,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-const fallbackId = useId ? useId() : `input-${Math.random().toString(36).slice(2, 10)}`
-const inputId = computed(() => props.id || fallbackId)
+const generatedId = useId()
+const inputId = computed(() => props.id || generatedId)
 const errorId = computed(() => `${inputId.value}-error`)
 const hintId = computed(() => `${inputId.value}-hint`)
 

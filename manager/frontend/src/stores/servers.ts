@@ -87,6 +87,8 @@ export const useServersStore = defineStore('servers', () => {
   const canList = ref(true)
   /** Server ids of a restricted account; null = every server. */
   const allowedIds = ref<string[] | null>(null)
+  /** The account is limited to some servers (set from /auth/me/servers). */
+  const hasServerList = ref(false)
   const loaded = ref(false)
   const loading = ref(false)
   const epoch = ref(0)
@@ -145,6 +147,7 @@ export const useServersStore = defineStore('servers', () => {
 
   async function loadFromOwnAccess(): Promise<void> {
     const { data } = await api.get<{ allowedServers: string[] | null }>('/auth/me/servers')
+    hasServerList.value = data.allowedServers !== null
     servers.value = []
     canList.value = false
     multiserverEnabled.value = false
@@ -152,6 +155,16 @@ export const useServersStore = defineStore('servers', () => {
     activeId.value = data.allowedServers
       ? resolveActiveId(data.allowedServers, null, activeId.value)
       : null
+  }
+
+  /** Whether the account is limited to some servers; unknown counts as limited. */
+  async function loadServerListState(): Promise<void> {
+    try {
+      const { data } = await api.get<{ unrestricted?: boolean }>('/auth/me/servers')
+      hasServerList.value = data.unrestricted !== true
+    } catch {
+      hasServerList.value = true
+    }
   }
 
   async function refresh(): Promise<void> {
@@ -165,6 +178,7 @@ export const useServersStore = defineStore('servers', () => {
         if ((err as AxiosError)?.response?.status !== 403) throw err
         await loadFromOwnAccess()
       }
+      if (canList.value) await loadServerListState()
       remember(activeId.value)
       loaded.value = true
       if (wasLoaded && scopeId.value !== before) onScopeChanged()
@@ -190,6 +204,7 @@ export const useServersStore = defineStore('servers', () => {
     multiserverEnabled.value = false
     canList.value = true
     allowedIds.value = null
+    hasServerList.value = false
     runStates.value = {}
     createReport.value = null
     // The next account must not see this one's console lines or finish its requests.
@@ -264,6 +279,7 @@ export const useServersStore = defineStore('servers', () => {
     multiserverEnabled,
     canList,
     allowedIds,
+    hasServerList,
     loaded,
     loading,
     epoch,

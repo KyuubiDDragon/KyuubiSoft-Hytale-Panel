@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getApiErrorMessage } from '@/utils/apiErrors'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { serverApi, type PluginStatus, type PluginUpdateCheck } from '@/api/server'
@@ -47,7 +48,7 @@ async function loadPluginStatus() {
     }
   } catch (err) {
     console.error('Failed to load plugin status:', err)
-    error.value = err instanceof Error ? err.message : 'Failed to load plugin status'
+    error.value = getApiErrorMessage(err, 'Failed to load plugin status')
   } finally {
     loading.value = false
   }
@@ -69,7 +70,7 @@ async function installPlugin() {
       error.value = result.error || t('dashboard.plugin.installFailed')
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : t('dashboard.plugin.installFailed')
+    error.value = getApiErrorMessage(err, t('dashboard.plugin.installFailed'))
   } finally {
     installing.value = false
   }
@@ -91,7 +92,7 @@ async function updatePlugin() {
       error.value = result.error || t('dashboard.plugin.updateFailed')
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : t('dashboard.plugin.updateFailed')
+    error.value = getApiErrorMessage(err, t('dashboard.plugin.updateFailed'))
   } finally {
     updating.value = false
   }

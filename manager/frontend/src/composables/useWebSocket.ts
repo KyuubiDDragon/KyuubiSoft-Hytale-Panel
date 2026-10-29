@@ -14,6 +14,8 @@ const QUEUED_COMMAND_MS = 15_000
 // Without any message for this long the connection counts as dead (the
 // client pings every 30 s and the server answers).
 const SILENCE_LIMIT_MS = 75_000
+// Quick attempts before the console waits a while and offers a manual retry.
+export const MAX_RECONNECT_ATTEMPTS = 5
 // Close codes after which reconnecting cannot help.
 const FINAL_CLOSE_CODES: Record<number, string> = {
   4003: 'console.permissionLost',
@@ -28,7 +30,7 @@ export function useWebSocket() {
 
   const ws = ref<WebSocket | null>(null)
   const reconnectAttempts = ref(0)
-  const maxReconnectAttempts = 5
+  const maxReconnectAttempts = MAX_RECONNECT_ATTEMPTS
   const baseReconnectDelay = 3000
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   let isManualDisconnect = false
@@ -69,6 +71,7 @@ export function useWebSocket() {
     if (reconnectTimeout || isManualDisconnect) return
     if (reconnectAttempts.value < maxReconnectAttempts) {
       reconnectAttempts.value++
+      consoleStore.setReconnect(reconnectAttempts.value, false)
       // Exponential backoff: 3s, 6s, 12s, 24s, 48s
       const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts.value - 1)
       reconnectTimeout = setTimeout(() => {
@@ -76,7 +79,9 @@ export function useWebSocket() {
         void connect()
       }, delay)
     } else {
-      // After max attempts, wait longer and reset counter for eventual retry
+      // After max attempts, wait longer and reset counter for eventual retry.
+      // The console shows that it paused and offers "connect now".
+      consoleStore.setReconnect(maxReconnectAttempts, true)
       reconnectTimeout = setTimeout(() => {
         reconnectTimeout = null
         reconnectAttempts.value = 0
@@ -156,6 +161,7 @@ export function useWebSocket() {
       lastMessageAt = Date.now()
       consoleStore.setConnected(true)
       reconnectAttempts.value = 0
+      consoleStore.setReconnect(0, false)
       // The server holds messages until the socket is authenticated.
       flushQueuedCommands()
     }
@@ -180,6 +186,7 @@ export function useWebSocket() {
       const finalKey = FINAL_CLOSE_CODES[event.code]
       if (finalKey) {
         finalClosed = true
+        consoleStore.setReconnect(0, false)
         dropQueuedCommands(true)
         notice('ERROR', t(finalKey))
         return
@@ -208,9 +215,11 @@ export function useWebSocket() {
       case 'logs_dropped':
         notice(
           'WARN',
-          t(data.reason === 'burst' ? 'console.droppedBurst' : 'console.droppedSlow', {
-            count: Number(data.count) || 0,
-          }),
+          t(
+            data.reason === 'burst' ? 'console.droppedBurst' : 'console.droppedSlow',
+            { count: Number(data.count) || 0 },
+            Number(data.count) || 0,
+          ),
         )
         break
 
@@ -263,6 +272,7 @@ export function useWebSocket() {
 
   function disconnect() {
     isManualDisconnect = true
+    consoleStore.setReconnect(0, false)
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout)
       reconnectTimeout = null
@@ -314,6 +324,7 @@ export function useWebSocket() {
   async function reconnect() {
     finalClosed = false
     reconnectAttempts.value = 0
+    consoleStore.setReconnect(0, false)
     await connect()
   }
 

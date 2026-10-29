@@ -71,11 +71,21 @@ export default {
           header: '#282D36',
         },
         // Status Colors
+        // Status colors follow the theme (darker variants in the light theme
+        // for AA text contrast). The *-solid / -on pairs are for filled buttons.
         status: {
-          success: '#4ADE80',
-          warning: '#FBBF24',
-          error: '#EF4444',
-          info: '#60A5FA',
+          success: 'rgb(var(--status-success) / <alpha-value>)',
+          warning: 'rgb(var(--status-warning) / <alpha-value>)',
+          error: 'rgb(var(--status-error) / <alpha-value>)',
+          info: 'rgb(var(--status-info) / <alpha-value>)',
+          'success-solid': 'rgb(var(--status-success-solid) / <alpha-value>)',
+          'success-on': 'rgb(var(--status-success-on) / <alpha-value>)',
+          'error-solid': 'rgb(var(--status-error-solid) / <alpha-value>)',
+        },
+        // Brand orange for filled controls with white text (>= 4.5:1).
+        accent: {
+          solid: 'rgb(var(--accent-solid) / <alpha-value>)',
+          'solid-strong': 'rgb(var(--accent-solid-strong) / <alpha-value>)',
         },
       },
       fontFamily: {

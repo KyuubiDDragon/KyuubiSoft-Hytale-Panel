@@ -59,6 +59,9 @@ export const useConsoleStore = defineStore('console', () => {
   const logs = ref<LogEntry[]>([])
   const connected = ref(false)
   const autoScroll = ref(true)
+  // Which reconnect attempt is running (0: none); paused once the quick attempts are used up.
+  const reconnectAttempt = ref(0)
+  const reconnectPaused = ref(false)
   const maxLogs = ref(DEFAULT_MAX_LOGS)
   // Newest live entry seen per stream, so a reconnect's history does not repeat entries.
   const lastCursor: Record<'stdout' | 'stderr', string | null> = { stdout: null, stderr: null }
@@ -205,11 +208,18 @@ export const useConsoleStore = defineStore('console', () => {
     lastCursor.stdout = null
     lastCursor.stderr = null
     connected.value = false
+    reconnectAttempt.value = 0
+    reconnectPaused.value = false
     updateCounter.value++
   }
 
   function setConnected(value: boolean) {
     connected.value = value
+  }
+
+  function setReconnect(attempt: number, paused: boolean) {
+    reconnectAttempt.value = attempt
+    reconnectPaused.value = paused
   }
 
   function toggleAutoScroll() {
@@ -221,6 +231,8 @@ export const useConsoleStore = defineStore('console', () => {
     logs,
     connected,
     autoScroll,
+    reconnectAttempt,
+    reconnectPaused,
     // Getters
     logCount,
     logsUpdated,
@@ -236,6 +248,7 @@ export const useConsoleStore = defineStore('console', () => {
     clearLogs,
     reset,
     setConnected,
+    setReconnect,
     toggleAutoScroll,
   }
 })

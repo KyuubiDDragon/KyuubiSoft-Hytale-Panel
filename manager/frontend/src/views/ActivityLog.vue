@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -61,7 +62,7 @@ async function confirmClearLog() {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString()
+  return formatDateTime(dateStr)
 }
 
 function getCategoryColor(category: string): string {

@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
-import { i18n } from './i18n'
+import { i18n, setupI18n } from './i18n'
 import App from './App.vue'
 
 import './assets/styles/main.css'
@@ -9,6 +9,17 @@ import './assets/styles/main.css'
 // Import stores
 import { useAuthStore } from './stores/auth'
 import { useSetupStore } from './stores/setup'
+import { routeNeedsAllServers, routePermission } from './router/navigation'
+import { useServersStore } from './stores/servers'
+
+/** Meta of a page behind the login; the permission comes from the shared navigation list. */
+function guarded(name: string) {
+  return {
+    requiresAuth: true,
+    permission: routePermission(name),
+    allServers: routeNeedsAllServers(name),
+  }
+}
 
 // Create router with lazy-loaded views
 const router = createRouter({
@@ -30,204 +41,216 @@ const router = createRouter({
       path: '/',
       name: 'dashboard',
       component: () => import('./views/Dashboard.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('dashboard'),
     },
     {
       path: '/console',
       name: 'console',
       component: () => import('./views/Console.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('console'),
     },
     {
       path: '/performance',
       name: 'performance',
       component: () => import('./views/Performance.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('performance'),
     },
     {
       path: '/backups',
       name: 'backups',
       component: () => import('./views/Backups.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('backups'),
     },
     {
       path: '/players',
       name: 'players',
       component: () => import('./views/Players.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('players'),
     },
     {
       path: '/whitelist',
       name: 'whitelist',
       component: () => import('./views/Whitelist.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('whitelist'),
     },
     {
       path: '/permissions',
       name: 'permissions',
       component: () => import('./views/Permissions.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('permissions'),
     },
     {
       path: '/worlds',
       name: 'worlds',
       component: () => import('./views/Worlds.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('worlds'),
     },
     {
       path: '/mods',
       name: 'mods',
       component: () => import('./views/Mods.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('mods'),
     },
     {
       path: '/mod-status/:id?',
       name: 'modStatus',
       component: () => import('./views/ModStatus.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('modStatus'),
     },
     {
       path: '/assets',
       name: 'assets',
       component: () => import('./views/Assets.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('assets'),
     },
     {
       path: '/configuration',
       name: 'configuration',
       component: () => import('./views/Configuration.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('configuration'),
     },
     {
       path: '/files',
       name: 'files',
       component: () => import('./views/Files.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('files'),
     },
     {
       path: '/settings',
       name: 'settings',
       component: () => import('./views/Settings.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('settings'),
     },
     {
       path: '/users',
       name: 'users',
       component: () => import('./views/Users.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: guarded('users'),
     },
     {
       path: '/activity',
       name: 'activity',
       component: () => import('./views/ActivityLog.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: guarded('activity'),
     },
     {
       path: '/audit',
       name: 'audit',
       component: () => import('./views/Audit.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: guarded('audit'),
     },
     {
       path: '/webhooks',
       name: 'webhooks',
       component: () => import('./views/Webhooks.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: guarded('webhooks'),
     },
     {
       path: '/security',
       name: 'security',
       component: () => import('./views/SecuritySettings.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('security'),
     },
     {
       path: '/scheduler',
       name: 'scheduler',
       component: () => import('./views/Scheduler.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('scheduler'),
     },
     {
       path: '/statistics',
       name: 'statistics',
       component: () => import('./views/Statistics.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('statistics'),
     },
     {
       path: '/playtime',
       name: 'playtime',
       component: () => import('./views/Playtime.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('playtime'),
     },
     {
       path: '/crashes',
       name: 'crashes',
       component: () => import('./views/Crashes.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('crashes'),
     },
     {
       path: '/updates',
       name: 'updates',
       component: () => import('./views/Updates.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('updates'),
     },
     {
       path: '/player/:name',
       name: 'playerProfile',
       component: () => import('./views/PlayerProfile.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('playerProfile'),
     },
     {
       path: '/webmap',
       name: 'webmap',
       component: () => import('./views/WebMap.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('webmap'),
     },
     {
       path: '/chat',
       name: 'chat',
       component: () => import('./views/Chat.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('chat'),
     },
     {
       path: '/avatar-inventory',
       name: 'avatarInventory',
       component: () => import('./views/AvatarInventory.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('avatarInventory'),
     },
     {
       path: '/help',
       name: 'help',
       component: () => import('./views/Help.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('help'),
     },
     {
       path: '/live-map',
       name: 'liveMap',
       component: () => import('./views/LiveMap.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('liveMap'),
     },
     {
       path: '/replay',
       name: 'replay',
       component: () => import('./views/Replay.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('replay'),
     },
     {
       path: '/wiki',
       name: 'wiki',
       component: () => import('./views/Wiki.vue'),
-      meta: { requiresAuth: true },
+      meta: guarded('wiki'),
     },
     {
       path: '/roles',
       name: 'roles',
       component: () => import('./views/Roles.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: guarded('roles'),
     },
     {
       path: '/servers',
       name: 'servers',
       component: () => import('./views/Servers.vue'),
+      meta: guarded('servers'),
+    },
+    {
+      path: '/event-actions',
+      name: 'eventActions',
+      component: () => import('./views/EventActions.vue'),
+      meta: guarded('eventActions'),
+    },
+    {
+      path: '/forbidden',
+      name: 'forbidden',
+      component: () => import('./views/Forbidden.vue'),
       meta: { requiresAuth: true },
     },
     {
@@ -265,8 +288,9 @@ router.beforeEach(async (to, _from, next) => {
       setupRequired = await setupStore.loadSetupStatus()
       setupCheckDone = true
     } catch {
-      // If setup check fails, assume setup is not required
-      setupCheckDone = true
+      // No answer (offline, server restarting): carry on as a set-up panel
+      // instead of sending the user into the wizard, and ask again next time.
+      setupCheckDone = false
       setupRequired = false
     }
   }
@@ -294,12 +318,17 @@ router.beforeEach(async (to, _from, next) => {
     next('/login')
   } else if (to.path === '/login' && authStore.isAuthenticated) {
     next('/')
-  } else if (to.meta.requiresAdmin && !authStore.isAdmin) {
-    next('/')
+  } else if (
+    (to.meta.permission && !authStore.hasPermission(to.meta.permission)) ||
+    (to.meta.allServers && useServersStore().hasServerList)
+  ) {
+    // Say why the page stays closed instead of dropping the user on the dashboard.
+    next({ name: 'forbidden', query: { page: to.fullPath }, replace: true })
   } else {
     next()
   }
 })
 
 app.use(router)
-app.mount('#app')
+// The active language is loaded first, so the first render has no raw keys.
+void setupI18n().then(() => app.mount('#app'))

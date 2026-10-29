@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatDateTime } from '@/utils/formatDate'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -206,7 +207,7 @@ async function confirmDeleteUser() {
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString()
+  return formatDateTime(dateStr)
 }
 
 onMounted(() => {
@@ -373,9 +374,16 @@ onMounted(() => {
     </div>
 
     <!-- Add User Modal -->
-    <div v-if="showAddModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div
+      v-if="showAddModal"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-user-title"
+      @keydown.esc="showAddModal = false"
+    >
       <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md">
-        <h2 class="text-xl font-bold text-ink mb-4">{{ t('users.addUser') }}</h2>
+        <h2 id="add-user-title" class="text-xl font-bold text-ink mb-4">{{ t('users.addUser') }}</h2>
 
         <div v-if="formError" class="p-3 mb-4 bg-status-error/10 border border-status-error/20 rounded-lg">
           <p class="text-status-error text-sm">{{ formError }}</p>
@@ -425,9 +433,16 @@ onMounted(() => {
     </div>
 
     <!-- Edit User Modal -->
-    <div v-if="showEditModal && editingUser" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div
+      v-if="showEditModal && editingUser"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-user-title"
+      @keydown.esc="showEditModal = false"
+    >
       <div class="bg-surface-raised rounded-xl p-6 w-full max-w-md">
-        <h2 class="text-xl font-bold text-ink mb-4">{{ t('users.editUser') }}: {{ editingUser.username }}</h2>
+        <h2 id="edit-user-title" class="text-xl font-bold text-ink mb-4">{{ t('users.editUser') }}: {{ editingUser.username }}</h2>
 
         <div v-if="formError" class="p-3 mb-4 bg-status-error/10 border border-status-error/20 rounded-lg">
           <p class="text-status-error text-sm">{{ formError }}</p>

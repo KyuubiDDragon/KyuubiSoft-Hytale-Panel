@@ -4,6 +4,7 @@ import { useServersStore } from '@/stores/servers'
 import { apiErrorMessage } from '@/utils/apiErrors'
 import { useI18n } from 'vue-i18n'
 import api from '@/api/client'
+import { useAuthStore } from '@/stores/auth'
 import Card from '@/components/ui/Card.vue'
 import Button from '@/components/ui/Button.vue'
 import Icon from '@/components/ui/Icon.vue'
@@ -20,6 +21,8 @@ interface Webhook {
   type: 'discord' | 'slack' | 'generic'
   events: string[]
   enabled: boolean
+  /** Whether a signing secret is stored (the secret itself is never sent). */
+  hasSecret?: boolean
   /** Empty = events of every server. */
   serverIds?: string[]
   createdAt: string
@@ -27,6 +30,9 @@ interface Webhook {
 
 const { t, te } = useI18n()
 const serversStore = useServersStore()
+const authStore = useAuthStore()
+// Viewing the list is not managing it: adding, testing, switching and deleting need this.
+const canManage = computed(() => authStore.hasPermission('webhooks.manage'))
 
 const hooks = ref<Webhook[]>([])
 const availableEvents = ref<string[]>([])
@@ -122,7 +128,7 @@ onMounted(load)
         <h1 class="text-2xl font-bold text-ink">{{ t('webhooks.title') }}</h1>
         <p class="text-ink-muted mt-1">{{ t('webhooks.subtitle') }}</p>
       </div>
-      <Button @click="showAdd = !showAdd" class="flex items-center gap-2">
+      <Button v-if="canManage" @click="showAdd = !showAdd" class="flex items-center gap-2">
         <Icon name="plus" class="w-5 h-5" />
         {{ t('webhooks.add') }}
       </Button>
@@ -219,7 +225,7 @@ onMounted(load)
       :title="t('webhooks.noHooks')"
       :subtitle="t('webhooks.noHooksSubtitle')"
     >
-      <Button size="sm" @click="showAdd = true">{{ t('webhooks.add') }}</Button>
+      <Button v-if="canManage" size="sm" @click="showAdd = true">{{ t('webhooks.add') }}</Button>
     </EmptyTableState>
 
     <ResponsiveTable
@@ -247,7 +253,7 @@ onMounted(load)
         <span class="font-mono text-xs text-ink-muted break-all">{{ row.url }}</span>
       </template>
       <template #cell:events="{ row }">
-        <span class="text-sm text-ink-muted">{{ t('webhooks.eventCount', { count: row.events.length }) }}</span>
+        <span class="text-sm text-ink-muted">{{ t('webhooks.eventCount', { count: row.events.length }, row.events.length) }}</span>
       </template>
       <template #cell:status="{ row }">
         <span
@@ -262,9 +268,10 @@ onMounted(load)
         </span>
       </template>
       <template #actions="{ row }">
+        <template v-if="canManage">
         <Button variant="secondary" size="sm" @click="test(row)">{{ t('webhooks.test') }}</Button>
         <Button variant="secondary" size="sm" @click="toggle(row)">
-          {{ row.enabled ? t('common.disabled') : t('common.enabled') }}
+          {{ row.enabled ? t('webhooks.disable') : t('webhooks.enable') }}
         </Button>
         <Button
           variant="ghost"
@@ -276,6 +283,7 @@ onMounted(load)
         >
           <Icon name="trash" class="w-5 h-5" />
         </Button>
+        </template>
       </template>
     </ResponsiveTable>
 

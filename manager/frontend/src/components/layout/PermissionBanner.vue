@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { healthApi, type PermissionHealthResponse } from '@/api/health'
 import { useAuthStore } from '@/stores/auth'
+import { shellQuote } from '@/utils/shellQuote'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -10,6 +11,11 @@ const authStore = useAuthStore()
 const permissionHealth = ref<PermissionHealthResponse | null>(null)
 const loading = ref(true)
 const dismissed = ref(false)
+
+// The folder to hand to the fix command: the panel's configured host path.
+const fixCommand = computed(
+  () => `sudo chown -R 9999:9999 ${shellQuote(permissionHealth.value?.hostDataPath || '/opt/hytale')}`,
+)
 
 const showBanner = computed(() => {
   if (dismissed.value) return false
@@ -95,7 +101,7 @@ onMounted(() => {
         <div class="mt-3 p-2 bg-surface/50 rounded-md">
           <p class="text-xs text-ink-muted mb-1">{{ t('health.fixCommand') }}:</p>
           <code class="text-sm text-hytale-orange font-mono select-all">
-            sudo chown -R 9999:9999 /opt/hytale
+            {{ fixCommand }}
           </code>
         </div>
       </div>
@@ -104,6 +110,7 @@ onMounted(() => {
         @click="dismiss"
         class="flex-shrink-0 text-ink-muted hover:text-ink transition-colors"
         :title="t('common.dismiss')"
+        :aria-label="t('common.dismiss')"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path

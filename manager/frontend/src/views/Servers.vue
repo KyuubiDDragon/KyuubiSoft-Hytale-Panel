@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { translateServerWarning } from '@/utils/serverWarnings'
+import { formatDateTime } from '@/utils/formatDate'
 import { onMounted, ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -194,6 +196,8 @@ async function performDelete() {
         : t('servers.adm.deleted', { name: target.name }),
     )
     confirmDelete.value = null
+    // The hints of a server that is gone no longer apply.
+    if (serversStore.createReport?.name === target.name) serversStore.createReport = null
     await serversStore.refresh()
     if (data.data?.trashEntry) await trashPanel.value?.load()
   } catch (err) {
@@ -376,7 +380,7 @@ onMounted(() => {
         </button>
       </div>
       <ul class="list-disc pl-5 mt-1 space-y-1 text-xs text-ink-muted">
-        <li v-for="(w, i) in createReport.warnings" :key="i">{{ w }}</li>
+        <li v-for="(w, i) in createReport.warnings" :key="i">{{ translateServerWarning(w, t) }}</li>
       </ul>
     </div>
 
@@ -434,7 +438,7 @@ onMounted(() => {
             {{ t('servers.adm.limits.label') }}: {{ limitsText(s) }}
           </div>
           <div class="text-[11px] text-ink-subtle mt-1">
-            {{ t('servers.adm.createdBy', { date: new Date(s.createdAt).toLocaleString(), user: s.createdBy }) }}
+            {{ t('servers.adm.createdBy', { date: formatDateTime(s.createdAt), user: s.createdBy }) }}
           </div>
           <template v-if="(s.state ?? s.status) === 'waiting_for_files'">
             <p class="text-xs text-status-warning mt-2">{{ t('servers.adm.waitingHint') }}</p>

@@ -35,10 +35,24 @@ export default defineConfig({
         // network-first because mutations must reach the backend.
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        // Monaco-Editor's editor.api chunk is ~2.6 MB; raise the default
-        // 2 MiB cap so precache doesn't fail. We accept the larger SW.
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Self-hosted web fonts are part of the shell, so the PWA renders
+        // correctly offline.
+        globPatterns: ['**/*.{js,css,html,woff2}'],
+        // Not precached: the code editor (Monaco, ~2.6 MB) and the setup wizard
+        // are only needed by some users on some pages. They are cached at
+        // runtime on first use instead (see below), so a first visit does not
+        // download them up front.
+        globIgnores: ['**/editor.api-*.js', '**/editor-*.css', '**/SetupWizard-*.{js,css}'],
         runtimeCaching: [
+          {
+            // Hashed filenames, so a cached copy is never stale.
+            urlPattern: /\/assets\/(?:editor\.api-|editor-|SetupWizard-)[^/]+\.(?:js|css)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'kp-lazy-chunks',
+              expiration: { maxEntries: 8, maxAgeSeconds: 90 * 86400 },
+            },
+          },
           {
             urlPattern: /^\/api\//,
             handler: 'NetworkOnly',

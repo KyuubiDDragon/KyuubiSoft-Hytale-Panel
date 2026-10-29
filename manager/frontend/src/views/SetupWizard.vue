@@ -90,7 +90,12 @@ function isStepSkipped(stepId: string) {
 
 // Initialize
 onMounted(async () => {
-  const needsSetup = await setupStore.loadSetupStatus()
+  let needsSetup = true
+  try {
+    needsSetup = await setupStore.loadSetupStatus()
+  } catch {
+    // No answer: stay here; the system check explains the failed connection.
+  }
   initialLoading.value = false
 
   if (!needsSetup) {
@@ -101,7 +106,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-dark flex flex-col">
+  <!-- The wizard always sits on the dark surface; `dark` keeps its tokens dark too. -->
+  <div class="dark min-h-screen bg-dark flex flex-col">
     <!-- Background Pattern -->
     <div class="fixed inset-0 overflow-hidden pointer-events-none">
       <div class="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-hytale-orange/5 to-transparent rounded-full blur-3xl" />
