@@ -1145,6 +1145,40 @@ section.
   Push answers `400` for unknown push hosts and `409` for another account's
   subscription.
 
+### CI gates: blocking lint, infrastructure checks and image smoke tests
+
+Nothing changes for a running panel; this round tightens what a pull request
+has to pass.
+
+**CI**
+- ESLint now fails the build on errors, in the backend and the frontend.
+  Both had a small backlog of errors (useless escapes, `let` that is never
+  reassigned, intentional control characters in regular expressions, two
+  stray semicolons); all are fixed or, where the code is right, allowed on
+  the line with a reason. Warnings still pass.
+- The frontend tests run in CI (they existed, but only ran locally).
+- New `infra` job: shellcheck over every shell script, hadolint over both
+  Dockerfiles (exceptions with reasons in `.hadolint.yaml`) and
+  `docker compose config`, with and without `.env.example`.
+- The image job no longer only builds: the server image must start Java and
+  its start scripts must parse, and the manager image must come up and
+  answer `/api/health`.
+- Actions and tool images are pinned to a commit or digest instead of a
+  moving tag; the tag stays in a comment next to it.
+
+**Tests**
+- The event-action tests waited a fixed 20 to 60 ms for a rule to run and
+  failed on a busy machine, sometimes in the next test. The engine now keeps
+  track of running dispatches (`eventActionsIdle()`), and the tests wait for
+  exactly that.
+- The tests with many parallel writers (accounts, 2FA, JSON store) get 30 s
+  instead of 10 s, so a commit hook next to other work no longer times out.
+
+**Fixed**
+- Performance page: the free disk space read "Free" with a capital letter in
+  the middle of the line, because the label shared its translation key with
+  the heap view. It has its own key now (`performance.storageFree`).
+
 ### New features
 
 - **Update Center** (`/updates`): a dedicated view over the native Hytale update
