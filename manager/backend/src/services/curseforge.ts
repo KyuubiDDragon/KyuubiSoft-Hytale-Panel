@@ -14,6 +14,8 @@ import { untrackMod as cfwidgetUntrackMod } from './cfwidget.js';
 import type { ServerContext } from './serverContext.js';
 import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
 import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
+import { outboundErrorMessage, safeDownload, type ExpectedFile } from '../utils/safeFetch.js';
+import { removeReplacedFile } from '../utils/replacedFile.js';
 
 // Security: Regex pattern for validating mod IDs (CurseForge uses numeric IDs)
 const MOD_ID_PATTERN = /^\d{1,10}$/;
@@ -23,6 +25,9 @@ const VERSION_PATTERN = /^[a-zA-Z0-9._-]{1,64}$/;
 // CurseForge API Configuration
 const CURSEFORGE_API_BASE = 'api.curseforge.com';
 const CURSEFORGE_CDN_BASE = 'edge.forgecdn.net';
+// Mod files come from the CDN (edge.forgecdn.net redirects to
+// mediafilez.forgecdn.net); a download URL or redirect elsewhere is refused.
+export const CURSEFORGE_DOWNLOAD_HOSTS = ['forgecdn.net', 'curseforge.com'];
 
 // Game IDs - Hytale's CurseForge game ID
 // See: https://www.curseforge.com/hytale
@@ -456,69 +461,39 @@ async function curseforgeRequest<T>(
   });
 }
 
+/** Size and SHA-1 as CurseForge states them for the file. */
+function expectedFile(file: CurseForgeFile): ExpectedFile {
+  const sha1 = file.hashes?.find((h) => h.algo === 1)?.value;
+  return {
+    ...(file.fileLength > 0 ? { size: file.fileLength } : {}),
+    ...(sha1 ? { sha1 } : {}),
+  };
+}
+
 /**
- * Download a file from URL
+ * Download a mod file from the CurseForge CDN, checked against what
+ * CurseForge states for it.
  */
-async function downloadFile(url: string, destPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const request = (currentUrl: string) => {
-      const urlObj = new URL(currentUrl);
-      const proto = https;
-
-      const options: https.RequestOptions = {
-        hostname: urlObj.hostname,
-        path: urlObj.pathname + urlObj.search,
-        headers: {
-          'User-Agent': 'KyuubiSoft-HytalePanel/1.0',
-        },
-      };
-
-      proto
-        .get(options, (res) => {
-          // Handle redirects
-          if (res.statusCode === 301 || res.statusCode === 302) {
-            const redirectUrl = res.headers.location;
-            if (redirectUrl) {
-              request(redirectUrl);
-              return;
-            }
-          }
-
-          if (res.statusCode !== 200) {
-            logger.error(`Download failed: ${res.statusCode}`);
-            resolve(false);
-            return;
-          }
-
-          const chunks: Buffer[] = [];
-
-          res.on('data', (chunk) => chunks.push(chunk));
-          res.on('end', async () => {
-            try {
-              const buffer = Buffer.concat(chunks);
-              // destPath is <folder>/<plain name>. The game server can write
-              // to that folder: the file is replaced, never written through
-              // a link planted under its name.
-              await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
-              resolve(true);
-            } catch (e) {
-              logger.error('Failed to write file:', e);
-              resolve(false);
-            }
-          });
-          res.on('error', (e) => {
-            logger.error('Download error:', e);
-            resolve(false);
-          });
-        })
-        .on('error', (e) => {
-          logger.error('Request error:', e);
-          resolve(false);
-        });
-    };
-
-    request(url);
-  });
+async function downloadFile(
+  url: string,
+  destPath: string,
+  expected: ExpectedFile,
+): Promise<boolean> {
+  try {
+    // destPath is <folder>/<plain name>. The game server can write to that
+    // folder: the file is replaced, never written through a link planted
+    // under its name.
+    await safeDownload(url, {
+      allowedHosts: CURSEFORGE_DOWNLOAD_HOSTS,
+      headers: { 'User-Agent': 'KyuubiSoft-HytalePanel/1.0' },
+      expected,
+      saveTo: destPath,
+    });
+    return true;
+  } catch (e) {
+    logger.error(`[CurseForge] Download failed: ${outboundErrorMessage(e)}`);
+    return false;
+  }
 }
 
 // ============== Public API ==============
@@ -785,20 +760,8 @@ export async function installModFromCurseForge(
     return { success: false, error: 'Could not find a file to install' };
   }
 
-  // Check if this mod is already installed (for updates) and remove old file
+  // An update: the old file is removed once the new one is in place.
   const existingInstall = await isCurseForgeModInstalled(server, modId);
-  if (existingInstall && existingInstall.filename) {
-    // The stored filename is untrusted (shared data dir): only a bare name in the mods folder.
-    const oldFilePath = resolveFileInDir(server.paths.mods, existingInstall.filename);
-    try {
-      if (!oldFilePath) throw new Error('invalid stored filename');
-      await unlink(oldFilePath);
-      logger.info(`[CurseForge] Removed old mod file: ${existingInstall.filename}`);
-    } catch (e) {
-      // File might not exist, that's ok
-      logger.info(`[CurseForge] Could not remove old file ${existingInstall.filename}:`, e);
-    }
-  }
 
   // Get download URL
   let downloadUrl = file.downloadUrl;
@@ -850,10 +813,16 @@ export async function installModFromCurseForge(
   }
 
   // Download the file
-  const downloaded = await downloadFile(downloadUrl, destPath);
+  const downloaded = await downloadFile(downloadUrl, destPath, expectedFile(file));
 
   if (!downloaded) {
     return { success: false, error: 'Failed to download mod file' };
+  }
+
+  if (existingInstall?.filename) {
+    // The stored filename is untrusted (shared data dir): only a bare name in the mods folder.
+    const oldFilePath = resolveFileInDir(server.paths.mods, existingInstall.filename);
+    await removeReplacedFile(oldFilePath, destPath, '[CurseForge]');
   }
 
   // Track the installed mod (CurseForge internal tracking)
@@ -1026,14 +995,17 @@ export async function updateMod(
     return { success: false, error: 'Mod is not installed' };
   }
 
-  // Uninstall old version
-  const uninstallResult = await uninstallCurseForge(server, modId);
-  if (!uninstallResult.success) {
-    return { success: false, error: `Failed to uninstall old version: ${uninstallResult.error}` };
+  // The install replaces the old version only once the new file is in place,
+  // so a failed download keeps the mod installed.
+  const result = await installModFromCurseForge(server, modId, fileId);
+  if (result.success && result.filename !== installed.filename) {
+    try {
+      await cfwidgetUntrackMod(server, installed.filename);
+    } catch (e) {
+      logger.error('[CurseForge] Failed to untrack mod from CFWidget:', e);
+    }
   }
-
-  // Install new version
-  return installModFromCurseForge(server, modId, fileId);
+  return result;
 }
 
 /**

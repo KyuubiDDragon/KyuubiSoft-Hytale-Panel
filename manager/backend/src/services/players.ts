@@ -796,19 +796,29 @@ export type PlayerHistoryEntry = PlayerEntry;
 // Player Data File Reading (from server/universe/players/)
 // ============================================================
 
+/** A server's players directory and the folders a file read from it must lie in. */
+interface PlayersFolder {
+  dir: string;
+  roots: string[];
+}
+
 /**
  * A server's universe players directory; throws when no location stays
  * inside the server's folders (callers treat that like a missing folder).
  */
-async function getUniversePlayersPath(serverId?: string): Promise<string> {
-  const dir = playersDir(await serverFolders(serverId));
+async function getUniversePlayersPath(serverId?: string): Promise<PlayersFolder> {
+  const folders = await serverFolders(serverId);
+  const dir = playersDir(folders);
   if (!dir) throw new Error('The players folder of this server leads outside its folders');
-  return dir;
+  // The roots are the server's own folders, not `dir`: a link on the way to
+  // `dir` swapped after the check would make `dir` itself another server's
+  // folder.
+  return { dir, roots: [folders.server, folders.data] };
 }
 
-/** A saved player file, read only when it is a regular file inside `playersDirPath`. */
-async function readPlayerJson(playersDirPath: string, file: string): Promise<PlayerFileData> {
-  const content = await readRegularFile(path.join(playersDirPath, file), [playersDirPath], {
+/** A saved player file, read only when it is a regular file inside the server's folders. */
+async function readPlayerJson(players: PlayersFolder, file: string): Promise<PlayerFileData> {
+  const content = await readRegularFile(path.join(players.dir, file), players.roots, {
     maxBytes: MAX_SERVER_FILE_BYTES,
   });
   return JSON.parse(content.toString('utf-8'));
@@ -867,7 +877,7 @@ async function findPlayerUuidByName(playerName: string, serverId?: string): Prom
   // Try to find by scanning player files
   try {
     const playersDir = await getUniversePlayersPath(serverId);
-    const files = await readdir(playersDir);
+    const files = await readdir(playersDir.dir);
 
     for (const file of files) {
       if (!file.endsWith('.json')) continue;
@@ -1080,7 +1090,7 @@ export async function getAllPlayerFiles(
 ): Promise<{ uuid: string; name: string }[]> {
   try {
     const playersDir = await getUniversePlayersPath(serverId);
-    const files = await readdir(playersDir);
+    const files = await readdir(playersDir.dir);
     const result: { uuid: string; name: string }[] = [];
 
     for (const file of files) {
@@ -1219,7 +1229,7 @@ export async function getAllPlayersUnified(serverId?: string): Promise<UnifiedPl
   // First, read players from JSON files
   try {
     const playersDir = await getUniversePlayersPath(serverId);
-    const files = await readdir(playersDir);
+    const files = await readdir(playersDir.dir);
 
     for (const file of files) {
       if (!file.endsWith('.json')) continue;

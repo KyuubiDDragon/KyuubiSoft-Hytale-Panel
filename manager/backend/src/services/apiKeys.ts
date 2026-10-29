@@ -194,6 +194,13 @@ export function revokeApiKey(ownerUsername: string, id: string): boolean {
   return info.changes > 0;
 }
 
+/** Revoke every active key of an account (it was deleted). Returns how many. */
+export function revokeApiKeysOf(ownerUsername: string): number {
+  return getDb()
+    .prepare('UPDATE api_keys SET revoked_at = ? WHERE owner_username = ? AND revoked_at IS NULL')
+    .run(new Date().toISOString(), ownerUsername).changes;
+}
+
 /** Scopes and servers of a key that is neither revoked nor expired, else null. */
 export function getActiveApiKeyGrant(id: string): ApiKeyGrant | null {
   const row = getDb()
@@ -212,6 +219,8 @@ export async function verifyApiKey(token: string): Promise<{
   ownerUsername: string;
   scopes: string[];
   serverIds: string[] | null;
+  createdAt: string;
+  expiresAt: string | null;
 } | null> {
   if (!token.startsWith('kp_')) return null;
   const prefix = token.slice(0, 8);
@@ -230,6 +239,8 @@ export async function verifyApiKey(token: string): Promise<{
         ownerUsername: row.owner_username,
         scopes: JSON.parse(row.scopes) as string[],
         serverIds: parseServerIds(row),
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
       };
     }
   }

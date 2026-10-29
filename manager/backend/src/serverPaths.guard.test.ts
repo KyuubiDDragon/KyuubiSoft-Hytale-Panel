@@ -44,7 +44,7 @@ const PERMANENT: Record<string, string> = {
   'services/commandRegistry.ts': 'keeps the per-server command snapshots in one folder',
   'services/configService.ts': 'Asset Explorer settings, which are panel-wide',
   'services/assets.ts': 'the extracted Asset Explorer cache is shared by all servers',
-  'index.ts': '/api/health/permissions checks the compose mounts',
+  'routes/health.ts': '/api/health/permissions checks the compose mounts',
 };
 
 const PENDING: Record<string, string> = {};

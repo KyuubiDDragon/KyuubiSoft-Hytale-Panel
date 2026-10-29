@@ -27,6 +27,7 @@ import {
 import { resolveServerId } from './servers.js';
 import { PLUGIN_INTERNAL_PORT, getServerContext } from './serverContext.js';
 import { ensurePluginAuthConfig, getPluginToken } from './pluginAuth.js';
+import { replaceFileContent } from '../utils/noFollowFs.js';
 
 // Get directory name in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -725,16 +726,22 @@ export async function installPlugin(
       return { success: false, error: 'Plugin JAR not found in assets' };
     }
 
-    // Remove old versions
+    // Copy the new version first. The game server can write to its mods
+    // folder: the jar is replaced, never written through a link planted
+    // under its name.
+    await replaceFileContent(targetPath, await fs.promises.readFile(bundledPath), [modsPath]);
+
+    // Then remove old versions
     const files = fs.readdirSync(modsPath);
     for (const file of files) {
-      if (file.toLowerCase().startsWith('kyuubisoftapi') && file.endsWith('.jar')) {
+      if (
+        file !== PLUGIN_JAR_NAME &&
+        file.toLowerCase().startsWith('kyuubisoftapi') &&
+        file.endsWith('.jar')
+      ) {
         fs.unlinkSync(path.join(modsPath, file));
       }
     }
-
-    // Copy new version
-    fs.copyFileSync(bundledPath, targetPath);
 
     // Plugin 2.0 stays locked without the panel's token; write it now so the
     // next start loads it, even when that start does not go through the panel.

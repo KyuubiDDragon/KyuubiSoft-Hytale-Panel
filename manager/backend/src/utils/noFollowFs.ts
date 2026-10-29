@@ -310,16 +310,12 @@ export async function copyDirectoryTree(
   }
 }
 
-/**
- * Replaces `dest` with `content`: written to a new temporary file next to it
- * (O_EXCL), then renamed over it. rename() replaces a link at `dest` instead
- * of writing through it.
- */
-export async function replaceFileContent(
+/** Writes a new temporary file next to `dest` (O_EXCL) with `write`, then renames it over `dest`. */
+async function replaceWith(
   dest: string,
-  content: string | Buffer,
   roots: string[],
-  mode = 0o664,
+  mode: number,
+  write: (fh: FileHandle) => Promise<void>,
 ): Promise<void> {
   const tmp = path.join(
     path.dirname(dest),
@@ -327,7 +323,7 @@ export async function replaceFileContent(
   );
   const fh = await createExclusive(tmp, roots, mode);
   try {
-    await fh.writeFile(content);
+    await write(fh);
   } catch (err) {
     await fh.close().catch(() => undefined);
     await rm(tmp, { force: true }).catch(() => undefined);
@@ -339,6 +335,40 @@ export async function replaceFileContent(
   } catch (err) {
     await rm(tmp, { force: true }).catch(() => undefined);
     throw err;
+  }
+}
+
+/**
+ * Replaces `dest` with `content`: written to a new temporary file next to it
+ * (O_EXCL), then renamed over it. rename() replaces a link at `dest` instead
+ * of writing through it.
+ */
+export async function replaceFileContent(
+  dest: string,
+  content: string | Buffer,
+  roots: string[],
+  mode = 0o664,
+): Promise<void> {
+  await replaceWith(dest, roots, mode, (fh) => fh.writeFile(content));
+}
+
+/**
+ * Replaces `dest` with the content of the file `src`, the same way as
+ * replaceFileContent. `src` is a checked file of the panel's own (the staging
+ * folder, utils/staging.ts); it usually lies on another volume, so it is
+ * copied into the temporary file instead of renamed.
+ */
+export async function replaceFileFromFile(
+  dest: string,
+  src: string,
+  roots: string[],
+  mode = 0o664,
+): Promise<void> {
+  const from = await open(src, fsConstants.O_RDONLY | NO_FOLLOW);
+  try {
+    await replaceWith(dest, roots, mode, (to) => copyContents(from, to));
+  } finally {
+    await from.close().catch(() => undefined);
   }
 }
 

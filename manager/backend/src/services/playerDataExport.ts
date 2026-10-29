@@ -19,12 +19,23 @@
  * when the caller passes `null`; the route only does that for accounts with
  * access to every server. A player is matched by name and by the UUIDs that
  * name has on that server, so the records of a renamed player are included,
- * another server's records never are.
+ * another server's records never are. An earlier name that another player
+ * (another UUID) used too only brings in rows with the player's own UUIDs.
+ *
+ * Erasure also removes the player's lines from the server's daily chat logs.
+ * It keeps the audit and activity logs (records of what staff did, the
+ * erasure included) and recorded replays, which expire with their retention.
  */
 import { getDb } from '../db/index.js';
 import { getNote, type PlayerNote } from './playerNotes.js';
 import { getPunishment, type Punishment } from './punishments.js';
-import { getPlayerChatHistory, deletePlayerChatData, type ChatMessage } from './chatLog.js';
+import {
+  getPlayerChatHistory,
+  deletePlayerChatData,
+  deletePlayerGlobalChatLines,
+  type ChatLineFilter,
+  type ChatMessage,
+} from './chatLog.js';
 import { isDemoMode } from './demoData.js';
 
 export interface PlayerSessionRow {
@@ -54,7 +65,10 @@ const PLAYER_TABLES = ['play_sessions', 'punishments', 'player_notes'] as const;
 const MAX_ROWS = 100_000;
 
 interface PlayerIdentity {
+  /** The requested name and earlier names only this player used: every row. */
   names: string[];
+  /** Earlier names another player used too: only rows with one of `uuids`. */
+  sharedNames: string[];
   uuids: string[];
 }
 
@@ -102,12 +116,26 @@ function matchPlayer(identity: PlayerIdentity, scope: PlayerDataScope) {
   return { sql, params };
 }
 
+/** Whether rows on `scope` carry `name` with a UUID that is not one of `uuids`. */
+function usedByAnother(name: string, uuids: string[], scope: PlayerDataScope): boolean {
+  let sql = `player_name = ? AND uuid IS NOT NULL AND uuid NOT IN (${placeholders(uuids)})`;
+  const params: unknown[] = [name, ...uuids];
+  if (scope !== null) {
+    sql += ' AND server_id = ?';
+    params.push(scope);
+  }
+  return PLAYER_TABLES.some(
+    (table) => rowsOf(`SELECT 1 FROM ${table} WHERE ${sql} LIMIT 1`, params).length > 0,
+  );
+}
+
 /**
  * The UUIDs the name has on `scope`, and every name recorded there under one
- * of those UUIDs.
+ * of those UUIDs; an earlier name that rows of another UUID carry too is a
+ * shared one.
  */
 function resolveIdentity(playerName: string, scope: PlayerDataScope): PlayerIdentity {
-  const byName = matchPlayer({ names: [playerName], uuids: [] }, scope);
+  const byName = matchPlayer({ names: [playerName], sharedNames: [], uuids: [] }, scope);
   const uuids = new Set<string>();
   for (const table of PLAYER_TABLES) {
     const rows = rowsOf<{ uuid: string }>(
@@ -116,18 +144,48 @@ function resolveIdentity(playerName: string, scope: PlayerDataScope): PlayerIden
     );
     for (const row of rows) uuids.add(row.uuid);
   }
-  const names = new Set<string>([playerName]);
+  const aliases = new Set<string>();
   if (uuids.size > 0) {
-    const byUuid = matchPlayer({ names: [], uuids: [...uuids] }, scope);
+    const byUuid = matchPlayer({ names: [], sharedNames: [], uuids: [...uuids] }, scope);
     for (const table of PLAYER_TABLES) {
       const rows = rowsOf<{ player_name: string }>(
         `SELECT DISTINCT player_name FROM ${table} WHERE ${byUuid.sql}`,
         byUuid.params,
       );
-      for (const row of rows) names.add(row.player_name);
+      for (const row of rows) if (row.player_name !== playerName) aliases.add(row.player_name);
     }
   }
-  return { names: [...names], uuids: [...uuids] };
+  const names = [playerName];
+  const sharedNames: string[] = [];
+  for (const alias of aliases) {
+    (usedByAnother(alias, [...uuids], scope) ? sharedNames : names).push(alias);
+  }
+  return { names, sharedNames, uuids: [...uuids] };
+}
+
+const chatName = (name: string) => name.toLowerCase();
+
+/**
+ * The chat lines of `identity` under `name`: all under the requested name,
+ * under an earlier name the lines without a UUID or with one of the player's
+ * (only the latter for a shared name).
+ */
+function linesUnder(identity: PlayerIdentity, name: string): ChatLineFilter | undefined {
+  if (name === identity.names[0]) return undefined;
+  const shared = identity.sharedNames.includes(name);
+  return (m) => (m.uuid ? identity.uuids.includes(m.uuid) : !shared);
+}
+
+/** The lines of `identity` in a server's daily chat log. */
+function linesOf(identity: PlayerIdentity): ChatLineFilter {
+  const requested = chatName(identity.names[0]);
+  const earlier = new Set(identity.names.slice(1).map(chatName));
+  return (m) => {
+    const name = chatName(m.player);
+    if (name === requested) return true;
+    if (m.uuid) return identity.uuids.includes(m.uuid);
+    return earlier.has(name);
+  };
 }
 
 function rowIds(table: string, identity: PlayerIdentity, scope: PlayerDataScope): number[] {
@@ -147,9 +205,11 @@ function querySessions(identity: PlayerIdentity, scope: PlayerDataScope): Player
   );
 }
 
-async function chatOf(names: string[], scope: PlayerDataScope): Promise<ChatMessage[]> {
+async function chatOf(identity: PlayerIdentity, scope: PlayerDataScope): Promise<ChatMessage[]> {
   const all: ChatMessage[] = [];
-  for (const name of names) all.push(...(await getPlayerChatHistory(name, scope)));
+  for (const name of [...identity.names, ...identity.sharedNames]) {
+    all.push(...(await getPlayerChatHistory(name, scope, linesUnder(identity, name))));
+  }
   return all.sort((x, y) => y.timestamp.localeCompare(x.timestamp)).slice(0, MAX_ROWS);
 }
 
@@ -179,7 +239,7 @@ export async function exportPlayerData(
     .filter((p): p is Punishment => p !== null);
   const playSessions = querySessions(identity, scope);
   // Each message carries its server id.
-  const chat = await chatOf(identity.names, scope);
+  const chat = await chatOf(identity, scope);
 
   const totalMs = playSessions.reduce((sum, s) => sum + (s.duration_ms || 0), 0);
   return {
@@ -234,9 +294,10 @@ export async function deletePlayerData(
     )[0]?.n ?? 0;
   const playSessions = changedRows(`DELETE FROM play_sessions WHERE ${match.sql}`, match.params);
   let chat = true;
-  for (const name of identity.names) {
-    if (!(await deletePlayerChatData(name, scope))) chat = false;
+  for (const name of [...identity.names, ...identity.sharedNames]) {
+    if (!(await deletePlayerChatData(name, scope, linesUnder(identity, name)))) chat = false;
   }
+  if (!(await deletePlayerGlobalChatLines(scope, linesOf(identity)))) chat = false;
 
   return {
     player: playerName,

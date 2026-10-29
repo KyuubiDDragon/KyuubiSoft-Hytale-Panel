@@ -77,6 +77,17 @@ export function isPanelOwnedDataEntry(name: string): boolean {
   return PANEL_OWNED_DATA_ENTRIES.has(name);
 }
 
+/**
+ * Panel files that older versions kept in the data directory and that live in
+ * the manager volume now (JWT secret, password hashes, setup secrets). An
+ * archive's copy is never brought back into the data directory.
+ */
+const MANAGER_VOLUME_FILES: ReadonlySet<string> = new Set([
+  'setup-config.json',
+  'config.json',
+  'users.json',
+]);
+
 type SwapPhase = 'moving-out' | 'moving-in' | 'cleanup';
 
 interface RestoreJournal {
@@ -299,7 +310,10 @@ export async function swapDataContents(
   const kept = current.filter(isPanelOwnedDataEntry);
   const incoming = await stagedEntries(stageDir);
   // Panel-owned entries from the archive only fill a gap (e.g. a lost .machine-id).
-  const moveIn = incoming.filter((name) => !(isPanelOwnedDataEntry(name) && kept.includes(name)));
+  const moveIn = incoming.filter(
+    (name) =>
+      !MANAGER_VOLUME_FILES.has(name) && !(isPanelOwnedDataEntry(name) && kept.includes(name)),
+  );
 
   const journal: RestoreJournal = {
     version: 1,

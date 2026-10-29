@@ -105,4 +105,39 @@ describe('the bundled plugin jar', () => {
     expect(ensurePluginAuthConfig).toHaveBeenCalledTimes(1);
     expect(await api.getInstalledVersion()).toBe(api.PLUGIN_VERSION);
   });
+
+  it.skipIf(!canLink())(
+    'replaces a link planted under the jar name instead of writing through it',
+    async () => {
+      const victim = path.join(outside, 'panel-file.json');
+      fs.writeFileSync(victim, 'PANEL');
+      // The test before left the installed jar in the shared mods folder.
+      fs.rmSync(path.join(modsDir, api.PLUGIN_JAR_NAME), { force: true });
+      fs.symlinkSync(victim, path.join(modsDir, api.PLUGIN_JAR_NAME), 'file');
+
+      expect(await api.installPlugin()).toEqual({ success: true });
+
+      expect(fs.readFileSync(victim, 'utf-8')).toBe('PANEL');
+      expect(fs.lstatSync(path.join(modsDir, api.PLUGIN_JAR_NAME)).isSymbolicLink()).toBe(false);
+      expect(sha256(path.join(modsDir, api.PLUGIN_JAR_NAME))).toBe(
+        sha256(api.getBundledPluginPath()),
+      );
+    },
+  );
 });
+
+const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-plugin-outside-'));
+afterAll(() => {
+  fs.rmSync(outside, { recursive: true, force: true });
+});
+
+function canLink(): boolean {
+  const probe = path.join(os.tmpdir(), `kp-link-probe-${process.pid}-${Date.now()}`);
+  try {
+    fs.symlinkSync(fileURLToPath(import.meta.url), probe, 'file');
+    fs.unlinkSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}

@@ -16,7 +16,6 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
 import type { BackupInfo, StorageInfo, ActionResponse } from '../types/index.js';
 import { isValidBackupName } from '../utils/sanitize.js';
 import { isPathSafe, resolveRealPathWithin } from '../utils/pathSecurity.js';
@@ -29,6 +28,7 @@ import * as dockerService from './docker.js';
 import { waitForConsoleLine } from './serverConsoleOutput.js';
 import {
   freeBytes,
+  createTarArchive,
   freeTimestampedPath,
   resolveBackupPaths,
   runBackupHookAsync,
@@ -56,8 +56,6 @@ const LEGACY_AUTO_BACKUP_ID = new RegExp(
   `^${MANUAL_PREFIX}(${[...LEGACY_AUTO_LABELS].join('|')})_${TIMESTAMP}$`,
 );
 
-const TAR_TIMEOUT_MS = 2 * 60 * 60 * 1000;
-const TAR_STDERR_MAX = 64 * 1024;
 // Hytale 0.7: `world save` requires --confirm; --all saves every loaded world.
 const WORLD_SAVE_COMMAND = '/world save --all --confirm';
 const WORLD_SAVE_DONE = /Finished saving all worlds/i;
@@ -102,33 +100,6 @@ function backupType(id: string): BackupInfo['type'] {
   return isAutomaticBackupId(id) || id.startsWith('backup_') ? 'auto' : 'manual';
 }
 
-// ============================================================
-// External tools
-// ============================================================
-
-/** Run tar with an argv array; rejects with tar's stderr on a non-zero exit. */
-function runTar(args: string[], timeoutMs = TAR_TIMEOUT_MS): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('tar', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    child.stderr?.on('data', (chunk: Buffer) => {
-      if (stderr.length < TAR_STDERR_MAX) stderr += chunk.toString('utf8');
-    });
-    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
-    timer.unref?.();
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on('close', (code, signal) => {
-      clearTimeout(timer);
-      if (code === 0) return resolve();
-      const detail = stderr.trim().slice(-500) || (signal ? `killed by ${signal}` : `exit ${code}`);
-      reject(new Error(`tar failed: ${detail}`));
-    });
-  });
-}
-
 /**
  * First symbolic link below `dir` (relative path), or null. tar stores links
  * as links, and a restore refuses any archive that contains one, so the
@@ -162,12 +133,7 @@ async function findSymlink(dir: string, rel = ''): Promise<string | null> {
 export async function archiveDataDir(dataDir: string, outFile: string): Promise<boolean> {
   const entries = (await fs.promises.readdir(dataDir)).filter((n) => !isInternalDataEntry(n));
   if (entries.length === 0) return false;
-  try {
-    await runTar(['-c', '-z', '-f', outFile, '-C', dataDir, ...entries.map((n) => `./${n}`)]);
-  } catch (err) {
-    await fs.promises.rm(outFile, { force: true }).catch(() => undefined);
-    throw err;
-  }
+  await createTarArchive(outFile, ['-C', dataDir, ...entries.map((n) => `./${n}`)]);
   return true;
 }
 
@@ -196,8 +162,8 @@ function prunePanelBackups(panelDir: string): void {
 
 /**
  * Snapshot the panel's OWN state — a consistent online copy of panel.sqlite
- * (audit log, API keys, webhooks, punishments, …) plus the config/users/servers
- * JSON — into `<manager data>/panel-backups/panel-backup_<ts>.tar.gz`. It holds
+ * (audit log, API keys, webhooks, punishments, …) plus the config/users/servers/
+ * setup-config JSON — into `<manager data>/panel-backups/panel-backup_<ts>.tar.gz`. It holds
  * password hashes and secrets, so it stays in the manager's own volume, never
  * on the backups volume the game server can read. Against the loss of that
  * volume only the off-site upload (when configured) helps.
@@ -215,12 +181,14 @@ export async function backupPanelData(): Promise<{
     try {
       // Online snapshot — safe to take while the DB is in use (WAL).
       await getDb().backup(path.join(stage, 'panel.sqlite'));
-      for (const name of ['config.json', 'users.json', 'servers.json']) {
+      for (const name of ['config.json', 'users.json', 'servers.json', 'setup-config.json']) {
         const src = path.join(MANAGER_DATA_DIR, name);
         if (fs.existsSync(src)) fs.copyFileSync(src, path.join(stage, name));
       }
-      const outFile = path.join(panelDir, `${PANEL_BACKUP_PREFIX}${ts}.tar.gz`);
-      await runTar(['-c', '-z', '-f', outFile, '-C', stage, '.'], 5 * 60 * 1000);
+      const outFile = freeTimestampedPath((at) =>
+        path.join(panelDir, `${PANEL_BACKUP_PREFIX}${backupTimestamp(at)}.tar.gz`),
+      );
+      await createTarArchive(outFile, ['-C', stage, '.'], 5 * 60 * 1000);
       fs.chmodSync(outFile, 0o600);
       prunePanelBackups(panelDir);
       return { success: true, file: outFile };

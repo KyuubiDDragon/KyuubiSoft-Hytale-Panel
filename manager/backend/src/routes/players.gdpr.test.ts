@@ -40,6 +40,7 @@ const chat = await import('../services/chatLog.js');
 
 const UUID = '0a1b2c3d-0000-4000-8000-0000000000aa';
 const OTHER = '0a1b2c3d-0000-4000-8000-0000000000bb';
+const NEO = '0a1b2c3d-0000-4000-8000-0000000000cc';
 let server: Server;
 let base: string;
 
@@ -55,6 +56,9 @@ function seed(): void {
   punish.run('b1', 'SteveOld', UUID, 'warn', 'old name on B', 'mod', at(30), null, 0);
   punish.run('b1', 'Steve', UUID, 'tempban', 'running on B', 'mod', at(3), future, 1);
   punish.run('b1', 'Alex', OTHER, 'warn', 'someone else', 'mod', at(2), null, 0);
+  // Steve played as "Stevie" for a while; later Neo (another UUID) took that name.
+  punish.run('b1', 'Stevie', UUID, 'warn', 'as Stevie', 'mod', at(20), null, 0);
+  punish.run('b1', 'Stevie', NEO, 'warn', 'Neo as Stevie', 'mod', at(1), null, 0);
   const note = db.prepare(
     'INSERT INTO player_notes (server_id, player_name, uuid, note, by_user, created_at) VALUES (?, ?, ?, ?, ?, ?)',
   );
@@ -66,6 +70,7 @@ function seed(): void {
   session.run('default', 'Steve', UUID, at(60), at(50), 600_000);
   session.run('b1', 'Steve', UUID, at(40), at(30), 600_000);
   session.run('b1', 'SteveOld', UUID, at(90), at(80), 600_000);
+  session.run('b1', 'Stevie', NEO, at(10), at(5), 300_000);
 }
 
 beforeAll(async () => {
@@ -73,6 +78,13 @@ beforeAll(async () => {
   await chat.addChatMessage('default', 'Steve', 'chat on A');
   await chat.addChatMessage('b1', 'Steve', 'chat on B');
   await chat.addChatMessage('b1', 'SteveOld', 'old name on B');
+  await chat.addChatMessage('b1', 'Stevie', 'Steve as Stevie', UUID);
+  // The per-player file is written in the background: one line after the other.
+  await vi.waitFor(async () =>
+    expect(await chat.getPlayerChatHistory('Stevie', 'b1')).toHaveLength(1),
+  );
+  await chat.addChatMessage('b1', 'Stevie', 'Neo as Stevie', NEO);
+  await chat.addChatMessage('b1', 'Alex', 'Alex on B', OTHER);
 
   const app = express();
   app.use(express.json());
@@ -113,6 +125,7 @@ describe('player data export and erasure per server', () => {
     await vi.waitFor(async () => {
       const { body } = await call('GET', '/b1/players/Steve/export-data');
       expect(body.chat.map((m: { message: string }) => m.message).sort()).toEqual([
+        'Steve as Stevie',
         'chat on B',
         'old name on B',
       ]);
@@ -120,7 +133,9 @@ describe('player data export and erasure per server', () => {
     const { status, body } = await call('GET', '/b1/players/Steve/export-data');
     expect(status).toBe(200);
     expect(body.notes.map((n: { note: string }) => n.note)).toEqual(['note on B']);
+    // Under the earlier name "Stevie" only Steve's own rows, not Neo's.
     expect(body.punishments.map((p: { reason: string }) => p.reason).sort()).toEqual([
+      'as Stevie',
       'old name on B',
       'on B',
       'running on B',
@@ -134,7 +149,7 @@ describe('player data export and erasure per server', () => {
     expect(exported).toMatchObject({ status: 403, body: { code: 'ALL_SERVERS_REQUIRED' } });
     const erased = await call('DELETE', '/b1/players/Steve/data?allServers=true', 'limited');
     expect(erased).toMatchObject({ status: 403, body: { code: 'ALL_SERVERS_REQUIRED' } });
-    expect(count('SELECT COUNT(*) AS n FROM punishments')).toBe(5);
+    expect(count('SELECT COUNT(*) AS n FROM punishments')).toBe(7);
   });
 
   it('exports every server only when asked for explicitly', async () => {
@@ -149,7 +164,7 @@ describe('player data export and erasure per server', () => {
   it("erases B's records, keeps those still in effect and leaves A alone", async () => {
     const { status, body } = await call('DELETE', '/b1/players/Steve/data');
     expect(status).toBe(200);
-    expect(body.deleted).toMatchObject({ notes: 1, punishments: 2, playSessions: 2, chat: true });
+    expect(body.deleted).toMatchObject({ notes: 1, punishments: 3, playSessions: 2, chat: true });
     expect(body.kept).toEqual({ activePunishments: 1 });
 
     // The running tempban on A keeps its record, so its expiry still lifts it.
@@ -163,14 +178,36 @@ describe('player data export and erasure per server', () => {
     expect((await chat.getPlayerChatHistory('Steve', 'default')).map((m) => m.message)).toEqual([
       'chat on A',
     ]);
-    // On B: only the running tempban and another player's record remain.
+    // On B: only the running tempban and other players' records remain,
+    // including Neo's under the name Steve had before.
     expect(
       (
         getDb()
           .prepare("SELECT reason FROM punishments WHERE server_id = 'b1' ORDER BY reason")
           .all() as Array<{ reason: string }>
       ).map((r) => r.reason),
-    ).toEqual(['running on B', 'someone else']);
+    ).toEqual(['Neo as Stevie', 'running on B', 'someone else']);
+    expect(count("SELECT COUNT(*) AS n FROM play_sessions WHERE player_name = 'Stevie'")).toBe(1);
     expect(await chat.getPlayerChatHistory('SteveOld', 'b1')).toEqual([]);
+    expect((await chat.getPlayerChatHistory('Stevie', 'b1')).map((m) => m.message)).toEqual([
+      'Neo as Stevie',
+    ]);
+  });
+
+  it("removes the player's lines from the server's daily chat log, nobody else's", async () => {
+    const onB = (await chat.getGlobalChatLog({ days: 0 }, 'b1')).messages.map((m) => m.message);
+    expect(onB.sort()).toEqual(['Alex on B', 'Neo as Stevie']);
+    const onA = (await chat.getGlobalChatLog({ days: 0 }, 'default')).messages.map(
+      (m) => m.message,
+    );
+    expect(onA).toEqual(['chat on A']);
+
+    // Also in the file, not only in the cache of today's log.
+    const dir = path.join(tmpDir, 'servers', 'b1', 'chat', 'global');
+    const onDisk = fs
+      .readdirSync(dir)
+      .flatMap((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')))
+      .map((m: { message: string }) => m.message);
+    expect(onDisk.sort()).toEqual(['Alex on B', 'Neo as Stevie']);
   });
 });

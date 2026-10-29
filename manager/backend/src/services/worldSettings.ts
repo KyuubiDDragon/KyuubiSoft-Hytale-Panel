@@ -14,6 +14,7 @@ import { getServerContext, worldRoots } from './serverContext.js';
 import { runCommandViaPlugin, type PluginCommandAttempt } from './pluginCommands.js';
 import { readServerFile } from '../utils/serverFiles.js';
 import { UnsafeFileError } from '../utils/noFollowFs.js';
+import { resolveRealPath } from '../utils/pathSecurity.js';
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 // World names the server's world argument takes without quoting.
@@ -47,7 +48,7 @@ export function worldJsonPath(relFile: unknown): string | null {
 
 export interface WorldFileLocation {
   file: string;
-  /** The worlds root the file must stay in. */
+  /** The worlds root the file must stay in (its real path when it was found). */
   root: string;
   content: string;
 }
@@ -64,8 +65,12 @@ export async function locateWorldFile(
   serverId?: string,
 ): Promise<WorldFileLocation | null> {
   let refused: UnsafeFileError | null = null;
-  for (const root of worldRoots(await getServerContext(serverId))) {
-    const file = path.join(root, worldName, relFile);
+  for (const worldsRoot of worldRoots(await getServerContext(serverId))) {
+    // The real path, fixed now: the root may lie behind a link the game server
+    // controls (server/universe). Resolved again at write time, a link swapped
+    // meanwhile would make it another server's worlds folder.
+    const root = resolveRealPath(worldsRoot) ?? worldsRoot;
+    const file = path.join(worldsRoot, worldName, relFile);
     try {
       const found = await readServerFile(file, [root]);
       if (found) return { file, root, content: found.content };

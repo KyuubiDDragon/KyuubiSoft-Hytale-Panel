@@ -31,6 +31,9 @@ vi.mock('../services/roles.js', () => ({
 }));
 vi.mock('../services/users.js', () => ({
   getTokenVersion: async (u: string) => tokenVersions.get(u) ?? 1,
+  sessionProblem: async (u: string, v?: number) =>
+    v !== undefined && v !== (tokenVersions.get(u) ?? 1) ? 'TOKEN_INVALIDATED' : null,
+  isKeyOwnerCurrent: async () => true,
   isUserInvalidated: () => false,
   verifyUserCredentials: async () => null,
   updateLastLogin: async () => undefined,

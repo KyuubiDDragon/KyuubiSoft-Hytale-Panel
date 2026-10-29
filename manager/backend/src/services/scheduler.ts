@@ -963,11 +963,14 @@ function syncWelcomeAction(serverId: string, cfg: ScheduleConfig): string | unde
   const storedId = cfg.announcements.welcomeActionId;
   try {
     const stored = storedId ? getEventAction(storedId) : null;
-    // Only ever touch the rule this created, whatever id a config file holds.
+    // Only ever touch the rule this created for this server, whatever id a
+    // config file holds (the game server can write the file and name the
+    // welcome rule of another server).
     const ours =
       stored?.createdBy === 'scheduler' &&
       stored.name === WELCOME_ACTION_NAME &&
-      stored.actionType === 'announce'
+      stored.actionType === 'announce' &&
+      stored.serverId === serverId
         ? stored
         : null;
     if (ours) {

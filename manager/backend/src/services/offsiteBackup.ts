@@ -19,6 +19,8 @@ import crypto from 'crypto';
 import { URL } from 'url';
 import { getConfig } from './configService.js';
 import { logger } from '../utils/logger.js';
+import { assertAllowedHost } from '../utils/urlGuard.js';
+import { guardedLookup } from '../utils/safeFetch.js';
 
 type OffsiteConfig = NonNullable<Awaited<ReturnType<typeof getConfig>>['offsiteBackup']>;
 
@@ -31,6 +33,8 @@ export interface OffsiteResult {
 }
 
 const UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD';
+// Only the start of an error answer is kept.
+const ERROR_BODY_BYTES = 16 * 1024;
 
 function sha256Hex(data: string | Buffer): string {
   return crypto.createHash('sha256').update(data).digest('hex');
@@ -126,6 +130,17 @@ function putObject(
       `AWS4-HMAC-SHA256 Credential=${cfg.accessKeyId}/${scope}, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
+    // The endpoint may be a storage server in the LAN (MinIO); a cloud
+    // metadata address is refused, also when the name resolves to one. The
+    // connection is not pooled: other requests to the same name (a webhook,
+    // say) must not reuse it and skip their own, stricter address check.
+    try {
+      assertAllowedHost(host, true);
+    } catch (err) {
+      resolve({ success: false, error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+
     const transport = protocol === 'http' ? http : https;
     const req = transport.request(
       {
@@ -133,6 +148,8 @@ function putObject(
         host,
         port,
         path: canonicalUri,
+        lookup: guardedLookup(true),
+        agent: false,
         headers: {
           Host: hostHeader,
           'x-amz-date': amzDate,
@@ -144,7 +161,12 @@ function putObject(
       },
       (res) => {
         const chunks: Buffer[] = [];
-        res.on('data', (c) => chunks.push(c as Buffer));
+        let size = 0;
+        res.on('data', (c: Buffer) => {
+          if (size >= ERROR_BODY_BYTES) return;
+          chunks.push(c);
+          size += c.length;
+        });
         res.on('end', () => {
           const status = res.statusCode ?? 0;
           if (status >= 200 && status < 300) {

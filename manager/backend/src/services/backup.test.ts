@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { spawnSync } from 'child_process';
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kp-backup-names-')));
@@ -120,5 +121,67 @@ describe('freeTimestampedPath', () => {
     const make = (d: Date) => path.join(paths.backups, `manual_${backupTimestamp(d)}.tar.gz`);
     fs.writeFileSync(make(at), 'first');
     expect(path.basename(freeTimestampedPath(make, at))).toBe('manual_2026-10-22_030406.tar.gz');
+  });
+});
+
+describe('archiveDataDir', () => {
+  // The backups folder is shared with the game server, which could plant a
+  // link under the name the next backup gets.
+  const HAS_TAR =
+    process.platform !== 'win32' &&
+    spawnSync('sh', ['-c', 'command -v tar'], { stdio: 'ignore' }).status === 0;
+
+  beforeEach(() => {
+    fs.rmSync(paths.data, { recursive: true, force: true });
+    fs.mkdirSync(paths.data, { recursive: true });
+    fs.writeFileSync(path.join(paths.data, 'world.dat'), 'WORLD');
+  });
+
+  it('never writes into a file that is already there', async () => {
+    const { archiveDataDir } = await import('./backup.js');
+    const target = path.join(paths.backups, 'manual_taken.tar.gz');
+    fs.writeFileSync(target, 'SOMEONE ELSE');
+    await expect(archiveDataDir(paths.data, target)).rejects.toThrow();
+    expect(fs.readFileSync(target, 'utf-8')).toBe('SOMEONE ELSE');
+  });
+
+  it.skipIf(!HAS_TAR)('does not follow a link planted under the backup name', async () => {
+    const { archiveDataDir } = await import('./backup.js');
+    const victim = path.join(root, 'panel.sqlite');
+    fs.writeFileSync(victim, 'PANEL');
+    const target = path.join(paths.backups, 'manual_link.tar.gz');
+    fs.symlinkSync(victim, target);
+    await expect(archiveDataDir(paths.data, target)).rejects.toThrow();
+    expect(fs.readFileSync(victim, 'utf-8')).toBe('PANEL');
+  });
+
+  it.skipIf(!HAS_TAR)('creates the archive itself', async () => {
+    const { archiveDataDir } = await import('./backup.js');
+    const target = path.join(paths.backups, 'manual_ok.tar.gz');
+    expect(await archiveDataDir(paths.data, target)).toBe(true);
+    const list = spawnSync('tar', ['-tzf', target], { encoding: 'utf-8' }).stdout;
+    expect(list).toContain('./world.dat');
+  });
+});
+
+describe('backupPanelData', () => {
+  const HAS_TAR =
+    process.platform !== 'win32' &&
+    spawnSync('sh', ['-c', 'command -v tar'], { stdio: 'ignore' }).status === 0;
+
+  it.skipIf(!HAS_TAR)('includes the setup state of the manager volume', async () => {
+    const { backupPanelData } = await import('./backup.js');
+    const managerDir = process.env.MANAGER_DATA_PATH!;
+    for (const name of ['config.json', 'users.json', 'servers.json', 'setup-config.json']) {
+      fs.writeFileSync(path.join(managerDir, name), '{}');
+    }
+
+    const result = await backupPanelData();
+
+    expect(result.success).toBe(true);
+    const list = spawnSync('tar', ['-tzf', result.file!], { encoding: 'utf-8' }).stdout;
+    for (const name of ['panel.sqlite', 'config.json', 'users.json', 'servers.json', 'setup-config.json']) {
+      expect(list).toContain(`./${name}`);
+    }
   });
 });

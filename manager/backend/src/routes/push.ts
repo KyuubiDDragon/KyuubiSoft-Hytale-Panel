@@ -10,6 +10,7 @@ import type { AuthenticatedRequest } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import {
   getVapidPublicKey,
+  isAllowedPushEndpoint,
   saveSubscription,
   removeSubscription,
   countSubscriptions,
@@ -58,12 +59,20 @@ router.post('/subscribe', authMiddleware, async (req: AuthenticatedRequest, res:
     res.status(400).json({ error: 'Invalid push subscription' });
     return;
   }
+  if (!isAllowedPushEndpoint(sub.endpoint)) {
+    res.status(400).json({ error: 'The endpoint is not a known browser push service' });
+    return;
+  }
   try {
-    saveSubscription(
+    const saved = saveSubscription(
       req.user || 'unknown',
       sub,
       String(req.headers['user-agent'] || '').slice(0, 256),
     );
+    if (!saved) {
+      res.status(409).json({ error: 'This subscription belongs to another account' });
+      return;
+    }
     res.json({ success: true, devices: countSubscriptions(req.user || '') });
   } catch (error) {
     logger.error('[push] failed to save subscription:', error);
@@ -71,14 +80,14 @@ router.post('/subscribe', authMiddleware, async (req: AuthenticatedRequest, res:
   }
 });
 
-// POST /api/push/unsubscribe — remove a subscription by endpoint.
+// POST /api/push/unsubscribe — remove one of this user's subscriptions by endpoint.
 router.post('/unsubscribe', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const endpoint = req.body?.endpoint;
   if (typeof endpoint !== 'string' || !endpoint) {
     res.status(400).json({ error: 'Missing endpoint' });
     return;
   }
-  removeSubscription(endpoint);
+  removeSubscription(endpoint, req.user || '');
   res.json({ success: true, devices: countSubscriptions(req.user || '') });
 });
 

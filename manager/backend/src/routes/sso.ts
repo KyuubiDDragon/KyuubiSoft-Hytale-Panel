@@ -15,7 +15,7 @@ import {
   discordExchangeAndIdentify,
 } from '../services/sso.js';
 import { createRefreshToken } from '../services/auth.js';
-import { updateUsers } from '../services/users.js';
+import { claimTokenVersion, updateUsers } from '../services/users.js';
 import { asyncRoute } from '../utils/asyncRoute.js';
 import { audit } from '../services/audit.js';
 import type { CookieOptions } from 'express';
@@ -110,36 +110,39 @@ router.get(
     // parallel callbacks for the same identity cannot create two accounts.
     let user: PanelUser | undefined;
     let created = false;
-    await updateUsers<{ users: PanelUser[] }>((data) => {
-      // Find an existing linked account first.
-      user = data.users.find((u) =>
-        u.linkedAccounts?.some(
-          (a) => a.providerId === provider.id && a.subject === result.providerSubject,
-        ),
-      );
-      if (user || provider.autoCreate === false) return false;
-      // Create on the fly, with the suggested username uniquified.
-      let candidate = result.suggestedUsername;
-      let i = 1;
-      while (data.users.some((u) => u.username === candidate)) {
-        candidate = `${result.suggestedUsername}-${i++}`;
-      }
-      user = {
-        username: candidate,
-        roleId: provider.defaultRoleId ?? 'viewer',
-        tokenVersion: 1,
-        createdAt: new Date().toISOString(),
-        linkedAccounts: [
-          {
-            providerId: provider.id,
-            subject: result.providerSubject,
-            linkedAt: new Date().toISOString(),
-          },
-        ],
-      };
-      data.users.push(user);
-      created = true;
-    });
+    await updateUsers<{ users: PanelUser[]; deletedTokenVersions?: Record<string, number> }>(
+      (data) => {
+        // Find an existing linked account first.
+        user = data.users.find((u) =>
+          u.linkedAccounts?.some(
+            (a) => a.providerId === provider.id && a.subject === result.providerSubject,
+          ),
+        );
+        if (user || provider.autoCreate === false) return false;
+        // Create on the fly, with the suggested username uniquified.
+        let candidate = result.suggestedUsername;
+        let i = 1;
+        while (data.users.some((u) => u.username === candidate)) {
+          candidate = `${result.suggestedUsername}-${i++}`;
+        }
+        user = {
+          username: candidate,
+          roleId: provider.defaultRoleId ?? 'viewer',
+          // A deleted account of this name keeps its tokens dead.
+          tokenVersion: claimTokenVersion(data, candidate),
+          createdAt: new Date().toISOString(),
+          linkedAccounts: [
+            {
+              providerId: provider.id,
+              subject: result.providerSubject,
+              linkedAt: new Date().toISOString(),
+            },
+          ],
+        };
+        data.users.push(user);
+        created = true;
+      },
+    );
     if (!user) {
       res.status(401).send('No linked account; ask an admin to invite you.');
       return;

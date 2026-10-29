@@ -7,10 +7,15 @@ import { logger } from '../utils/logger.js';
 
 import { mkdir, access } from 'fs/promises';
 import path from 'path';
-import https from 'https';
-import http from 'http';
-import { assertSafeResolvedUrl, UnsafeUrlError } from '../utils/urlGuard.js';
+import {
+  outboundErrorMessage,
+  safeDownload,
+  safeRequest,
+  type ExpectedFile,
+  type OutboundPolicy,
+} from '../utils/safeFetch.js';
 import { readRegularFile, replaceFileContent, UnsafeFileError } from '../utils/noFollowFs.js';
+import { removeReplacedFile } from '../utils/replacedFile.js';
 import { resolveRealPathWithin } from '../utils/pathSecurity.js';
 import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 import type { ServerContext } from './serverContext.js';
@@ -18,6 +23,11 @@ import type { ServerContext } from './serverContext.js';
 // External registry URL
 const EXTERNAL_REGISTRY_URL = 'https://kyuubisoft.com/hytale-mods.json';
 const REGISTRY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+const REGISTRY_HOSTS = ['kyuubisoft.com'];
+const GITHUB_API_HOSTS = ['api.github.com'];
+// Release assets: github.com redirects to release-assets.githubusercontent.com.
+export const GITHUB_DOWNLOAD_HOSTS = ['github.com', 'githubusercontent.com'];
+const JSON_MAX_BYTES = 10 * 1024 * 1024;
 
 // Localized string type for multi-language support
 export interface LocalizedString {
@@ -34,6 +44,8 @@ export interface ModStoreEntry {
   author: string;
   github?: string; // owner/repo format (for GitHub releases)
   downloadUrl?: string; // Direct download URL (alternative to github)
+  sha256?: string; // Of the direct download; checked when given
+  size?: number; // Bytes of the direct download; checked when given
   category: 'map' | 'utility' | 'gameplay' | 'admin' | 'other';
   configTemplate?: Record<string, unknown>;
   configPath?: string; // Relative path for config file
@@ -87,48 +99,29 @@ const BUILTIN_REGISTRY: ModStoreEntry[] = [
 let registryCache: { data: ModStoreEntry[]; timestamp: number } | null = null;
 
 /**
- * Fetch JSON from URL
+ * Fetch JSON from one of `hosts` (redirects stay on them).
  */
-async function fetchJson<T>(url: string): Promise<T | null> {
-  return new Promise((resolve) => {
-    const protocol = url.startsWith('https') ? https : http;
-
-    protocol
-      .get(url, { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } }, (res) => {
-        // Handle redirects
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            fetchJson<T>(redirectUrl).then(resolve);
-            return;
-          }
-        }
-
-        if (res.statusCode !== 200) {
-          logger.error(`Fetch failed: ${url} - Status: ${res.statusCode}`);
-          resolve(null);
-          return;
-        }
-
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            logger.error('Failed to parse JSON:', e);
-            resolve(null);
-          }
-        });
-        res.on('error', () => resolve(null));
-      })
-      .on('error', (e) => {
-        logger.error('Request error:', e);
-        resolve(null);
-      });
-  });
+async function fetchJson<T>(
+  url: string,
+  hosts: readonly string[],
+  headers: Record<string, string> = {},
+): Promise<T | null> {
+  try {
+    const res = await safeRequest(url, {
+      allowedHosts: hosts,
+      httpsOnly: true,
+      maxBytes: JSON_MAX_BYTES,
+      headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0', ...headers },
+    });
+    if (res.status !== 200) {
+      logger.error(`Fetch failed: ${url} - Status: ${res.status}`);
+      return null;
+    }
+    return JSON.parse(res.body.toString('utf-8')) as T;
+  } catch (e) {
+    logger.error(`Fetch failed: ${url} - ${outboundErrorMessage(e)}`);
+    return null;
+  }
 }
 
 /**
@@ -145,6 +138,7 @@ async function fetchExternalRegistry(): Promise<ModStoreEntry[]> {
   try {
     const response = await fetchJson<{ mods: ModStoreEntry[] } | ModStoreEntry[]>(
       EXTERNAL_REGISTRY_URL,
+      REGISTRY_HOSTS,
     );
 
     if (response) {
@@ -228,6 +222,7 @@ export interface GitHubRelease {
     name: string;
     browser_download_url: string;
     size: number;
+    digest?: string | null; // "sha256:<hex>" for assets uploaded since mid-2025
   }[];
 }
 
@@ -243,49 +238,13 @@ export interface InstallResult {
  * Fetch latest release from GitHub
  */
 export async function getLatestRelease(githubRepo: string): Promise<GitHubRelease | null> {
-  return new Promise((resolve) => {
-    const options = {
-      hostname: 'api.github.com',
-      path: `/repos/${githubRepo}/releases/latest`,
-      method: 'GET',
-      headers: {
-        'User-Agent': 'KyuubiSoft-Panel/1.0',
-        Accept: 'application/vnd.github.v3+json',
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        try {
-          if (res.statusCode === 200) {
-            resolve(JSON.parse(data));
-          } else {
-            logger.error(`GitHub API error: ${res.statusCode}`);
-            resolve(null);
-          }
-        } catch (e) {
-          logger.error('Failed to parse GitHub response:', e);
-          resolve(null);
-        }
-      });
-    });
-
-    req.on('error', (e) => {
-      logger.error('GitHub request error:', e);
-      resolve(null);
-    });
-
-    req.end();
-  });
+  const release = await fetchJson<GitHubRelease>(
+    `https://api.github.com/repos/${githubRepo}/releases/latest`,
+    GITHUB_API_HOSTS,
+    { Accept: 'application/vnd.github.v3+json' },
+  );
+  return release && Array.isArray(release.assets) ? release : null;
 }
-
-const MAX_DOWNLOAD_REDIRECTS = 5;
 
 /**
  * The game server can write to its mods folder: a folder below it that is a
@@ -308,88 +267,87 @@ async function readModsFolderFile(modsDir: string, file: string): Promise<string
 }
 
 /**
- * Download file from URL.
- *
- * SECURITY: the URL and every redirect target are SSRF-checked
- * (assertSafeResolvedUrl) before a connection is made, so a malicious mod
- * registry / release asset can't redirect the panel into internal services
- * (localhost, 169.254.169.254, RFC1918). Redirects are capped to avoid loops.
+ * Download a mod file. SECURITY: every hop is checked (utils/safeFetch.ts),
+ * so a malicious registry entry or release asset can't redirect the panel
+ * into internal services (localhost, 169.254.169.254, RFC1918); size and
+ * hash are checked where the source states them.
  */
-async function downloadFile(url: string, destPath: string): Promise<boolean> {
-  const fetchWithGuard = (currentUrl: string, redirectsLeft: number): Promise<boolean> =>
-    new Promise<boolean>((resolve) => {
-      // Validate BEFORE connecting (resolves DNS, rejects private ranges).
-      assertSafeResolvedUrl(currentUrl)
-        .then((safeUrl) => {
-          const proto = safeUrl.protocol === 'https:' ? https : http;
-          proto
-            .get(
-              safeUrl.toString(),
-              { headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' } },
-              (res) => {
-                // Handle redirects (301/302/303/307/308)
-                if (
-                  res.statusCode &&
-                  res.statusCode >= 300 &&
-                  res.statusCode < 400 &&
-                  res.headers.location
-                ) {
-                  res.resume(); // drain the socket
-                  if (redirectsLeft <= 0) {
-                    logger.error('Download failed: too many redirects');
-                    resolve(false);
-                    return;
-                  }
-                  // location may be relative — resolve against the current URL.
-                  const next = new URL(res.headers.location, safeUrl).toString();
-                  fetchWithGuard(next, redirectsLeft - 1).then(resolve);
-                  return;
-                }
-
-                if (res.statusCode !== 200) {
-                  logger.error(`Download failed: ${res.statusCode}`);
-                  res.resume();
-                  resolve(false);
-                  return;
-                }
-
-                const chunks: Buffer[] = [];
-                res.on('data', (chunk) => chunks.push(chunk));
-                res.on('end', async () => {
-                  try {
-                    const buffer = Buffer.concat(chunks);
-                    // destPath is <mods folder>/<plain name>. The game server can
-                    // write to that folder: the file is replaced, never written
-                    // through a link planted under its name.
-                    await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
-                    resolve(true);
-                  } catch (e) {
-                    logger.error('Failed to write file:', e);
-                    resolve(false);
-                  }
-                });
-                res.on('error', (e) => {
-                  logger.error('Download error:', e);
-                  resolve(false);
-                });
-              },
-            )
-            .on('error', (e) => {
-              logger.error('Request error:', e);
-              resolve(false);
-            });
-        })
-        .catch((e) => {
-          if (e instanceof UnsafeUrlError) {
-            logger.error(`Download blocked (unsafe URL: ${e.reason}): ${currentUrl}`);
-          } else {
-            logger.error('Download URL validation failed:', e);
-          }
-          resolve(false);
-        });
+async function downloadFile(download: ModDownload, destPath: string): Promise<boolean> {
+  try {
+    // destPath is <mods folder>/<plain name>. The game server can write to
+    // that folder: the file is replaced, never written through a link
+    // planted under its name.
+    await safeDownload(download.url, {
+      ...download.policy,
+      headers: { 'User-Agent': 'KyuubiSoft-Panel/1.0' },
+      expected: download.expected,
+      saveTo: destPath,
     });
+    return true;
+  } catch (e) {
+    logger.error(`[ModStore] Download failed: ${outboundErrorMessage(e)}`);
+    return false;
+  }
+}
 
-  return fetchWithGuard(url, MAX_DOWNLOAD_REDIRECTS);
+interface ModDownload {
+  url: string;
+  filename: string;
+  version: string;
+  expected: ExpectedFile;
+  policy: OutboundPolicy;
+}
+
+const SHA256_HEX = /^[a-f0-9]{64}$/i;
+const positiveSize = (n: unknown): n is number => Number.isInteger(n) && (n as number) > 0;
+
+/** Size and SHA-256 GitHub states for a release asset. */
+function githubAssetExpected(asset: GitHubRelease['assets'][number]): ExpectedFile {
+  const sha256 = typeof asset.digest === 'string' ? asset.digest.replace(/^sha256:/i, '') : '';
+  return {
+    ...(positiveSize(asset.size) ? { size: asset.size } : {}),
+    ...(SHA256_HEX.test(sha256) ? { sha256 } : {}),
+  };
+}
+
+/**
+ * Where the latest version of `mod` comes from. GitHub assets stay on GitHub;
+ * a direct registry URL may redirect to any public host and is checked
+ * against the registry's sha256/size when it gives them.
+ */
+async function latestDownload(mod: ModStoreEntry): Promise<ModDownload | { error: string }> {
+  if (mod.github) {
+    const release = await getLatestRelease(mod.github);
+    if (!release) return { error: 'Failed to fetch release from GitHub' };
+    const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
+    if (!jarAsset) return { error: 'No JAR file found in release' };
+    return {
+      url: jarAsset.browser_download_url,
+      // SECURITY: never trust the asset name as a path component.
+      filename: safeModFilename(jarAsset.name, `${mod.name}.jar`),
+      version: release.tag_name,
+      expected: githubAssetExpected(jarAsset),
+      policy: { allowedHosts: GITHUB_DOWNLOAD_HOSTS, httpsOnly: true },
+    };
+  }
+  if (mod.downloadUrl) {
+    // Reduce the URL's last part to a safe basename so a registry-supplied
+    // URL ending in e.g. /../../foo can't escape modsPath.
+    const urlParts = mod.downloadUrl.split('/');
+    return {
+      url: mod.downloadUrl,
+      filename: safeModFilename(urlParts[urlParts.length - 1], `${mod.name}.jar`),
+      version: mod.version || 'unknown',
+      expected: {
+        ...(typeof mod.sha256 === 'string' && SHA256_HEX.test(mod.sha256)
+          ? { sha256: mod.sha256 }
+          : {}),
+        ...(positiveSize(mod.size) ? { size: mod.size } : {}),
+      },
+      policy: {},
+    };
+  }
+  return { error: 'No download source available' };
 }
 
 /**
@@ -554,39 +512,11 @@ export async function installMod(server: ServerContext, modId: string): Promise<
     return { success: false, error: `Mod already installed: ${installed.filename}` };
   }
 
-  let downloadUrl: string;
-  let filename: string;
-  let version: string;
-
-  // Determine download source (GitHub or direct URL)
-  if (mod.github) {
-    // Get latest release from GitHub
-    const release = await getLatestRelease(mod.github);
-    if (!release) {
-      return { success: false, error: 'Failed to fetch release from GitHub' };
-    }
-
-    // Find JAR asset
-    const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
-    if (!jarAsset) {
-      return { success: false, error: 'No JAR file found in release' };
-    }
-
-    downloadUrl = jarAsset.browser_download_url;
-    // SECURITY: never trust the asset name as a path component.
-    filename = safeModFilename(jarAsset.name, `${mod.name}.jar`);
-    version = release.tag_name;
-  } else if (mod.downloadUrl) {
-    // Direct download URL
-    downloadUrl = mod.downloadUrl;
-    // Extract filename from URL but reduce it to a safe basename so a
-    // registry-supplied URL ending in e.g. /../../foo can't escape modsPath.
-    const urlParts = mod.downloadUrl.split('/');
-    filename = safeModFilename(urlParts[urlParts.length - 1], `${mod.name}.jar`);
-    version = mod.version || 'unknown';
-  } else {
-    return { success: false, error: 'No download source available' };
+  const download = await latestDownload(mod);
+  if ('error' in download) {
+    return { success: false, error: download.error };
   }
+  const { filename, version } = download;
 
   // Ensure mods directory exists
   const modsDir = server.paths.mods;
@@ -598,7 +528,7 @@ export async function installMod(server: ServerContext, modId: string): Promise<
 
   // Download the JAR
   const destPath = path.join(modsDir, filename);
-  const downloaded = await downloadFile(downloadUrl, destPath);
+  const downloaded = await downloadFile(download, destPath);
 
   if (!downloaded) {
     return { success: false, error: 'Failed to download mod file' };
@@ -738,35 +668,11 @@ export async function updateMod(server: ServerContext, modId: string): Promise<I
     return { success: false, error: 'Mod not installed' };
   }
 
-  let downloadUrl: string;
-  let filename: string;
-  let latestVersion: string;
-
-  if (mod.github) {
-    // Get latest release from GitHub
-    const release = await getLatestRelease(mod.github);
-    if (!release) {
-      return { success: false, error: 'Failed to fetch release from GitHub' };
-    }
-
-    // Find JAR asset
-    const jarAsset = release.assets.find((a) => a.name.endsWith('.jar'));
-    if (!jarAsset) {
-      return { success: false, error: 'No JAR file found in release' };
-    }
-
-    downloadUrl = jarAsset.browser_download_url;
-    // Same reduction as installMod: the asset name is untrusted release metadata.
-    filename = safeModFilename(jarAsset.name, `${mod.name}.jar`);
-    latestVersion = release.tag_name;
-  } else if (mod.downloadUrl) {
-    downloadUrl = mod.downloadUrl;
-    const urlParts = mod.downloadUrl.split('/');
-    filename = safeModFilename(urlParts[urlParts.length - 1], `${mod.name}.jar`);
-    latestVersion = mod.version || 'unknown';
-  } else {
-    return { success: false, error: 'No download source available' };
+  const download = await latestDownload(mod);
+  if ('error' in download) {
+    return { success: false, error: download.error };
   }
+  const { filename, version: latestVersion } = download;
 
   // Check if already latest
   if (installed.installedVersion) {
@@ -780,23 +686,19 @@ export async function updateMod(server: ServerContext, modId: string): Promise<I
     }
   }
 
-  const { unlink } = await import('fs/promises');
-
-  // Delete old version
-  try {
-    await unlink(path.join(server.paths.mods, installed.filename));
-  } catch (e) {
-    logger.error('Failed to delete old mod file:', e);
-    // Continue anyway - download new version
-  }
-
-  // Download new version
+  // Download new version; the old one is removed once it is in place.
   const destPath = path.join(server.paths.mods, filename);
-  const downloaded = await downloadFile(downloadUrl, destPath);
+  const downloaded = await downloadFile(download, destPath);
 
   if (!downloaded) {
     return { success: false, error: 'Failed to download new version' };
   }
+
+  await removeReplacedFile(
+    path.join(server.paths.mods, installed.filename),
+    destPath,
+    '[ModStore]',
+  );
 
   return {
     success: true,

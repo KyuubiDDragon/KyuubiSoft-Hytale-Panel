@@ -1,7 +1,7 @@
 /**
  * Pieces shared by the panel backups (services/backup.ts) and the server's
  * native backups (services/nativeBackups.ts): path resolution, the off-host
- * hook and the configurable extraction cap.
+ * hook, the configurable extraction cap and writing tar archives.
  */
 import fs from 'fs';
 import { spawn } from 'child_process';
@@ -84,4 +84,64 @@ export function runBackupHookAsync(absolutePath: string): void {
   } catch (err) {
     console.warn('[Backup] Failed to spawn backup-hook:', err instanceof Error ? err.message : err);
   }
+}
+
+const TAR_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const TAR_STDERR_MAX = 64 * 1024;
+
+/**
+ * Run tar with an argv array; rejects with tar's stderr on a non-zero exit.
+ * `stdoutFd` receives tar's output (for `-f -`).
+ */
+function runTar(args: string[], timeoutMs = TAR_TIMEOUT_MS, stdoutFd?: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('tar', args, { stdio: ['ignore', stdoutFd ?? 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderr.length < TAR_STDERR_MAX) stderr += chunk.toString('utf8');
+    });
+    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+    timer.unref?.();
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0) return resolve();
+      const detail = stderr.trim().slice(-500) || (signal ? `killed by ${signal}` : `exit ${code}`);
+      reject(new Error(`tar failed: ${detail}`));
+    });
+  });
+}
+
+/**
+ * Writes a gzipped tar of `sources` (tar arguments after `-f`) to `outFile`,
+ * which must not exist yet. The backups folder is shared with the game
+ * server: `tar -f <name>` would follow a link it planted under the name of the
+ * next backup and overwrite whatever that points to. So the file is created
+ * here (O_EXCL never follows a link) and tar writes into it through stdout.
+ * A failed archive is removed.
+ */
+export async function createTarArchive(
+  outFile: string,
+  sources: string[],
+  timeoutMs = TAR_TIMEOUT_MS,
+): Promise<void> {
+  const fh = await fs.promises.open(
+    outFile,
+    fs.constants.O_WRONLY |
+      fs.constants.O_CREAT |
+      fs.constants.O_EXCL |
+      (fs.constants.O_NOFOLLOW ?? 0),
+    0o666,
+  );
+  try {
+    await runTar(['-c', '-z', '-f', '-', ...sources], timeoutMs, fh.fd);
+  } catch (err) {
+    await fh.close().catch(() => undefined);
+    await fs.promises.rm(outFile, { force: true }).catch(() => undefined);
+    throw err;
+  }
+  await fh.close();
 }

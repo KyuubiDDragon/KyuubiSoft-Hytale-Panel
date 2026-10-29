@@ -25,6 +25,8 @@ export interface ApiKeyGrant {
   scopes: string[];
   /** Servers the key is limited to; null or absent = every server its owner may use. */
   serverIds?: string[] | null;
+  /** When the key expires; null or absent = never. */
+  expiresAt?: string | null;
 }
 
 export interface AuthenticatedRequest extends Request {

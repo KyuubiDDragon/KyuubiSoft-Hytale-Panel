@@ -7,7 +7,7 @@
  * world before an experiment, ship a world between servers, or pre-generate
  * terrain so players don't lag the server generating chunks on first visit.
  *
- * tar is invoked via execFile with an argv array (NO shell), so world names
+ * tar is invoked with an argv array (NO shell), so world names
  * and paths can never be interpreted as shell — there's no quoting to get
  * wrong. World names are additionally validated against the real on-disk
  * world list, so only an existing directory inside a known worlds root can be
@@ -22,8 +22,6 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { resolveServerIdSync } from './servers.js';
 import { getServerContext, worldRoots } from './serverContext.js';
 import * as dockerService from './docker.js';
@@ -41,6 +39,7 @@ import { publish } from './eventBus.js';
 import {
   EXTRACT_RESERVE_BYTES,
   archiveExtractMaxBytes,
+  createTarArchive,
   freeTimestampedPath,
 } from './backupCommon.js';
 import { flushWorldsIfRunning, withBackupLock } from './backup.js';
@@ -51,8 +50,6 @@ import {
   type BackupJob,
 } from './backupJobs.js';
 import { withServerStopped } from './serverLifecycle.js';
-
-const execFileAsync = promisify(execFile);
 
 const WORLD_BACKUP_PREFIX = 'world_';
 // Staging next to the worlds dir (same filesystem, inside the data dir, and
@@ -220,13 +217,9 @@ export async function backupWorld(
     if (flush.note) logger.warn(`[Worlds] backup of "${worldName}": ${flush.note}`);
     // No shell: tar gets an argv array. -C parent + the directory name means the
     // archive contains the world folder itself (restore recreates it by name).
-    await execFileAsync(
-      'tar',
-      ['-czf', outFile, '-C', found.parentDir, path.basename(found.worldPath)],
-      {
-        maxBuffer: 1024 * 1024 * 10,
-      },
-    );
+    // The file is created exclusively (the backups folder is shared with the
+    // game server, which could plant a link under the name).
+    await createTarArchive(outFile, ['-C', found.parentDir, path.basename(found.worldPath)]);
     const size = fs.statSync(outFile).size;
     publish(
       'backup.completed',
