@@ -20,10 +20,13 @@ const showBanner = computed(() => {
   return !pluginStatus.value.installed || !pluginStatus.value.running || updateInfo.value?.available
 })
 
+const authError = computed(() => pluginStatus.value?.authError ?? null)
+
 const bannerType = computed(() => {
   if (!pluginStatus.value) return 'info'
   if (!pluginStatus.value.installed) return 'warning'
   if (updateInfo.value?.available) return 'warning'
+  if (authError.value) return 'warning'
   if (!pluginStatus.value.running) return 'info'
   return 'success'
 })
@@ -122,6 +125,12 @@ onMounted(() => {
           <template v-else-if="updateInfo?.available">
             {{ t('dashboard.plugin.updateAvailable') }}
           </template>
+          <template v-else-if="authError === 'token_rejected'">
+            {{ t('dashboard.plugin.auth.tokenRejectedTitle') }}
+          </template>
+          <template v-else-if="authError === 'token_missing'">
+            {{ t('dashboard.plugin.auth.tokenMissingTitle') }}
+          </template>
           <template v-else>
             {{ t('dashboard.plugin.notRunning') }}
           </template>
@@ -133,6 +142,12 @@ onMounted(() => {
           </template>
           <template v-else-if="updateInfo?.available">
             {{ t('dashboard.plugin.updateHint', { current: updateInfo.currentVersion, latest: updateInfo.latestVersion }) }}
+          </template>
+          <template v-else-if="authError === 'token_rejected'">
+            {{ t('dashboard.plugin.auth.tokenRejectedHint') }}
+          </template>
+          <template v-else-if="authError === 'token_missing'">
+            {{ t('dashboard.plugin.auth.tokenMissingHint') }}
           </template>
           <template v-else>
             {{ t('dashboard.plugin.restartHint') }}

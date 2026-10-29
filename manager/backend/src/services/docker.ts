@@ -17,8 +17,9 @@ import type { ServerStatus, ServerStats, ActionResponse } from '../types/index.j
 import { validateCommand, escapeShellArg } from '../utils/sanitize.js';
 import { clearOnlinePlayers } from './players.js';
 import { isDemoMode, getDemoStatus, getDemoStats, getDemoLogs } from './demoData.js';
-import { ensureLoaded, getDefaultId, getServer } from './servers.js';
+import { ensureLoaded, getDefaultId, getServer, resolveServerId } from './servers.js';
 import { createDockerClient } from './dockerClient.js';
+import { ensurePluginAuthConfig } from './pluginAuth.js';
 
 const docker = createDockerClient();
 
@@ -38,7 +39,11 @@ class DockerTimeoutError extends Error {
   }
 }
 
-function withTimeout<T>(op: string, promise: Promise<T>, ms: number = DOCKER_OP_TIMEOUT_MS): Promise<T> {
+function withTimeout<T>(
+  op: string,
+  promise: Promise<T>,
+  ms: number = DOCKER_OP_TIMEOUT_MS,
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new DockerTimeoutError(op, ms)), ms);
@@ -90,7 +95,11 @@ export async function getStatus(serverId?: string): Promise<ServerStatus> {
       started_at: info.State.StartedAt,
     };
   } catch (error) {
-    return { status: 'error', running: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    return {
+      status: 'error',
+      running: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 
@@ -102,7 +111,8 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { error: 'Container not running' };
     const stats = await withTimeout('stats', container.stats({ stream: false }));
-    const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+    const cpuDelta =
+      stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
     const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
     const cpuCount = stats.cpu_stats.online_cpus || 1;
     const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
@@ -114,8 +124,8 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
       memory_bytes: memoryUsage,
       memory_limit_bytes: memoryLimit,
       memory_percent: Math.round(memoryPercent * 100) / 100,
-      memory_mb: Math.round(memoryUsage / (1024 * 1024) * 10) / 10,
-      memory_limit_mb: Math.round(memoryLimit / (1024 * 1024) * 10) / 10,
+      memory_mb: Math.round((memoryUsage / (1024 * 1024)) * 10) / 10,
+      memory_limit_mb: Math.round((memoryLimit / (1024 * 1024)) * 10) / 10,
     };
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Unknown error' };
@@ -125,13 +135,24 @@ export async function getStats(serverId?: string): Promise<ServerStats> {
 // Records the last time the panel itself stopped/restarted a server, so the
 // watchdog can tell a deliberate stop from a crash and not "restart" something
 // an operator just stopped (or fight a restart already in progress).
+// Keyed by the concrete registry id: legacy callers pass no id, the watchdog
+// always passes the real one, so both sides go through resolveServerId().
 const intentionalStops = new Map<string, number>();
-export function noteIntentionalStop(serverId?: string): void {
-  intentionalStops.set(serverId ?? '__default__', Date.now());
+export async function noteIntentionalStop(serverId?: string): Promise<void> {
+  intentionalStops.set(await resolveServerId(serverId), Date.now());
 }
-export function wasRecentlyStoppedIntentionally(serverId: string | undefined, withinMs: number): boolean {
-  const ts = intentionalStops.get(serverId ?? '__default__');
+export async function wasRecentlyStoppedIntentionally(
+  serverId: string | undefined,
+  withinMs: number,
+): Promise<boolean> {
+  const ts = intentionalStops.get(await resolveServerId(serverId));
   return ts !== undefined && Date.now() - ts < withinMs;
+}
+
+// Hytale 0.7 registers `stop` with the alias `shutdown`; `--crash` makes it
+// shut down as a crash, which the watchdog should still report as one.
+function isStopCommand(command: string): boolean {
+  return /^\/?(stop|shutdown)\b/i.test(command.trim()) && !/--crash\b/i.test(command);
 }
 
 export async function startContainer(serverId?: string): Promise<ActionResponse> {
@@ -139,6 +160,9 @@ export async function startContainer(serverId?: string): Promise<ActionResponse>
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
+    // The KyuubiSoft API plugin only accepts the panel's token; write it before
+    // the server process starts. Never throws, so it cannot block the start.
+    await ensurePluginAuthConfig(serverId);
     await withTimeout('start', container.start());
     return { success: true, message: 'Container started' };
   } catch (error) {
@@ -151,7 +175,7 @@ export async function stopContainer(serverId?: string): Promise<ActionResponse> 
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
-    noteIntentionalStop(serverId); // tell the watchdog this stop was deliberate
+    await noteIntentionalStop(serverId); // tell the watchdog this stop was deliberate
     await withTimeout('stop', container.stop({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
     clearOnlinePlayers();
     return { success: true, message: 'Container stopped' };
@@ -165,7 +189,8 @@ export async function restartContainer(serverId?: string): Promise<ActionRespons
   try {
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
-    noteIntentionalStop(serverId); // restart cycles through "stopped"; don't treat as a crash
+    await noteIntentionalStop(serverId); // restart cycles through "stopped"; don't treat as a crash
+    await ensurePluginAuthConfig(serverId); // picked up by the restarted process, see startContainer
     await withTimeout('restart', container.restart({ t: 30 }), DOCKER_STOP_TIMEOUT_MS);
     clearOnlinePlayers();
     return { success: true, message: 'Container restarted' };
@@ -179,7 +204,10 @@ export async function getLogs(tail: number = 100, serverId?: string): Promise<st
   try {
     const container = await getContainer(serverId);
     if (!container) return '';
-    const logs = await withTimeout('logs', container.logs({ stdout: true, stderr: true, tail, timestamps: true }) as Promise<Buffer>);
+    const logs = await withTimeout(
+      'logs',
+      container.logs({ stdout: true, stderr: true, tail, timestamps: true }) as Promise<Buffer>,
+    );
     return logs.toString('utf-8');
   } catch {
     return '';
@@ -191,7 +219,9 @@ export async function getLogs(tail: number = 100, serverId?: string): Promise<st
 const stdinStreams = new Map<string, NodeJS.WritableStream>();
 
 async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; key: string }> {
-  const key = serverId ?? '__default__';
+  // Same key for legacy and scoped callers, otherwise one container gets two
+  // concurrent stdin attaches.
+  const key = await resolveServerId(serverId);
   const existing = stdinStreams.get(key);
   if (existing) return { ok: true, key };
   try {
@@ -199,7 +229,13 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
     if (!container) return { ok: false, key };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { ok: false, key };
-    const stream = await container.attach({ stream: true, stdin: true, stdout: false, stderr: false, hijack: true });
+    const stream = await container.attach({
+      stream: true,
+      stdin: true,
+      stdout: false,
+      stderr: false,
+      hijack: true,
+    });
     stdinStreams.set(key, stream);
     stream.on('error', () => stdinStreams.delete(key));
     stream.on('close', () => stdinStreams.delete(key));
@@ -211,21 +247,29 @@ async function ensureStdinAttached(serverId?: string): Promise<{ ok: boolean; ke
 }
 
 export async function execCommand(command: string, serverId?: string): Promise<ActionResponse> {
+  // SECURITY: single gate for everything written to the game console. It runs
+  // after every caller has filled in its placeholders, so an embedded line
+  // break (a second, unchecked console command) or a TTY control byte (Ctrl-C
+  // shuts the server down) is rejected here no matter which path built it.
+  const validation = validateCommand(command);
+  if (!validation.valid) {
+    // JSON.stringify keeps a smuggled line break from forging log lines.
+    console.warn(
+      `[SECURITY] Blocked command: ${JSON.stringify(String(command).slice(0, 80))} Reason: ${validation.error}`,
+    );
+    return { success: false, error: validation.error || 'Invalid command' };
+  }
   if (isDemoMode()) {
-    const validation = validateCommand(command);
-    if (!validation.valid) return { success: false, error: validation.error || 'Invalid command' };
     return { success: true, message: `[DEMO] Command executed: ${command}` };
   }
   try {
-    const validation = validateCommand(command);
-    if (!validation.valid) {
-      console.warn(`[SECURITY] Blocked command: ${command.substring(0, 50)}... Reason: ${validation.error}`);
-      return { success: false, error: validation.error || 'Invalid command' };
-    }
     const container = await getContainer(serverId);
     if (!container) return { success: false, error: 'Container not found' };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
+
+    // A console stop exits the container just like a UI stop does.
+    if (isStopCommand(command)) await noteIntentionalStop(serverId);
 
     const attached = await ensureStdinAttached(serverId);
     const stream = attached.ok ? stdinStreams.get(attached.key) : undefined;
@@ -239,8 +283,13 @@ export async function execCommand(command: string, serverId?: string): Promise<A
     }
 
     const escapedCommand = escapeShellArg(command);
-    const exec = await withTimeout('exec', container.exec({
-      Cmd: ['sh', '-c', `
+    const exec = await withTimeout(
+      'exec',
+      container.exec({
+        Cmd: [
+          'sh',
+          '-c',
+          `
         if command -v screen > /dev/null && screen -list | grep -q hytale; then
           screen -S hytale -p 0 -X stuff ${escapedCommand}$'\n'
         elif [ -p /tmp/server_input ]; then
@@ -248,10 +297,12 @@ export async function execCommand(command: string, serverId?: string): Promise<A
         else
           echo ${escapedCommand} >> /proc/1/fd/0
         fi
-      `],
-      AttachStdout: true,
-      AttachStderr: true,
-    }));
+      `,
+        ],
+        AttachStdout: true,
+        AttachStderr: true,
+      }),
+    );
     const execStream = await exec.start({});
     return new Promise((resolve) => {
       execStream.on('end', () => resolve({ success: true, message: `Command sent: ${command}` }));
@@ -263,7 +314,10 @@ export async function execCommand(command: string, serverId?: string): Promise<A
   }
 }
 
-export async function execInContainer(command: string, serverId?: string): Promise<ActionResponse & { output?: string }> {
+export async function execInContainer(
+  command: string,
+  serverId?: string,
+): Promise<ActionResponse & { output?: string }> {
   if (isDemoMode()) {
     if (command.includes('stats memory')) {
       const { getDemoMemoryStats } = await import('./demoData.js');
@@ -276,14 +330,24 @@ export async function execInContainer(command: string, serverId?: string): Promi
     if (!container) return { success: false, error: 'Container not found' };
     const info = await withTimeout('inspect', container.inspect());
     if (!info.State.Running) return { success: false, error: 'Container not running' };
-    const exec = await withTimeout('exec', container.exec({ Cmd: ['sh', '-c', command], AttachStdout: true, AttachStderr: true }));
+    const exec = await withTimeout(
+      'exec',
+      container.exec({ Cmd: ['sh', '-c', command], AttachStdout: true, AttachStderr: true }),
+    );
     const stream = await exec.start({});
     return new Promise((resolve) => {
       let output = '';
-      stream.on('data', (chunk: Buffer) => { output += chunk.toString('utf8'); });
-      stream.on('end', () => resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }));
+      stream.on('data', (chunk: Buffer) => {
+        output += chunk.toString('utf8');
+      });
+      stream.on('end', () =>
+        resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }),
+      );
       stream.on('error', (err: Error) => resolve({ success: false, error: err.message }));
-      setTimeout(() => resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }), 5000);
+      setTimeout(
+        () => resolve({ success: true, output: output.replace(/[\x00-\x08]/g, '').trim() }),
+        5000,
+      );
     });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

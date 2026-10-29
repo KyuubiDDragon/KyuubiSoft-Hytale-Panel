@@ -21,19 +21,28 @@ const { requirePermission } = await import('./permissions.js');
 function mockRes(): { res: Response; status: () => number | undefined } {
   let statusCode: number | undefined;
   const res = {} as Response;
-  res.status = vi.fn((c: number) => { statusCode = c; return res; }) as unknown as Response['status'];
+  res.status = vi.fn((c: number) => {
+    statusCode = c;
+    return res;
+  }) as unknown as Response['status'];
   res.json = vi.fn(() => res) as unknown as Response['json'];
   return { res, status: () => statusCode };
 }
 const run = (perm: string, req: Partial<AuthenticatedRequest>) => {
   const { res, status } = mockRes();
   const next = vi.fn();
-  return requirePermission(perm as never)(req as AuthenticatedRequest, res, next as NextFunction)
-    .then(() => ({ status, next }));
+  return requirePermission(perm as never)(
+    req as AuthenticatedRequest,
+    res,
+    next as NextFunction,
+  ).then(() => ({ status, next }));
 };
 
 describe('requirePermission', () => {
-  beforeEach(() => { getUserPermissions.mockReset(); getUserPermissionsForServer.mockReset(); });
+  beforeEach(() => {
+    getUserPermissions.mockReset();
+    getUserPermissionsForServer.mockReset();
+  });
 
   it('401s an unauthenticated request', async () => {
     const { status, next } = await run('backups.create', {});
@@ -80,7 +89,10 @@ describe('requirePermission', () => {
 
   it('gives a key no rights once its owner is gone', async () => {
     getUserPermissions.mockResolvedValue([]); // owner deleted ⇒ no perms
-    const { status } = await run('backups.create', { user: 'ghost', apiKey: { id: 'k3', scopes: ['backups.create'] } });
+    const { status } = await run('backups.create', {
+      user: 'ghost',
+      apiKey: { id: 'k3', scopes: ['backups.create'] },
+    });
     expect(status()).toBe(403);
   });
 
@@ -89,5 +101,14 @@ describe('requirePermission', () => {
     const { next } = await run('console.execute', { user: 'op', serverId: 'srv-1' });
     expect(getUserPermissionsForServer).toHaveBeenCalledWith('op', 'srv-1');
     expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('forwards a user-store failure to the error handler instead of hanging', async () => {
+    // e.g. a corrupt users.json: Express 4 would otherwise leave the request open.
+    const failure = new Error('users.json is corrupt');
+    getUserPermissions.mockRejectedValue(failure);
+    const { status, next } = await run('backups.create', { user: 'alice' });
+    expect(next).toHaveBeenCalledWith(failure);
+    expect(status()).toBeUndefined();
   });
 });

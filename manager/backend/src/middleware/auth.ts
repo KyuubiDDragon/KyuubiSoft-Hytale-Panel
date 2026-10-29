@@ -57,9 +57,19 @@ export async function authMiddleware(
   }
 
   if (result.tokenVersion !== undefined) {
-    const currentVersion = await getTokenVersion(result.username);
+    let currentVersion: number;
+    try {
+      currentVersion = await getTokenVersion(result.username);
+    } catch (err) {
+      // users.json unreadable (corrupt, permissions): fail closed with 500
+      // via the global error handler instead of leaving the request hanging.
+      next(err);
+      return;
+    }
     if (currentVersion !== result.tokenVersion) {
-      res.status(401).json({ detail: 'Session expired due to account changes', code: 'TOKEN_INVALIDATED' });
+      res
+        .status(401)
+        .json({ detail: 'Session expired due to account changes', code: 'TOKEN_INVALIDATED' });
       return;
     }
   }

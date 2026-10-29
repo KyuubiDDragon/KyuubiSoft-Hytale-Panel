@@ -2,7 +2,197 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
-## [Unreleased] - Session reliability, credential-conflict fix, recovery CLI, security hardening & new operator features
+## [Unreleased] - Security hotfix, KyuubiSoft API 2.0.0, Node 24, session reliability, recovery CLI & new operator features
+
+### Security hotfix
+
+Closes several ways for non-admin panel users (and in one case any player) to
+gain admin rights, read panel secrets or lose data. Read **Breaking changes and
+upgrade notes** below before updating.
+
+**Console and automation**
+- Commands containing line breaks or other control characters (C0, DEL, C1,
+  U+2028/U+2029) are rejected centrally before anything reaches the game
+  server's stdin, after every placeholder substitution. Previously a second
+  line bypassed the command whitelist and the admin gate (`/say hi` followed by
+  `/op add …`), and a Ctrl-C byte could shut the server down. Covers the
+  console (REST and WebSocket), scheduler, quick commands, event actions and
+  kick/ban reasons.
+- Scheduled commands, quick commands and event actions pass the same check as
+  the console: the command whitelist plus `console.execute` /
+  `console.execute.admin` on the target server — when saving (saving user) and
+  when firing (the user who saved the entry, with their current rights).
+  `scheduler.edit` alone can no longer schedule `/op`, `/stop` or `/ban`.
+- Event action placeholders are normalised: name fields (`{player}`,
+  `{username}`, …) must be valid player names, otherwise the action is skipped
+  and audited. A crafted username on a failed login can no longer inject
+  commands. Event patterns are limited to known event names or `category.*`.
+- `/auth` (all subcommands) and `/save-off` now require the admin level, so
+  operators can no longer sign the server out of Hytale or silently turn off
+  world saving.
+- Player names in the ban list endpoints are validated; kick/ban reasons,
+  AutoMod details, Discord relay messages and announcements are single-line.
+- API keys can no longer exceed their scopes on the command paths: the HTTP
+  console checks the command tier against both the key's scopes and its
+  owner's role, WebSocket tickets requested with a key require the key itself
+  to hold `console.view` or `players.view` and carry its scopes to the socket,
+  and `POST /api/players/bulk` goes through the regular permission gate
+  (key scopes and per-server roles included).
+
+**Files and archives**
+- World archive imports and per-world restores are validated before
+  extraction: archives with symlinks, hardlinks, device/FIFO entries, absolute
+  paths or `..` components are rejected, and extraction runs in a private
+  staging folder that is re-checked before it is merged. A crafted world
+  archive could previously plant links that exposed the panel's JWT secret and
+  user database. `Assets.zip` goes through the same checks.
+- The file manager resolves symlinks for every operation and re-applies the
+  root boundary and deny list to the real location (`PATH_SYMLINK_ESCAPE`,
+  `PATH_SYMLINK`). The same real-path check covers world config files, server
+  config files and backup download/restore/delete.
+- CurseForge (CFWidget) tracking only accepts plain `.jar`/`.zip` names inside
+  the mods folder; invalid stored entries are dropped on load. A crafted entry
+  could previously delete arbitrary files such as `panel.sqlite`, `users.json`
+  or `setup-config.json`. Stored names from CurseForge, Modtale and StackMart
+  are reduced to bare names before any delete, and mod store updates sanitise
+  the download name like installs do.
+
+**Accounts and setup**
+- `users.json` is no longer replaced by a file containing only the `.env`
+  admin when it cannot be read. Only a missing file is created; a corrupt file
+  fails requests with HTTP 500, is left untouched and a one-time
+  `users.json.corrupt-<timestamp>` copy is kept.
+- All `users.json` writers (users, 2FA, SSO, setup wizard, env migration,
+  recovery CLI) write atomically (temp file, fsync, rename) and are
+  serialised, so parallel logins and edits no longer lose updates. A TOTP or
+  backup code submitted twice in parallel is accepted only once; 2FA fails
+  closed when the user store is unreadable.
+- `--allow-op` is no longer enabled by the setup wizard, the default config or
+  the env migration. It lets any player give themselves full admin rights with
+  `/op self`; admins are made from the console with `/op add <name>`, which
+  works without the flag. Existing settings are kept, but while the flag is on
+  the panel shows a warning banner, a warning in Settings and `[WARN]` lines in
+  the server start log.
+
+**Servers**
+- Deleting a server no longer removes the compose-stack game container or
+  unrelated containers: registry checks (compose, default and last server are
+  not deletable) run before any Docker call, and only containers carrying the
+  panel's ownership labels for that server id are removed (409
+  `CONTAINER_NOT_MANAGED` otherwise; `?keepContainer=true` drops only the
+  registry entry). Container names are always generated by the panel.
+- Multiserver is behind the `MULTISERVER_ENABLED` flag (default off) until
+  every page is server-aware: creating servers and moving the default away
+  from the compose server are refused with 403 `MULTISERVER_DISABLED`, and the
+  server picker is hidden. Existing extra servers stay listed and deletable.
+
+**Web**
+- Mod changelogs from CurseForge, Modtale and GitHub releases are sanitised in
+  the backend (dependency-free allowlist sanitizer) and again in the browser
+  with a stricter DOMPurify policy (no class/style/id/event attributes,
+  http(s)-only links and images, links forced to noopener/noreferrer). The
+  `vue/no-v-html` lint rule is an error again.
+- The web map is no longer served unauthenticated on the panel origin. It
+  requires `players.view` and a short-lived, revocable web map session; every
+  HTTP and WebSocket request is re-checked against the user, their session
+  version and their permission. The proxied page always runs in a CSP sandbox
+  with an opaque origin, so third-party map scripts can no longer read panel
+  tokens or call the panel API. Panel cookies and authorization headers are no
+  longer forwarded to the game container.
+- The unauthenticated `/api/worlds`, `/api/tiles` and `/api/webmap-ws` proxy
+  routes and the web map exemptions from the CSRF and setup checks are gone.
+- The file write rate limit keys anonymous clients by IPv6 subnet, so rotating
+  addresses inside a prefix no longer dodges it.
+
+**KyuubiSoft API plugin 2.0.0**
+- Every HTTP route, `/metrics` and the WebSocket require
+  `Authorization: Bearer <token>`; the WebSocket upgrade is authenticated
+  before the handshake (no unauthenticated `101` anymore). Without a
+  configured token the API answers `503` (fail-closed). Constant-time token
+  check. CORS is off by default, with an optional explicit
+  `corsAllowedOrigins` allowlist.
+- The panel generates a random per-server plugin token, stores it in its data
+  volume (`plugin-tokens.json`, mode 0600, never exposed through the API or the
+  file manager), writes it into the plugin config before every start/restart,
+  at boot and on plugin install, and sends it with every plugin request and
+  WebSocket. Containers created by the panel receive it via
+  `KYUUBISOFT_API_TOKEN`.
+- The dashboard explains when the plugin rejects the panel token or has none
+  ("restart the server from the panel") instead of a generic error.
+- The file manager blocks every `config.json` variant (`.bak`, `.tmp-*`,
+  `.corrupt-*`) and the whole `config/kyuubisoft-api/` directory. An
+  unreadable plugin config is backed up to the panel's own data volume
+  instead of the server directory, and writing the token never follows
+  symlinks in the server directory shared with the game container.
+
+### Fixed (hotfix)
+
+- The watchdog no longer reports `server.crashed` (webhooks, Discord,
+  notifications, crash capture) or auto-restarts after a stop or restart from
+  the panel UI, the setup wizard, scheduled restarts, rollback, or a `/stop`
+  typed into the panel console.
+- 2FA backup codes were never accepted; they now work with or without the dash
+  and in any letter case.
+- Requests no longer hang when the user store fails; the auth middleware,
+  auth routes, console, bulk player actions and the WebSocket console answer
+  with an error (HTTP 500 / close code 1011).
+- Scheduled commands and event-action rules that the panel would skip (saved
+  before creators were recorded, or whose creator lost the console permission)
+  are flagged with a `blockedReason`; the scheduler shows a "not running" badge
+  with an **Approve** button for admins
+  (`POST /api/scheduler/commands/:id/approve`,
+  `POST /api/event-actions/:id/approve`, re-checked and audited).
+- The web map notices when its session ends (panel restart, 12-hour limit,
+  revoked permission) and shows a "Map session expired" overlay with a reload
+  button; while the page is open the session is kept alive and renewed before
+  the limit.
+- A rejected `Assets.zip` no longer wipes the currently extracted assets.
+- Shell scripts keep LF line endings on Windows checkouts (`.gitattributes`),
+  so locally built images start again.
+
+### Platform
+
+- The manager runs on Node.js 24 LTS (Node 20 reached end of life); Docker,
+  CI (`.nvmrc`) and `engines` are aligned. Docker base images are pinned by
+  digest, and the build toolchain no longer ends up in the runtime image.
+- bcrypt 6 (existing password hashes stay valid) and better-sqlite3 12 for
+  Node 24; known vulnerabilities in runtime dependencies fixed, including
+  denial-of-service issues in ws, multer and compression (backend audit 40 →
+  10 findings, none critical; frontend 31 → 19). Unused express-ws,
+  openid-client and proper-lockfile removed; vitest 5, dockerode 5.
+
+### Breaking changes and upgrade notes
+
+- **Rebuild and redeploy the manager image**, then open the dashboard: it
+  offers the KyuubiSoft API 2.0.0 update. Install it and restart the server
+  **from the panel** so the plugin picks up its token.
+- Scripts calling the plugin API directly must send the bearer token. The
+  plugin keys `authEnabled`, `corsEnabled` and `corsOrigin` are ignored;
+  `insecureDisableAuth: true` disables auth for isolated development setups
+  and logs a warning at every start.
+- `scheduler.edit` alone no longer allows scheduling commands; saving or
+  running quick commands needs console permission. Scheduled commands saved
+  before this update have no recorded creator and only run commands that need
+  no admin permission — the scheduler marks them as "not running"; an admin
+  approves them once with the **Approve** button. Review existing event
+  actions after the update.
+- Operators lose `/auth` and `/save-off`.
+- API keys scoped to `console.execute` lose admin-level commands; add
+  `console.execute.admin` to the key if it needs them. WebSocket tickets for
+  API keys need `console.view` or `players.view` on the key itself.
+- `POST /api/servers` requires `MULTISERVER_ENABLED=true`; the current default
+  server can no longer be deleted (switch the default first), and a failed
+  container removal returns 502 and keeps the registry entry.
+- The web map in the panel requires `players.view`. Old direct links to
+  `/api/webmap/` and the `/api/worlds`, `/api/tiles`, `/api/webmap-ws` routes
+  no longer work; open the map from the panel's Web Map page.
+- Symlinks that lead out of a file manager root (for example `server/universe`,
+  `server/mods`, `server/plugins` inside the game container) are no longer
+  followed; use the Data, Mods and Plugins roots instead. World imports reject
+  archives with links, self-extracting or prepended zips and empty archives.
+- A corrupt `users.json` blocks all logins until it is repaired or restored.
+  Deleting the file re-creates only the `.env` admin; all other accounts are
+  lost.
 
 ### New features
 

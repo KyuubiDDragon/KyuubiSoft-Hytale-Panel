@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useServersStore } from '@/stores/servers'
 
+const { t } = useI18n()
 const serversStore = useServersStore()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
@@ -30,7 +32,9 @@ function pick(id: string) {
 </script>
 
 <template>
-  <div ref="root" class="relative">
+  <!-- Hidden unless the backend enables multiserver: the picker still mounts
+       so its refresh() loads the flag. -->
+  <div v-if="serversStore.multiserverEnabled" ref="root" class="relative">
     <button
       type="button"
       @click="open = !open"
@@ -92,6 +96,7 @@ function pick(id: string) {
         </div>
         <div class="border-t border-border/60 px-3 py-2 text-xs text-gray-400">
           {{ serversStore.servers.length }} server{{ serversStore.servers.length === 1 ? '' : 's' }} registered
+          · <span class="uppercase tracking-wider text-status-warning">{{ t('servers.guard.experimentalBadge') }}</span>
         </div>
       </div>
     </Transition>

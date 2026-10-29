@@ -5,7 +5,7 @@ import { getDockerInstance, execCommand, getLogs } from './services/docker.js';
 import { parseLogLine } from './services/logs.js';
 import { processLogLine } from './services/players.js';
 import { hasPermission } from './services/roles.js';
-import { getCommandRequiredPermission } from './utils/sanitize.js';
+import { authorizeCommand, scopeAllows } from './services/commandPolicy.js';
 import type { WsMessage } from './types/index.js';
 import { isDemoMode, getNextDemoLogLine } from './services/demoData.js';
 import { getDefaultId, getServer } from './services/servers.js';
@@ -14,6 +14,8 @@ import { getDefaultId, getServer } from './services/servers.js';
 // when the last subscriber to server X disconnects we tear down its stream.
 const clientUsernames = new Map<WebSocket, string>();
 const clientServerId = new Map<WebSocket, string>();
+// Scopes of the API key a socket's ticket was issued for (absent = normal login).
+const clientApiKeyScopes = new Map<WebSocket, string[]>();
 
 // Per-server set of subscribed sockets (so we can broadcast per-server)
 const clientsByServer = new Map<string, Set<WebSocket>>();
@@ -55,10 +57,12 @@ async function sendExistingLogs(ws: WebSocket, serverId: string): Promise<void> 
 
       const parsed = parseLogLine(trimmed);
       if (parsed && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'log',
-          ...parsed,
-        }));
+        ws.send(
+          JSON.stringify({
+            type: 'log',
+            ...parsed,
+          }),
+        );
       }
     }
   } catch (error) {
@@ -83,8 +87,11 @@ export async function resolveSocketServerId(reqUrl: string): Promise<string | nu
     return id;
   }
   if (reqUrl.startsWith('/api/console/ws')) {
-    try { return await getDefaultId(); }
-    catch { return 'default'; }
+    try {
+      return await getDefaultId();
+    } catch {
+      return 'default';
+    }
   }
   return null;
 }
@@ -113,6 +120,7 @@ export function setupWebSocket(wss: WebSocketServer): void {
     const expectedServerId = isScoped ? serverId : undefined;
 
     let username: string;
+    let apiKeyScopes: string[] | undefined;
 
     if (ticket) {
       const ticketResult = verifyWsTicket(ticket, expectedServerId);
@@ -121,8 +129,11 @@ export function setupWebSocket(wss: WebSocketServer): void {
         return;
       }
       username = ticketResult.username;
+      apiKeyScopes = ticketResult.apiKeyScopes;
     } else if (token) {
-      console.warn('WebSocket: Client using deprecated token auth. Should use /api/auth/ws-ticket instead.');
+      console.warn(
+        'WebSocket: Client using deprecated token auth. Should use /api/auth/ws-ticket instead.',
+      );
       const tokenResult = verifyToken(token, 'access');
       if (!tokenResult) {
         ws.close(4001, 'Invalid token');
@@ -134,7 +145,19 @@ export function setupWebSocket(wss: WebSocketServer): void {
       return;
     }
 
-    const canViewLogs = await hasPermission(username, 'console.view', isScoped ? serverId : undefined);
+    // A ticket requested with an API key carries the key's scopes; the key must
+    // cover console.view itself, not just its owner. A failing rights lookup
+    // (unreadable users file) closes the socket instead of leaving it hanging.
+    let canViewLogs = false;
+    try {
+      canViewLogs =
+        scopeAllows(apiKeyScopes, 'console.view') &&
+        (await hasPermission(username, 'console.view', isScoped ? serverId : undefined));
+    } catch (err) {
+      console.error('WebSocket permission check failed:', err);
+      ws.close(1011, 'Permission check failed');
+      return;
+    }
     if (!canViewLogs) {
       ws.close(4003, 'Permission denied: console.view required');
       return;
@@ -145,6 +168,7 @@ export function setupWebSocket(wss: WebSocketServer): void {
     serverClients.add(ws);
     clientUsernames.set(ws, username);
     clientServerId.set(ws, serverId);
+    if (apiKeyScopes) clientApiKeyScopes.set(ws, apiKeyScopes);
 
     await sendExistingLogs(ws, serverId);
 
@@ -162,28 +186,36 @@ export function setupWebSocket(wss: WebSocketServer): void {
             if (message.payload) {
               const wsUsername = clientUsernames.get(ws);
               const wsServerId = clientServerId.get(ws);
-              const requiredPerm = getCommandRequiredPermission(message.payload) ?? 'console.execute';
-              // Authorize against the SAME server the command will run on, so a
-              // per-server operator role is honoured (global scope alone would
-              // wrongly reject it).
-              if (!wsUsername || !(await hasPermission(wsUsername, requiredPerm, wsServerId))) {
-                ws.send(JSON.stringify({
-                  type: 'command_response',
-                  command: message.payload,
-                  success: false,
-                  error: `Permission denied: ${requiredPerm} required`,
-                }));
+              // Same check as the HTTP console: whitelist, then the command's
+              // tier on the SAME server it will run on (so a per-server operator
+              // role is honoured), limited by the API key's scopes if any.
+              const auth = await authorizeCommand(
+                { username: wsUsername, apiKeyScopes: clientApiKeyScopes.get(ws) },
+                message.payload,
+                wsServerId,
+              );
+              if (!auth.allowed) {
+                ws.send(
+                  JSON.stringify({
+                    type: 'command_response',
+                    command: message.payload,
+                    success: false,
+                    error: auth.error,
+                  }),
+                );
                 break;
               }
 
               const result = await execCommand(message.payload, wsServerId);
-              ws.send(JSON.stringify({
-                type: 'command_response',
-                command: message.payload,
-                success: result.success,
-                output: result.message,
-                error: result.error,
-              }));
+              ws.send(
+                JSON.stringify({
+                  type: 'command_response',
+                  command: message.payload,
+                  success: result.success,
+                  output: result.message,
+                  error: result.error,
+                }),
+              );
             }
             break;
 
@@ -200,6 +232,7 @@ export function setupWebSocket(wss: WebSocketServer): void {
       const sid = clientServerId.get(ws);
       clientUsernames.delete(ws);
       clientServerId.delete(ws);
+      clientApiKeyScopes.delete(ws);
       if (sid) {
         const set = clientsByServer.get(sid);
         set?.delete(ws);
@@ -215,6 +248,7 @@ export function setupWebSocket(wss: WebSocketServer): void {
       const sid = clientServerId.get(ws);
       clientUsernames.delete(ws);
       clientServerId.delete(ws);
+      clientApiKeyScopes.delete(ws);
       if (sid) {
         clientsByServer.get(sid)?.delete(ws);
       }
@@ -272,30 +306,33 @@ function startDemoLogStreaming(serverId: string): void {
 
   console.log(`[DEMO] Demo log streaming started for ${serverId}`);
 
-  state.demoInterval = setInterval(() => {
-    const set = clientsByServer.get(serverId);
-    if (!set || set.size === 0) {
-      stopDemoLogStreaming(serverId);
-      return;
-    }
-
-    const logLine = getNextDemoLogLine();
-    const parsed = parseLogLine(logLine);
-
-    if (parsed) {
-      broadcast(serverId, { type: 'log', ...parsed });
-
-      const playerEvent = processLogLine(logLine);
-      if (playerEvent) {
-        broadcast(serverId, {
-          type: 'player_event',
-          event: playerEvent.event,
-          player: playerEvent.player,
-          timestamp: new Date().toISOString(),
-        });
+  state.demoInterval = setInterval(
+    () => {
+      const set = clientsByServer.get(serverId);
+      if (!set || set.size === 0) {
+        stopDemoLogStreaming(serverId);
+        return;
       }
-    }
-  }, 3000 + Math.random() * 5000);
+
+      const logLine = getNextDemoLogLine();
+      const parsed = parseLogLine(logLine);
+
+      if (parsed) {
+        broadcast(serverId, { type: 'log', ...parsed });
+
+        const playerEvent = processLogLine(logLine);
+        if (playerEvent) {
+          broadcast(serverId, {
+            type: 'player_event',
+            event: playerEvent.event,
+            player: playerEvent.player,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+    },
+    3000 + Math.random() * 5000,
+  );
 }
 
 function stopDemoLogStreaming(serverId: string): void {
@@ -389,7 +426,6 @@ async function startLogStreaming(serverId: string): Promise<void> {
       console.log(`Log stream closed (${serverId})`);
       scheduleStreamRestart(serverId);
     });
-
   } catch (error) {
     console.error(`Failed to start log streaming (${serverId}):`, error);
     broadcast(serverId, { type: 'error', message: 'Failed to connect to container logs' });

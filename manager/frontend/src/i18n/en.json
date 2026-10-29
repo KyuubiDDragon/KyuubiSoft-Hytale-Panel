@@ -61,6 +61,13 @@
     "permissionIssueDesc": "The manager cannot write to some data directories. This typically happens after upgrading to v2.0.0, which runs as a non-root user (UID 1001) for security.",
     "fixCommand": "Run this command on your host to fix permissions"
   },
+  "allowOpSecurity": {
+    "warning": "With this option, any player on the server can give themselves full admin rights with /op self.",
+    "safeAlternative": "To make someone an admin safely, use the console: /op add <name>.",
+    "bannerTitle": "Self-OP is enabled on this server",
+    "bannerText": "The server is started with --allow-op.",
+    "openSettings": "Open settings"
+  },
   "auth": {
     "login": "Login",
     "logout": "Logout",
@@ -375,7 +382,13 @@
       "update": "Update Plugin",
       "updating": "Updating...",
       "updateSuccess": "Plugin updated successfully. Restart the server to activate.",
-      "updateFailed": "Update failed"
+      "updateFailed": "Update failed",
+      "auth": {
+        "tokenRejectedTitle": "Plugin token does not match",
+        "tokenRejectedHint": "The KyuubiSoft API plugin rejected the panel's token, probably because the server still runs with an older one. Restart the server from the panel so the plugin loads the current token.",
+        "tokenMissingTitle": "Plugin locked: no token configured",
+        "tokenMissingHint": "The KyuubiSoft API plugin has no access token yet and blocks all requests. Restart the server from the panel; the panel writes the token before every start."
+      }
     },
     "downloaderAuthExpired": "Hytale Downloader Authentication Expired",
     "downloaderAuthExpiredDesc": "The downloader authentication has expired or is missing. Automatic server updates cannot be performed until you re-authenticate.",
@@ -1226,9 +1239,9 @@
     "disableSentryRestartRequired": "Restart Required",
     "disableSentryRestartRequiredDesc": "The setting has been changed. The server must now be restarted to apply the change.",
     "disableSentryRestarting": "Server is restarting to apply the new setting...",
-    "allowOpTitle": "Allow OP Commands",
-    "allowOpDesc": "Enable this option to allow OP (operator) commands on the server. OP players have elevated permissions.",
-    "allowOpLabel": "Allow OP Commands",
+    "allowOpTitle": "Allow /op self (--allow-op)",
+    "allowOpDesc": "Starts the server with --allow-op, which unlocks the /op self command for players. Making admins from the console with /op add works without it.",
+    "allowOpLabel": "Allow /op self",
     "allowOpHint": "Adds the --allow-op flag when starting the server",
     "allowOpRestartNote": "After changing this setting, the server must be restarted for the change to take effect.",
     "allowOpRestartRequired": "Restart Required",
@@ -1368,7 +1381,19 @@
     "deleteConfirm": "Delete server \"{name}\"? The container will be stopped.",
     "ready": "ready",
     "creating": "creating",
-    "broken": "broken"
+    "broken": "broken",
+    "guard": {
+      "disabledTitle": "Multiserver is disabled",
+      "disabledHint": "Multiserver is a work in progress and currently disabled. All panel actions apply to the default server. Additional servers that already exist stay listed here so you can remove them.",
+      "experimentalTitle": "Multiserver is experimental",
+      "experimentalHint": "Many panel actions still apply to the default server only, regardless of the server selected in the header. Use additional servers for testing only.",
+      "experimentalBadge": "experimental",
+      "composeBadge": "Compose",
+      "notManagedTitle": "Container not managed by the panel",
+      "notManagedMessage": "The container \"{container}\" was not created by the panel for this server, so it will be neither stopped nor removed. Remove only the registry entry and leave the container untouched?",
+      "removeEntryOnly": "Remove entry only",
+      "entryRemoved": "Registry entry for \"{name}\" removed; the container was left untouched"
+    }
   },
   "security": {
     "confirmRevokeTitle": "Revoke API key?",
@@ -1523,6 +1548,14 @@
     "commandWhitelistHint": "Only whitelisted console commands (starting with /) are allowed.",
     "commandMustStartWithSlash": "Command must start with /",
     "needAtLeastOneTime": "Add at least one time",
+    "approval": {
+      "notRunning": "Not running: must be approved by an admin",
+      "invalidCommand": "Not running: this command is not allowed",
+      "noCreator": "Saved before creators were recorded; this command needs an admin's approval.",
+      "creatorLacksPermission": "Its creator no longer holds the console permission for this command.",
+      "approve": "Approve",
+      "approved": "Approved, the command runs again"
+    },
     "inMinutes": "in {n} min",
     "minutesAgo": "{n} min ago",
     "inHours": "in {n} h",
@@ -1574,7 +1607,14 @@
     "openNewTab": "Open in New Tab",
     "notInstalled": "EasyWebMap Not Installed",
     "notInstalledDesc": "The EasyWebMap mod is not installed. Install it from the Mod Store to enable the live web map feature.",
-    "goToModStore": "Go to Mod Store"
+    "goToModStore": "Go to Mod Store",
+    "access": {
+      "noPermission": "You need the \"View player list\" permission (players.view) to open the web map.",
+      "sessionFailed": "The web map could not be opened. Please try again.",
+      "sessionExpired": "Map session expired",
+      "sessionExpiredDesc": "The map session has ended, for example after a panel restart. Reload the map to continue.",
+      "reload": "Reload map"
+    }
   },
   "roles": {
     "title": "Role Management",
@@ -2002,9 +2042,8 @@
     "whitelistEnabled": "Enable Whitelist",
     "whitelistDescription": "Only players on the whitelist can join the server. You can manage the whitelist after setup.",
     "recommended": "Recommended",
-    "allowOperator": "Allow Operator Commands (/op)",
-    "allowOperatorDescription": "Allow trusted players to receive elevated permissions via the /op command.",
-    "allowOperatorWarning": "Operators have full server control. Only grant OP status to players you fully trust.",
+    "allowOperator": "Allow /op self (--allow-op)",
+    "allowOperatorDescription": "Unlocks the /op self command for players. Not needed to make admins: /op add works from the console without it. Leave this off.",
     "securityTipsTitle": "Security Best Practices",
     "securityTip1": "Use a strong server password if your server is public",
     "securityTip2": "Enable whitelist to control who can join",

@@ -18,7 +18,7 @@ async function effectivePermissions(req: AuthenticatedRequest): Promise<string[]
     if (!req.user) return [];
     const ownerPerms = await getUserPermissions(req.user);
     if (ownerPerms.includes('*')) return req.apiKey.scopes;
-    return req.apiKey.scopes.filter(s => (ownerPerms as string[]).includes(s));
+    return req.apiKey.scopes.filter((s) => (ownerPerms as string[]).includes(s));
   }
   if (!req.user) return [];
   // Hybrid scope: when a route is mounted under /api/servers/:serverId/...
@@ -29,6 +29,20 @@ async function effectivePermissions(req: AuthenticatedRequest): Promise<string[]
     return getUserPermissionsForServer(req.user, req.serverId);
   }
   return getUserPermissions(req.user);
+}
+
+// effectivePermissions() reads users.json; if that fails (corrupt file) the
+// error goes to the global handler (500) instead of hanging the request.
+async function effectivePermissionsOrForward(
+  req: AuthenticatedRequest,
+  next: NextFunction,
+): Promise<string[] | null> {
+  try {
+    return await effectivePermissions(req);
+  } catch (err) {
+    next(err);
+    return null;
+  }
 }
 
 /**
@@ -42,7 +56,8 @@ export function requirePermission(...permissions: Permission[]) {
       return;
     }
 
-    const userPermissions = await effectivePermissions(req);
+    const userPermissions = await effectivePermissionsOrForward(req, next);
+    if (!userPermissions) return;
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {
@@ -52,7 +67,7 @@ export function requirePermission(...permissions: Permission[]) {
 
     // Check if ALL required permissions are present
     const hasAllPermissions = permissions.every((permission) =>
-      userPermissions.includes(permission)
+      userPermissions.includes(permission),
     );
 
     if (!hasAllPermissions) {
@@ -78,7 +93,8 @@ export function requireAnyPermission(...permissions: Permission[]) {
       return;
     }
 
-    const userPermissions = await effectivePermissions(req);
+    const userPermissions = await effectivePermissionsOrForward(req, next);
+    if (!userPermissions) return;
 
     // Admin wildcard grants all permissions
     if (userPermissions.includes('*')) {
@@ -87,9 +103,7 @@ export function requireAnyPermission(...permissions: Permission[]) {
     }
 
     // Check if ANY of the required permissions is present
-    const hasAnyPermission = permissions.some((permission) =>
-      userPermissions.includes(permission)
-    );
+    const hasAnyPermission = permissions.some((permission) => userPermissions.includes(permission));
 
     if (!hasAnyPermission) {
       res.status(403).json({

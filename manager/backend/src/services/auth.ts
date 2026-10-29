@@ -11,6 +11,9 @@ interface WsTicket {
   /** Server id this ticket is bound to. Tickets without scope are
    *  legacy / default-server. Verify enforces the binding. */
   serverId?: string;
+  /** Scopes of the API key the ticket was requested with; undefined for a
+   *  normal login. The socket must honour them, not just the owner's role. */
+  apiKeyScopes?: string[];
 }
 
 const wsTickets = new Map<string, WsTicket>();
@@ -30,7 +33,7 @@ setInterval(() => {
 // Verify credentials using users service
 export async function verifyCredentials(
   username: string,
-  password: string
+  password: string,
 ): Promise<{ valid: boolean; user?: Omit<User, 'passwordHash'>; role?: string }> {
   const user = await verifyUserCredentials(username, password);
   if (!user) {
@@ -43,26 +46,29 @@ export async function verifyCredentials(
 
 export async function createAccessToken(subject: string): Promise<string> {
   const tokenVersion = await getTokenVersion(subject);
-  return jwt.sign(
-    { sub: subject, type: 'access', tokenVersion },
-    config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn, algorithm: 'HS256' } as SignOptions
-  );
+  return jwt.sign({ sub: subject, type: 'access', tokenVersion }, config.jwtSecret, {
+    expiresIn: config.jwtExpiresIn,
+    algorithm: 'HS256',
+  } as SignOptions);
 }
 
 // Refresh tokens also carry tokenVersion so password/role changes invalidate them.
 export async function createRefreshToken(subject: string): Promise<string> {
   const tokenVersion = await getTokenVersion(subject);
-  return jwt.sign(
-    { sub: subject, type: 'refresh', tokenVersion },
-    config.jwtSecret,
-    { expiresIn: config.refreshExpiresIn, algorithm: 'HS256' } as SignOptions
-  );
+  return jwt.sign({ sub: subject, type: 'refresh', tokenVersion }, config.jwtSecret, {
+    expiresIn: config.refreshExpiresIn,
+    algorithm: 'HS256',
+  } as SignOptions);
 }
 
-export function verifyToken(token: string, type: 'access' | 'refresh' = 'access'): { username: string; tokenVersion?: number } | null {
+export function verifyToken(
+  token: string,
+  type: 'access' | 'refresh' = 'access',
+): { username: string; tokenVersion?: number } | null {
   try {
-    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as JwtPayload & { tokenVersion?: number };
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as JwtPayload & {
+      tokenVersion?: number;
+    };
     if (payload.type !== type) {
       return null;
     }
@@ -76,12 +82,17 @@ export function verifyToken(token: string, type: 'access' | 'refresh' = 'access'
 // Creates short-lived, single-use tickets for WebSocket authentication.
 // Tickets are deleted atomically on first verify to eliminate any race window.
 
-export function createWsTicket(username: string, serverId?: string): string {
+export function createWsTicket(
+  username: string,
+  serverId?: string,
+  apiKeyScopes?: string[],
+): string {
   const ticketId = crypto.randomBytes(32).toString('hex');
   wsTickets.set(ticketId, {
     username,
     createdAt: Date.now(),
     serverId,
+    apiKeyScopes: apiKeyScopes ? [...apiKeyScopes] : undefined,
   });
   return ticketId;
 }
@@ -92,7 +103,10 @@ export function createWsTicket(username: string, serverId?: string): string {
  * with a serverId can only open WebSockets for that server — this prevents
  * cross-server ticket reuse.
  */
-export function verifyWsTicket(ticketId: string, expectedServerId?: string): { valid: boolean; username?: string; serverId?: string } {
+export function verifyWsTicket(
+  ticketId: string,
+  expectedServerId?: string,
+): { valid: boolean; username?: string; serverId?: string; apiKeyScopes?: string[] } {
   // Atomic check-and-delete: Map.delete returns true only if it existed.
   // This guarantees that even if two requests arrive with the same ticket,
   // only one of them gets past this point.
@@ -111,7 +125,11 @@ export function verifyWsTicket(ticketId: string, expectedServerId?: string): { v
 
   // Scoped ticket must match the request's server scope. Unscoped tickets
   // (legacy single-server) only open unscoped connections.
-  if (ticket.serverId !== undefined && expectedServerId !== undefined && ticket.serverId !== expectedServerId) {
+  if (
+    ticket.serverId !== undefined &&
+    expectedServerId !== undefined &&
+    ticket.serverId !== expectedServerId
+  ) {
     return { valid: false };
   }
   if (ticket.serverId !== undefined && expectedServerId === undefined) {
@@ -119,5 +137,10 @@ export function verifyWsTicket(ticketId: string, expectedServerId?: string): { v
     return { valid: false };
   }
 
-  return { valid: true, username: ticket.username, serverId: ticket.serverId };
+  return {
+    valid: true,
+    username: ticket.username,
+    serverId: ticket.serverId,
+    apiKeyScopes: ticket.apiKeyScopes,
+  };
 }

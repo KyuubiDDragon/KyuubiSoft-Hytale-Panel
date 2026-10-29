@@ -31,11 +31,21 @@ const loading = ref(false)
 const showAddModal = ref(false)
 const submitting = ref(false)
 const confirmDelete = ref<ServerInstance | null>(null)
+// Set when the backend refused to touch the container (no panel labels for
+// this server): offers removing only the registry entry.
+const confirmKeepContainer = ref<ServerInstance | null>(null)
 const deleting = ref(false)
+
+function apiError(err: unknown): { detail: string; code?: string } {
+  const data = (err as { response?: { data?: { detail?: string; error?: string; code?: string } } })?.response?.data
+  return {
+    detail: data?.detail || data?.error || (err instanceof Error ? err.message : 'Unknown error'),
+    code: data?.code,
+  }
+}
 
 interface FormState {
   name: string
-  containerName: string
   serverPort: number | null
   webMapPort: number | null
   webMapWsPort: number | null
@@ -45,7 +55,6 @@ interface FormState {
 
 const form = reactive<FormState>({
   name: '',
-  containerName: '',
   serverPort: null,
   webMapPort: null,
   webMapWsPort: null,
@@ -55,7 +64,6 @@ const form = reactive<FormState>({
 
 function resetForm() {
   form.name = ''
-  form.containerName = ''
   form.serverPort = null
   form.webMapPort = null
   form.webMapWsPort = null
@@ -90,7 +98,6 @@ async function submitCreate() {
       name: form.name.trim(),
       autoStart: form.autoStart,
     }
-    if (form.containerName.trim()) payload.containerName = form.containerName.trim()
     if (form.serverPort)  payload.serverPort = form.serverPort
     if (form.webMapPort)  payload.webMapPort = form.webMapPort
     if (form.webMapWsPort) payload.webMapWsPort = form.webMapWsPort
@@ -119,8 +126,7 @@ async function submitCreate() {
       serversStore.setActive(data.server.id)
     }
   } catch (err) {
-    const detail = err instanceof Error ? err.message : 'Unknown error'
-    toast.error('Create failed: ' + detail)
+    toast.error('Create failed: ' + apiError(err).detail)
   } finally {
     submitting.value = false
   }
@@ -136,8 +142,29 @@ async function performDelete() {
     confirmDelete.value = null
     await serversStore.refresh()
   } catch (err) {
-    const detail = err instanceof Error ? err.message : 'Unknown error'
-    toast.error('Delete failed: ' + detail)
+    const { detail, code } = apiError(err)
+    if (code === 'CONTAINER_NOT_MANAGED') {
+      confirmDelete.value = null
+      confirmKeepContainer.value = target
+    } else {
+      toast.error('Delete failed: ' + detail)
+    }
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function performDeleteEntryOnly() {
+  if (!confirmKeepContainer.value) return
+  const target = confirmKeepContainer.value
+  deleting.value = true
+  try {
+    await api.delete(`/servers/${target.id}`, { params: { keepContainer: 'true' } })
+    toast.success(t('servers.guard.entryRemoved', { name: target.name }))
+    confirmKeepContainer.value = null
+    await serversStore.refresh()
+  } catch (err) {
+    toast.error('Delete failed: ' + apiError(err).detail)
   } finally {
     deleting.value = false
   }
@@ -148,7 +175,7 @@ async function makeDefault(s: ServerInstance) {
     await serversStore.setDefault(s.id)
     toast.success(`Default server set to "${s.name}"`)
   } catch (err) {
-    toast.error('Could not set default: ' + (err instanceof Error ? err.message : 'unknown'))
+    toast.error('Could not set default: ' + apiError(err).detail)
   }
 }
 
@@ -181,7 +208,7 @@ onMounted(refresh)
           Refresh
         </Button>
         <Button
-          v-if="canCreate"
+          v-if="canCreate && serversStore.multiserverEnabled"
           variant="primary"
           size="sm"
           @click="showAddModal = true"
@@ -189,6 +216,20 @@ onMounted(refresh)
           + Add Server
         </Button>
       </div>
+    </div>
+
+    <div
+      v-if="canList && serversStore.loaded"
+      class="rounded-xl p-4 border"
+      :class="serversStore.multiserverEnabled ? 'bg-status-warning/10 border-status-warning/30' : 'bg-surface-raised border-border'"
+      role="status"
+    >
+      <p class="text-sm font-semibold" :class="serversStore.multiserverEnabled ? 'text-status-warning' : 'text-ink'">
+        {{ serversStore.multiserverEnabled ? t('servers.guard.experimentalTitle') : t('servers.guard.disabledTitle') }}
+      </p>
+      <p class="text-xs text-ink-muted mt-1">
+        {{ serversStore.multiserverEnabled ? t('servers.guard.experimentalHint') : t('servers.guard.disabledHint') }}
+      </p>
     </div>
 
     <div v-if="!canList" class="bg-surface-raised border border-border rounded-xl p-6 text-center text-ink-muted">
@@ -218,6 +259,9 @@ onMounted(refresh)
             <span v-if="serversStore.defaultId === s.id" class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold bg-hytale-orange/15 text-hytale-orange">
               Default
             </span>
+            <span v-if="s.kind === 'compose'" class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold bg-surface-overlay text-ink-muted">
+              {{ t('servers.guard.composeBadge') }}
+            </span>
           </div>
           <div class="text-xs text-ink-muted mt-1 font-mono">
             <span class="mr-3">id: {{ s.id }}</span>
@@ -231,22 +275,28 @@ onMounted(refresh)
           </div>
         </div>
         <div class="flex flex-col gap-2 flex-shrink-0">
-          <Button variant="secondary" size="sm" @click="goToDashboard(s)">
+          <Button
+            v-if="serversStore.multiserverEnabled || serversStore.defaultId === s.id"
+            variant="secondary"
+            size="sm"
+            @click="goToDashboard(s)"
+          >
             Open
           </Button>
+          <!-- With multiserver off the default may only move back to the compose server. -->
           <Button
-            v-if="canCreate && serversStore.defaultId !== s.id"
+            v-if="canCreate && serversStore.defaultId !== s.id && (serversStore.multiserverEnabled || s.kind === 'compose')"
             variant="ghost"
             size="sm"
             @click="makeDefault(s)"
           >
             Set default
           </Button>
+          <!-- The backend refuses the compose, default and last server; do not offer it. -->
           <Button
-            v-if="canDelete"
+            v-if="canDelete && serversStore.isDeletable(s)"
             variant="danger"
             size="sm"
-            :disabled="serversStore.servers.length <= 1"
             @click="confirmDelete = s"
           >
             Delete
@@ -263,14 +313,6 @@ onMounted(refresh)
             v-model="form.name"
             placeholder="e.g. Survival #2"
             class="w-full bg-surface-overlay border border-border rounded-lg px-3 py-2 text-sm text-ink"
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-ink-muted mb-1">Container name (optional)</label>
-          <input
-            v-model="form.containerName"
-            placeholder="hytale-srv-…"
-            class="w-full bg-surface-overlay border border-border rounded-lg px-3 py-2 text-sm text-ink font-mono"
           />
         </div>
         <div class="grid grid-cols-2 gap-2">
@@ -341,6 +383,17 @@ onMounted(refresh)
       confirm-text="Delete"
       @confirm="performDelete"
       @cancel="confirmDelete = null"
+    />
+
+    <ConfirmDialog
+      :show="!!confirmKeepContainer"
+      :title="t('servers.guard.notManagedTitle')"
+      :message="confirmKeepContainer ? t('servers.guard.notManagedMessage', { container: confirmKeepContainer.containerName }) : ''"
+      variant="danger"
+      :loading="deleting"
+      :confirm-text="t('servers.guard.removeEntryOnly')"
+      @confirm="performDeleteEntryOnly"
+      @cancel="confirmKeepContainer = null"
     />
   </div>
 </template>

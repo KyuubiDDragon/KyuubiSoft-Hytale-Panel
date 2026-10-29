@@ -24,6 +24,7 @@ import { config } from '../config.js';
 import { isDemoMode } from './demoData.js';
 import { getDockerInstance } from './docker.js';
 import { updateServerInstance, type ServerInstance } from './servers.js';
+import { getPluginToken } from './pluginAuth.js';
 import path from 'path';
 
 export interface CreateOptions {
@@ -39,15 +40,22 @@ export interface DeleteOptions {
 }
 
 export type CreateResult =
-  | { ok: true; containerId: string; started: boolean }
-  | { ok: false; error: string };
+  { ok: true; containerId: string; started: boolean } | { ok: false; error: string };
 
 export type DeleteResult =
   | { ok: true }
-  | { ok: false; error: string };
+  // not_managed: the container exists but is not the panel's container for
+  // this server, so it was left untouched. docker_error: anything else.
+  | { ok: false; code: 'not_managed' | 'docker_error'; error: string };
 
 const STACK_NAME = process.env.STACK_NAME || 'hytale';
 const STACK_NETWORK = `${STACK_NAME}-net`;
+
+// Ownership labels stamped on every container this module creates. Deletion
+// only ever touches containers that carry both with matching values.
+const LABEL_MANAGED = 'kyuubisoft.panel.managed';
+const LABEL_SERVER_ID = 'kyuubisoft.panel.server-id';
+const LABEL_SERVER_NAME = 'kyuubisoft.panel.server-name';
 
 /**
  * Pick the most likely image tag for the new container. We do NOT pull —
@@ -113,7 +121,11 @@ function buildExposedPorts(instance: ServerInstance): Record<string, Record<stri
   };
 }
 
-function buildCreateOptions(instance: ServerInstance, image: string): Docker.ContainerCreateOptions {
+function buildCreateOptions(
+  instance: ServerInstance,
+  image: string,
+  pluginToken?: string,
+): Docker.ContainerCreateOptions {
   return {
     name: instance.containerName,
     Image: image,
@@ -124,6 +136,10 @@ function buildCreateOptions(instance: ServerInstance, image: string): Docker.Con
       `WEBMAP_PORT=${instance.network.webMapPort}`,
       `WEBMAP_WS_PORT=${instance.network.webMapWsPort}`,
       `TZ=${config.tz}`,
+      // The KyuubiSoft API plugin falls back to this when its config file has
+      // no token. Instance server dirs are not mounted into the manager, so
+      // the panel cannot write that file for them.
+      ...(pluginToken ? [`KYUUBISOFT_API_TOKEN=${pluginToken}`] : []),
     ],
     OpenStdin: true,
     Tty: true,
@@ -145,9 +161,9 @@ function buildCreateOptions(instance: ServerInstance, image: string): Docker.Con
       },
     },
     Labels: {
-      'kyuubisoft.panel.managed': 'true',
-      'kyuubisoft.panel.server-id': instance.id,
-      'kyuubisoft.panel.server-name': instance.name,
+      [LABEL_MANAGED]: 'true',
+      [LABEL_SERVER_ID]: instance.id,
+      [LABEL_SERVER_NAME]: instance.name,
     },
   };
 }
@@ -185,7 +201,15 @@ export async function createInstanceContainer(
       };
     }
 
-    const created = await docker.createContainer(buildCreateOptions(instance, image));
+    // Without a token the plugin stays locked, but the server itself still runs.
+    const pluginToken = await getPluginToken(instance.id).catch((err) => {
+      console.warn(
+        `[dockerImageManager] No plugin token for ${instance.id}:`,
+        err instanceof Error ? err.message : err,
+      );
+      return undefined;
+    });
+    const created = await docker.createContainer(buildCreateOptions(instance, image, pluginToken));
     let started = false;
     if (opts.autoStart) {
       try {
@@ -195,7 +219,10 @@ export async function createInstanceContainer(
         // Container exists but failed to start — leave status broken so the
         // operator can investigate via `docker logs <name>`.
         await updateServerInstance(instance.id, { status: 'broken' });
-        return { ok: false, error: `Container created but start failed: ${err instanceof Error ? err.message : String(err)}` };
+        return {
+          ok: false,
+          error: `Container created but start failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
       }
     }
 
@@ -208,11 +235,21 @@ export async function createInstanceContainer(
   }
 }
 
+function isNoSuchContainer(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /no such container/i.test(msg) || /404/.test(msg);
+}
+
 /**
  * Stop and remove the Docker container backing the registry entry. Volumes
  * (bind-mounts) are left in place unless the caller passes removeData; even
  * then we only attempt to remove the container's anonymous volumes via
  * `force: true, v: true` — bind-mount sources stay on the host.
+ *
+ * The container is inspected first and only removed when it carries the
+ * panel's ownership labels for exactly this server id. Anything else (the
+ * compose stack's own container, the manager, unrelated containers that
+ * happen to share the name) is refused with `code: 'not_managed'`.
  */
 export async function deleteInstanceContainer(
   instance: ServerInstance,
@@ -224,19 +261,47 @@ export async function deleteInstanceContainer(
   }
 
   const docker = dockerOverride ?? getDockerInstance();
+  let containerId: string;
   try {
-    const container = docker.getContainer(instance.containerName);
+    const info = await docker.getContainer(instance.containerName).inspect();
+    const labels = info.Config?.Labels ?? {};
+    if (labels[LABEL_MANAGED] !== 'true' || labels[LABEL_SERVER_ID] !== instance.id) {
+      return {
+        ok: false,
+        code: 'not_managed',
+        error: `Container "${instance.containerName}" is not managed by the panel for server ${instance.id}; it was left untouched`,
+      };
+    }
+    containerId = info.Id;
+  } catch (err) {
+    // 404 = already gone; treat as success.
+    if (isNoSuchContainer(err)) return { ok: true };
+    return {
+      ok: false,
+      code: 'docker_error',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  try {
+    // Address the inspected container by id so a rename in between cannot
+    // redirect the removal to a different container.
+    const container = docker.getContainer(containerId);
     // Best-effort stop. Ignore errors for already-stopped containers.
-    try { await container.stop({ t: 10 }); } catch { /* not running */ }
+    try {
+      await container.stop({ t: 10 });
+    } catch {
+      /* not running */
+    }
     await container.remove({ force: true, v: !!opts.removeData });
     return { ok: true };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    // 404 = already gone; treat as success.
-    if (/no such container/i.test(msg) || /404/.test(msg)) {
-      return { ok: true };
-    }
-    return { ok: false, error: msg };
+    if (isNoSuchContainer(err)) return { ok: true };
+    return {
+      ok: false,
+      code: 'docker_error',
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

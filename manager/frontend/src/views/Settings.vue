@@ -1285,6 +1285,15 @@ onUnmounted(() => {
     <Card v-if="authStore.canManageServer" :title="t('settings.allowOpTitle')">
       <p class="text-ink-muted text-sm mb-4">{{ t('settings.allowOpDesc') }}</p>
 
+      <!-- Security warning: any player can take admin with /op self while this is on -->
+      <div
+        class="mb-4 p-3 rounded-lg border text-sm"
+        :class="allowOpData?.allowOp ? 'bg-status-error/20 border-status-error/30 text-status-error' : 'bg-status-warning/10 border-status-warning/20 text-status-warning'"
+        role="note"
+      >
+        {{ t('allowOpSecurity.warning') }} {{ t('allowOpSecurity.safeAlternative') }}
+      </div>
+
       <!-- Error/Success Messages -->
       <div v-if="allowOpError" class="mb-4 p-3 bg-status-error/20 border border-status-error/30 rounded-lg text-status-error text-sm">
         {{ allowOpError }}
@@ -1314,7 +1323,7 @@ onUnmounted(() => {
           </div>
           <div class="text-sm text-ink-muted">
             <span v-if="allowOpLoading">{{ t('common.loading') }}...</span>
-            <span v-else-if="allowOpData?.allowOp" class="text-status-success">{{ t('settings.enabled') }}</span>
+            <span v-else-if="allowOpData?.allowOp" class="text-status-error">{{ t('settings.enabled') }}</span>
             <span v-else class="text-ink-subtle">{{ t('settings.disabled') }}</span>
           </div>
         </div>

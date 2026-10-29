@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { AuthenticatedRequest } from '../types/index.js';
@@ -66,9 +66,11 @@ const writeRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many write operations, slow down', code: 'RATE_LIMITED' },
+  // Per user when authenticated; otherwise per IP, with IPv6 addresses collapsed to
+  // their subnet so a client cannot dodge the limit by rotating addresses.
   keyGenerator: (req) => {
     const aReq = req as AuthenticatedRequest;
-    return aReq.user || req.ip || 'unknown';
+    return aReq.user ? `user:${aReq.user}` : ipKeyGenerator(req.ip || '');
   },
 });
 

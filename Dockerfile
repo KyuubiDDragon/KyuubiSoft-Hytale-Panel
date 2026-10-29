@@ -3,7 +3,9 @@
 # Fully automated - downloads server files on first start
 # ============================================================
 
-FROM eclipse-temurin:25-jdk-noble
+# Pinned by multi-arch index digest (tag 25-jdk-noble = 25.0.4.1_1-jdk-noble at
+# pin time). To update: `docker buildx imagetools inspect eclipse-temurin:25-jdk-noble`.
+FROM eclipse-temurin:25-jdk-noble@sha256:ba0f0e1a33864105e1d454e88105c617ab40f71062db1f306bf58be32a3f8e5e
 
 LABEL maintainer="Andy - Kyuubi D. Dragon"
 LABEL description="Hytale Dedicated Server - Auto-Setup"

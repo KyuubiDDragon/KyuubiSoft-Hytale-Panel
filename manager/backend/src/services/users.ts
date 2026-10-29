@@ -1,8 +1,9 @@
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { access, mkdir } from 'fs/promises';
 import path from 'path';
 import bcrypt from 'bcrypt';
 import { config } from '../config.js';
 import { isDemoMode } from './demoData.js';
+import { readJsonFile, updateJsonFile } from '../utils/jsonStore.js';
 
 // Shared password policy. Applied at every entry point that mints or
 // changes a password: createUser / updateUser (API) and the setup wizard's
@@ -12,14 +13,16 @@ export function validatePasswordPolicy(password: string, username?: string): str
   if (typeof password !== 'string' || password.length < 12) {
     return 'Password must be at least 12 characters';
   }
-  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(rx => rx.test(password)).length;
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter((rx) =>
+    rx.test(password),
+  ).length;
   if (classes < 3) {
     return 'Password must include at least three of: lowercase, uppercase, digit, symbol';
   }
   if (username && password.toLowerCase().includes(username.toLowerCase())) {
     return 'Password must not contain the username';
   }
-  if (COMMON_SEQUENCES.some(c => password.toLowerCase().includes(c))) {
+  if (COMMON_SEQUENCES.some((c) => password.toLowerCase().includes(c))) {
     return 'Password contains a well-known sequence; pick something less guessable';
   }
   return null;
@@ -56,76 +59,132 @@ interface UsersData {
 const DATA_DIR = process.env.MANAGER_DATA_PATH || '/app/data';
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
-// Ensure data directory exists
-async function ensureDataDir(): Promise<void> {
-  try {
-    await mkdir(DATA_DIR, { recursive: true });
-  } catch {
-    // Directory may already exist
-  }
+// users.json is read on every authenticated request and rewritten on every
+// login, by this module, the 2FA service and SSO. Two rules keep it intact:
+//  - Only a MISSING file is bootstrapped. A corrupt or unreadable one throws
+//    (the request fails with 500) and is never replaced — replacing it with
+//    the env admin used to wipe every other account and its 2FA.
+//  - Every write goes through updateUsers(): serialised read-modify-write
+//    with an atomic tmp → fsync → rename.
+const hasUsersArray = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  Array.isArray((value as { users?: unknown }).users);
+
+/**
+ * Raw users.json content for modules that keep extra per-user fields (2FA,
+ * SSO links). Null only when the file does not exist; throws when corrupt.
+ */
+export async function readUsersFile<
+  T extends { users: unknown[] } = UsersData,
+>(): Promise<T | null> {
+  return readJsonFile<T>(USERS_FILE, { isValid: hasUsersArray });
 }
 
-// Read users from file
-async function readUsers(): Promise<UsersData> {
-  try {
-    const content = await readFile(USERS_FILE, 'utf-8');
-    const data = JSON.parse(content) as UsersData;
-
+// Bring legacy records up to date in place. Returns true if anything changed.
+function migrateUserRecords(data: UsersData): boolean {
+  let changed = false;
+  for (const user of data.users) {
+    const userAny = user as any;
     // Migrate users from old role field to new roleId field
-    let needsMigration = false;
-    for (const user of data.users) {
-      const userAny = user as any;
-      if (userAny.role !== undefined && userAny.roleId === undefined) {
-        userAny.roleId = userAny.role;
-        delete userAny.role;
-        needsMigration = true;
-      }
-      // Migrate users without tokenVersion
-      if (user.tokenVersion === undefined) {
-        user.tokenVersion = 1;
-        needsMigration = true;
-      }
+    if (userAny.role !== undefined && userAny.roleId === undefined) {
+      userAny.roleId = userAny.role;
+      delete userAny.role;
+      changed = true;
     }
-
-    // Save migrated data if needed
-    if (needsMigration) {
-      await writeUsers(data);
+    // Migrate users without tokenVersion
+    if (user.tokenVersion === undefined) {
+      user.tokenVersion = 1;
+      changed = true;
     }
-
-    return data;
-  } catch {
-    // File doesn't exist yet. Bootstrap a default admin from the env vars —
-    // but only when BOTH are actually set. Minting a user with an empty
-    // username/password (e.g. post-setup installs that removed
-    // MANAGER_PASSWORD from .env, then lost their users.json) would create a
-    // broken account record instead of surfacing the real problem.
-    if (!config.managerUsername || !config.managerPassword) {
-      console.error(
-        '[Users] users.json is missing and MANAGER_USERNAME/MANAGER_PASSWORD are not set — ' +
-        'no login is possible. Recover with: docker exec -it <manager-container> node dist/cli.js reset-password <username>'
-      );
-      return { users: [] };
-    }
-    // SECURITY: Use async bcrypt to prevent blocking the event loop
-    const passwordHash = await bcrypt.hash(config.managerPassword, 12);
-    const defaultAdmin: User = {
-      username: config.managerUsername,
-      passwordHash,
-      roleId: 'admin',
-      createdAt: new Date().toISOString(),
-      tokenVersion: 1,
-    };
-    const data: UsersData = { users: [defaultAdmin] };
-    await writeUsers(data);
-    console.log(`[Users] Created users.json with admin '${config.managerUsername}' from MANAGER_USERNAME/MANAGER_PASSWORD`);
-    return data;
   }
+  return changed;
 }
 
-// Write users to file
-async function writeUsers(data: UsersData): Promise<void> {
-  await ensureDataDir();
-  await writeFile(USERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+// Create users.json with the env admin. Called only when the file does not
+// exist; re-checked under the lock so concurrent first requests create it once.
+async function bootstrapUsers(): Promise<UsersData> {
+  // Only when BOTH env vars are actually set. Minting a user with an empty
+  // username/password (e.g. post-setup installs that removed
+  // MANAGER_PASSWORD from .env, then lost their users.json) would create a
+  // broken account record instead of surfacing the real problem.
+  if (!config.managerUsername || !config.managerPassword) {
+    console.error(
+      '[Users] users.json is missing and MANAGER_USERNAME/MANAGER_PASSWORD are not set — ' +
+        'no login is possible. Recover with: docker exec -it <manager-container> node dist/cli.js reset-password <username>',
+    );
+    return { users: [] };
+  }
+  // SECURITY: Use async bcrypt to prevent blocking the event loop
+  const passwordHash = await bcrypt.hash(config.managerPassword, 12);
+  await mkdir(DATA_DIR, { recursive: true });
+  let created = false;
+  const data = await updateJsonFile<UsersData>(
+    USERS_FILE,
+    (current) => {
+      if (current) return undefined;
+      created = true;
+      return {
+        users: [
+          {
+            username: config.managerUsername,
+            passwordHash,
+            roleId: 'admin',
+            createdAt: new Date().toISOString(),
+            tokenVersion: 1,
+          },
+        ],
+      };
+    },
+    { isValid: hasUsersArray },
+  );
+  if (created) {
+    console.log(
+      `[Users] Created users.json with admin '${config.managerUsername}' from MANAGER_USERNAME/MANAGER_PASSWORD`,
+    );
+  }
+  return data ?? { users: [] };
+}
+
+// Read users from file (bootstraps a missing file, migrates legacy records)
+async function readUsers(): Promise<UsersData> {
+  const data = await readUsersFile();
+  if (!data) return bootstrapUsers();
+  if (migrateUserRecords(data)) {
+    // Persist under the lock, re-applied to the file's current content so a
+    // concurrent change is not lost.
+    await updateJsonFile<UsersData>(
+      USERS_FILE,
+      (current) => (current && migrateUserRecords(current) ? current : undefined),
+      { isValid: hasUsersArray },
+    );
+  }
+  return data;
+}
+
+/**
+ * Serialised read-modify-write of users.json. `mutate` changes `data` in
+ * place; return false to skip the write, throw to abort. Resolves to the
+ * content after the update. A file that vanished after bootstrap is not
+ * recreated with a partial account list.
+ */
+export async function updateUsers<T extends { users: unknown[] } = UsersData>(
+  mutate: (data: T) => boolean | void,
+): Promise<T> {
+  await readUsers();
+  const result = await updateJsonFile<T>(
+    USERS_FILE,
+    (current) => {
+      if (!current) throw new Error('users.json is missing');
+      return mutate(current) === false ? undefined : current;
+    },
+    { isValid: hasUsersArray },
+  );
+  return result!;
+}
+
+function findUserIndex(data: UsersData, username: string): number {
+  return data.users.findIndex((u) => u.username === username);
 }
 
 // Get all users (without password hashes)
@@ -159,7 +218,7 @@ export async function getUser(username: string): Promise<User | null> {
   // Demo mode: return demo user data
   if (isDemoMode()) {
     const demoUsers: Record<string, User> = {
-      'demo': {
+      demo: {
         username: 'demo',
         passwordHash: '',
         roleId: 'viewer',
@@ -167,7 +226,7 @@ export async function getUser(username: string): Promise<User | null> {
         lastLogin: new Date().toISOString(),
         tokenVersion: 1,
       },
-      'admin': {
+      admin: {
         username: 'admin',
         passwordHash: '',
         roleId: 'admin',
@@ -180,17 +239,20 @@ export async function getUser(username: string): Promise<User | null> {
   }
 
   const data = await readUsers();
-  return data.users.find(u => u.username === username) || null;
+  return data.users.find((u) => u.username === username) || null;
 }
 
 // Verify user credentials
 // SECURITY: Use async bcrypt to prevent blocking the event loop
-export async function verifyUserCredentials(username: string, password: string): Promise<User | null> {
+export async function verifyUserCredentials(
+  username: string,
+  password: string,
+): Promise<User | null> {
   // Demo mode: use hardcoded demo credentials
   if (isDemoMode()) {
     const demoCredentials: Record<string, { password: string; roleId: string }> = {
-      'demo': { password: 'demo', roleId: 'viewer' },
-      'admin': { password: 'admin', roleId: 'admin' },
+      demo: { password: 'demo', roleId: 'viewer' },
+      admin: { password: 'admin', roleId: 'admin' },
     };
 
     const cred = demoCredentials[username.toLowerCase()];
@@ -224,12 +286,12 @@ export async function verifyUserCredentials(username: string, password: string):
 export async function createUser(
   username: string,
   password: string,
-  roleId: string = 'viewer'
+  roleId: string = 'viewer',
 ): Promise<Omit<User, 'passwordHash'>> {
   const data = await readUsers();
 
-  // Check if username already exists
-  if (data.users.some(u => u.username === username)) {
+  // Check if username already exists (re-checked under the lock below)
+  if (data.users.some((u) => u.username === username)) {
     throw new Error('Username already exists');
   }
 
@@ -257,8 +319,12 @@ export async function createUser(
     tokenVersion: 1,
   };
 
-  data.users.push(newUser);
-  await writeUsers(data);
+  await updateUsers((current) => {
+    if (current.users.some((u) => u.username === username)) {
+      throw new Error('Username already exists');
+    }
+    current.users.push(newUser);
+  });
 
   const { passwordHash: _, ...userWithoutPassword } = newUser;
   return userWithoutPassword;
@@ -267,64 +333,69 @@ export async function createUser(
 // Update user
 export async function updateUser(
   username: string,
-  updates: { password?: string; roleId?: string }
+  updates: { password?: string; roleId?: string },
 ): Promise<Omit<User, 'passwordHash'>> {
   const data = await readUsers();
-  const userIndex = data.users.findIndex(u => u.username === username);
-
-  if (userIndex === -1) {
+  if (findUserIndex(data, username) === -1) {
     throw new Error('User not found');
   }
 
-  let shouldInvalidateTokens = false;
-
+  // Hash outside the lock: bcrypt takes ~250 ms and would stall every other
+  // users.json write (logins, 2FA) meanwhile.
+  let passwordHash: string | undefined;
   if (updates.password) {
     const policyError = validatePasswordPolicy(updates.password, username);
     if (policyError) {
       throw new Error(policyError);
     }
     // SECURITY: Use async bcrypt to prevent blocking the event loop
-    data.users[userIndex].passwordHash = await bcrypt.hash(updates.password, 12);
-    shouldInvalidateTokens = true;
+    passwordHash = await bcrypt.hash(updates.password, 12);
   }
 
-  if (updates.roleId) {
-    data.users[userIndex].roleId = updates.roleId;
-    shouldInvalidateTokens = true;
-  }
+  let updated: User | undefined;
+  await updateUsers((current) => {
+    const userIndex = findUserIndex(current, username);
+    if (userIndex === -1) {
+      throw new Error('User not found');
+    }
+    const user = current.users[userIndex];
+    if (passwordHash) {
+      user.passwordHash = passwordHash;
+    }
+    if (updates.roleId) {
+      user.roleId = updates.roleId;
+    }
+    // Invalidate tokens after password or role changes (same write)
+    if (passwordHash || updates.roleId) {
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+    }
+    updated = user;
+  });
 
-  await writeUsers(data);
-
-  // Invalidate tokens after password or role changes
-  if (shouldInvalidateTokens) {
-    await invalidateUserTokens(username);
-  }
-
-  const { passwordHash, ...userWithoutPassword } = data.users[userIndex];
+  const { passwordHash: _, ...userWithoutPassword } = updated!;
   return userWithoutPassword;
 }
 
 // Delete user
 export async function deleteUser(username: string): Promise<void> {
-  const data = await readUsers();
+  await updateUsers((current) => {
+    // Prevent deleting the last admin
+    const adminCount = current.users.filter((u) => u.roleId === 'admin').length;
+    const userToDelete = current.users.find((u) => u.username === username);
 
-  // Prevent deleting the last admin
-  const adminCount = data.users.filter(u => u.roleId === 'admin').length;
-  const userToDelete = data.users.find(u => u.username === username);
+    if (!userToDelete) {
+      throw new Error('User not found');
+    }
 
-  if (!userToDelete) {
-    throw new Error('User not found');
-  }
+    if (userToDelete.roleId === 'admin' && adminCount <= 1) {
+      throw new Error('Cannot delete the last admin user');
+    }
 
-  if (userToDelete.roleId === 'admin' && adminCount <= 1) {
-    throw new Error('Cannot delete the last admin user');
-  }
+    // Add to invalidation list before deleting
+    invalidatedUsers.add(username);
 
-  // Add to invalidation list before deleting
-  invalidatedUsers.add(username);
-
-  data.users = data.users.filter(u => u.username !== username);
-  await writeUsers(data);
+    current.users = current.users.filter((u) => u.username !== username);
+  });
 }
 
 // Update last login time
@@ -334,24 +405,20 @@ export async function updateLastLogin(username: string): Promise<void> {
     return;
   }
 
-  const data = await readUsers();
-  const userIndex = data.users.findIndex(u => u.username === username);
-
-  if (userIndex !== -1) {
-    data.users[userIndex].lastLogin = new Date().toISOString();
-    await writeUsers(data);
-  }
+  await updateUsers((current) => {
+    const userIndex = findUserIndex(current, username);
+    if (userIndex === -1) return false;
+    current.users[userIndex].lastLogin = new Date().toISOString();
+  });
 }
 
 // Invalidate all tokens for a user by incrementing tokenVersion
 export async function invalidateUserTokens(username: string): Promise<void> {
-  const data = await readUsers();
-  const userIndex = data.users.findIndex(u => u.username === username);
-
-  if (userIndex !== -1) {
-    data.users[userIndex].tokenVersion = (data.users[userIndex].tokenVersion || 0) + 1;
-    await writeUsers(data);
-  }
+  await updateUsers((current) => {
+    const userIndex = findUserIndex(current, username);
+    if (userIndex === -1) return false;
+    current.users[userIndex].tokenVersion = (current.users[userIndex].tokenVersion || 0) + 1;
+  });
 }
 
 // Get current token version for a user
@@ -378,7 +445,7 @@ export async function initializeUsers(): Promise<void> {
   // expecting it to take effect — it never does once users.json exists.
   let usersFileExists = false;
   try {
-    await readFile(USERS_FILE, 'utf-8');
+    await access(USERS_FILE);
     usersFileExists = true;
   } catch {
     // not created yet
@@ -386,8 +453,8 @@ export async function initializeUsers(): Promise<void> {
   if (usersFileExists && config.managerPassword) {
     console.log(
       '[Users] users.json exists — logins are validated against it. ' +
-      'MANAGER_USERNAME/MANAGER_PASSWORD from the environment are IGNORED. ' +
-      'To reset a password run: docker exec -it <manager-container> node dist/cli.js reset-password <username>'
+        'MANAGER_USERNAME/MANAGER_PASSWORD from the environment are IGNORED. ' +
+        'To reset a password run: docker exec -it <manager-container> node dist/cli.js reset-password <username>',
     );
   }
 

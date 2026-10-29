@@ -9,7 +9,7 @@ import { writeFile, mkdir, access, readFile, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import { config } from '../config.js';
-import { sanitizeFileName } from '../utils/pathSecurity.js';
+import { sanitizeFileName, resolveFileInDir } from '../utils/pathSecurity.js';
 import { untrackMod as cfwidgetUntrackMod } from './cfwidget.js';
 
 // Security: Regex pattern for validating mod IDs (CurseForge uses numeric IDs)
@@ -374,7 +374,7 @@ async function curseforgeRequest<T>(
   options: {
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
     body?: unknown;
-  } = {}
+  } = {},
 ): Promise<T | null> {
   const { method = 'GET', body } = options;
   const apiKey = getApiKey();
@@ -389,7 +389,7 @@ async function curseforgeRequest<T>(
 
     const headers: Record<string, string> = {
       'User-Agent': 'KyuubiSoft-HytalePanel/1.0',
-      'Accept': 'application/json',
+      Accept: 'application/json',
       'x-api-key': apiKey,
     };
 
@@ -462,43 +462,45 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
         },
       };
 
-      proto.get(options, (res) => {
-        // Handle redirects
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            request(redirectUrl);
+      proto
+        .get(options, (res) => {
+          // Handle redirects
+          if (res.statusCode === 301 || res.statusCode === 302) {
+            const redirectUrl = res.headers.location;
+            if (redirectUrl) {
+              request(redirectUrl);
+              return;
+            }
+          }
+
+          if (res.statusCode !== 200) {
+            logger.error(`Download failed: ${res.statusCode}`);
+            resolve(false);
             return;
           }
-        }
 
-        if (res.statusCode !== 200) {
-          logger.error(`Download failed: ${res.statusCode}`);
-          resolve(false);
-          return;
-        }
+          const chunks: Buffer[] = [];
 
-        const chunks: Buffer[] = [];
-
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', async () => {
-          try {
-            const buffer = Buffer.concat(chunks);
-            await writeFile(destPath, buffer);
-            resolve(true);
-          } catch (e) {
-            logger.error('Failed to write file:', e);
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', async () => {
+            try {
+              const buffer = Buffer.concat(chunks);
+              await writeFile(destPath, buffer);
+              resolve(true);
+            } catch (e) {
+              logger.error('Failed to write file:', e);
+              resolve(false);
+            }
+          });
+          res.on('error', (e) => {
+            logger.error('Download error:', e);
             resolve(false);
-          }
-        });
-        res.on('error', (e) => {
-          logger.error('Download error:', e);
+          });
+        })
+        .on('error', (e) => {
+          logger.error('Request error:', e);
           resolve(false);
         });
-      }).on('error', (e) => {
-        logger.error('Request error:', e);
-        resolve(false);
-      });
     };
 
     request(url);
@@ -510,18 +512,20 @@ async function downloadFile(url: string, destPath: string): Promise<boolean> {
 /**
  * Search for mods on CurseForge
  */
-export async function searchMods(options: {
-  search?: string;
-  gameId?: number;
-  classId?: number;
-  categoryId?: number;
-  gameVersion?: string;
-  modLoaderType?: number;
-  sortField?: CurseForgeSortField;
-  sortOrder?: CurseForgeSortOrder;
-  pageSize?: number;
-  index?: number;
-} = {}): Promise<CurseForgeSearchResult | null> {
+export async function searchMods(
+  options: {
+    search?: string;
+    gameId?: number;
+    classId?: number;
+    categoryId?: number;
+    gameVersion?: string;
+    modLoaderType?: number;
+    sortField?: CurseForgeSortField;
+    sortOrder?: CurseForgeSortOrder;
+    pageSize?: number;
+    index?: number;
+  } = {},
+): Promise<CurseForgeSearchResult | null> {
   const {
     search,
     gameId = getGameId(),
@@ -555,7 +559,9 @@ export async function searchMods(options: {
   params.append('pageSize', pageSize.toString());
   params.append('index', index.toString());
 
-  const result = await curseforgeRequest<CurseForgeSearchResult>(`/v1/mods/search?${params.toString()}`);
+  const result = await curseforgeRequest<CurseForgeSearchResult>(
+    `/v1/mods/search?${params.toString()}`,
+  );
 
   if (result) {
     setCache(cacheKey, result);
@@ -600,7 +606,7 @@ export async function getModFiles(
     modLoaderType?: number;
     pageSize?: number;
     index?: number;
-  } = {}
+  } = {},
 ): Promise<CurseForgeFile[] | null> {
   // Security: Validate modId before using in URL
   if (!isValidModId(modId)) {
@@ -623,7 +629,7 @@ export async function getModFiles(
   params.append('index', index.toString());
 
   const result = await curseforgeRequest<CurseForgeFilesResult>(
-    `/v1/mods/${modId}/files?${params.toString()}`
+    `/v1/mods/${modId}/files?${params.toString()}`,
   );
 
   if (result) {
@@ -649,7 +655,9 @@ export async function getFile(modId: number, fileId: number): Promise<CurseForge
     return cached.data;
   }
 
-  const result = await curseforgeRequest<{ data: CurseForgeFile }>(`/v1/mods/${modId}/files/${fileId}`);
+  const result = await curseforgeRequest<{ data: CurseForgeFile }>(
+    `/v1/mods/${modId}/files/${fileId}`,
+  );
 
   if (result) {
     setCache(cacheKey, result);
@@ -669,7 +677,7 @@ export async function getDownloadUrl(modId: number, fileId: number): Promise<str
   }
 
   const result = await curseforgeRequest<{ data: string }>(
-    `/v1/mods/${modId}/files/${fileId}/download-url`
+    `/v1/mods/${modId}/files/${fileId}/download-url`,
   );
 
   return result?.data || null;
@@ -688,7 +696,7 @@ export async function getCategories(gameId?: number): Promise<CurseForgeCategory
   }
 
   const result = await curseforgeRequest<{ data: CurseForgeCategory[] }>(
-    `/v1/categories?gameId=${id}`
+    `/v1/categories?gameId=${id}`,
   );
 
   if (result) {
@@ -704,7 +712,7 @@ export async function getCategories(gameId?: number): Promise<CurseForgeCategory
  */
 export async function installModFromCurseForge(
   modId: number,
-  fileId?: number
+  fileId?: number,
 ): Promise<CurseForgeInstallResult> {
   // Security: Validate modId
   if (!isValidModId(modId)) {
@@ -726,7 +734,8 @@ export async function installModFromCurseForge(
   if (mod.allowModDistribution === false) {
     return {
       success: false,
-      error: 'This mod does not allow third-party downloads. Please download manually from CurseForge.',
+      error:
+        'This mod does not allow third-party downloads. Please download manually from CurseForge.',
       modName: mod.name,
       modId: mod.id,
     };
@@ -744,7 +753,7 @@ export async function installModFromCurseForge(
     // Get the main/latest file
     if (mod.latestFiles && mod.latestFiles.length > 0) {
       // Prefer release versions
-      file = mod.latestFiles.find(f => f.releaseType === 1) || mod.latestFiles[0];
+      file = mod.latestFiles.find((f) => f.releaseType === 1) || mod.latestFiles[0];
     }
 
     if (!file) {
@@ -753,7 +762,7 @@ export async function installModFromCurseForge(
       if (!files || files.length === 0) {
         return { success: false, error: 'No files available for this mod' };
       }
-      file = files.find(f => f.releaseType === 1) || files[0];
+      file = files.find((f) => f.releaseType === 1) || files[0];
     }
   }
 
@@ -764,8 +773,10 @@ export async function installModFromCurseForge(
   // Check if this mod is already installed (for updates) and remove old file
   const existingInstall = await isCurseForgeModInstalled(modId);
   if (existingInstall && existingInstall.filename) {
-    const oldFilePath = path.join(config.modsPath, existingInstall.filename);
+    // The stored filename is untrusted (shared data dir): only a bare name in the mods folder.
+    const oldFilePath = resolveFileInDir(config.modsPath, existingInstall.filename);
     try {
+      if (!oldFilePath) throw new Error('invalid stored filename');
       await unlink(oldFilePath);
       logger.info(`[CurseForge] Removed old mod file: ${existingInstall.filename}`);
     } catch (e) {
@@ -927,16 +938,18 @@ export async function getPopularMods(limit: number = 10): Promise<CurseForgeMod[
 /**
  * Check for updates for installed mods
  */
-export async function checkForUpdates(): Promise<Array<{
-  modId: number;
-  modName: string;
-  currentFileId: number;
-  currentVersion: string;
-  latestFileId: number;
-  latestVersion: string;
-  releaseType: number;
-  hasUpdate: boolean;
-}>> {
+export async function checkForUpdates(): Promise<
+  Array<{
+    modId: number;
+    modName: string;
+    currentFileId: number;
+    currentVersion: string;
+    latestFileId: number;
+    latestVersion: string;
+    releaseType: number;
+    hasUpdate: boolean;
+  }>
+> {
   const installed = await getInstalledCurseForgeInfo();
   const updates: Array<{
     modId: number;
@@ -954,7 +967,7 @@ export async function checkForUpdates(): Promise<Array<{
     if (!mod) continue;
 
     // Find the latest file matching the same release type or better
-    const latestFile = mod.latestFiles?.find(f => f.releaseType <= info.releaseType);
+    const latestFile = mod.latestFiles?.find((f) => f.releaseType <= info.releaseType);
 
     if (latestFile && latestFile.id !== info.fileId) {
       updates.push({
@@ -1007,7 +1020,9 @@ export async function updateMod(modId: number, fileId?: number): Promise<CurseFo
 /**
  * Uninstall a CurseForge mod
  */
-export async function uninstallCurseForge(modId: number): Promise<{ success: boolean; error?: string }> {
+export async function uninstallCurseForge(
+  modId: number,
+): Promise<{ success: boolean; error?: string }> {
   // Security: Validate modId
   if (!isValidModId(modId)) {
     return { success: false, error: 'Invalid mod ID format' };
@@ -1019,12 +1034,10 @@ export async function uninstallCurseForge(modId: number): Promise<{ success: boo
   }
 
   const basePath = config.modsPath;
-  const filePath = path.join(basePath, installed.filename);
-  const resolvedPath = path.resolve(filePath);
-  const resolvedBase = path.resolve(basePath);
-
-  // Security: Verify path is within allowed directory
-  if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
+  // Security: the stored filename (shared data dir) must be a bare name in the base folder -
+  // "sub/x.jar" through a symlinked sub folder would pass a plain prefix check.
+  const filePath = resolveFileInDir(basePath, installed.filename);
+  if (!filePath) {
     return { success: false, error: 'Invalid file path' };
   }
 
@@ -1061,17 +1074,17 @@ export async function getFileChangelog(modId: number, fileId: number): Promise<s
       `${CURSEFORGE_API_BASE}/v1/mods/${modId}/files/${fileId}/changelog`,
       {
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'x-api-key': config.curseforgeApiKey,
         },
-      }
+      },
     );
 
     if (!response.ok) {
       return null;
     }
 
-    const result = await response.json() as { data: string };
+    const result = (await response.json()) as { data: string };
     return result.data || null;
   } catch (e) {
     logger.error(`[CurseForge] Failed to get changelog for mod ${modId} file ${fileId}:`, e);

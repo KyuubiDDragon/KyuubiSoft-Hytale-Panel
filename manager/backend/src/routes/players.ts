@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger.js';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../middleware/auth.js';
@@ -16,6 +16,8 @@ import { config } from '../config.js';
 import { logActivity } from '../services/activityLog.js';
 import { isDemoMode, getDemoWhitelist } from '../services/demoData.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import type { Permission } from '../types/permissions.js';
+import { asyncRoute } from '../utils/asyncRoute.js';
 import {
   isValidPlayerName,
   isValidGamemode,
@@ -32,55 +34,82 @@ const router = Router();
 // The frontend assembles the selection (Checkbox-Spalte → idle "N selected"
 // bar) and we run the same per-player handlers serially with audit + error
 // capture per item. Permissions are checked per action via requirePermission.
-const BULK_ACTIONS = new Set(['kick', 'ban', 'unban']);
-router.post('/bulk', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const { names, action, reason } = req.body as { names?: string[]; action?: string; reason?: string };
-  if (!Array.isArray(names) || names.length === 0 || !action) {
-    res.status(400).json({ detail: 'names[] and action required' });
-    return;
-  }
-  if (!BULK_ACTIONS.has(action)) {
-    res.status(400).json({ detail: `unsupported action ${action}` });
-    return;
-  }
-  // Permission gate that matches the per-player route's gate.
-  const { getUserPermissions } = await import('../services/roles.js');
-  const perms = await getUserPermissions(req.user!);
-  const required = action === 'kick' ? 'players.kick' : action === 'ban' ? 'players.ban' : 'players.unban';
-  if (!perms.includes('*') && !(perms as string[]).includes(required)) {
-    res.status(403).json({ error: 'Insufficient permissions', required });
-    return;
-  }
+const BULK_PERMISSIONS = new Map<string, Permission>([
+  ['kick', 'players.kick'],
+  ['ban', 'players.ban'],
+  ['unban', 'players.unban'],
+]);
 
-  const results: Array<{ name: string; success: boolean; error?: string }> = [];
-  const safeReason = reason ? sanitizeMessage(reason, 100) : '';
-  for (const rawName of names) {
-    if (!isValidPlayerName(rawName)) {
-      results.push({ name: rawName, success: false, error: 'invalid name' });
-      continue;
-    }
-    let cmd: string;
-    if (action === 'kick') cmd = safeReason ? `/kick ${rawName} ${safeReason}` : `/kick ${rawName}`;
-    else if (action === 'ban') cmd = safeReason ? `/ban ${rawName} ${safeReason}` : `/ban ${rawName}`;
-    else cmd = `/unban ${rawName}`;
-    if (isDemoMode()) {
-      results.push({ name: rawName, success: true });
-      continue;
-    }
-    const r = await dockerService.execCommand(cmd, req.serverId);
-    results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
-    if (action === 'kick' && r.success) playersService.removePlayer(rawName);
+// SECURITY: same gate as the per-player routes, through requirePermission so
+// an API key's scopes and the per-server role count (previously only the
+// owner's global role was checked).
+function requireBulkPermission(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  const action = (req.body as { action?: unknown } | undefined)?.action;
+  const required = typeof action === 'string' ? BULK_PERMISSIONS.get(action) : undefined;
+  if (!required) {
+    res
+      .status(400)
+      .json({
+        detail: action ? `unsupported action ${String(action)}` : 'names[] and action required',
+      });
+    return;
   }
-  const summary = {
-    total: results.length,
-    success: results.filter(r => r.success).length,
-    failed: results.filter(r => !r.success).length,
-  };
-  // Reuse the player-scoped activity log target; the action name carries
-  // the "bulk_" prefix to make filtering trivial.
-  await logActivity(req.user || 'system', `bulk_${action}`, 'player', summary.failed === 0, `${summary.total} players`);
-  res.json({ results, summary });
-});
+  void requirePermission(required)(req, res, next);
+}
+
+router.post(
+  '/bulk',
+  authMiddleware,
+  requireBulkPermission,
+  asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    const { names, action, reason } = req.body as {
+      names?: string[];
+      action: string;
+      reason?: string;
+    };
+    if (!Array.isArray(names) || names.length === 0) {
+      res.status(400).json({ detail: 'names[] and action required' });
+      return;
+    }
+
+    const results: Array<{ name: string; success: boolean; error?: string }> = [];
+    const safeReason = reason ? sanitizeMessage(reason, 100) : '';
+    for (const rawName of names) {
+      if (!isValidPlayerName(rawName)) {
+        results.push({ name: rawName, success: false, error: 'invalid name' });
+        continue;
+      }
+      let cmd: string;
+      if (action === 'kick')
+        cmd = safeReason ? `/kick ${rawName} ${safeReason}` : `/kick ${rawName}`;
+      else if (action === 'ban')
+        cmd = safeReason ? `/ban ${rawName} ${safeReason}` : `/ban ${rawName}`;
+      else cmd = `/unban ${rawName}`;
+      if (isDemoMode()) {
+        results.push({ name: rawName, success: true });
+        continue;
+      }
+      const r = await dockerService.execCommand(cmd, req.serverId);
+      results.push({ name: rawName, success: r.success, error: r.success ? undefined : r.error });
+      if (action === 'kick' && r.success) playersService.removePlayer(rawName);
+    }
+    const summary = {
+      total: results.length,
+      success: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+    };
+    // Reuse the player-scoped activity log target; the action name carries
+    // the "bulk_" prefix to make filtering trivial.
+    await logActivity(
+      req.user || 'system',
+      `bulk_${action}`,
+      'player',
+      summary.failed === 0,
+      `${summary.total} players`,
+    );
+    res.json({ results, summary });
+  }),
+);
 
 // SECURITY: Validate player name from URL params
 function validatePlayerName(res: Response, name: string): boolean {
@@ -111,7 +140,11 @@ async function readWhitelist(): Promise<WhitelistData> {
 }
 
 async function writeWhitelist(data: WhitelistData): Promise<void> {
-  await writeFile(path.join(config.serverPath, 'whitelist.json'), JSON.stringify(data, null, 2), 'utf-8');
+  await writeFile(
+    path.join(config.serverPath, 'whitelist.json'),
+    JSON.stringify(data, null, 2),
+    'utf-8',
+  );
 }
 
 // Name mapping for bans (UUID -> player name)
@@ -129,1274 +162,1620 @@ async function readBansMapping(): Promise<BanNameMapping> {
 }
 
 async function writeBansMapping(mapping: BanNameMapping): Promise<void> {
-  await writeFile(path.join(config.serverPath, 'bans-names.json'), JSON.stringify(mapping, null, 2), 'utf-8');
+  await writeFile(
+    path.join(config.serverPath, 'bans-names.json'),
+    JSON.stringify(mapping, null, 2),
+    'utf-8',
+  );
 }
 
 // GET /api/players
-router.get('/', authMiddleware, requirePermission('players.view'), async (req: AuthenticatedRequest, res: Response) => {
-  // Check if server is running - if not, clear stale players and return empty list
-  const status = await dockerService.getStatus(req.serverId);
-  if (!status.running) {
-    playersService.clearOnlinePlayers();
-    res.json({
-      players: [],
-      count: 0,
-    });
-    return;
-  }
-
-  const players = await playersService.getOnlinePlayers(req.serverId);
-
-  res.json({
-    players,
-    count: players.length,
-  });
-});
-
-// GET /api/players/count
-router.get('/count', authMiddleware, requirePermission('players.view'), async (_req: Request, res: Response) => {
-  // Check if server is running - if not, return 0
-  const status = await dockerService.getStatus();
-  if (!status.running) {
-    playersService.clearOnlinePlayers();
-    res.json({ count: 0 });
-    return;
-  }
-  const count = await playersService.getPlayerCount();
-  res.json({ count });
-});
-
-// GET /api/players/history - All players who have ever joined
-router.get('/history', authMiddleware, requirePermission('players.view'), async (_req: Request, res: Response) => {
-  const history = await playersService.getPlayerHistory();
-  res.json({ players: history, count: history.length });
-});
-
-// GET /api/players/offline - Players in history who are currently offline
-router.get('/offline', authMiddleware, requirePermission('players.view'), async (_req: Request, res: Response) => {
-  const offline = await playersService.getOfflinePlayers();
-  res.json({ players: offline, count: offline.length });
-});
-
-// GET /api/players/all - All players from JSON files with online status
-router.get('/all', authMiddleware, requirePermission('players.view'), async (_req: Request, res: Response) => {
-  // Update online status based on server status
-  const status = await dockerService.getStatus();
-  if (!status.running) {
-    playersService.clearOnlinePlayers();
-  }
-
-  const players = await playersService.getAllPlayersUnified();
-  const onlineCount = players.filter(p => p.online).length;
-  res.json({ players, count: players.length, onlineCount });
-});
-
-// GET /api/players/playtime - playtime leaderboard (most-played first)
-router.get('/playtime', authMiddleware, requirePermission('players.view'), (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
-    res.json({ leaderboard: getLeaderboard(req.serverId, limit) });
-  } catch (error) {
-    logger.error('[Players] playtime leaderboard failed:', error);
-    res.status(500).json({ error: 'Failed to load playtime leaderboard' });
-  }
-});
-
-// GET /api/players/:uuid/playtime - per-player sessions + total
-router.get('/:uuid/playtime', authMiddleware, requirePermission('players.view'), (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
-    res.json(getPlayerSessions(req.params.uuid, limit));
-  } catch (error) {
-    logger.error('[Players] playtime sessions failed:', error);
-    res.status(500).json({ error: 'Failed to load playtime sessions' });
-  }
-});
-
-// POST /api/players/:name/kick
-router.post('/:name/kick', authMiddleware, requirePermission('players.kick'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const { reason } = req.body;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  // Demo mode: simulate kick
-  if (isDemoMode()) {
-    await logActivity(username, 'kick', 'player', true, playerName, reason);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} kicked`,
-    });
-    return;
-  }
-
-  // SECURITY: Sanitize reason if provided
-  const safeReason = reason ? sanitizeMessage(reason, 100) : '';
-
-  // Send kick command to server (with optional reason)
-  const command = safeReason ? `/kick ${playerName} ${safeReason}` : `/kick ${playerName}`;
-  const result = await dockerService.execCommand(command, req.serverId);
-
-  if (result.success) {
-    playersService.removePlayer(playerName);
-
-    punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'kick', reason: safeReason || undefined, byUser: username });
-    // Log activity
-    await logActivity(username, 'kick', 'player', true, playerName, reason);
-
-    res.json({
-      success: true,
-      message: `Player ${playerName} kicked`,
-    });
-  } else {
-    await logActivity(username, 'kick', 'player', false, playerName, result.error);
-
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to kick player',
-    });
-  }
-});
-
-// POST /api/players/:name/ban
-router.post('/:name/ban', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const { reason } = req.body;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  // Demo mode: simulate ban
-  if (isDemoMode()) {
-    await logActivity(username, 'ban', 'player', true, playerName, reason);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} banned`,
-    });
-    return;
-  }
-
-  // SECURITY: Sanitize reason if provided
-  const safeReason = reason ? sanitizeMessage(reason, 100) : 'You have been banned';
-
-  // First kick the player if online
-  await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
-
-  // Then execute ban command - server will update bans.json with UUID
-  const command = `/ban ${playerName} ${safeReason}`;
-  const result = await dockerService.execCommand(command, req.serverId);
-
-  if (result.success) {
-    playersService.removePlayer(playerName);
-
-    // Store player name in mapping file for display purposes
-    // The server's bans.json uses UUIDs, we need names for the UI
-    try {
-      const mapping = await readBansMapping();
-      // We'll update the mapping when the bans list is read
-      // For now, just ensure we have a way to associate names
-      mapping[playerName] = playerName; // Temporary - will be replaced with UUID mapping
-      await writeBansMapping(mapping);
-
-      // Remove from whitelist if present
-      const whitelist = await readWhitelist();
-      if (whitelist.list.includes(playerName)) {
-        whitelist.list = whitelist.list.filter(p => p !== playerName);
-        await writeWhitelist(whitelist);
-      }
-    } catch (err) {
-      logger.error('Failed to update ban mapping:', err);
-    }
-
-    punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'ban', reason: safeReason, byUser: username });
-    // Log activity
-    await logActivity(username, 'ban', 'player', true, playerName, reason);
-
-    res.json({
-      success: true,
-      message: `Player ${playerName} banned`,
-    });
-  } else {
-    await logActivity(username, 'ban', 'player', false, playerName, result.error);
-
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to ban player',
-    });
-  }
-});
-
-// DELETE /api/players/:name/ban
-router.delete('/:name/ban', authMiddleware, requirePermission('players.unban'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  // Demo mode: simulate unban
-  if (isDemoMode()) {
-    await logActivity(username, 'unban', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} unbanned`,
-    });
-    return;
-  }
-
-  // Execute unban command - server will update bans.json
-  const result = await dockerService.execCommand(`/unban ${playerName}`, req.serverId);
-
-  if (result.success) {
-    punishments.deactivateActiveForPlayer(playerName, ['ban', 'tempban'], username);
-    // Log activity
-    await logActivity(username, 'unban', 'player', true, playerName);
-
-    res.json({
-      success: true,
-      message: `Player ${playerName} unbanned`,
-    });
-  } else {
-    await logActivity(username, 'unban', 'player', false, playerName, result.error);
-
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to unban player',
-    });
-  }
-});
-
-// POST /api/players/:name/whitelist
-router.post('/:name/whitelist', authMiddleware, requirePermission('players.whitelist'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  // Demo mode: simulate whitelist add
-  if (isDemoMode()) {
-    await logActivity(username, 'whitelist_add', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} added to whitelist`,
-    });
-    return;
-  }
-
-  const result = await dockerService.execCommand(`/whitelist add ${playerName}`, req.serverId);
-
-  if (result.success) {
-    // Persist to whitelist.json
-    try {
-      const whitelist = await readWhitelist();
-      if (!whitelist.list.includes(playerName)) {
-        whitelist.list.push(playerName);
-        await writeWhitelist(whitelist);
-      }
-    } catch (err) {
-      logger.error('Failed to persist whitelist:', err);
-    }
-
-    // Log activity
-    await logActivity(username, 'whitelist_add', 'player', true, playerName);
-
-    res.json({
-      success: true,
-      message: `Player ${playerName} added to whitelist`,
-    });
-  } else {
-    await logActivity(username, 'whitelist_add', 'player', false, playerName, result.error);
-
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to add to whitelist',
-    });
-  }
-});
-
-// DELETE /api/players/:name/whitelist
-router.delete('/:name/whitelist', authMiddleware, requirePermission('players.whitelist'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  // Demo mode: simulate whitelist remove
-  if (isDemoMode()) {
-    await logActivity(username, 'whitelist_remove', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} removed from whitelist`,
-    });
-    return;
-  }
-
-  const result = await dockerService.execCommand(`/whitelist remove ${playerName}`, req.serverId);
-
-  if (result.success) {
-    // Remove from whitelist.json
-    try {
-      const whitelist = await readWhitelist();
-      whitelist.list = whitelist.list.filter(p => p !== playerName);
-      await writeWhitelist(whitelist);
-    } catch (err) {
-      logger.error('Failed to persist whitelist removal:', err);
-    }
-
-    // Log activity
-    await logActivity(username, 'whitelist_remove', 'player', true, playerName);
-
-    res.json({
-      success: true,
-      message: `Player ${playerName} removed from whitelist`,
-    });
-  } else {
-    await logActivity(username, 'whitelist_remove', 'player', false, playerName, result.error);
-
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to remove from whitelist',
-    });
-  }
-});
-
-// POST /api/players/:name/op
-router.post('/:name/op', authMiddleware, requirePermission('players.op'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  // Demo mode: simulate op
-  if (isDemoMode()) {
-    await logActivity(username, 'op_add', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} is now an operator`,
-    });
-    return;
-  }
-
-  const result = await dockerService.execCommand(`/op add ${playerName}`, req.serverId);
-
-  if (result.success) {
-    await logActivity(username, 'op_add', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `Player ${playerName} is now an operator`,
-    });
-  } else {
-    await logActivity(username, 'op_add', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to op player',
-    });
-  }
-});
-
-// DELETE /api/players/:name/op
-router.delete('/:name/op', authMiddleware, requirePermission('players.op'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  // Demo mode: simulate deop
-  if (isDemoMode()) {
-    await logActivity(username, 'op_remove', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} is no longer an operator`,
-    });
-    return;
-  }
-
-  const result = await dockerService.execCommand(`/op remove ${playerName}`, req.serverId);
-
-  if (result.success) {
-    await logActivity(username, 'op_remove', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `Player ${playerName} is no longer an operator`,
-    });
-  } else {
-    await logActivity(username, 'op_remove', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to deop player',
-    });
-  }
-});
-
-// POST /api/players/:name/message
-router.post('/:name/message', authMiddleware, requirePermission('players.message'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
-  const { message } = req.body;
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  if (!message || typeof message !== 'string') {
-    res.status(400).json({
-      success: false,
-      error: 'Message is required',
-    });
-    return;
-  }
-
-  // Demo mode: simulate message
-  if (isDemoMode()) {
-    res.json({
-      success: true,
-      message: `[Demo] Message sent to ${playerName}`,
-    });
-    return;
-  }
-
-  // SECURITY: Sanitize message
-  const safeMessage = sanitizeMessage(message, 256);
-
-  const result = await dockerService.execCommand(`/msg ${playerName} ${safeMessage}`, req.serverId);
-
-  if (result.success) {
-    res.json({
-      success: true,
-      message: `Message sent to ${playerName}`,
-    });
-  } else {
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to send message',
-    });
-  }
-});
-
-// POST /api/players/:name/teleport
-router.post('/:name/teleport', authMiddleware, requirePermission('players.teleport'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const { target, x, y, z } = req.body;
-  const username = req.user || 'system';
-
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
-
-  let teleportDetails: string;
-  let teleportOptions: { target?: string; x?: number; y?: number; z?: number };
-
-  if (target) {
-    // SECURITY: Validate target player name
-    if (!isValidPlayerName(target)) {
-      res.status(400).json({ success: false, error: 'Invalid target player name' });
-      return;
-    }
-    teleportDetails = `to player ${target}`;
-    teleportOptions = { target };
-  } else if (x !== undefined && y !== undefined && z !== undefined) {
-    // SECURITY: Validate coordinates
-    if (!isValidCoordinate(x) || !isValidCoordinate(y) || !isValidCoordinate(z)) {
-      res.status(400).json({ success: false, error: 'Invalid coordinates' });
-      return;
-    }
-    teleportDetails = `to coordinates ${x}, ${y}, ${z}`;
-    teleportOptions = { x, y, z };
-  } else {
-    res.status(400).json({
-      success: false,
-      error: 'Either target player or coordinates (x, y, z) required',
-    });
-    return;
-  }
-
-  // Demo mode: simulate teleport
-  if (isDemoMode()) {
-    await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
-    res.json({
-      success: true,
-      message: target ? `[Demo] Teleported ${playerName} to ${target}` : `[Demo] Teleported ${playerName} to ${x}, ${y}, ${z}`,
-    });
-    return;
-  }
-
-  // Try plugin API first (more reliable)
-  try {
-    const pluginResult = await kyuubiApi.teleportPlayerViaPlugin(playerName, teleportOptions, req.serverId);
-    if (pluginResult.success) {
-      await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
+router.get(
+  '/',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    // Check if server is running - if not, clear stale players and return empty list
+    const status = await dockerService.getStatus(req.serverId);
+    if (!status.running) {
+      playersService.clearOnlinePlayers();
       res.json({
-        success: true,
-        message: target ? `Teleported ${playerName} to ${target}` : `Teleported ${playerName} to ${x}, ${y}, ${z}`,
+        players: [],
+        count: 0,
       });
       return;
     }
-  } catch {
-    // Plugin not available, fall back to console command
-  }
 
-  // Fallback: Use console command
-  const command = target
-    ? `/tp ${playerName} ${target}`
-    : `/tp ${playerName} ${x} ${y} ${z}`;
+    const players = await playersService.getOnlinePlayers(req.serverId);
 
-  const result = await dockerService.execCommand(command, req.serverId);
-
-  if (result.success) {
-    await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
     res.json({
-      success: true,
-      message: target ? `Teleported ${playerName} to ${target}` : `Teleported ${playerName} to ${x}, ${y}, ${z}`,
+      players,
+      count: players.length,
     });
-  } else {
-    await logActivity(username, 'teleport', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to teleport player',
-    });
-  }
-});
+  },
+);
+
+// GET /api/players/count
+router.get(
+  '/count',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (_req: Request, res: Response) => {
+    // Check if server is running - if not, return 0
+    const status = await dockerService.getStatus();
+    if (!status.running) {
+      playersService.clearOnlinePlayers();
+      res.json({ count: 0 });
+      return;
+    }
+    const count = await playersService.getPlayerCount();
+    res.json({ count });
+  },
+);
+
+// GET /api/players/history - All players who have ever joined
+router.get(
+  '/history',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (_req: Request, res: Response) => {
+    const history = await playersService.getPlayerHistory();
+    res.json({ players: history, count: history.length });
+  },
+);
+
+// GET /api/players/offline - Players in history who are currently offline
+router.get(
+  '/offline',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (_req: Request, res: Response) => {
+    const offline = await playersService.getOfflinePlayers();
+    res.json({ players: offline, count: offline.length });
+  },
+);
+
+// GET /api/players/all - All players from JSON files with online status
+router.get(
+  '/all',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (_req: Request, res: Response) => {
+    // Update online status based on server status
+    const status = await dockerService.getStatus();
+    if (!status.running) {
+      playersService.clearOnlinePlayers();
+    }
+
+    const players = await playersService.getAllPlayersUnified();
+    const onlineCount = players.filter((p) => p.online).length;
+    res.json({ players, count: players.length, onlineCount });
+  },
+);
+
+// GET /api/players/playtime - playtime leaderboard (most-played first)
+router.get(
+  '/playtime',
+  authMiddleware,
+  requirePermission('players.view'),
+  (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
+      res.json({ leaderboard: getLeaderboard(req.serverId, limit) });
+    } catch (error) {
+      logger.error('[Players] playtime leaderboard failed:', error);
+      res.status(500).json({ error: 'Failed to load playtime leaderboard' });
+    }
+  },
+);
+
+// GET /api/players/:uuid/playtime - per-player sessions + total
+router.get(
+  '/:uuid/playtime',
+  authMiddleware,
+  requirePermission('players.view'),
+  (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
+      res.json(getPlayerSessions(req.params.uuid, limit));
+    } catch (error) {
+      logger.error('[Players] playtime sessions failed:', error);
+      res.status(500).json({ error: 'Failed to load playtime sessions' });
+    }
+  },
+);
+
+// POST /api/players/:name/kick
+router.post(
+  '/:name/kick',
+  authMiddleware,
+  requirePermission('players.kick'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const { reason } = req.body;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    // Demo mode: simulate kick
+    if (isDemoMode()) {
+      await logActivity(username, 'kick', 'player', true, playerName, reason);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} kicked`,
+      });
+      return;
+    }
+
+    // SECURITY: Sanitize reason if provided
+    const safeReason = reason ? sanitizeMessage(reason, 100) : '';
+
+    // Send kick command to server (with optional reason)
+    const command = safeReason ? `/kick ${playerName} ${safeReason}` : `/kick ${playerName}`;
+    const result = await dockerService.execCommand(command, req.serverId);
+
+    if (result.success) {
+      playersService.removePlayer(playerName);
+
+      punishments.recordPunishment({
+        serverId: req.serverId,
+        playerName,
+        type: 'kick',
+        reason: safeReason || undefined,
+        byUser: username,
+      });
+      // Log activity
+      await logActivity(username, 'kick', 'player', true, playerName, reason);
+
+      res.json({
+        success: true,
+        message: `Player ${playerName} kicked`,
+      });
+    } else {
+      await logActivity(username, 'kick', 'player', false, playerName, result.error);
+
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to kick player',
+      });
+    }
+  },
+);
+
+// POST /api/players/:name/ban
+router.post(
+  '/:name/ban',
+  authMiddleware,
+  requirePermission('players.ban'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const { reason } = req.body;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    // Demo mode: simulate ban
+    if (isDemoMode()) {
+      await logActivity(username, 'ban', 'player', true, playerName, reason);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} banned`,
+      });
+      return;
+    }
+
+    // SECURITY: Sanitize reason if provided
+    const safeReason = reason ? sanitizeMessage(reason, 100) : 'You have been banned';
+
+    // First kick the player if online
+    await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
+
+    // Then execute ban command - server will update bans.json with UUID
+    const command = `/ban ${playerName} ${safeReason}`;
+    const result = await dockerService.execCommand(command, req.serverId);
+
+    if (result.success) {
+      playersService.removePlayer(playerName);
+
+      // Store player name in mapping file for display purposes
+      // The server's bans.json uses UUIDs, we need names for the UI
+      try {
+        const mapping = await readBansMapping();
+        // We'll update the mapping when the bans list is read
+        // For now, just ensure we have a way to associate names
+        mapping[playerName] = playerName; // Temporary - will be replaced with UUID mapping
+        await writeBansMapping(mapping);
+
+        // Remove from whitelist if present
+        const whitelist = await readWhitelist();
+        if (whitelist.list.includes(playerName)) {
+          whitelist.list = whitelist.list.filter((p) => p !== playerName);
+          await writeWhitelist(whitelist);
+        }
+      } catch (err) {
+        logger.error('Failed to update ban mapping:', err);
+      }
+
+      punishments.recordPunishment({
+        serverId: req.serverId,
+        playerName,
+        type: 'ban',
+        reason: safeReason,
+        byUser: username,
+      });
+      // Log activity
+      await logActivity(username, 'ban', 'player', true, playerName, reason);
+
+      res.json({
+        success: true,
+        message: `Player ${playerName} banned`,
+      });
+    } else {
+      await logActivity(username, 'ban', 'player', false, playerName, result.error);
+
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to ban player',
+      });
+    }
+  },
+);
+
+// DELETE /api/players/:name/ban
+router.delete(
+  '/:name/ban',
+  authMiddleware,
+  requirePermission('players.unban'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    // Demo mode: simulate unban
+    if (isDemoMode()) {
+      await logActivity(username, 'unban', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} unbanned`,
+      });
+      return;
+    }
+
+    // Execute unban command - server will update bans.json
+    const result = await dockerService.execCommand(`/unban ${playerName}`, req.serverId);
+
+    if (result.success) {
+      punishments.deactivateActiveForPlayer(playerName, ['ban', 'tempban'], username);
+      // Log activity
+      await logActivity(username, 'unban', 'player', true, playerName);
+
+      res.json({
+        success: true,
+        message: `Player ${playerName} unbanned`,
+      });
+    } else {
+      await logActivity(username, 'unban', 'player', false, playerName, result.error);
+
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to unban player',
+      });
+    }
+  },
+);
+
+// POST /api/players/:name/whitelist
+router.post(
+  '/:name/whitelist',
+  authMiddleware,
+  requirePermission('players.whitelist'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    // Demo mode: simulate whitelist add
+    if (isDemoMode()) {
+      await logActivity(username, 'whitelist_add', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} added to whitelist`,
+      });
+      return;
+    }
+
+    const result = await dockerService.execCommand(`/whitelist add ${playerName}`, req.serverId);
+
+    if (result.success) {
+      // Persist to whitelist.json
+      try {
+        const whitelist = await readWhitelist();
+        if (!whitelist.list.includes(playerName)) {
+          whitelist.list.push(playerName);
+          await writeWhitelist(whitelist);
+        }
+      } catch (err) {
+        logger.error('Failed to persist whitelist:', err);
+      }
+
+      // Log activity
+      await logActivity(username, 'whitelist_add', 'player', true, playerName);
+
+      res.json({
+        success: true,
+        message: `Player ${playerName} added to whitelist`,
+      });
+    } else {
+      await logActivity(username, 'whitelist_add', 'player', false, playerName, result.error);
+
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to add to whitelist',
+      });
+    }
+  },
+);
+
+// DELETE /api/players/:name/whitelist
+router.delete(
+  '/:name/whitelist',
+  authMiddleware,
+  requirePermission('players.whitelist'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    // Demo mode: simulate whitelist remove
+    if (isDemoMode()) {
+      await logActivity(username, 'whitelist_remove', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} removed from whitelist`,
+      });
+      return;
+    }
+
+    const result = await dockerService.execCommand(`/whitelist remove ${playerName}`, req.serverId);
+
+    if (result.success) {
+      // Remove from whitelist.json
+      try {
+        const whitelist = await readWhitelist();
+        whitelist.list = whitelist.list.filter((p) => p !== playerName);
+        await writeWhitelist(whitelist);
+      } catch (err) {
+        logger.error('Failed to persist whitelist removal:', err);
+      }
+
+      // Log activity
+      await logActivity(username, 'whitelist_remove', 'player', true, playerName);
+
+      res.json({
+        success: true,
+        message: `Player ${playerName} removed from whitelist`,
+      });
+    } else {
+      await logActivity(username, 'whitelist_remove', 'player', false, playerName, result.error);
+
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to remove from whitelist',
+      });
+    }
+  },
+);
+
+// POST /api/players/:name/op
+router.post(
+  '/:name/op',
+  authMiddleware,
+  requirePermission('players.op'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    // Demo mode: simulate op
+    if (isDemoMode()) {
+      await logActivity(username, 'op_add', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} is now an operator`,
+      });
+      return;
+    }
+
+    const result = await dockerService.execCommand(`/op add ${playerName}`, req.serverId);
+
+    if (result.success) {
+      await logActivity(username, 'op_add', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `Player ${playerName} is now an operator`,
+      });
+    } else {
+      await logActivity(username, 'op_add', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to op player',
+      });
+    }
+  },
+);
+
+// DELETE /api/players/:name/op
+router.delete(
+  '/:name/op',
+  authMiddleware,
+  requirePermission('players.op'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    // Demo mode: simulate deop
+    if (isDemoMode()) {
+      await logActivity(username, 'op_remove', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} is no longer an operator`,
+      });
+      return;
+    }
+
+    const result = await dockerService.execCommand(`/op remove ${playerName}`, req.serverId);
+
+    if (result.success) {
+      await logActivity(username, 'op_remove', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `Player ${playerName} is no longer an operator`,
+      });
+    } else {
+      await logActivity(username, 'op_remove', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to deop player',
+      });
+    }
+  },
+);
+
+// POST /api/players/:name/message
+router.post(
+  '/:name/message',
+  authMiddleware,
+  requirePermission('players.message'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
+    const { message } = req.body;
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    if (!message || typeof message !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Message is required',
+      });
+      return;
+    }
+
+    // Demo mode: simulate message
+    if (isDemoMode()) {
+      res.json({
+        success: true,
+        message: `[Demo] Message sent to ${playerName}`,
+      });
+      return;
+    }
+
+    // SECURITY: Sanitize message
+    const safeMessage = sanitizeMessage(message, 256);
+
+    const result = await dockerService.execCommand(
+      `/msg ${playerName} ${safeMessage}`,
+      req.serverId,
+    );
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: `Message sent to ${playerName}`,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to send message',
+      });
+    }
+  },
+);
+
+// POST /api/players/:name/teleport
+router.post(
+  '/:name/teleport',
+  authMiddleware,
+  requirePermission('players.teleport'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const { target, x, y, z } = req.body;
+    const username = req.user || 'system';
+
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
+
+    let teleportDetails: string;
+    let teleportOptions: { target?: string; x?: number; y?: number; z?: number };
+
+    if (target) {
+      // SECURITY: Validate target player name
+      if (!isValidPlayerName(target)) {
+        res.status(400).json({ success: false, error: 'Invalid target player name' });
+        return;
+      }
+      teleportDetails = `to player ${target}`;
+      teleportOptions = { target };
+    } else if (x !== undefined && y !== undefined && z !== undefined) {
+      // SECURITY: Validate coordinates
+      if (!isValidCoordinate(x) || !isValidCoordinate(y) || !isValidCoordinate(z)) {
+        res.status(400).json({ success: false, error: 'Invalid coordinates' });
+        return;
+      }
+      teleportDetails = `to coordinates ${x}, ${y}, ${z}`;
+      teleportOptions = { x, y, z };
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'Either target player or coordinates (x, y, z) required',
+      });
+      return;
+    }
+
+    // Demo mode: simulate teleport
+    if (isDemoMode()) {
+      await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
+      res.json({
+        success: true,
+        message: target
+          ? `[Demo] Teleported ${playerName} to ${target}`
+          : `[Demo] Teleported ${playerName} to ${x}, ${y}, ${z}`,
+      });
+      return;
+    }
+
+    // Try plugin API first (more reliable)
+    try {
+      const pluginResult = await kyuubiApi.teleportPlayerViaPlugin(
+        playerName,
+        teleportOptions,
+        req.serverId,
+      );
+      if (pluginResult.success) {
+        await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
+        res.json({
+          success: true,
+          message: target
+            ? `Teleported ${playerName} to ${target}`
+            : `Teleported ${playerName} to ${x}, ${y}, ${z}`,
+        });
+        return;
+      }
+    } catch {
+      // Plugin not available, fall back to console command
+    }
+
+    // Fallback: Use console command
+    const command = target ? `/tp ${playerName} ${target}` : `/tp ${playerName} ${x} ${y} ${z}`;
+
+    const result = await dockerService.execCommand(command, req.serverId);
+
+    if (result.success) {
+      await logActivity(username, 'teleport', 'player', true, playerName, teleportDetails);
+      res.json({
+        success: true,
+        message: target
+          ? `Teleported ${playerName} to ${target}`
+          : `Teleported ${playerName} to ${x}, ${y}, ${z}`,
+      });
+    } else {
+      await logActivity(username, 'teleport', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to teleport player',
+      });
+    }
+  },
+);
 
 // POST /api/players/:name/kill
-router.post('/:name/kill', authMiddleware, requirePermission('players.kill'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
+router.post(
+  '/:name/kill',
+  authMiddleware,
+  requirePermission('players.kill'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  // Demo mode: simulate kill
-  if (isDemoMode()) {
-    await logActivity(username, 'kill', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} killed`,
-    });
-    return;
-  }
+    // Demo mode: simulate kill
+    if (isDemoMode()) {
+      await logActivity(username, 'kill', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} killed`,
+      });
+      return;
+    }
 
-  // Try plugin API first (more reliable)
-  try {
-    const pluginResult = await kyuubiApi.killPlayerViaPlugin(playerName, req.serverId);
-    if (pluginResult.success) {
+    // Try plugin API first (more reliable)
+    try {
+      const pluginResult = await kyuubiApi.killPlayerViaPlugin(playerName, req.serverId);
+      if (pluginResult.success) {
+        await logActivity(username, 'kill', 'player', true, playerName);
+        res.json({
+          success: true,
+          message: `Player ${playerName} killed`,
+        });
+        return;
+      }
+    } catch {
+      // Plugin not available, fall back to console command
+    }
+
+    // Fallback: Use console command
+    const result = await dockerService.execCommand(`/kill ${playerName}`, req.serverId);
+
+    if (result.success) {
       await logActivity(username, 'kill', 'player', true, playerName);
       res.json({
         success: true,
         message: `Player ${playerName} killed`,
       });
-      return;
+    } else {
+      await logActivity(username, 'kill', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to kill player',
+      });
     }
-  } catch {
-    // Plugin not available, fall back to console command
-  }
-
-  // Fallback: Use console command
-  const result = await dockerService.execCommand(`/kill ${playerName}`, req.serverId);
-
-  if (result.success) {
-    await logActivity(username, 'kill', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `Player ${playerName} killed`,
-    });
-  } else {
-    await logActivity(username, 'kill', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to kill player',
-    });
-  }
-});
+  },
+);
 
 // POST /api/players/:name/respawn
-router.post('/:name/respawn', authMiddleware, requirePermission('players.respawn'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
+router.post(
+  '/:name/respawn',
+  authMiddleware,
+  requirePermission('players.respawn'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  // Demo mode: simulate respawn
-  if (isDemoMode()) {
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} respawned`,
-    });
-    return;
-  }
+    // Demo mode: simulate respawn
+    if (isDemoMode()) {
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} respawned`,
+      });
+      return;
+    }
 
-  // Try plugin API first (more reliable)
-  try {
-    const pluginResult = await kyuubiApi.respawnPlayerViaPlugin(playerName, req.serverId);
-    if (pluginResult.success) {
+    // Try plugin API first (more reliable)
+    try {
+      const pluginResult = await kyuubiApi.respawnPlayerViaPlugin(playerName, req.serverId);
+      if (pluginResult.success) {
+        res.json({
+          success: true,
+          message: `Player ${playerName} respawned`,
+        });
+        return;
+      }
+    } catch {
+      // Plugin not available, fall back to console command
+    }
+
+    // Fallback: Use console command
+    const result = await dockerService.execCommand(
+      `/player respawn --player ${playerName}`,
+      req.serverId,
+    );
+
+    if (result.success) {
       res.json({
         success: true,
         message: `Player ${playerName} respawned`,
       });
-      return;
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to respawn player',
+      });
     }
-  } catch {
-    // Plugin not available, fall back to console command
-  }
-
-  // Fallback: Use console command
-  const result = await dockerService.execCommand(`/player respawn --player ${playerName}`, req.serverId);
-
-  if (result.success) {
-    res.json({
-      success: true,
-      message: `Player ${playerName} respawned`,
-    });
-  } else {
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to respawn player',
-    });
-  }
-});
+  },
+);
 
 // POST /api/players/:name/gamemode
-router.post('/:name/gamemode', authMiddleware, requirePermission('players.gamemode'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const { gamemode } = req.body;
-  const username = req.user || 'system';
+router.post(
+  '/:name/gamemode',
+  authMiddleware,
+  requirePermission('players.gamemode'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const { gamemode } = req.body;
+    const username = req.user || 'system';
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  if (!gamemode) {
-    res.status(400).json({
-      success: false,
-      error: 'Gamemode is required',
-    });
-    return;
-  }
+    if (!gamemode) {
+      res.status(400).json({
+        success: false,
+        error: 'Gamemode is required',
+      });
+      return;
+    }
 
-  // SECURITY: Validate gamemode
-  if (!isValidGamemode(gamemode)) {
-    res.status(400).json({
-      success: false,
-      error: 'Invalid gamemode. Use: creative, adventure (or c, a)',
-    });
-    return;
-  }
+    // SECURITY: Validate gamemode
+    if (!isValidGamemode(gamemode)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid gamemode. Use: creative, adventure (or c, a)',
+      });
+      return;
+    }
 
-  // Demo mode: simulate gamemode change
-  if (isDemoMode()) {
-    await logActivity(username, 'gamemode', 'player', true, playerName, `Changed to ${gamemode}`);
-    res.json({
-      success: true,
-      message: `[Demo] Set ${playerName}'s gamemode to ${gamemode}`,
-    });
-    return;
-  }
+    // Demo mode: simulate gamemode change
+    if (isDemoMode()) {
+      await logActivity(username, 'gamemode', 'player', true, playerName, `Changed to ${gamemode}`);
+      res.json({
+        success: true,
+        message: `[Demo] Set ${playerName}'s gamemode to ${gamemode}`,
+      });
+      return;
+    }
 
-  // Try plugin API first (more reliable)
-  try {
-    const pluginResult = await kyuubiApi.setGamemodeViaPlugin(playerName, gamemode, req.serverId);
-    if (pluginResult.success) {
+    // Try plugin API first (more reliable)
+    try {
+      const pluginResult = await kyuubiApi.setGamemodeViaPlugin(playerName, gamemode, req.serverId);
+      if (pluginResult.success) {
+        await logActivity(
+          username,
+          'gamemode',
+          'player',
+          true,
+          playerName,
+          `Changed to ${gamemode}`,
+        );
+        res.json({
+          success: true,
+          message: `Set ${playerName}'s gamemode to ${gamemode}`,
+        });
+        return;
+      }
+    } catch {
+      // Plugin not available, fall back to console command
+    }
+
+    // Fallback: Use console command
+    const result = await dockerService.execCommand(
+      `/gamemode ${gamemode} ${playerName}`,
+      req.serverId,
+    );
+
+    if (result.success) {
       await logActivity(username, 'gamemode', 'player', true, playerName, `Changed to ${gamemode}`);
       res.json({
         success: true,
         message: `Set ${playerName}'s gamemode to ${gamemode}`,
       });
-      return;
+    } else {
+      await logActivity(username, 'gamemode', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to change gamemode',
+      });
     }
-  } catch {
-    // Plugin not available, fall back to console command
-  }
-
-  // Fallback: Use console command
-  const result = await dockerService.execCommand(`/gamemode ${gamemode} ${playerName}`, req.serverId);
-
-  if (result.success) {
-    await logActivity(username, 'gamemode', 'player', true, playerName, `Changed to ${gamemode}`);
-    res.json({
-      success: true,
-      message: `Set ${playerName}'s gamemode to ${gamemode}`,
-    });
-  } else {
-    await logActivity(username, 'gamemode', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to change gamemode',
-    });
-  }
-});
+  },
+);
 
 // POST /api/players/:name/give
-router.post('/:name/give', authMiddleware, requirePermission('players.give'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const { item, amount } = req.body;
-  const username = req.user || 'system';
+router.post(
+  '/:name/give',
+  authMiddleware,
+  requirePermission('players.give'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const { item, amount } = req.body;
+    const username = req.user || 'system';
 
-  // DEBUG: Log received values
-  logger.info('[Give Debug] Received:', { playerName, item, amount, body: req.body });
+    // DEBUG: Log received values
+    logger.info('[Give Debug] Received:', { playerName, item, amount, body: req.body });
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  if (!item) {
-    res.status(400).json({
-      success: false,
-      error: 'Item is required',
-    });
-    return;
-  }
-
-  // SECURITY: Validate item ID format (item_name with underscores, lowercase)
-  if (!isValidItemId(String(item).toLowerCase())) {
-    res.status(400).json({
-      success: false,
-      error: 'Invalid item ID format. Use: item_name (e.g., furniture_crude_sign)',
-    });
-    return;
-  }
-
-  // SECURITY: Validate amount if provided
-  if (amount !== undefined && !isValidNumber(amount)) {
-    res.status(400).json({
-      success: false,
-      error: 'Invalid amount. Must be a number.',
-    });
-    return;
-  }
-
-  // Demo mode: simulate give
-  if (isDemoMode()) {
-    await logActivity(username, 'give', 'player', true, playerName, `Gave ${amount || 1}x ${item}`);
-    res.json({
-      success: true,
-      message: `[Demo] Gave ${amount || 1} ${item} to ${playerName}`,
-    });
-    return;
-  }
-
-  // Try the plugin API first (in-process, atomic), fall back to console.
-  try {
-    const pluginResult = await kyuubiApi.givePlayerViaPlugin(playerName, String(item), amount as number | undefined, req.serverId);
-    if (pluginResult.success) {
-      await logActivity(username, 'give', 'player', true, playerName, `Gave ${amount || 1}x ${item}`);
-      res.json({ success: true, message: `Gave ${amount || 1} ${item} to ${playerName}` });
+    if (!item) {
+      res.status(400).json({
+        success: false,
+        error: 'Item is required',
+      });
       return;
     }
-  } catch {
-    // Plugin not available — fall back to console command.
-  }
 
-  // Command format: /give <player> <item> --quantity=<amount>
-  const command = amount && amount > 1
-    ? `/give ${playerName} ${item} --quantity=${amount}`
-    : `/give ${playerName} ${item}`;
+    // SECURITY: Validate item ID format (item_name with underscores, lowercase)
+    if (!isValidItemId(String(item).toLowerCase())) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid item ID format. Use: item_name (e.g., furniture_crude_sign)',
+      });
+      return;
+    }
 
-  const result = await dockerService.execCommand(command, req.serverId);
-  logger.info('[Give Debug] Command result:', result);
+    // SECURITY: Validate amount if provided
+    if (amount !== undefined && !isValidNumber(amount)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid amount. Must be a number.',
+      });
+      return;
+    }
 
-  if (result.success) {
-    await logActivity(username, 'give', 'player', true, playerName, `Gave ${amount || 1}x ${item}`);
-    res.json({
-      success: true,
-      message: `Gave ${amount || 1} ${item} to ${playerName}`,
-    });
-  } else {
-    await logActivity(username, 'give', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to give item',
-    });
-  }
-});
+    // Demo mode: simulate give
+    if (isDemoMode()) {
+      await logActivity(
+        username,
+        'give',
+        'player',
+        true,
+        playerName,
+        `Gave ${amount || 1}x ${item}`,
+      );
+      res.json({
+        success: true,
+        message: `[Demo] Gave ${amount || 1} ${item} to ${playerName}`,
+      });
+      return;
+    }
+
+    // Try the plugin API first (in-process, atomic), fall back to console.
+    try {
+      const pluginResult = await kyuubiApi.givePlayerViaPlugin(
+        playerName,
+        String(item),
+        amount as number | undefined,
+        req.serverId,
+      );
+      if (pluginResult.success) {
+        await logActivity(
+          username,
+          'give',
+          'player',
+          true,
+          playerName,
+          `Gave ${amount || 1}x ${item}`,
+        );
+        res.json({ success: true, message: `Gave ${amount || 1} ${item} to ${playerName}` });
+        return;
+      }
+    } catch {
+      // Plugin not available — fall back to console command.
+    }
+
+    // Command format: /give <player> <item> --quantity=<amount>
+    const command =
+      amount && amount > 1
+        ? `/give ${playerName} ${item} --quantity=${amount}`
+        : `/give ${playerName} ${item}`;
+
+    const result = await dockerService.execCommand(command, req.serverId);
+    logger.info('[Give Debug] Command result:', result);
+
+    if (result.success) {
+      await logActivity(
+        username,
+        'give',
+        'player',
+        true,
+        playerName,
+        `Gave ${amount || 1}x ${item}`,
+      );
+      res.json({
+        success: true,
+        message: `Gave ${amount || 1} ${item} to ${playerName}`,
+      });
+    } else {
+      await logActivity(username, 'give', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to give item',
+      });
+    }
+  },
+);
 
 // POST /api/players/:name/heal
-router.post('/:name/heal', authMiddleware, requirePermission('players.heal'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
+router.post(
+  '/:name/heal',
+  authMiddleware,
+  requirePermission('players.heal'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  // Demo mode: simulate heal
-  if (isDemoMode()) {
-    res.json({
-      success: true,
-      message: `[Demo] Player ${playerName} healed`,
-    });
-    return;
-  }
+    // Demo mode: simulate heal
+    if (isDemoMode()) {
+      res.json({
+        success: true,
+        message: `[Demo] Player ${playerName} healed`,
+      });
+      return;
+    }
 
-  // Try plugin API first
-  try {
-    const pluginResult = await kyuubiApi.healPlayerViaPlugin(playerName, req.serverId);
-    if (pluginResult.success) {
+    // Try plugin API first
+    try {
+      const pluginResult = await kyuubiApi.healPlayerViaPlugin(playerName, req.serverId);
+      if (pluginResult.success) {
+        res.json({
+          success: true,
+          message: `Player ${playerName} healed`,
+        });
+        return;
+      }
+    } catch {
+      // Plugin not available, fall back to console command
+    }
+
+    // Fallback: Use console command
+    const result = await dockerService.execCommand(
+      `/player stats settomax --player ${playerName}`,
+      req.serverId,
+    );
+
+    if (result.success) {
       res.json({
         success: true,
         message: `Player ${playerName} healed`,
       });
-      return;
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to heal player',
+      });
     }
-  } catch {
-    // Plugin not available, fall back to console command
-  }
-
-  // Fallback: Use console command
-  const result = await dockerService.execCommand(`/player stats settomax --player ${playerName}`, req.serverId);
-
-  if (result.success) {
-    res.json({
-      success: true,
-      message: `Player ${playerName} healed`,
-    });
-  } else {
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to heal player',
-    });
-  }
-});
+  },
+);
 
 // POST /api/players/:name/effect
-router.post('/:name/effect', authMiddleware, requirePermission('players.effects'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const { effect, action } = req.body;
-  const username = req.user || 'system';
+router.post(
+  '/:name/effect',
+  authMiddleware,
+  requirePermission('players.effects'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const { effect, action } = req.body;
+    const username = req.user || 'system';
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  if (!effect && action !== 'clear') {
-    res.status(400).json({
-      success: false,
-      error: 'Effect is required',
-    });
-    return;
-  }
+    if (!effect && action !== 'clear') {
+      res.status(400).json({
+        success: false,
+        error: 'Effect is required',
+      });
+      return;
+    }
 
-  // SECURITY: Validate effect name if provided
-  if (effect && !isValidEffectName(effect)) {
-    res.status(400).json({
-      success: false,
-      error: 'Invalid effect name',
-    });
-    return;
-  }
+    // SECURITY: Validate effect name if provided
+    if (effect && !isValidEffectName(effect)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid effect name',
+      });
+      return;
+    }
 
-  // Demo mode: simulate effect
-  if (isDemoMode()) {
-    const effectDetails = action === 'clear' ? 'Cleared all effects' : `Applied ${effect}`;
-    await logActivity(username, 'effect', 'player', true, playerName, effectDetails);
-    res.json({
-      success: true,
-      message: action === 'clear' ? `[Demo] Cleared effects from ${playerName}` : `[Demo] Applied ${effect} to ${playerName}`,
-    });
-    return;
-  }
+    // Demo mode: simulate effect
+    if (isDemoMode()) {
+      const effectDetails = action === 'clear' ? 'Cleared all effects' : `Applied ${effect}`;
+      await logActivity(username, 'effect', 'player', true, playerName, effectDetails);
+      res.json({
+        success: true,
+        message:
+          action === 'clear'
+            ? `[Demo] Cleared effects from ${playerName}`
+            : `[Demo] Applied ${effect} to ${playerName}`,
+      });
+      return;
+    }
 
-  // Use --player flag for console commands
-  const command = action === 'clear'
-    ? `/player effect clear --player ${playerName}`
-    : `/player effect apply --player ${playerName} ${effect}`;
-  const result = await dockerService.execCommand(command, req.serverId);
+    // Use --player flag for console commands
+    const command =
+      action === 'clear'
+        ? `/player effect clear --player ${playerName}`
+        : `/player effect apply --player ${playerName} ${effect}`;
+    const result = await dockerService.execCommand(command, req.serverId);
 
-  if (result.success) {
-    const effectDetails = action === 'clear' ? 'Cleared all effects' : `Applied ${effect}`;
-    await logActivity(username, 'effect', 'player', true, playerName, effectDetails);
-    res.json({
-      success: true,
-      message: action === 'clear' ? `Cleared effects from ${playerName}` : `Applied ${effect} to ${playerName}`,
-    });
-  } else {
-    await logActivity(username, 'effect', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to apply effect',
-    });
-  }
-});
+    if (result.success) {
+      const effectDetails = action === 'clear' ? 'Cleared all effects' : `Applied ${effect}`;
+      await logActivity(username, 'effect', 'player', true, playerName, effectDetails);
+      res.json({
+        success: true,
+        message:
+          action === 'clear'
+            ? `Cleared effects from ${playerName}`
+            : `Applied ${effect} to ${playerName}`,
+      });
+    } else {
+      await logActivity(username, 'effect', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to apply effect',
+      });
+    }
+  },
+);
 
 // POST /api/players/:name/inventory/clear
-router.post('/:name/inventory/clear', authMiddleware, requirePermission('players.clear_inventory'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
+router.post(
+  '/:name/inventory/clear',
+  authMiddleware,
+  requirePermission('players.clear_inventory'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  // Demo mode: simulate inventory clear
-  if (isDemoMode()) {
-    await logActivity(username, 'inventory_clear', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `[Demo] Cleared ${playerName}'s inventory`,
-    });
-    return;
-  }
+    // Demo mode: simulate inventory clear
+    if (isDemoMode()) {
+      await logActivity(username, 'inventory_clear', 'player', true, playerName);
+      res.json({
+        success: true,
+        message: `[Demo] Cleared ${playerName}'s inventory`,
+      });
+      return;
+    }
 
-  // Try plugin API first
-  try {
-    const pluginResult = await kyuubiApi.clearInventoryViaPlugin(playerName, req.serverId);
-    if (pluginResult.success) {
+    // Try plugin API first
+    try {
+      const pluginResult = await kyuubiApi.clearInventoryViaPlugin(playerName, req.serverId);
+      if (pluginResult.success) {
+        await logActivity(username, 'inventory_clear', 'player', true, playerName);
+        res.json({
+          success: true,
+          message: `Cleared ${playerName}'s inventory`,
+        });
+        return;
+      }
+    } catch {
+      // Plugin not available, fall back to console command
+    }
+
+    // Fallback: Use console command
+    const result = await dockerService.execCommand(`/inventory clear ${playerName}`, req.serverId);
+
+    if (result.success) {
       await logActivity(username, 'inventory_clear', 'player', true, playerName);
       res.json({
         success: true,
         message: `Cleared ${playerName}'s inventory`,
       });
-      return;
+    } else {
+      await logActivity(username, 'inventory_clear', 'player', false, playerName, result.error);
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to clear inventory',
+      });
     }
-  } catch {
-    // Plugin not available, fall back to console command
-  }
-
-  // Fallback: Use console command
-  const result = await dockerService.execCommand(`/inventory clear ${playerName}`, req.serverId);
-
-  if (result.success) {
-    await logActivity(username, 'inventory_clear', 'player', true, playerName);
-    res.json({
-      success: true,
-      message: `Cleared ${playerName}'s inventory`,
-    });
-  } else {
-    await logActivity(username, 'inventory_clear', 'player', false, playerName, result.error);
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to clear inventory',
-    });
-  }
-});
+  },
+);
 
 // GET /api/players/statistics - Get player statistics
-router.get('/statistics', authMiddleware, requirePermission('players.view'), async (_req: Request, res: Response) => {
-  const stats = await playersService.getPlayerStatistics();
-  res.json(stats);
-});
+router.get(
+  '/statistics',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (_req: Request, res: Response) => {
+    const stats = await playersService.getPlayerStatistics();
+    res.json(stats);
+  },
+);
 
 // GET /api/players/activity - Get daily activity for charts
-router.get('/activity', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
-  const days = parseInt(req.query.days as string) || 7;
-  const activity = await playersService.getDailyActivity(days);
-  res.json(activity);
-});
+router.get(
+  '/activity',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (req: Request, res: Response) => {
+    const days = parseInt(req.query.days as string) || 7;
+    const activity = await playersService.getDailyActivity(days);
+    res.json(activity);
+  },
+);
 
 // ============== CHAT LOG ENDPOINTS ==============
 
 // GET /api/players/chat - Get global chat log
-router.get('/chat', authMiddleware, requirePermission('chat.view'), async (req: Request, res: Response) => {
-  const limit = parseInt(req.query.limit as string) || 100;
-  const offset = parseInt(req.query.offset as string) || 0;
-  const days = parseInt(req.query.days as string) || 7; // Default 7 days, 0 = all
+router.get(
+  '/chat',
+  authMiddleware,
+  requirePermission('chat.view'),
+  async (req: Request, res: Response) => {
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const days = parseInt(req.query.days as string) || 7; // Default 7 days, 0 = all
 
-  const result = await chatLog.getGlobalChatLog({ limit, offset, days });
-  res.json(result);
-});
+    const result = await chatLog.getGlobalChatLog({ limit, offset, days });
+    res.json(result);
+  },
+);
 
 // GET /api/players/:name/chat - Get chat log for specific player
-router.get('/:name/chat', authMiddleware, requirePermission('chat.view'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
+router.get(
+  '/:name/chat',
+  authMiddleware,
+  requirePermission('chat.view'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  const limit = parseInt(req.query.limit as string) || 100;
-  const offset = parseInt(req.query.offset as string) || 0;
-  const days = parseInt(req.query.days as string) || 7; // Default 7 days, 0 = all
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const days = parseInt(req.query.days as string) || 7; // Default 7 days, 0 = all
 
-  const result = await chatLog.getPlayerChatLog(playerName, { limit, offset, days });
-  res.json(result);
-});
+    const result = await chatLog.getPlayerChatLog(playerName, { limit, offset, days });
+    res.json(result);
+  },
+);
 
 // ============== DEATH POSITION ENDPOINTS ==============
 
 // GET /api/players/:name/deaths - Get death positions from player file
-router.get('/:name/deaths', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
+router.get(
+  '/:name/deaths',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  // Get death positions directly from player JSON file
-  const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
+    // Get death positions directly from player JSON file
+    const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
 
-  res.json({
-    success: positions.length > 0,
-    player: playerName,
-    positions,
-    count: positions.length,
-  });
-});
+    res.json({
+      success: positions.length > 0,
+      player: playerName,
+      positions,
+      count: positions.length,
+    });
+  },
+);
 
 // GET /api/players/:name/deaths/last - Get last death position for a player
-router.get('/:name/deaths/last', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
+router.get(
+  '/:name/deaths/last',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  // Get death positions from file and return the last one (most recent)
-  const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
+    // Get death positions from file and return the last one (most recent)
+    const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
 
-  if (positions.length > 0) {
-    const lastPosition = positions[positions.length - 1];
-    res.json({
-      success: true,
-      player: playerName,
-      position: lastPosition,
-    });
-  } else {
-    res.json({
-      success: false,
-      player: playerName,
-      error: 'No death position recorded for this player',
-    });
-  }
-});
+    if (positions.length > 0) {
+      const lastPosition = positions[positions.length - 1];
+      res.json({
+        success: true,
+        player: playerName,
+        position: lastPosition,
+      });
+    } else {
+      res.json({
+        success: false,
+        player: playerName,
+        error: 'No death position recorded for this player',
+      });
+    }
+  },
+);
 
 // POST /api/players/:name/teleport/death - Teleport player to a death position
 // Body: { index?: number } - index of death position (default: last/most recent)
-router.post('/:name/teleport/death', authMiddleware, requirePermission('players.teleport'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
-  const { index } = req.body;
+router.post(
+  '/:name/teleport/death',
+  authMiddleware,
+  requirePermission('players.teleport'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
+    const { index } = req.body;
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  // Get death positions from player file
-  const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
+    // Get death positions from player file
+    const positions = await playersService.getPlayerDeathPositionsFromFile(playerName);
 
-  if (positions.length === 0) {
-    res.status(404).json({
-      success: false,
-      error: 'No death position recorded for this player',
-    });
-    return;
-  }
+    if (positions.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'No death position recorded for this player',
+      });
+      return;
+    }
 
-  // Get the requested position (default: last/most recent)
-  const posIndex = index !== undefined ? Math.min(Math.max(0, index), positions.length - 1) : positions.length - 1;
-  const position = positions[posIndex];
+    // Get the requested position (default: last/most recent)
+    const posIndex =
+      index !== undefined
+        ? Math.min(Math.max(0, index), positions.length - 1)
+        : positions.length - 1;
+    const position = positions[posIndex];
 
-  // Demo mode: simulate teleport to death
-  if (isDemoMode()) {
-    res.json({
-      success: true,
-      message: `[Demo] Teleported ${playerName} to death location (Day ${position.day}: ${position.position.x}, ${position.position.y}, ${position.position.z})`,
-      position,
-    });
-    return;
-  }
+    // Demo mode: simulate teleport to death
+    if (isDemoMode()) {
+      res.json({
+        success: true,
+        message: `[Demo] Teleported ${playerName} to death location (Day ${position.day}: ${position.position.x}, ${position.position.y}, ${position.position.z})`,
+        position,
+      });
+      return;
+    }
 
-  // Teleport to death position
-  const command = `/tp ${playerName} ${position.position.x} ${position.position.y} ${position.position.z}`;
-  const result = await dockerService.execCommand(command, req.serverId);
+    // Teleport to death position
+    const command = `/tp ${playerName} ${position.position.x} ${position.position.y} ${position.position.z}`;
+    const result = await dockerService.execCommand(command, req.serverId);
 
-  if (result.success) {
-    res.json({
-      success: true,
-      message: `Teleported ${playerName} to death location (Day ${position.day}: ${position.position.x}, ${position.position.y}, ${position.position.z})`,
-      position,
-    });
-  } else {
-    res.status(500).json({
-      success: false,
-      error: result.error || 'Failed to teleport player',
-    });
-  }
-});
+    if (result.success) {
+      res.json({
+        success: true,
+        message: `Teleported ${playerName} to death location (Day ${position.day}: ${position.position.x}, ${position.position.y}, ${position.position.z})`,
+        position,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to teleport player',
+      });
+    }
+  },
+);
 
 // POST /api/players/:name/deaths - Manually record a death position (for testing/admin)
-router.post('/:name/deaths', authMiddleware, requirePermission('players.edit'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
+router.post(
+  '/:name/deaths',
+  authMiddleware,
+  requirePermission('players.edit'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
 
-  // SECURITY: Validate player name
-  if (!validatePlayerName(res, playerName)) return;
+    // SECURITY: Validate player name
+    if (!validatePlayerName(res, playerName)) return;
 
-  const { world, x, y, z } = req.body;
+    const { world, x, y, z } = req.body;
 
-  if (!world || x === undefined || y === undefined || z === undefined) {
-    res.status(400).json({
-      success: false,
-      error: 'Missing required fields: world, x, y, z',
-    });
-    return;
-  }
+    if (!world || x === undefined || y === undefined || z === undefined) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required fields: world, x, y, z',
+      });
+      return;
+    }
 
-  try {
-    const position = await chatLog.recordDeathPosition(
-      playerName,
-      world,
-      parseFloat(x),
-      parseFloat(y),
-      parseFloat(z)
-    );
+    try {
+      const position = await chatLog.recordDeathPosition(
+        playerName,
+        world,
+        parseFloat(x),
+        parseFloat(y),
+        parseFloat(z),
+      );
 
-    res.json({
-      success: true,
-      message: `Death position recorded for ${playerName}`,
-      position,
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to record death position',
-    });
-  }
-});
+      res.json({
+        success: true,
+        message: `Death position recorded for ${playerName}`,
+        position,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to record death position',
+      });
+    }
+  },
+);
 
 // ============== PUNISHMENT HISTORY ==============
 
 // GET /api/players/punishments - full, filterable history
-router.get('/punishments', authMiddleware, requirePermission('players.view'), async (req: AuthenticatedRequest, res: Response) => {
-  const player = typeof req.query.player === 'string' ? req.query.player : undefined;
-  const type = typeof req.query.type === 'string' ? req.query.type : undefined;
-  const activeOnly = req.query.active === 'true';
-  const limit = parseInt(req.query.limit as string) || 200;
-  res.json({ punishments: punishments.listPunishments({ player, type, activeOnly, limit }) });
-});
+router.get(
+  '/punishments',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const player = typeof req.query.player === 'string' ? req.query.player : undefined;
+    const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+    const activeOnly = req.query.active === 'true';
+    const limit = parseInt(req.query.limit as string) || 200;
+    res.json({ punishments: punishments.listPunishments({ player, type, activeOnly, limit }) });
+  },
+);
 
 // GET /api/players/:name/punishments - history for one player
-router.get('/:name/punishments', authMiddleware, requirePermission('players.view'), async (req: Request, res: Response) => {
-  const playerName = req.params.name;
-  if (!validatePlayerName(res, playerName)) return;
-  res.json({ punishments: punishments.listPunishments({ player: playerName, limit: 200 }) });
-});
+router.get(
+  '/:name/punishments',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (req: Request, res: Response) => {
+    const playerName = req.params.name;
+    if (!validatePlayerName(res, playerName)) return;
+    res.json({ punishments: punishments.listPunishments({ player: playerName, limit: 200 }) });
+  },
+);
 
 // GET /api/players/:name/notes - staff notes for one player
-router.get('/:name/notes', authMiddleware, requirePermission('players.view'), (req: Request, res: Response) => {
-  const playerName = req.params.name;
-  if (!validatePlayerName(res, playerName)) return;
-  res.json({ notes: playerNotes.listNotes(playerName) });
-});
+router.get(
+  '/:name/notes',
+  authMiddleware,
+  requirePermission('players.view'),
+  (req: Request, res: Response) => {
+    const playerName = req.params.name;
+    if (!validatePlayerName(res, playerName)) return;
+    res.json({ notes: playerNotes.listNotes(playerName) });
+  },
+);
 
 // POST /api/players/:name/notes  { note }
-router.post('/:name/notes', authMiddleware, requirePermission('players.kick'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-  if (!validatePlayerName(res, playerName)) return;
-  const note = sanitizeMessage(String((req.body as { note?: string }).note ?? ''), 500);
-  if (!note) { res.status(400).json({ error: 'Note text required' }); return; }
-  const created = playerNotes.addNote({ playerName, note, byUser: username, serverId: req.serverId });
-  await logActivity(username, 'note_add', 'player', true, playerName, note.slice(0, 80));
-  res.json({ success: true, note: created });
-});
+router.post(
+  '/:name/notes',
+  authMiddleware,
+  requirePermission('players.kick'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+    if (!validatePlayerName(res, playerName)) return;
+    const note = sanitizeMessage(String((req.body as { note?: string }).note ?? ''), 500);
+    if (!note) {
+      res.status(400).json({ error: 'Note text required' });
+      return;
+    }
+    const created = playerNotes.addNote({
+      playerName,
+      note,
+      byUser: username,
+      serverId: req.serverId,
+    });
+    await logActivity(username, 'note_add', 'player', true, playerName, note.slice(0, 80));
+    res.json({ success: true, note: created });
+  },
+);
 
 // DELETE /api/players/:name/notes/:id
-router.delete('/:name/notes/:id', authMiddleware, requirePermission('players.kick'), async (req: AuthenticatedRequest, res: Response) => {
-  const username = req.user || 'system';
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) { res.status(400).json({ error: 'Invalid id' }); return; }
-  const ok = playerNotes.deleteNote(id);
-  if (ok) await logActivity(username, 'note_delete', 'player', true, req.params.name, `note #${id}`);
-  res.json({ success: ok });
-});
+router.delete(
+  '/:name/notes/:id',
+  authMiddleware,
+  requirePermission('players.kick'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const username = req.user || 'system';
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      res.status(400).json({ error: 'Invalid id' });
+      return;
+    }
+    const ok = playerNotes.deleteNote(id);
+    if (ok)
+      await logActivity(username, 'note_delete', 'player', true, req.params.name, `note #${id}`);
+    res.json({ success: ok });
+  },
+);
 
 // POST /api/players/:name/tempban  { duration: "2h"|7200, reason? }
-router.post('/:name/tempban', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-  if (!validatePlayerName(res, playerName)) return;
+router.post(
+  '/:name/tempban',
+  authMiddleware,
+  requirePermission('players.ban'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+    if (!validatePlayerName(res, playerName)) return;
 
-  const { duration, reason } = req.body as { duration?: string | number; reason?: string };
-  const durationMs = punishments.parseDuration(duration);
-  if (!durationMs) {
-    res.status(400).json({ success: false, error: 'Valid duration required (e.g. 30m, 2h, 7d)' });
-    return;
-  }
-  const safeReason = reason ? sanitizeMessage(reason, 100) : 'Temporarily banned';
+    const { duration, reason } = req.body as { duration?: string | number; reason?: string };
+    const durationMs = punishments.parseDuration(duration);
+    if (!durationMs) {
+      res.status(400).json({ success: false, error: 'Valid duration required (e.g. 30m, 2h, 7d)' });
+      return;
+    }
+    const safeReason = reason ? sanitizeMessage(reason, 100) : 'Temporarily banned';
 
-  if (isDemoMode()) {
-    const p = punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'tempban', reason: safeReason, byUser: username, durationMs });
-    await logActivity(username, 'tempban', 'player', true, playerName, safeReason);
-    res.json({ success: true, message: `[Demo] Temp-banned ${playerName}`, expiresAt: p.expiresAt });
-    return;
-  }
+    if (isDemoMode()) {
+      const p = punishments.recordPunishment({
+        serverId: req.serverId,
+        playerName,
+        type: 'tempban',
+        reason: safeReason,
+        byUser: username,
+        durationMs,
+      });
+      await logActivity(username, 'tempban', 'player', true, playerName, safeReason);
+      res.json({
+        success: true,
+        message: `[Demo] Temp-banned ${playerName}`,
+        expiresAt: p.expiresAt,
+      });
+      return;
+    }
 
-  await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
-  const result = await dockerService.execCommand(`/ban ${playerName} ${safeReason}`, req.serverId);
-  if (result.success) {
-    playersService.removePlayer(playerName);
-    const p = punishments.recordPunishment({ serverId: req.serverId, playerName, type: 'tempban', reason: safeReason, byUser: username, durationMs });
-    await logActivity(username, 'tempban', 'player', true, playerName, `${safeReason} (until ${p.expiresAt})`);
-    res.json({ success: true, message: `Temp-banned ${playerName}`, expiresAt: p.expiresAt });
-  } else {
-    await logActivity(username, 'tempban', 'player', false, playerName, result.error);
-    res.status(500).json({ success: false, error: result.error || 'Failed to temp-ban player' });
-  }
-});
+    await dockerService.execCommand(`/kick ${playerName} ${safeReason}`, req.serverId);
+    const result = await dockerService.execCommand(
+      `/ban ${playerName} ${safeReason}`,
+      req.serverId,
+    );
+    if (result.success) {
+      playersService.removePlayer(playerName);
+      const p = punishments.recordPunishment({
+        serverId: req.serverId,
+        playerName,
+        type: 'tempban',
+        reason: safeReason,
+        byUser: username,
+        durationMs,
+      });
+      await logActivity(
+        username,
+        'tempban',
+        'player',
+        true,
+        playerName,
+        `${safeReason} (until ${p.expiresAt})`,
+      );
+      res.json({ success: true, message: `Temp-banned ${playerName}`, expiresAt: p.expiresAt });
+    } else {
+      await logActivity(username, 'tempban', 'player', false, playerName, result.error);
+      res.status(500).json({ success: false, error: result.error || 'Failed to temp-ban player' });
+    }
+  },
+);
 
 // POST /api/players/:name/mute  { duration?, reason? }  (duration omitted = permanent)
-router.post('/:name/mute', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-  if (!validatePlayerName(res, playerName)) return;
+router.post(
+  '/:name/mute',
+  authMiddleware,
+  requirePermission('players.ban'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+    if (!validatePlayerName(res, playerName)) return;
 
-  const { duration, reason } = req.body as { duration?: string | number; reason?: string };
-  const durationMs = punishments.parseDuration(duration);
-  const safeReason = reason ? sanitizeMessage(reason, 100) : '';
+    const { duration, reason } = req.body as { duration?: string | number; reason?: string };
+    const durationMs = punishments.parseDuration(duration);
+    const safeReason = reason ? sanitizeMessage(reason, 100) : '';
 
-  if (!isDemoMode()) {
-    const result = await dockerService.execCommand(`/mute ${playerName}`, req.serverId);
-    if (!result.success) {
-      res.status(500).json({ success: false, error: result.error || 'Failed to mute player' });
-      return;
+    if (!isDemoMode()) {
+      const result = await dockerService.execCommand(`/mute ${playerName}`, req.serverId);
+      if (!result.success) {
+        res.status(500).json({ success: false, error: result.error || 'Failed to mute player' });
+        return;
+      }
     }
-  }
-  const p = punishments.recordPunishment({ serverId: req.serverId, playerName, type: durationMs ? 'tempmute' : 'mute', reason: safeReason || undefined, byUser: username, durationMs });
-  await logActivity(username, 'mute', 'player', true, playerName, durationMs ? `until ${p.expiresAt}` : 'permanent');
-  res.json({ success: true, message: `Muted ${playerName}`, expiresAt: p.expiresAt });
-});
+    const p = punishments.recordPunishment({
+      serverId: req.serverId,
+      playerName,
+      type: durationMs ? 'tempmute' : 'mute',
+      reason: safeReason || undefined,
+      byUser: username,
+      durationMs,
+    });
+    await logActivity(
+      username,
+      'mute',
+      'player',
+      true,
+      playerName,
+      durationMs ? `until ${p.expiresAt}` : 'permanent',
+    );
+    res.json({ success: true, message: `Muted ${playerName}`, expiresAt: p.expiresAt });
+  },
+);
 
 // DELETE /api/players/:name/mute  (unmute)
-router.delete('/:name/mute', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  const username = req.user || 'system';
-  if (!validatePlayerName(res, playerName)) return;
+router.delete(
+  '/:name/mute',
+  authMiddleware,
+  requirePermission('players.ban'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    const username = req.user || 'system';
+    if (!validatePlayerName(res, playerName)) return;
 
-  if (!isDemoMode()) {
-    const result = await dockerService.execCommand(`/unmute ${playerName}`, req.serverId);
-    if (!result.success) {
-      res.status(500).json({ success: false, error: result.error || 'Failed to unmute player' });
-      return;
+    if (!isDemoMode()) {
+      const result = await dockerService.execCommand(`/unmute ${playerName}`, req.serverId);
+      if (!result.success) {
+        res.status(500).json({ success: false, error: result.error || 'Failed to unmute player' });
+        return;
+      }
     }
-  }
-  punishments.deactivateActiveForPlayer(playerName, ['mute', 'tempmute'], username);
-  await logActivity(username, 'unmute', 'player', true, playerName);
-  res.json({ success: true, message: `Unmuted ${playerName}` });
-});
+    punishments.deactivateActiveForPlayer(playerName, ['mute', 'tempmute'], username);
+    await logActivity(username, 'unmute', 'player', true, playerName);
+    res.json({ success: true, message: `Unmuted ${playerName}` });
+  },
+);
 
 // ============== GDPR / DSGVO: data export & erasure ==============
 
 // GET /api/players/:name/export-data - download everything the panel stores
 // about a player (notes, punishments, sessions, chat) as a JSON file.
-router.get('/:name/export-data', authMiddleware, requirePermission('players.view'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  if (!validatePlayerName(res, playerName)) return;
-  try {
-    const data = await exportPlayerData(playerName);
-    await logActivity(req.user || 'system', 'export_player_data', 'player', true, playerName);
-    res.setHeader('Content-Disposition', `attachment; filename="player-data-${playerName}.json"`);
-    res.setHeader('Content-Type', 'application/json');
-    res.send(JSON.stringify(data, null, 2));
-  } catch (err) {
-    logger.error('[GDPR] export failed:', err);
-    res.status(500).json({ error: 'Failed to export player data' });
-  }
-});
+router.get(
+  '/:name/export-data',
+  authMiddleware,
+  requirePermission('players.view'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    if (!validatePlayerName(res, playerName)) return;
+    try {
+      const data = await exportPlayerData(playerName);
+      await logActivity(req.user || 'system', 'export_player_data', 'player', true, playerName);
+      res.setHeader('Content-Disposition', `attachment; filename="player-data-${playerName}.json"`);
+      res.setHeader('Content-Type', 'application/json');
+      res.send(JSON.stringify(data, null, 2));
+    } catch (err) {
+      logger.error('[GDPR] export failed:', err);
+      res.status(500).json({ error: 'Failed to export player data' });
+    }
+  },
+);
 
 // DELETE /api/players/:name/data - erase the panel's personal data for a player
 // (right to be forgotten). Gated behind players.ban — the highest-trust player
 // permission moderators hold. The on-disk game save is NOT touched.
-router.delete('/:name/data', authMiddleware, requirePermission('players.ban'), async (req: AuthenticatedRequest, res: Response) => {
-  const playerName = req.params.name;
-  if (!validatePlayerName(res, playerName)) return;
-  try {
-    const result = await deletePlayerData(playerName);
-    await logActivity(req.user || 'system', 'erase_player_data', 'player', true, playerName, JSON.stringify(result.deleted));
-    res.json({ success: true, ...result });
-  } catch (err) {
-    logger.error('[GDPR] erasure failed:', err);
-    res.status(500).json({ success: false, error: 'Failed to erase player data' });
-  }
-});
+router.delete(
+  '/:name/data',
+  authMiddleware,
+  requirePermission('players.ban'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const playerName = req.params.name;
+    if (!validatePlayerName(res, playerName)) return;
+    try {
+      const result = await deletePlayerData(playerName);
+      await logActivity(
+        req.user || 'system',
+        'erase_player_data',
+        'player',
+        true,
+        playerName,
+        JSON.stringify(result.deleted),
+      );
+      res.json({ success: true, ...result });
+    } catch (err) {
+      logger.error('[GDPR] erasure failed:', err);
+      res.status(500).json({ success: false, error: 'Failed to erase player data' });
+    }
+  },
+);
 
 export default router;

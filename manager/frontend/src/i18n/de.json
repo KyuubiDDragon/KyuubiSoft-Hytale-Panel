@@ -61,6 +61,13 @@
     "permissionIssueDesc": "Der Manager kann nicht in einige Datenverzeichnisse schreiben. Das passiert typischerweise nach dem Upgrade auf v2.0.0, welches aus Sicherheitsgründen als Nicht-Root-Benutzer (UID 1001) läuft.",
     "fixCommand": "Führe diesen Befehl auf dem Host aus, um die Berechtigungen zu reparieren"
   },
+  "allowOpSecurity": {
+    "warning": "Mit dieser Option kann sich jeder Spieler auf dem Server per /op self selbst volle Adminrechte geben.",
+    "safeAlternative": "Admins vergibt man sicher über die Konsole mit /op add <Name>.",
+    "bannerTitle": "OP-Selbstvergabe ist auf diesem Server aktiv",
+    "bannerText": "Der Server wird mit --allow-op gestartet.",
+    "openSettings": "Einstellungen öffnen"
+  },
   "auth": {
     "login": "Anmelden",
     "logout": "Abmelden",
@@ -375,7 +382,13 @@
       "update": "Plugin aktualisieren",
       "updating": "Aktualisiere...",
       "updateSuccess": "Plugin erfolgreich aktualisiert. Starte den Server neu, um es zu aktivieren.",
-      "updateFailed": "Aktualisierung fehlgeschlagen"
+      "updateFailed": "Aktualisierung fehlgeschlagen",
+      "auth": {
+        "tokenRejectedTitle": "Plugin-Token passt nicht",
+        "tokenRejectedHint": "Das KyuubiSoft API Plugin hat das Token des Panels abgelehnt, vermutlich läuft der Server noch mit einem älteren. Starte den Server über das Panel neu, damit das Plugin das aktuelle Token lädt.",
+        "tokenMissingTitle": "Plugin gesperrt: kein Token eingerichtet",
+        "tokenMissingHint": "Das KyuubiSoft API Plugin hat noch kein Zugriffstoken und blockiert alle Anfragen. Starte den Server über das Panel neu; das Panel trägt das Token vor jedem Start ein."
+      }
     },
     "downloaderAuthExpired": "Hytale Downloader Authentifizierung abgelaufen",
     "downloaderAuthExpiredDesc": "Die Downloader-Authentifizierung ist abgelaufen oder fehlt. Automatische Server-Updates können nicht durchgeführt werden, bis du dich erneut authentifizierst.",
@@ -1226,9 +1239,9 @@
     "disableSentryRestartRequired": "Neustart erforderlich",
     "disableSentryRestartRequiredDesc": "Die Einstellung wurde geändert. Der Server muss jetzt neugestartet werden, um die Änderung anzuwenden.",
     "disableSentryRestarting": "Server wird neugestartet, um die neue Einstellung anzuwenden...",
-    "allowOpTitle": "OP-Befehle erlauben",
-    "allowOpDesc": "Aktiviere diese Option, um OP-Befehle (Operator-Befehle) auf dem Server zu erlauben. OP-Spieler haben erweiterte Berechtigungen.",
-    "allowOpLabel": "OP-Befehle erlauben",
+    "allowOpTitle": "/op self erlauben (--allow-op)",
+    "allowOpDesc": "Startet den Server mit --allow-op und schaltet damit den Befehl /op self für Spieler frei. Admins über die Konsole mit /op add zu ernennen, funktioniert auch ohne diese Option.",
+    "allowOpLabel": "/op self erlauben",
     "allowOpHint": "Fügt das --allow-op Flag beim Server-Start hinzu",
     "allowOpRestartNote": "Nach dem Ändern dieser Einstellung muss der Server neugestartet werden, damit die Änderung wirksam wird.",
     "allowOpRestartRequired": "Neustart erforderlich",
@@ -1420,7 +1433,19 @@
     "deleteConfirm": "Server „{name}\" wirklich löschen? Container wird gestoppt.",
     "ready": "bereit",
     "creating": "wird erstellt",
-    "broken": "fehlerhaft"
+    "broken": "fehlerhaft",
+    "guard": {
+      "disabledTitle": "Multiserver ist deaktiviert",
+      "disabledHint": "Multiserver ist in Arbeit und derzeit deaktiviert. Alle Aktionen im Panel wirken auf den Standard-Server. Bereits angelegte Zusatz-Server bleiben hier sichtbar, damit du sie entfernen kannst.",
+      "experimentalTitle": "Multiserver ist experimentell",
+      "experimentalHint": "Viele Aktionen im Panel wirken weiterhin nur auf den Standard-Server, egal welcher Server oben ausgewählt ist. Zusatz-Server nur zum Testen verwenden.",
+      "experimentalBadge": "experimentell",
+      "composeBadge": "Compose",
+      "notManagedTitle": "Container wird nicht vom Panel verwaltet",
+      "notManagedMessage": "Der Container „{container}\" wurde nicht vom Panel für diesen Server angelegt und wird deshalb weder gestoppt noch entfernt. Nur den Registry-Eintrag entfernen und den Container unverändert lassen?",
+      "removeEntryOnly": "Nur Eintrag entfernen",
+      "entryRemoved": "Registry-Eintrag für „{name}\" entfernt; der Container blieb unverändert"
+    }
   },
   "security": {
     "confirmRevokeTitle": "API-Key widerrufen?",
@@ -1575,6 +1600,14 @@
     "commandWhitelistHint": "Nur erlaubte Konsolenbefehle (beginnend mit /) sind zulässig.",
     "commandMustStartWithSlash": "Befehl muss mit / beginnen",
     "needAtLeastOneTime": "Mindestens eine Zeit hinzufügen",
+    "approval": {
+      "notRunning": "Läuft nicht: muss von einem Admin freigegeben werden",
+      "invalidCommand": "Läuft nicht: dieser Befehl ist nicht erlaubt",
+      "noCreator": "Gespeichert, bevor Ersteller erfasst wurden; dieser Befehl braucht eine Admin-Freigabe.",
+      "creatorLacksPermission": "Der Ersteller hat das Konsolenrecht für diesen Befehl nicht mehr.",
+      "approve": "Freigeben",
+      "approved": "Freigegeben, der Befehl läuft wieder"
+    },
     "inMinutes": "in {n} Min",
     "minutesAgo": "vor {n} Min",
     "inHours": "in {n} Std",
@@ -1626,7 +1659,14 @@
     "openNewTab": "In neuem Tab öffnen",
     "notInstalled": "EasyWebMap nicht installiert",
     "notInstalledDesc": "Das EasyWebMap-Mod ist nicht installiert. Installiere es über den Mod Store, um die Live-Webkarte zu aktivieren.",
-    "goToModStore": "Zum Mod Store"
+    "goToModStore": "Zum Mod Store",
+    "access": {
+      "noPermission": "Für die Web-Karte brauchst du das Recht „Spielerliste anzeigen“ (players.view).",
+      "sessionFailed": "Die Web-Karte konnte nicht geöffnet werden. Bitte versuche es erneut.",
+      "sessionExpired": "Kartensitzung abgelaufen",
+      "sessionExpiredDesc": "Die Kartensitzung ist beendet, zum Beispiel nach einem Neustart des Panels. Lade die Karte neu, um weiterzumachen.",
+      "reload": "Karte neu laden"
+    }
   },
   "permissionDescriptions": {
     "dashboard": {
@@ -2002,9 +2042,8 @@
     "whitelistEnabled": "Whitelist aktivieren",
     "whitelistDescription": "Nur Spieler auf der Whitelist können dem Server beitreten. Du kannst die Whitelist nach dem Setup verwalten.",
     "recommended": "Empfohlen",
-    "allowOperator": "Operator-Befehle erlauben (/op)",
-    "allowOperatorDescription": "Erlaube vertrauenswürdigen Spielern erweiterte Rechte über den /op Befehl.",
-    "allowOperatorWarning": "Operatoren haben volle Server-Kontrolle. Vergib OP-Status nur an Spieler, denen du vollständig vertraust.",
+    "allowOperator": "/op self erlauben (--allow-op)",
+    "allowOperatorDescription": "Schaltet den Befehl /op self für Spieler frei. Für Admins nicht nötig: /op add funktioniert über die Konsole auch ohne. Lass diese Option aus.",
     "securityTipsTitle": "Sicherheits-Tipps",
     "securityTip1": "Verwende ein starkes Server-Passwort wenn dein Server öffentlich ist",
     "securityTip2": "Aktiviere die Whitelist um zu kontrollieren wer beitreten kann",

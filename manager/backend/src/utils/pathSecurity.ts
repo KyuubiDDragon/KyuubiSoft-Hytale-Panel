@@ -32,6 +32,92 @@ export function isPathSafe(targetPath: string, allowedDirectories: string[]): bo
 }
 
 /**
+ * True when `child` is `parent` itself or lies below it. Both must already be
+ * absolute. Unlike a plain startsWith() this does not treat a sibling such as
+ * "/data-old" as being inside "/data", and a file literally named "..foo" is
+ * still inside.
+ */
+function isWithinDir(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
+
+/**
+ * Resolve every symlink in `targetPath` and return its real location.
+ *
+ * A path that does not exist yet (the target of a create/write/move) resolves
+ * its nearest existing ancestor and re-appends the missing tail, so a
+ * symlinked parent directory can't smuggle a new file somewhere else.
+ * Returns null when a component exists but can't be resolved (a broken or
+ * looping symlink) or on any other error, so callers fail closed.
+ */
+export function resolveRealPath(targetPath: string): string | null {
+  const isMissing = (err: unknown) => {
+    const code = (err as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR';
+  };
+
+  let current = path.resolve(targetPath);
+  const missingTail: string[] = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync(current);
+      return missingTail.length > 0 ? path.join(real, ...missingTail.reverse()) : real;
+    } catch (err) {
+      if (!isMissing(err)) return null;
+    }
+    // realpath also reports ENOENT for a dangling symlink. Only an entry that
+    // is genuinely absent may be skipped; a link we can't follow is refused.
+    try {
+      fs.lstatSync(current);
+      return null;
+    } catch (err) {
+      if (!isMissing(err)) return null;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    missingTail.push(path.basename(current));
+    current = parent;
+  }
+}
+
+/**
+ * Symlink-aware variant of isPathSafe(): resolves `targetPath` AND the allowed
+ * directories through resolveRealPath() and checks where the path really
+ * points. A link inside an allowed directory that leads elsewhere is
+ * rejected. Returns the resolved real path, or null if it is not inside any
+ * allowed directory.
+ */
+export function resolveRealPathWithin(
+  targetPath: string,
+  allowedDirectories: string[],
+): string | null {
+  const real = resolveRealPath(targetPath);
+  if (!real) return null;
+  for (const dir of allowedDirectories) {
+    const realDir = resolveRealPath(dir);
+    if (realDir && isWithinDir(real, realDir)) return real;
+  }
+  return null;
+}
+
+/**
+ * Join a stored or user-supplied bare file name onto `baseDir` for a
+ * destructive operation (unlink/overwrite of a mod file and similar). Only a
+ * plain basename is accepted: no path separators of either flavour, no "." or
+ * "..", no control characters. Returns null for anything else, so a value
+ * like "../users.json" or "C:\x" can never reach unlink().
+ */
+export function resolveFileInDir(baseDir: string, fileName: unknown): string | null {
+  if (typeof fileName !== 'string' || fileName.length === 0 || fileName.length > 255) return null;
+  // eslint-disable-next-line no-control-regex
+  if (/[/\\\x00-\x1f\x7f]/.test(fileName) || fileName === '.' || fileName === '..') return null;
+  if (path.isAbsolute(fileName) || /^[a-zA-Z]:/.test(fileName)) return null;
+  const joined = path.join(baseDir, fileName);
+  return isPathSafe(joined, [baseDir]) ? joined : null;
+}
+
+/**
  * Get the real path (resolving symlinks) and verify it's within allowed directories
  */
 export function getRealPathIfSafe(targetPath: string, allowedDirectories: string[]): string | null {
@@ -99,7 +185,7 @@ export function sanitizeFileName(fileName: string): string | null {
 export function safePathJoin(baseDir: string, ...parts: string[]): string | null {
   try {
     // Sanitize each part
-    const sanitizedParts = parts.map(part => {
+    const sanitizedParts = parts.map((part) => {
       // Remove any leading slashes and path traversal attempts
       return part.replace(/^[/\\]+/, '').replace(/\.\./g, '');
     });
@@ -130,6 +216,9 @@ export function isAllowedExtension(filePath: string, allowedExtensions: string[]
 
 export default {
   isPathSafe,
+  resolveRealPath,
+  resolveRealPathWithin,
+  resolveFileInDir,
   getRealPathIfSafe,
   sanitizeFileName,
   safePathJoin,

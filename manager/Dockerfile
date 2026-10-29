@@ -3,8 +3,13 @@
 # Multi-stage build: Frontend + Backend (Node.js/TypeScript)
 # ============================================================
 
+# Node 24 LTS, pinned by multi-arch index digest so every stage builds from the
+# exact same, reproducible base. To update: resolve the new digest for the tag
+# (`docker buildx imagetools inspect node:24-alpine`) and bump both parts.
+ARG NODE_IMAGE=node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+
 # Stage 1: Build Frontend
-FROM node:20-alpine AS frontend-builder
+FROM ${NODE_IMAGE} AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -20,9 +25,10 @@ RUN npm run build
 
 
 # Stage 2: Build Backend
-FROM node:20-alpine AS backend-builder
+FROM ${NODE_IMAGE} AS backend-builder
 
-# bcrypt is a native module — needs build toolchain
+# bcrypt and better-sqlite3 normally install prebuilt musl binaries; the
+# toolchain is the source-build fallback for platforms without a prebuild.
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app/backend
@@ -38,8 +44,20 @@ COPY backend/ ./
 RUN npm run build
 
 
-# Stage 3: Production Image
-FROM node:20-alpine
+# Stage 3: Production dependencies only. Installed in their own stage so the
+# build toolchain never reaches the runtime image.
+FROM ${NODE_IMAGE} AS backend-deps
+
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app/backend
+
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev
+
+
+# Stage 4: Production Image
+FROM ${NODE_IMAGE}
 
 LABEL maintainer="Hytale Server Manager"
 LABEL description="Web-based management tool for Hytale servers"
@@ -55,13 +73,10 @@ RUN addgroup -g 9999 -S hytale && \
 
 WORKDIR /app
 
-# bcrypt native binding needs the build toolchain at install time
-RUN apk add --no-cache --virtual .build-deps python3 make g++
-
-# Copy manifest + lockfile and install production dependencies only, from the lockfile.
+# Manifest (needed at runtime for "type": "module") + production node_modules
+# from the deps stage; same base image, so native bindings stay ABI-compatible.
 COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force \
-    && apk del .build-deps
+COPY --from=backend-deps /app/backend/node_modules ./node_modules
 
 # Copy built backend from builder
 COPY --from=backend-builder /app/backend/dist ./dist

@@ -99,26 +99,26 @@ export interface PanelConfig {
   // AWS SigV4 signing — no extra dependencies.
   offsiteBackup?: {
     enabled: boolean;
-    endpoint: string;        // e.g. https://s3.us-west-002.backblazeb2.com (blank = AWS)
-    region: string;          // e.g. us-east-1
+    endpoint: string; // e.g. https://s3.us-west-002.backblazeb2.com (blank = AWS)
+    region: string; // e.g. us-east-1
     bucket: string;
-    prefix: string;          // key prefix, e.g. "hytale-backups/"
+    prefix: string; // key prefix, e.g. "hytale-backups/"
     accessKeyId: string;
     secretAccessKey: string;
-    uploadOnBackup: boolean;  // auto-upload each new backup
+    uploadOnBackup: boolean; // auto-upload each new backup
   };
   // Optional auto-moderation of in-game chat. Off by default. Reacts to
   // player_chat events from the plugin and applies the configured action.
   automod?: {
     enabled: boolean;
-    bannedWords: string[];     // case-insensitive whole-word matches
-    blockLinks: boolean;       // flag messages containing URLs
-    maxCapsPercent: number;    // 0 = off; e.g. 80 = >80% uppercase letters (min 8 chars)
-    maxMessageLength: number;  // 0 = off; flag very long messages
-    floodCount: number;        // 0 = off; N messages…
-    floodWindowSec: number;    // …within this many seconds counts as spam
+    bannedWords: string[]; // case-insensitive whole-word matches
+    blockLinks: boolean; // flag messages containing URLs
+    maxCapsPercent: number; // 0 = off; e.g. 80 = >80% uppercase letters (min 8 chars)
+    maxMessageLength: number; // 0 = off; flag very long messages
+    floodCount: number; // 0 = off; N messages…
+    floodWindowSec: number; // …within this many seconds counts as spam
     action: 'warn' | 'mute' | 'kick';
-    muteDurationSec: number;   // for action=mute (0 = permanent)
+    muteDurationSec: number; // for action=mute (0 = permanent)
   };
 }
 
@@ -161,11 +161,17 @@ export function getDefaultConfig(): PanelConfig {
       gameMode: 'Adventure',
       password: '',
       whitelist: false,
-      allowOp: true,
+      // --allow-op lets any player grant themselves admin via `/op self`.
+      allowOp: false,
     },
     publicStatus: { enabled: false },
     discord: { enabled: false, token: '', channelId: '' },
-    webPush: { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: 'mailto:admin@example.com' },
+    webPush: {
+      enabled: false,
+      vapidPublicKey: '',
+      vapidPrivateKey: '',
+      subject: 'mailto:admin@example.com',
+    },
     offsiteBackup: {
       enabled: false,
       endpoint: '',
@@ -412,13 +418,12 @@ export async function migrateFromEnv(): Promise<PanelConfig> {
     if (envCors === '*') {
       config.corsOrigins = ['*'];
     } else {
-      config.corsOrigins = envCors.split(',').map(origin => origin.trim());
+      config.corsOrigins = envCors.split(',').map((origin) => origin.trim());
     }
   }
 
   // Trust Proxy
-  config.network.trustProxy =
-    process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
+  config.network.trustProxy = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
 
   // Performance settings from Java RAM env vars
   const minRam = process.env.JAVA_MIN_RAM;
@@ -515,10 +520,7 @@ function deepMerge<T extends object>(target: T, source: Partial<T>): T {
       !Array.isArray(targetValue)
     ) {
       // Recursively merge nested objects
-      result[key] = deepMerge(
-        targetValue as object,
-        sourceValue as object
-      ) as T[keyof T];
+      result[key] = deepMerge(targetValue as object, sourceValue as object) as T[keyof T];
     } else if (sourceValue !== undefined) {
       // Use source value if defined
       result[key] = sourceValue as T[keyof T];

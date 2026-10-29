@@ -1,12 +1,8 @@
 import path from 'path';
-import {
-  promises as fsp,
-  createReadStream,
-  lstatSync,
-  type Stats,
-} from 'fs';
+import { promises as fsp, createReadStream, lstatSync, statSync, type Stats } from 'fs';
 import type { ReadStream } from 'fs';
 import { config } from '../config.js';
+import { resolveRealPath } from '../utils/pathSecurity.js';
 
 // ============================================================
 // Types
@@ -23,11 +19,11 @@ export interface FileManagerRoot {
 
 export interface DirEntry {
   name: string;
-  path: string;          // relative to root
+  path: string; // relative to root
   type: 'file' | 'directory';
   size: number;
-  mtime: string;         // ISO timestamp
-  mtimeMs: number;       // ms epoch for ETag/conflict checks
+  mtime: string; // ISO timestamp
+  mtimeMs: number; // ms epoch for ETag/conflict checks
   isReadOnly: boolean;
 }
 
@@ -62,7 +58,7 @@ export class FileManagerError extends Error {
 // Limits
 // ============================================================
 
-export const MAX_READ_BYTES = 5 * 1024 * 1024;   // 5 MB
+export const MAX_READ_BYTES = 5 * 1024 * 1024; // 5 MB
 export const MAX_WRITE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 // Default deny patterns applied to ALL roots in addition to per-root deny list.
@@ -72,12 +68,16 @@ export const MAX_WRITE_BYTES = 10 * 1024 * 1024; // 10 MB
 // replacing it is arbitrary-code-execution-on-restart.
 const GLOBAL_DENY_PATTERNS: RegExp[] = [
   /(^|\/)\.env(\.|$)/i,
-  /(^|\/)users\.json$/i,
+  /(^|\/)users\.json(\.|$)/i, // incl. .tmp-* / .corrupt-* copies (hashes, TOTP secrets)
+  /(^|\/)plugin-tokens\.json(\.|$)/i, // KyuubiSoft API plugin tokens, incl. copies
   /(^|\/)audit\.sqlite(-journal)?$/i,
   /(^|\/)panel\.sqlite(-journal)?$/i,
-  /(^|\/)HytaleServer\.jar$/i,   // server JAR replace = RCE on restart
-  /(^|\/)auth\.enc$/i,           // encrypted Hytale auth credentials
-  /(^|\/)config\.json$/i,        // use the dedicated, schema-validated config editor
+  /(^|\/)HytaleServer\.jar$/i, // server JAR replace = RCE on restart
+  /(^|\/)auth\.enc$/i, // encrypted Hytale auth credentials
+  // Use the dedicated, schema-validated config editor. Also covers .bak /
+  // .tmp-* / .corrupt-* copies: the plugin's config.json holds its API token.
+  /(^|\/)config\.json(\.|$)/i,
+  /(^|\/)config\/kyuubisoft-api(\/|$)/i, // KyuubiSoft API plugin config dir (bearer token)
 ];
 
 // Extension-based denies target secret/credential FILES only. They must NEVER
@@ -86,7 +86,7 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
 const EXTENSION_DENY_PATTERNS: RegExp[] = [
   /\.key$/i,
   /\.pem$/i,
-  /\.aot$/i,                     // AOT cache file (paired with the JAR)
+  /\.aot$/i, // AOT cache file (paired with the JAR)
 ];
 
 // ============================================================
@@ -140,6 +140,24 @@ export function getRoot(rootId: string): FileManagerRoot {
 // Path resolution & security
 // ============================================================
 
+interface ResolvedTarget {
+  abs: string; // lexical absolute path inside the root (as requested)
+  real: string; // the same path with every symlink resolved
+  rootReal: string; // real location of the root itself
+}
+
+function escapesDir(relative: string): boolean {
+  return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+}
+
+function isDirectorySync(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false; // non-existent target (create/write path) → treat as file
+  }
+}
+
 /**
  * Resolve a relative path against a root, with traversal & deny protection.
  * Returns the absolute filesystem path.
@@ -147,14 +165,14 @@ export function getRoot(rootId: string): FileManagerRoot {
  * Throws FileManagerError(403) if path escapes root or matches deny patterns.
  */
 export function resolveSafe(root: FileManagerRoot, relPath: string): string {
+  return resolveTarget(root, relPath).abs;
+}
+
+function resolveTarget(root: FileManagerRoot, relPath: string): ResolvedTarget {
   const raw = relPath || '';
 
   // Reject obvious absolute paths or Windows-drive paths before normalisation
-  if (
-    raw.startsWith('/') ||
-    raw.startsWith('\\') ||
-    /^[a-zA-Z]:[\\/]/.test(raw)
-  ) {
+  if (raw.startsWith('/') || raw.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(raw)) {
     throw new FileManagerError('Absolute paths not allowed', 403, 'PATH_FORBIDDEN');
   }
 
@@ -189,7 +207,29 @@ export function resolveSafe(root: FileManagerRoot, relPath: string): string {
     throw new FileManagerError('Path is in deny-list', 403, 'PATH_DENIED');
   }
 
-  return resolved;
+  // Symlink defence: the checks above only look at the NAME. Resolve where
+  // the path really points (nearest existing ancestor for create targets) and
+  // repeat the root-boundary and deny checks on that, so a link inside the
+  // root - e.g. one planted by an imported archive - can't read, overwrite or
+  // delete anything outside it (panel secrets, users.json, ...).
+  const rootReal = resolveRealPath(rootAbs) ?? rootAbs;
+  const real = resolveRealPath(resolved);
+  if (!real) {
+    throw new FileManagerError('Path contains a broken symlink', 403, 'PATH_SYMLINK');
+  }
+  const realRelative = path.relative(rootReal, real);
+  if (escapesDir(realRelative)) {
+    throw new FileManagerError(
+      'Path resolves outside the root via a symlink',
+      403,
+      'PATH_SYMLINK_ESCAPE',
+    );
+  }
+  if (isDenied(root, realRelative.replace(/\\/g, '/'), isDirectorySync(real))) {
+    throw new FileManagerError('Path is in deny-list', 403, 'PATH_DENIED');
+  }
+
+  return { abs: resolved, real, rootReal };
 }
 
 export function isDenied(root: FileManagerRoot, relPath: string, isDir = false): boolean {
@@ -246,6 +286,9 @@ export function isDenied(root: FileManagerRoot, relPath: string, isDir = false):
  * is NOT admin) could overwrite HytaleServer.jar (RCE on restart) or read
  * auth.enc, because getRealPathIfSafe() only checks the root boundary and
  * never consulted the deny-list.
+ *
+ * The owning root and the deny rules are decided on the REAL path (symlinks
+ * resolved), and the requested name must not be a denied one either.
  */
 export function isAbsolutePathAllowed(absPath: string, mode: 'read' | 'write'): boolean {
   let resolved: string;
@@ -254,20 +297,19 @@ export function isAbsolutePathAllowed(absPath: string, mode: 'read' | 'write'): 
   } catch {
     return false;
   }
+  const real = resolveRealPath(resolved);
+  if (!real) return false; // broken/looping symlink
+  const isDir = isDirectorySync(real);
   for (const root of getRoots()) {
     const rootAbs = path.resolve(root.path);
-    const relative = path.relative(rootAbs, resolved);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) continue; // not under this root
+    const rootReal = resolveRealPath(rootAbs) ?? rootAbs;
+    const relative = path.relative(rootReal, real);
+    if (escapesDir(relative)) continue; // not under this root
     // Found the owning root. Writes are only allowed under a read-write root.
     if (mode === 'write' && !root.rw) return false;
-    let isDir = false;
-    try {
-      isDir = lstatSync(resolved).isDirectory();
-    } catch {
-      isDir = false; // non-existent target (create) → treat as file
-    }
-    const relForCheck = (relative || '').replace(/\\/g, '/');
-    return !isDenied(root, relForCheck, isDir);
+    if (isDenied(root, relative.replace(/\\/g, '/'), isDir)) return false;
+    const requested = path.relative(rootAbs, resolved);
+    return escapesDir(requested) || !isDenied(root, requested.replace(/\\/g, '/'), isDir);
   }
   return false; // outside every managed root
 }
@@ -277,11 +319,40 @@ export function isAbsolutePathAllowed(absPath: string, mode: 'read' | 'write'): 
 // ============================================================
 
 const BINARY_EXTS = new Set([
-  '.jar', '.zip', '.gz', '.tar', '.7z', '.rar',
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico',
-  '.mp3', '.wav', '.ogg', '.flac', '.mp4', '.mkv', '.avi',
-  '.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.db',
-  '.sqlite', '.sqlite3', '.pdf', '.woff', '.woff2', '.ttf', '.otf',
+  '.jar',
+  '.zip',
+  '.gz',
+  '.tar',
+  '.7z',
+  '.rar',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.bmp',
+  '.ico',
+  '.mp3',
+  '.wav',
+  '.ogg',
+  '.flac',
+  '.mp4',
+  '.mkv',
+  '.avi',
+  '.exe',
+  '.dll',
+  '.so',
+  '.dylib',
+  '.bin',
+  '.dat',
+  '.db',
+  '.sqlite',
+  '.sqlite3',
+  '.pdf',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
 ]);
 
 function isLikelyBinary(filePath: string, sample?: Buffer): boolean {
@@ -299,17 +370,22 @@ function isLikelyBinary(filePath: string, sample?: Buffer): boolean {
 // Operations
 // ============================================================
 
-export async function listDir(rootId: string, relPath: string): Promise<{
+export async function listDir(
+  rootId: string,
+  relPath: string,
+): Promise<{
   root: { id: string; path: string; rw: boolean };
   path: string;
   entries: DirEntry[];
 }> {
   const root = getRoot(rootId);
-  const abs = resolveSafe(root, relPath);
+  // Work on the resolved directory so entries are read where the path really
+  // points (resolveTarget already confirmed that is inside the root).
+  const { real: dir, rootReal } = resolveTarget(root, relPath);
 
   let stat: Stats;
   try {
-    stat = await fsp.stat(abs);
+    stat = await fsp.stat(dir);
   } catch {
     throw new FileManagerError('Directory not found', 404, 'NOT_FOUND');
   }
@@ -317,10 +393,10 @@ export async function listDir(rootId: string, relPath: string): Promise<{
     throw new FileManagerError('Not a directory', 400, 'NOT_A_DIRECTORY');
   }
 
-  const names = await fsp.readdir(abs);
+  const names = await fsp.readdir(dir);
   const entries: DirEntry[] = [];
   for (const name of names) {
-    const full = path.join(abs, name);
+    const full = path.join(dir, name);
     let s: Stats;
     try {
       s = await fsp.lstat(full);
@@ -330,9 +406,7 @@ export async function listDir(rootId: string, relPath: string): Promise<{
     // Skip symlinks for safety
     if (s.isSymbolicLink()) continue;
 
-    const relForFile = path
-      .relative(path.resolve(root.path), full)
-      .replace(/\\/g, '/');
+    const relForFile = path.relative(rootReal, full).replace(/\\/g, '/');
 
     // Honour deny list for listing too. Extension denies (.key/.pem/.aot)
     // apply to files only, so legitimate directories stay visible.
@@ -368,7 +442,8 @@ export async function readFile(
   maxBytes: number = MAX_READ_BYTES,
 ): Promise<ReadResult> {
   const root = getRoot(rootId);
-  const abs = resolveSafe(root, relPath);
+  // Read the resolved file, never whatever a link at `abs` points to by then.
+  const { real: abs } = resolveTarget(root, relPath);
 
   let stat: Stats;
   try {
@@ -453,18 +528,13 @@ export async function writeFile(
   if (existing && ifMatchMtime !== undefined) {
     // Allow ~1 ms drift due to FS precision
     if (Math.abs(existing.mtimeMs - ifMatchMtime) > 1) {
-      throw new FileManagerError(
-        'File changed on disk since last read',
-        409,
-        'CONFLICT',
-      );
+      throw new FileManagerError('File changed on disk since last read', 409, 'CONFLICT');
     }
   }
 
   // Size check
-  const buf = encoding === 'base64'
-    ? Buffer.from(content, 'base64')
-    : Buffer.from(content, 'utf-8');
+  const buf =
+    encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf-8');
 
   if (buf.length > MAX_WRITE_BYTES) {
     throw new FileManagerError(
@@ -483,7 +553,7 @@ export async function writeFile(
   // Atomic write via temp file + rename. The temp file lives in the same
   // directory so rename() is atomic on POSIX.
   const tmp = `${abs}.tmp-${process.pid}-${Date.now()}`;
-  await fsp.writeFile(tmp, buf);
+  await fsp.writeFile(tmp, buf, { flag: 'wx' }); // never follow something pre-planted at tmp
   await fsp.rename(tmp, abs);
 
   const newStat = await fsp.stat(abs);
@@ -509,7 +579,11 @@ async function assertNoSymlinkOnPath(rootDir: string, target: string): Promise<v
     try {
       const st = await fsp.lstat(current);
       if (st.isSymbolicLink()) {
-        throw new FileManagerError(`Refusing to traverse symlink ${path.relative(rootDir, current)}`, 400, 'PATH_SYMLINK');
+        throw new FileManagerError(
+          `Refusing to traverse symlink ${path.relative(rootDir, current)}`,
+          400,
+          'PATH_SYMLINK',
+        );
       }
     } catch (err) {
       // Last segment may not exist yet (we're about to create it). Earlier
@@ -528,7 +602,7 @@ export async function deleteFile(rootId: string, relPath: string): Promise<void>
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
-  const abs = resolveSafe(root, relPath);
+  const { abs, real, rootReal } = resolveTarget(root, relPath);
 
   let stat: Stats;
   try {
@@ -537,8 +611,8 @@ export async function deleteFile(rootId: string, relPath: string): Promise<void>
     throw new FileManagerError('Path not found', 404, 'NOT_FOUND');
   }
 
-  // Don't allow deleting the root itself
-  if (path.resolve(abs) === path.resolve(root.path)) {
+  // Don't allow deleting the root itself (also not via a link that points at it)
+  if (path.resolve(abs) === path.resolve(root.path) || real === rootReal) {
     throw new FileManagerError('Cannot delete root directory', 403, 'FORBIDDEN');
   }
 
@@ -550,11 +624,7 @@ export async function deleteFile(rootId: string, relPath: string): Promise<void>
   }
 }
 
-export async function moveFile(
-  rootId: string,
-  from: string,
-  to: string,
-): Promise<void> {
+export async function moveFile(rootId: string, from: string, to: string): Promise<void> {
   const root = getRoot(rootId);
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
@@ -577,7 +647,10 @@ export async function moveFile(
     // ENOENT is expected
   }
 
+  // Same TOCTOU guard as writeFile: no symlink may sit on the target's chain.
+  await assertNoSymlinkOnPath(root.path, path.dirname(absTo));
   await fsp.mkdir(path.dirname(absTo), { recursive: true });
+  await assertNoSymlinkOnPath(root.path, path.dirname(absTo));
   await fsp.rename(absFrom, absTo);
 }
 
@@ -615,10 +688,13 @@ export async function uploadFile(
     : safeName;
 
   const abs = resolveSafe(root, destRel);
+  // Same TOCTOU guard as writeFile: no symlink may sit on the target's chain.
+  await assertNoSymlinkOnPath(root.path, path.dirname(abs));
   await fsp.mkdir(path.dirname(abs), { recursive: true });
+  await assertNoSymlinkOnPath(root.path, path.dirname(abs));
 
   const tmp = `${abs}.tmp-${process.pid}-${Date.now()}`;
-  await fsp.writeFile(tmp, file.buffer);
+  await fsp.writeFile(tmp, file.buffer, { flag: 'wx' }); // never follow something pre-planted at tmp
   await fsp.rename(tmp, abs);
 
   const stat = await fsp.stat(abs);
@@ -634,11 +710,11 @@ export async function openDownloadStream(
   relPath: string,
 ): Promise<{ stream: ReadStream; size: number; filename: string }> {
   const root = getRoot(rootId);
-  const abs = resolveSafe(root, relPath);
+  const { abs, real } = resolveTarget(root, relPath);
 
   let stat: Stats;
   try {
-    stat = await fsp.stat(abs);
+    stat = await fsp.stat(real);
   } catch {
     throw new FileManagerError('File not found', 404, 'NOT_FOUND');
   }
@@ -646,7 +722,7 @@ export async function openDownloadStream(
     throw new FileManagerError('Not a file', 400, 'NOT_A_FILE');
   }
   return {
-    stream: createReadStream(abs),
+    stream: createReadStream(real),
     size: stat.size,
     filename: path.basename(abs),
   };

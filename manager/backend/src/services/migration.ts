@@ -24,6 +24,7 @@ import path from 'path';
 import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile } from '../config.js';
 import { getCurrentVersion } from './panelVersionService.js';
+import { readJsonFile, updateJsonFile } from '../utils/jsonStore.js';
 
 // Paths
 const DATA_DIR = config.dataPath;
@@ -158,7 +159,9 @@ function readEnvConfig(): EnvConfig {
     trustProxy: process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1',
     modtaleApiKey: process.env.MODTALE_API_KEY,
     enableBackup: process.env.ENABLE_BACKUP === 'true',
-    backupFrequency: process.env.BACKUP_FREQUENCY ? parseInt(process.env.BACKUP_FREQUENCY, 10) : undefined,
+    backupFrequency: process.env.BACKUP_FREQUENCY
+      ? parseInt(process.env.BACKUP_FREQUENCY, 10)
+      : undefined,
     javaMinRam: process.env.JAVA_MIN_RAM,
     javaMaxRam: process.env.JAVA_MAX_RAM,
   };
@@ -188,16 +191,28 @@ async function readPanelConfig(): Promise<PanelConfig | null> {
   }
 }
 
+const hasUsersArray = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  Array.isArray((value as { users?: unknown }).users);
+
 /**
- * Check if users.json already has an admin user
+ * Check if users.json already has an admin user. An existing but unreadable
+ * file counts as "has admin": migration must never replace it with a single
+ * env admin, which would wipe every other account and its 2FA.
  */
 async function hasExistingAdmin(): Promise<boolean> {
   try {
-    const content = await readFile(USERS_FILE, 'utf-8');
-    const usersData = JSON.parse(content);
-    return usersData.users && usersData.users.length > 0;
-  } catch {
-    return false;
+    const usersData = await readJsonFile<{ users: unknown[] }>(USERS_FILE, {
+      isValid: hasUsersArray,
+    });
+    return !!usersData && usersData.users.length > 0;
+  } catch (error) {
+    logger.error(
+      `[Migration] ${USERS_FILE} exists but is unreadable — leaving it untouched:`,
+      error,
+    );
+    return true;
   }
 }
 
@@ -299,16 +314,24 @@ export async function runMigration(): Promise<boolean> {
 
       const passwordHash = await bcrypt.hash(envConfig.managerPassword, 10);
       const usersData = {
-        users: [{
-          username: envConfig.managerUsername,
-          passwordHash: passwordHash,
-          roleId: 'admin',
-          createdAt: new Date().toISOString(),
-          tokenVersion: 1,
-        }]
+        users: [
+          {
+            username: envConfig.managerUsername,
+            passwordHash: passwordHash,
+            roleId: 'admin',
+            createdAt: new Date().toISOString(),
+            tokenVersion: 1,
+          },
+        ],
       };
 
-      await writeFile(USERS_FILE, JSON.stringify(usersData, null, 2), 'utf-8');
+      // Re-checked under the file lock: never replaces accounts that appeared
+      // since hasExistingAdmin() ran.
+      await updateJsonFile<{ users: unknown[] }>(
+        USERS_FILE,
+        (current) => (current && current.users.length > 0 ? undefined : usersData),
+        { isValid: hasUsersArray },
+      );
       logger.info('[Migration] Admin user created:', envConfig.managerUsername);
     } else if (hasAdmin) {
       logger.info('[Migration] Admin user already exists, skipping user creation');
@@ -319,7 +342,9 @@ export async function runMigration(): Promise<boolean> {
       patchline: existingPanelConfig?.patchline || envConfig.patchline || 'release',
       acceptEarlyPlugins: existingPanelConfig?.acceptEarlyPlugins ?? false,
       disableSentry: existingPanelConfig?.disableSentry ?? false,
-      allowOp: existingPanelConfig?.allowOp ?? serverConfig?.AllowOp ?? true,
+      // An explicit earlier choice is kept; otherwise off, which matches what
+      // start-server.sh did without a panel-config.json (no --allow-op).
+      allowOp: existingPanelConfig?.allowOp ?? serverConfig?.AllowOp ?? false,
     };
 
     await writeFile(PANEL_CONFIG_FILE, JSON.stringify(panelConfig, null, 2), 'utf-8');
@@ -345,7 +370,7 @@ export async function runMigration(): Promise<boolean> {
         gameMode: serverConfig?.Defaults?.GameMode || 'Adventure',
         password: serverConfig?.Password || '',
         whitelist: serverConfig?.Whitelist ?? false,
-        allowOp: serverConfig?.AllowOp ?? true,
+        allowOp: panelConfig.allowOp,
       },
       performance: {
         minRam: envConfig.javaMinRam || '3G',
@@ -393,7 +418,9 @@ export async function runMigration(): Promise<boolean> {
     const mainConfig = {
       setupComplete: true,
       jwtSecret: envConfig.jwtSecret || '',
-      corsOrigins: envConfig.corsOrigins ? envConfig.corsOrigins.split(',').map(o => o.trim()) : [],
+      corsOrigins: envConfig.corsOrigins
+        ? envConfig.corsOrigins.split(',').map((o) => o.trim())
+        : [],
       network: {
         trustProxy: envConfig.trustProxy ?? false,
         accessMode: accessMode,
@@ -435,7 +462,19 @@ export async function runMigration(): Promise<boolean> {
 // comparison, so '3.0.0' also matches the '3.0.0-alpha' package version).
 const VERSION_FEATURES: Record<string, string[]> = {
   '2.1.0': ['native_update_system', 'update_config'],
-  '3.0.0': ['two_factor_auth', 'api_keys', 'audit_log', 'webhooks', 'sso', 'file_manager', 'notifications', 'multi_server', 'live_map', 'replay', 'wiki'],
+  '3.0.0': [
+    'two_factor_auth',
+    'api_keys',
+    'audit_log',
+    'webhooks',
+    'sso',
+    'file_manager',
+    'notifications',
+    'multi_server',
+    'live_map',
+    'replay',
+    'wiki',
+  ],
 };
 
 /**
@@ -505,7 +544,10 @@ export async function migrateUpdateConfig(): Promise<{ migrated: boolean; newFea
  * Update panel version and track new features
  * Returns list of new features that were added since last version
  */
-export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: string[]; showBanner: boolean }> {
+export async function checkPanelVersionAndFeatures(): Promise<{
+  newFeatures: string[];
+  showBanner: boolean;
+}> {
   const newFeatures: string[] = [];
   // Real version from package.json; strip any pre-release suffix ('-alpha') so
   // the numeric comparison below stays well-defined.
@@ -528,8 +570,11 @@ export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: str
     // Check if we're on a newer version
     const isNewer =
       currentVersionParts[0] > lastVersionParts[0] ||
-      (currentVersionParts[0] === lastVersionParts[0] && currentVersionParts[1] > lastVersionParts[1]) ||
-      (currentVersionParts[0] === lastVersionParts[0] && currentVersionParts[1] === lastVersionParts[1] && currentVersionParts[2] > lastVersionParts[2]);
+      (currentVersionParts[0] === lastVersionParts[0] &&
+        currentVersionParts[1] > lastVersionParts[1]) ||
+      (currentVersionParts[0] === lastVersionParts[0] &&
+        currentVersionParts[1] === lastVersionParts[1] &&
+        currentVersionParts[2] > lastVersionParts[2]);
 
     if (!isNewer && lastVersion === CURRENT_PANEL_VERSION) {
       return { newFeatures: [], showBanner: false };
@@ -541,7 +586,9 @@ export async function checkPanelVersionAndFeatures(): Promise<{ newFeatures: str
       const isVersionNewer =
         versionParts[0] > lastVersionParts[0] ||
         (versionParts[0] === lastVersionParts[0] && versionParts[1] > lastVersionParts[1]) ||
-        (versionParts[0] === lastVersionParts[0] && versionParts[1] === lastVersionParts[1] && versionParts[2] > lastVersionParts[2]);
+        (versionParts[0] === lastVersionParts[0] &&
+          versionParts[1] === lastVersionParts[1] &&
+          versionParts[2] > lastVersionParts[2]);
 
       if (isVersionNewer) {
         newFeatures.push(...features);

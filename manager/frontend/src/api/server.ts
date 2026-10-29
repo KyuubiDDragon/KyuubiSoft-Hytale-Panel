@@ -219,6 +219,9 @@ export interface PluginStatus {
   version: string | null
   port: number
   error?: string
+  // Plugin refused the panel token (token_rejected) or has none (token_missing);
+  // both clear after a server restart through the panel.
+  authError?: 'token_rejected' | 'token_missing'
 }
 
 export interface PluginUpdateCheck {
@@ -553,12 +556,17 @@ export const serverApi = {
   },
 
   async getConfigContent(filename: string): Promise<ConfigContentResponse> {
-    const response = await api.get<ConfigContentResponse>(`/server/config/${encodeURIComponent(filename)}`)
+    const response = await api.get<ConfigContentResponse>(
+      `/server/config/${encodeURIComponent(filename)}`,
+    )
     return response.data
   },
 
   async saveConfigContent(filename: string, content: string): Promise<ActionResponse> {
-    const response = await api.put<ActionResponse>(`/server/config/${encodeURIComponent(filename)}`, { content })
+    const response = await api.put<ActionResponse>(
+      `/server/config/${encodeURIComponent(filename)}`,
+      { content },
+    )
     return response.data
   },
 
@@ -592,8 +600,13 @@ export const serverApi = {
     return response.data
   },
 
-  async setAcceptEarlyPlugins(acceptEarlyPlugins: boolean): Promise<AcceptEarlyPluginsUpdateResponse> {
-    const response = await api.put<AcceptEarlyPluginsUpdateResponse>('/server/accept-early-plugins', { acceptEarlyPlugins })
+  async setAcceptEarlyPlugins(
+    acceptEarlyPlugins: boolean,
+  ): Promise<AcceptEarlyPluginsUpdateResponse> {
+    const response = await api.put<AcceptEarlyPluginsUpdateResponse>(
+      '/server/accept-early-plugins',
+      { acceptEarlyPlugins },
+    )
     return response.data
   },
 
@@ -603,7 +616,9 @@ export const serverApi = {
   },
 
   async setDisableSentry(disableSentry: boolean): Promise<DisableSentryUpdateResponse> {
-    const response = await api.put<DisableSentryUpdateResponse>('/server/disable-sentry', { disableSentry })
+    const response = await api.put<DisableSentryUpdateResponse>('/server/disable-sentry', {
+      disableSentry,
+    })
     return response.data
   },
 
@@ -622,7 +637,9 @@ export const serverApi = {
     return response.data
   },
 
-  async saveJvmSettings(payload: JvmSettingsUpdate): Promise<{ success: boolean; changed: boolean; message?: string }> {
+  async saveJvmSettings(
+    payload: JvmSettingsUpdate,
+  ): Promise<{ success: boolean; changed: boolean; message?: string }> {
     const response = await api.put('/server/jvm', payload)
     return response.data
   },
@@ -655,7 +672,8 @@ export const serverApi = {
   },
 
   async getPluginPlayers(): Promise<PluginApiResponse<PluginPlayersResponse>> {
-    const response = await api.get<PluginApiResponse<PluginPlayersResponse>>('/server/plugin/players')
+    const response =
+      await api.get<PluginApiResponse<PluginPlayersResponse>>('/server/plugin/players')
     return response.data
   },
 
@@ -675,29 +693,47 @@ export const serverApi = {
   },
 
   // Player detail methods
-  async getPluginPlayerDetails(playerName: string): Promise<PluginApiResponse<PluginPlayerDetails>> {
-    const response = await api.get<PluginApiResponse<PluginPlayerDetails>>(`/server/plugin/players/${encodeURIComponent(playerName)}/details`)
+  async getPluginPlayerDetails(
+    playerName: string,
+  ): Promise<PluginApiResponse<PluginPlayerDetails>> {
+    const response = await api.get<PluginApiResponse<PluginPlayerDetails>>(
+      `/server/plugin/players/${encodeURIComponent(playerName)}/details`,
+    )
     return response.data
   },
 
-  async getPluginPlayerInventory(playerName: string): Promise<PluginApiResponse<PluginPlayerInventory>> {
-    const response = await api.get<PluginApiResponse<PluginPlayerInventory>>(`/server/plugin/players/${encodeURIComponent(playerName)}/inventory`)
+  async getPluginPlayerInventory(
+    playerName: string,
+  ): Promise<PluginApiResponse<PluginPlayerInventory>> {
+    const response = await api.get<PluginApiResponse<PluginPlayerInventory>>(
+      `/server/plugin/players/${encodeURIComponent(playerName)}/inventory`,
+    )
     return response.data
   },
 
-  async getPluginPlayerAppearance(playerName: string): Promise<PluginApiResponse<PluginPlayerAppearance>> {
-    const response = await api.get<PluginApiResponse<PluginPlayerAppearance>>(`/server/plugin/players/${encodeURIComponent(playerName)}/appearance`)
+  async getPluginPlayerAppearance(
+    playerName: string,
+  ): Promise<PluginApiResponse<PluginPlayerAppearance>> {
+    const response = await api.get<PluginApiResponse<PluginPlayerAppearance>>(
+      `/server/plugin/players/${encodeURIComponent(playerName)}/appearance`,
+    )
     return response.data
   },
 
   // File-based player data methods (reads from server/universe/players/)
   async getFilePlayerDetails(playerName: string): Promise<PluginApiResponse<FilePlayerDetails>> {
-    const response = await api.get<PluginApiResponse<FilePlayerDetails>>(`/server/players/${encodeURIComponent(playerName)}/file/details`)
+    const response = await api.get<PluginApiResponse<FilePlayerDetails>>(
+      `/server/players/${encodeURIComponent(playerName)}/file/details`,
+    )
     return response.data
   },
 
-  async getFilePlayerInventory(playerName: string): Promise<PluginApiResponse<FilePlayerInventory>> {
-    const response = await api.get<PluginApiResponse<FilePlayerInventory>>(`/server/players/${encodeURIComponent(playerName)}/file/inventory`)
+  async getFilePlayerInventory(
+    playerName: string,
+  ): Promise<PluginApiResponse<FilePlayerInventory>> {
+    const response = await api.get<PluginApiResponse<FilePlayerInventory>>(
+      `/server/players/${encodeURIComponent(playerName)}/file/inventory`,
+    )
     return response.data
   },
 
@@ -723,33 +759,68 @@ export const serverApi = {
     return response.data
   },
 
-  async saveUpdateConfig(config: Partial<UpdateConfig>): Promise<{ success: boolean; message?: string; data?: UpdateConfig }> {
-    const response = await api.put<{ success: boolean; message?: string; data?: UpdateConfig }>('/server/update-config', config)
+  async saveUpdateConfig(
+    config: Partial<UpdateConfig>,
+  ): Promise<{ success: boolean; message?: string; data?: UpdateConfig }> {
+    const response = await api.put<{ success: boolean; message?: string; data?: UpdateConfig }>(
+      '/server/update-config',
+      config,
+    )
     return response.data
   },
 
-  async getUpdateStatus(): Promise<{ success: boolean; data?: NativeUpdateStatus; error?: string }> {
-    const response = await api.get<{ success: boolean; data?: NativeUpdateStatus; error?: string }>('/server/update-status')
+  async getUpdateStatus(): Promise<{
+    success: boolean
+    data?: NativeUpdateStatus
+    error?: string
+  }> {
+    const response = await api.get<{ success: boolean; data?: NativeUpdateStatus; error?: string }>(
+      '/server/update-status',
+    )
     return response.data
   },
 
-  async checkForNativeUpdate(): Promise<{ success: boolean; data?: NativeUpdateStatus; message?: string; error?: string }> {
-    const response = await api.post<{ success: boolean; data?: NativeUpdateStatus; message?: string; error?: string }>('/server/update-check')
+  async checkForNativeUpdate(): Promise<{
+    success: boolean
+    data?: NativeUpdateStatus
+    message?: string
+    error?: string
+  }> {
+    const response = await api.post<{
+      success: boolean
+      data?: NativeUpdateStatus
+      message?: string
+      error?: string
+    }>('/server/update-check')
     return response.data
   },
 
   async downloadNativeUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
-    const response = await api.post<{ success: boolean; message?: string; error?: string }>('/server/update-download')
+    const response = await api.post<{ success: boolean; message?: string; error?: string }>(
+      '/server/update-download',
+    )
     return response.data
   },
 
-  async applyNativeUpdate(): Promise<{ success: boolean; message?: string; warning?: string; error?: string }> {
-    const response = await api.post<{ success: boolean; message?: string; warning?: string; error?: string }>('/server/update-apply')
+  async applyNativeUpdate(): Promise<{
+    success: boolean
+    message?: string
+    warning?: string
+    error?: string
+  }> {
+    const response = await api.post<{
+      success: boolean
+      message?: string
+      warning?: string
+      error?: string
+    }>('/server/update-apply')
     return response.data
   },
 
   async cancelNativeUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
-    const response = await api.post<{ success: boolean; message?: string; error?: string }>('/server/update-cancel')
+    const response = await api.post<{ success: boolean; message?: string; error?: string }>(
+      '/server/update-cancel',
+    )
     return response.data
   },
 
@@ -764,12 +835,24 @@ export const serverApi = {
   },
 
   async createJarSnapshot(): Promise<{ success: boolean; snapshot?: JarSnapshot; error?: string }> {
-    const response = await api.post<{ success: boolean; snapshot?: JarSnapshot; error?: string }>('/server/jar-snapshot')
+    const response = await api.post<{ success: boolean; snapshot?: JarSnapshot; error?: string }>(
+      '/server/jar-snapshot',
+    )
     return response.data
   },
 
-  async rollbackJar(snapshotId: string): Promise<{ success: boolean; message?: string; restoredVersion?: string | null; error?: string }> {
-    const response = await api.post<{ success: boolean; message?: string; restoredVersion?: string | null; error?: string }>('/server/rollback', { snapshotId })
+  async rollbackJar(snapshotId: string): Promise<{
+    success: boolean
+    message?: string
+    restoredVersion?: string | null
+    error?: string
+  }> {
+    const response = await api.post<{
+      success: boolean
+      message?: string
+      restoredVersion?: string | null
+      error?: string
+    }>('/server/rollback', { snapshotId })
     return response.data
   },
 

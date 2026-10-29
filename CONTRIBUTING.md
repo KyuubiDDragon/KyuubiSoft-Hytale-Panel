@@ -22,6 +22,9 @@
 
 ## Local dev loop
 
+Requires **Node.js 24 LTS** (pinned in `.nvmrc`; run `nvm use` in the repo root).
+The Docker image and CI use the same major version.
+
 ```bash
 # Backend
 cd manager/backend

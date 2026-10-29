@@ -11,7 +11,7 @@
  */
 
 import WebSocket from 'ws';
-import { resolvePluginEndpoint } from './kyuubiApi.js';
+import { getPluginAuthHeaders, resolvePluginEndpoint } from './kyuubiApi.js';
 import { addChatMessage, recordDeathPosition } from './chatLog.js';
 import { parsePluginEvent, type PluginEvent } from '../schemas/pluginEvents.js';
 import { eventBus, publish as publishPanelEvent } from './eventBus.js';
@@ -28,6 +28,21 @@ interface WebSocketState {
   isConnecting: boolean;
   isShuttingDown: boolean;
   currentReconnectDelay: number;
+  // HTTP status of the last refused handshake (401/503), so the auth hint is
+  // logged once instead of on every reconnect attempt.
+  lastRefusedStatus: number | null;
+}
+
+// Plugin 2.0 refuses the upgrade with these when the token is wrong or missing.
+const REFUSED_HANDSHAKE_HINTS: Record<number, string> = {
+  401: 'Plugin rejected the panel token (HTTP 401). Restart the server so the plugin loads the current token.',
+  503: 'Plugin is locked (HTTP 503, no auth token configured). Restart the server from the panel so it writes the token.',
+};
+
+/** Status code of a refused handshake; ws reports it as "Unexpected server response: <code>". */
+export function refusedHandshakeStatus(error: Error): number | null {
+  const match = /^Unexpected server response: (\d{3})$/.exec(error.message);
+  return match ? Number(match[1]) : null;
 }
 
 // Per-server WS connection state.
@@ -45,6 +60,7 @@ function getOrCreateState(serverId: string): WebSocketState {
       isConnecting: false,
       isShuttingDown: false,
       currentReconnectDelay: RECONNECT_DELAY,
+      lastRefusedStatus: null,
     };
     connections.set(serverId, state);
   }
@@ -60,22 +76,42 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
       console.log(`[Chat:${serverId}] ${event.player}: ${event.message}`);
       await addChatMessage(event.player, event.message, event.uuid);
       eventBus.publish('player_chat', {
-        player: event.player, uuid: event.uuid, message: event.message, serverId,
+        player: event.player,
+        uuid: event.uuid,
+        message: event.message,
+        serverId,
       });
       // Also publish to panel-event taxonomy so webhooks / notifications see it.
       break;
 
     case 'player_death':
-      console.log(`[Death:${serverId}] ${event.player} died${event.cause ? ` (${event.cause})` : ''}`);
+      console.log(
+        `[Death:${serverId}] ${event.player} died${event.cause ? ` (${event.cause})` : ''}`,
+      );
       if (event.world && event.x !== undefined && event.y !== undefined && event.z !== undefined) {
         await recordDeathPosition(event.player, event.world, event.x, event.y, event.z);
       }
       eventBus.publish('player_death', {
-        player: event.player, cause: event.cause, world: event.world, x: event.x, y: event.y, z: event.z, serverId,
+        player: event.player,
+        cause: event.cause,
+        world: event.world,
+        x: event.x,
+        y: event.y,
+        z: event.z,
+        serverId,
       });
-      publishPanelEvent('player.death', {
-        player: event.player, cause: event.cause, world: event.world, x: event.x, y: event.y, z: event.z,
-      }, serverId);
+      publishPanelEvent(
+        'player.death',
+        {
+          player: event.player,
+          cause: event.cause,
+          world: event.world,
+          x: event.x,
+          y: event.y,
+          z: event.z,
+        },
+        serverId,
+      );
       break;
 
     case 'player_join':
@@ -123,24 +159,31 @@ async function handleEvent(serverId: string, event: PluginEventData): Promise<vo
 export async function connect(serverId: string): Promise<void> {
   const state = getOrCreateState(serverId);
 
-  if (state.isShuttingDown || state.isConnecting || (state.ws && state.ws.readyState === WebSocket.OPEN)) {
+  if (
+    state.isShuttingDown ||
+    state.isConnecting ||
+    (state.ws && state.ws.readyState === WebSocket.OPEN)
+  ) {
     return;
   }
 
   state.isConnecting = true;
   const { host, port } = await resolvePluginEndpoint(serverId);
   const url = `ws://${host}:${port}/ws`;
+  // Plugin 2.0 checks the token before the handshake; never put it in the URL.
+  const headers = await getPluginAuthHeaders(serverId);
 
   console.log(`[PluginEvents:${serverId}] Connecting to plugin WebSocket at ${url}...`);
 
   try {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, { headers });
     state.ws = ws;
 
     ws.on('open', () => {
       console.log(`[PluginEvents:${serverId}] Connected to plugin WebSocket`);
       state.isConnecting = false;
       state.currentReconnectDelay = RECONNECT_DELAY;
+      state.lastRefusedStatus = null;
     });
 
     ws.on('message', async (data: WebSocket.Data) => {
@@ -173,8 +216,13 @@ export async function connect(serverId: string): Promise<void> {
     });
 
     ws.on('error', (error) => {
-      // Only log if not a connection refused error (which is expected when plugin is not running)
-      if (!(error as NodeJS.ErrnoException).code?.includes('ECONNREFUSED')) {
+      const refused = refusedHandshakeStatus(error);
+      const hint = refused !== null ? REFUSED_HANDSHAKE_HINTS[refused] : undefined;
+      if (hint) {
+        if (state.lastRefusedStatus !== refused) console.warn(`[PluginEvents:${serverId}] ${hint}`);
+        state.lastRefusedStatus = refused;
+      } else if (!(error as NodeJS.ErrnoException).code?.includes('ECONNREFUSED')) {
+        // Connection refused is expected while the plugin is not running.
         console.error(`[PluginEvents:${serverId}] WebSocket error:`, error.message);
       }
       state.isConnecting = false;
@@ -219,7 +267,11 @@ export function disconnect(serverId: string): void {
   }
 
   if (state.ws) {
-    try { state.ws.close(); } catch { /* ignore */ }
+    try {
+      state.ws.close();
+    } catch {
+      /* ignore */
+    }
     state.ws = null;
   }
 

@@ -39,6 +39,8 @@ export interface QuickCommand {
   category: string
 }
 
+export type ScheduledCommandBlock = 'invalid_command' | 'no_creator' | 'creator_lacks_permission'
+
 export interface ScheduledCommand {
   id: string
   name: string
@@ -47,6 +49,10 @@ export interface ScheduledCommand {
   mode: 'daily' | 'interval'
   times: string[]
   intervalMinutes: number
+  /** Panel user whose console rights the entry runs with (server-managed). */
+  createdBy?: string
+  /** Derived by the server: why the timer would skip this entry right now. */
+  blockedReason?: ScheduledCommandBlock | null
 }
 
 export interface ScheduledCommandStatus {
@@ -149,6 +155,11 @@ export const schedulerApi = {
 
   async runScheduledCommand(id: string): Promise<{ success: boolean; error?: string }> {
     const response = await api.post(`/scheduler/commands/${id}/run`)
+    return response.data
+  },
+
+  async approveScheduledCommand(id: string): Promise<{ success: boolean; error?: string }> {
+    const response = await api.post(`/scheduler/commands/${id}/approve`)
     return response.data
   },
 

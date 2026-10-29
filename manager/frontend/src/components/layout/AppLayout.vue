@@ -5,6 +5,7 @@ import Sidebar from './Sidebar.vue'
 import MobileNav from './MobileNav.vue'
 import Header from './Header.vue'
 import PermissionBanner from './PermissionBanner.vue'
+import AllowOpBanner from './AllowOpBanner.vue'
 import DemoBanner from './DemoBanner.vue'
 import ToastContainer from '@/components/ui/ToastContainer.vue'
 
@@ -60,6 +61,9 @@ provide('toggleSidebar', toggleSidebar)
 
       <!-- Permission Warning Banner (only shows if there are issues) -->
       <PermissionBanner />
+
+      <!-- --allow-op Warning Banner (only shows while the flag is on) -->
+      <AllowOpBanner />
 
       <!-- Header -->
       <Header />
