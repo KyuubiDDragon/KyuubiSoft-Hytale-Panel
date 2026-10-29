@@ -1007,6 +1007,144 @@ of this section.
   that is not a string (`400`). Webhook payloads carry `serverId` and
   `serverName`.
 
+### Security hardening: accounts, setup, files and outbound requests
+
+Closes the remaining security findings of the 2026-10 review. No default
+changes: where a fix could break a working setup, it comes with an option
+that keeps the old behaviour. Rebuild the manager image and re-create the
+stack (`docker compose up -d`). See **Upgrade notes** at the end of this
+section.
+
+**Accounts, sessions and API keys**
+- API keys can no longer create keys beyond their own scopes: a key with
+  `apikeys.manage` now grants at most what it holds itself (narrowed by its
+  owner's current rights), not everything its owner may do. A key also cannot
+  create a key that outlives it; without an expiry the new key inherits the
+  creating key's expiry. `expiresAt` must be a date and scopes must be
+  strings.
+- API keys can no longer enrol, disable or regenerate the owner's two-factor
+  authentication (`403 API_KEY_NOT_ALLOWED`).
+- `PUT /api/auth/api-keys/:id/servers` is simulated in demo mode like the
+  other demo writes.
+- Sessions end with their account: access and refresh tokens of a deleted
+  account are refused, also after a panel restart, and an account created
+  again under the same name (panel, setup wizard, SSO or recovery CLI) never
+  inherits the old sessions. Deleting an account revokes its API keys, and
+  keys whose owner no longer exists stop working. `/api/auth/me` no longer
+  reports admin rights for unknown accounts. Re-creating a just-deleted
+  username no longer locks the new account out until a restart.
+- Player data export and erasure have their own permissions,
+  `players.export_data` and `players.erase_data` (admins only by default).
+  Erasure now also removes the player's lines from the server's daily chat
+  logs, and earlier names another player took over later no longer pull in
+  that player's records.
+- The panel logs a warning once when `TRUST_PROXY` does not match the
+  requests it receives (trusted without a reverse proxy in front, or a proxy
+  in front that is not trusted).
+- `/api/health/permissions` requires sign-in, `settings.view` and access to
+  every server, and checks the folders without writing test files into them.
+  The permission banner only runs the check for such accounts.
+
+**First-run setup**
+- The setup no longer hands out secrets: `GET /api/setup/status` returns only
+  language, download method, patchline and auto-update, never the admin
+  password hash, the server password or store API keys.
+- The setup seal fails closed: a damaged, unreadable or deleted
+  `setup-config.json` or a missing `config.json` no longer reopens the
+  unauthenticated setup endpoints on a finished panel (the log names the file
+  to restore or delete). Setup actions wait until the startup migration has
+  finished.
+- When the startup migration has to write a damaged `setup-config.json` or
+  `config.json` in the manager volume anew, it first keeps the old file as
+  `<name>.corrupt-<time>` (mode 0600) and names it in the log; a file it
+  cannot read or copy is left as it is.
+- The setup wizard no longer resets the password and role of an existing
+  account that has the chosen admin name; only the untouched account created
+  from `MANAGER_USERNAME`/`MANAGER_PASSWORD` can still be replaced, as before.
+- `setup-config.json` moved from the game server's data folder to the manager
+  volume, once and automatically. Only the setup state and the first wizard
+  choices are carried over; the admin password hash of an unfinished setup,
+  network, store keys, server and automation settings are not. The panel
+  self-backup now includes it.
+- Taking over `config.json`/`users.json` that older versions wrote into the
+  game server's data folder is hardened: the JWT secret is never taken over
+  (`JWT_SECRET` stays in charge, or a new secret is generated), only the setup
+  state is kept from `config.json`, and `users.json` is only taken over into
+  an install that was already set up, never into a fresh one. Files that are
+  not taken over are moved out of the data folder.
+- Restoring an old game backup no longer brings `config.json`, `users.json`
+  or `setup-config.json` back into the data folder.
+
+**Files, uploads and backups**
+- Mod and plugin uploads are checked before they are stored and are written
+  atomically; scripts smaller than 512 bytes are no longer rejected.
+- Mod downloads and mod/plugin uploads are streamed into a staging folder in
+  the manager volume and checked there instead of being held in memory, so
+  large or parallel transfers can no longer exhaust the manager's memory. The
+  limits stay at 512 MB per download and 50 MB per upload; the folder is
+  emptied at every start.
+- A mod update no longer removes the installed version before the new one is
+  downloaded; a failed download keeps the mod installed.
+- The file manager hides the setup state file and the keys of the encrypted
+  server login. In the server folder, the `universe` folder can no longer be
+  deleted or moved, and world folders and world JSON files are read-only at
+  any depth (change them on the Worlds page).
+- Backups, world backups and panel self-backups create their archive file
+  exclusively, so a link planted under the next backup name is never
+  followed.
+- The KyuubiSoft API plugin install replaces the jar atomically instead of
+  copying through a possible link.
+- The wiki scan and the mod list skip links in a server's mods folder.
+- Saved player files and world files are read and written only inside the
+  server's own folders, also when a link is swapped meanwhile.
+- The scheduler no longer adopts another server's welcome rule named in its
+  data file.
+
+**Outbound requests and downloads**
+- Outbound requests (webhooks, mod downloads, store and registry APIs, Web
+  Push, off-site backup) go through one guard that checks every redirect hop,
+  pins the connection to the checked address, opens a fresh connection per
+  request, and enforces time and size limits. Cloud metadata addresses are
+  never reachable.
+- The private address list now covers IPv4-mapped IPv6, the whole IPv6
+  unique-local range and further reserved ranges; NAT64, 6to4 and Teredo
+  addresses are classified by the IPv4 address they carry, and local-use
+  NAT64 counts as private. `ALLOW_INTERNAL_WEBHOOKS` is passed to the manager
+  container.
+- Mod downloads only use each store's own hosts (CurseForge CDN, Modtale,
+  StackMart, GitHub). CurseForge downloads are checked against the stated
+  SHA-1 and size, GitHub release assets against their SHA-256 digest and
+  size. Registry entries may carry `sha256`/`size`.
+- Web Push only accepts endpoints of the browsers' push services (more via
+  `WEB_PUSH_EXTRA_HOSTS`). A subscription cannot be taken over or removed by
+  another account. Sends time out after 10 seconds.
+- The Discord bridge no longer lets in-game chat ping @everyone, @here, users
+  or roles.
+
+**Upgrade notes**
+- Rebuild the manager image and re-create the stack. New options in
+  `.env.example`: `WEB_PUSH_EXTRA_HOSTS`; `ALLOW_INTERNAL_WEBHOOKS` (default
+  `false`, as before) now reaches the manager.
+- Recommended: rotate `JWT_SECRET` and change panel passwords after
+  upgrading. Game backups made by older versions may still contain the
+  panel's `config.json`/`users.json` with the old secret and password hashes;
+  treat those archives as sensitive.
+- Roles that relied on `players.view`/`players.ban` for player data export or
+  erasure (for example Moderator) need the new `players.export_data` /
+  `players.erase_data`.
+- A broken setup state no longer reopens the wizard. To run the setup again,
+  delete `setup-config.json` in the manager volume or restore `config.json`;
+  the log names the file.
+- Webhooks: metadata addresses are always refused, also with
+  `ALLOW_INTERNAL_WEBHOOKS=true`. Private targets that slipped through before
+  (IPv4-mapped IPv6, unique-local IPv6 outside `fc00:`/`fd00:`, further
+  reserved ranges) now need the option. At most 5 redirects are followed.
+- API changes: API keys get `403 API_KEY_NOT_ALLOWED` on the 2FA change
+  routes and `403` for keys beyond their own scopes or expiry; tokens of
+  deleted accounts get `401 USER_DELETED`; setup errors answer `503`; Web
+  Push answers `400` for unknown push hosts and `409` for another account's
+  subscription.
+
 ### New features
 
 - **Update Center** (`/updates`): a dedicated view over the native Hytale update
