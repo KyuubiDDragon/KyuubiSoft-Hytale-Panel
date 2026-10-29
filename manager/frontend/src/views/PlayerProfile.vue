@@ -18,7 +18,8 @@ const { addToast } = useToast()
 const { ask } = useConfirm()
 const playerName = computed(() => String(route.params.name || ''))
 const canEdit = computed(() => authStore.hasPermission('players.kick'))
-const canErase = computed(() => authStore.hasPermission('players.ban'))
+const canExport = computed(() => authStore.hasPermission('players.export_data'))
+const canErase = computed(() => authStore.hasPermission('players.erase_data'))
 const exporting = ref(false)
 const erasing = ref(false)
 
@@ -124,6 +125,7 @@ onMounted(load)
       </div>
       <div class="ml-auto flex items-center gap-2">
         <button
+          v-if="canExport"
           @click="exportData"
           :disabled="exporting"
           class="flex items-center gap-2 px-3 py-2 bg-surface-overlay text-ink rounded-lg text-sm hover:bg-border transition-colors disabled:opacity-50"

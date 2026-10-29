@@ -2155,7 +2155,9 @@
       "heal": "Curar jogadores",
       "effects": "Gerenciar efeitos",
       "clear_inventory": "Limpar inventário",
-      "message": "Enviar mensagens"
+      "message": "Enviar mensagens",
+      "export_data": "Exportar dados armazenados do jogador (acesso LGPD/GDPR)",
+      "erase_data": "Apagar dados armazenados do jogador (exclusão LGPD/GDPR)"
     },
     "chat": {
       "view": "Ver chat",

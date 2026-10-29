@@ -2197,7 +2197,9 @@
       "heal": "Heal players",
       "effects": "Manage effects",
       "clear_inventory": "Clear inventory",
-      "message": "Send messages"
+      "message": "Send messages",
+      "export_data": "Export stored player data (GDPR access)",
+      "erase_data": "Erase stored player data (GDPR erasure)"
     },
     "chat": {
       "view": "View chat",

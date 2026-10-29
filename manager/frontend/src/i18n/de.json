@@ -2197,7 +2197,9 @@
       "heal": "Spieler heilen",
       "effects": "Effekte verwalten",
       "clear_inventory": "Inventar leeren",
-      "message": "Nachrichten senden"
+      "message": "Nachrichten senden",
+      "export_data": "Gespeicherte Spielerdaten exportieren (DSGVO-Auskunft)",
+      "erase_data": "Gespeicherte Spielerdaten löschen (DSGVO-Löschung)"
     },
     "chat": {
       "view": "Chat anzeigen",
