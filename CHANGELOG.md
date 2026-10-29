@@ -2,7 +2,13 @@
 
 All notable changes to the Hytale Server Manager will be documented in this file.
 
-## [Unreleased] - Security hotfix, KyuubiSoft API 2.0.0, Node 24, session reliability, recovery CLI & new operator features
+## [Unreleased]
+
+## [3.0.0] - 2026-10-29 - Security, Hytale 0.7, multiple servers, KyuubiSoft API 2.1, new interface & operator features
+
+Everything since `3.0.0-alpha`. A first 3.0.0 entry was written on 2026-06-01
+but never tagged or released; its changes are part of this release and listed
+at the end of this section under **Earlier in 3.0.0**.
 
 ### Security hotfix
 
@@ -1418,14 +1424,14 @@ See **Upgrade notes** at the end of this section.
   `.env` has no effect on an existing install (this previously caused "my
   configured password doesn't work" confusion).
 
-## [3.0.0] - 2026-06-01 - New operator features, reliability hardening & DR
+### Earlier in 3.0.0 (written up 2026-06-01): new operator features, reliability hardening & DR
 
 Builds on `3.0.0-alpha` with a wave of operator-facing features and a focused
 reliability/security/disaster-recovery hardening pass. Every change is type-checked
 (`tsc`/`vue-tsc`), the backend suite is green (87 tests), and the frontend builds
 clean with full en/de/pt_br i18n parity.
 
-### New operator features
+#### New operator features
 
 - **Performance history charts**: an in-memory ring buffer samples TPS/MSPT (from
   the plugin's `server_tick` events) plus container CPU/RAM and renders
@@ -1460,7 +1466,7 @@ clean with full en/de/pt_br i18n parity.
 - **Mobile bottom navigation**: a phone-friendly bottom bar (hidden at `lg+`) for the
   most-used destinations, plus assorted responsive fixes.
 
-### Reliability & disaster recovery
+#### Reliability & disaster recovery
 
 - **Docker API timeouts**: every one-shot Docker call (inspect/stats/start/stop/
   restart/logs/exec) is raced against a timeout so a hung daemon can no longer freeze
@@ -1481,7 +1487,7 @@ clean with full en/de/pt_br i18n parity.
   `server.alert` on low TPS (server lag) and low free disk, into the existing
   notification/webhook pipeline. Env-tunable thresholds.
 
-### Security & quality
+#### Security & quality
 
 - **File-manager upload magic-byte validation**: uploads with a known binary/archive
   extension must match the format's signature (mods/plugins already did this).
@@ -1495,7 +1501,7 @@ clean with full en/de/pt_br i18n parity.
 - **Performance**: native off-screen virtualization (`content-visibility`) for the
   console log, player rows and asset/file lists.
 
-### Notable bug fixes
+#### Notable bug fixes
 
 - Asset Explorer surfaces the real unzip/permission/disk error instead of a bare
   "code 50".
@@ -1505,7 +1511,7 @@ clean with full en/de/pt_br i18n parity.
   (date-stamped releases with a hash suffix are recognized).
 - Multi-mod upload, command-help links and live-map wiring fixed.
 
-### Plugin
+#### Plugin
 
 - **KyuubiSoft API plugin** bumped through v1.4.x for the 2026-05 Hytale ECS API
   (older builds no longer compile against the current `HytaleServer.jar`).
