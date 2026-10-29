@@ -1245,7 +1245,7 @@
   "performance": {
     "title": "Monitor de Desempenho",
     "storage": "Armazenamento",
-    "free": "livre",
+    "storageFree": "livre",
     "lowDiskWarning": "Pouco espaço em disco — libere backups ou mundos para evitar que o servidor não inicie.",
     "storageCategories": {
       "worlds": "Mundos",

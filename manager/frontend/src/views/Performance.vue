@@ -416,7 +416,7 @@ onUnmounted(() => {
           <h3 class="text-lg font-semibold text-ink">{{ t('performance.storage') }}</h3>
         </div>
         <div v-if="storage.filesystem" class="text-sm text-ink-muted">
-          {{ formatBytes(storage.filesystem.freeBytes) }} {{ t('performance.free') }}
+          {{ formatBytes(storage.filesystem.freeBytes) }} {{ t('performance.storageFree') }}
           <span class="text-ink-subtle">/ {{ formatBytes(storage.filesystem.totalBytes) }}</span>
         </div>
       </div>
