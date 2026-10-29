@@ -27,6 +27,8 @@ export interface FileManagerRoot {
   deny?: string[];
   /** Matched against the whole path inside the root (lower case). */
   denyPatterns?: RegExp[];
+  /** Readable, but changed only through their own editor (`message` says which). */
+  editorOnly?: { patterns: RegExp[]; message: string };
   label?: string;
 }
 
@@ -92,7 +94,28 @@ const GLOBAL_DENY_PATTERNS: RegExp[] = [
   /(^|\/)config\.json(\.|$)/i,
   /(^|\/)config\/kyuubisoft-api(\/|$)/i, // KyuubiSoft API plugin config dir up to 2.0 (bearer token)
   /(^|\/)KyuubiDDragon_KyuubiSoftAPI(\/|$)/i, // its data dir in mods/ since 2.1 (bearer token)
+  // Setup state in the data folder: game server password, store API keys
+  // (and the admin hash while the wizard runs), incl. copies.
+  /(^|\/)setup-config\.json(\.|$)/i,
+  // Keys of the encrypted server login (auth.enc): the passphrase and the
+  // machine id older images kept in the data folder.
+  /(^|\/)auth\.passphrase$/i,
+  /(^|\/)\.machine-id$/i,
 ];
+
+// Worlds in the server folder (universe/worlds, worlds): the world folders and
+// their JSON files are held in memory by the running server and written back,
+// so they are changed on the Worlds page, which validates them and writes
+// while the server is stopped. Reading them stays possible. `universe` itself
+// is covered too: deleting or moving it would take every world along. Other
+// files inside it stay writable.
+const WORLD_EDITOR_PATTERNS: RegExp[] = [
+  /^universe$/i,
+  /^(universe\/)?worlds(\/[^/]+)?$/i,
+  /^(universe\/)?worlds\/[^/]+\/.+\.json(\.|$)/i,
+];
+const WORLD_EDITOR_MESSAGE =
+  'World files are changed on the Worlds page (it checks them and saves while the server is stopped)';
 
 // Extension-based denies target secret/credential FILES only. They must NEVER
 // hide or block a *directory* — a folder named e.g. "cache.aot" is legitimate
@@ -175,6 +198,7 @@ export function getRoots(folders: FileManagerFolders): FileManagerRoot[] {
       // Hytale config.json has its own editor + auth/ is sensitive
       deny: ['config.json', 'auth/', 'auth'],
       denyPatterns: accessFilePatterns(peekServerConfig(folders.server)),
+      editorOnly: { patterns: WORLD_EDITOR_PATTERNS, message: WORLD_EDITOR_MESSAGE },
       label: 'Server',
     },
     {
@@ -223,11 +247,23 @@ function isDirectorySync(p: string): boolean {
  *
  * Throws FileManagerError(403) if path escapes root or matches deny patterns.
  */
-export function resolveSafe(root: FileManagerRoot, relPath: string): string {
-  return resolveTarget(root, relPath).abs;
+export function resolveSafe(root: FileManagerRoot, relPath: string, forWrite = false): string {
+  return resolveTarget(root, relPath, forWrite).abs;
 }
 
-function resolveTarget(root: FileManagerRoot, relPath: string): ResolvedTarget {
+/** A path inside the root that only its own editor changes (lower case, `/`). */
+export function isEditorOnly(root: FileManagerRoot, relPath: string): boolean {
+  const lower = relPath.toLowerCase();
+  return !!relPath && !!root.editorOnly?.patterns.some((re) => re.test(lower));
+}
+
+function assertWritable(root: FileManagerRoot, relPath: string): void {
+  if (isEditorOnly(root, relPath)) {
+    throw new FileManagerError(root.editorOnly!.message, 403, 'PATH_DENIED');
+  }
+}
+
+function resolveTarget(root: FileManagerRoot, relPath: string, forWrite = false): ResolvedTarget {
   const raw = relPath || '';
 
   // Reject obvious absolute paths or Windows-drive paths before normalisation
@@ -265,6 +301,7 @@ function resolveTarget(root: FileManagerRoot, relPath: string): ResolvedTarget {
   if (isDenied(root, relForCheck, isDirTarget)) {
     throw new FileManagerError('Path is in deny-list', 403, 'PATH_DENIED');
   }
+  if (forWrite) assertWritable(root, relForCheck);
 
   // Symlink defence: the checks above only look at the NAME. Resolve where
   // the path really points (nearest existing ancestor for create targets) and
@@ -287,6 +324,7 @@ function resolveTarget(root: FileManagerRoot, relPath: string): ResolvedTarget {
   if (isDenied(root, realRelative.replace(/\\/g, '/'), isDirectorySync(real))) {
     throw new FileManagerError('Path is in deny-list', 403, 'PATH_DENIED');
   }
+  if (forWrite) assertWritable(root, realRelative.replace(/\\/g, '/'));
 
   return { abs: resolved, real, rootReal };
 }
@@ -372,9 +410,14 @@ export function isAbsolutePathAllowed(
     if (escapesDir(relative)) continue; // not under this root
     // Found the owning root. Writes are only allowed under a read-write root.
     if (mode === 'write' && !root.rw) return false;
-    if (isDenied(root, relative.replace(/\\/g, '/'), isDir)) return false;
+    const realRel = relative.replace(/\\/g, '/');
+    if (isDenied(root, realRel, isDir)) return false;
+    if (mode === 'write' && isEditorOnly(root, realRel)) return false;
     const requested = path.relative(rootAbs, resolved);
-    return escapesDir(requested) || !isDenied(root, requested.replace(/\\/g, '/'), isDir);
+    if (escapesDir(requested)) return true;
+    const requestedRel = requested.replace(/\\/g, '/');
+    if (mode === 'write' && isEditorOnly(root, requestedRel)) return false;
+    return !isDenied(root, requestedRel, isDir);
   }
   return false; // outside every managed root
 }
@@ -568,7 +611,7 @@ export async function writeFile(
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
-  const abs = resolveSafe(root, relPath);
+  const abs = resolveSafe(root, relPath, true);
 
   // Symlink defence: if the resolved path or any segment of its parent
   // chain is a symlink, refuse the write. This closes the TOCTOU window
@@ -674,7 +717,7 @@ export async function deleteFile(
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
-  const { abs, real, rootReal } = resolveTarget(root, relPath);
+  const { abs, real, rootReal } = resolveTarget(root, relPath, true);
 
   let stat: Stats;
   try {
@@ -706,8 +749,8 @@ export async function moveFile(
   if (!root.rw) {
     throw new FileManagerError('Root is read-only', 403, 'READ_ONLY');
   }
-  const absFrom = resolveSafe(root, from);
-  const absTo = resolveSafe(root, to);
+  const absFrom = resolveSafe(root, from, true);
+  const absTo = resolveSafe(root, to, true);
 
   try {
     await fsp.access(absFrom);
@@ -765,7 +808,7 @@ export async function uploadFile(
     ? `${relPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')}/${safeName}`
     : safeName;
 
-  const abs = resolveSafe(root, destRel);
+  const abs = resolveSafe(root, destRel, true);
   // Same TOCTOU guard as writeFile: no symlink may sit on the target's chain.
   await assertNoSymlinkOnPath(root.path, path.dirname(abs));
   await fsp.mkdir(path.dirname(abs), { recursive: true });

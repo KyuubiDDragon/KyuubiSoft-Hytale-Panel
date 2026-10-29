@@ -85,10 +85,16 @@ function generatePassword(): string {
   }
 }
 
+interface CliUsersData {
+  users: CliUser[];
+  /** Last tokenVersion of deleted accounts (services/users.ts). */
+  deletedTokenVersions?: Record<string, number>;
+}
+
 // A missing file is an empty store; a corrupt one aborts the command instead
 // of being overwritten with only the account this command touches.
-async function readUsers(): Promise<{ users: CliUser[] }> {
-  const data = await readJsonFile<{ users: CliUser[] }>(USERS_FILE, {
+async function readUsers(): Promise<CliUsersData> {
+  const data = await readJsonFile<CliUsersData>(USERS_FILE, {
     isValid: (value) => Array.isArray((value as { users?: unknown } | null)?.users),
   });
   return data ?? { users: [] };
@@ -100,7 +106,7 @@ async function readUsers(): Promise<{ users: CliUser[] }> {
  * panel (UID 9999) out of its own user store on the next lastLogin/tokenVersion
  * update.
  */
-async function writeUsers(data: { users: CliUser[] }): Promise<void> {
+async function writeUsers(data: CliUsersData): Promise<void> {
   await writeJsonAtomic(USERS_FILE, data);
 }
 
@@ -275,13 +281,17 @@ async function cmdCreateAdmin(
     process.exit(1);
   }
 
+  // A deleted account of this name left its last tokenVersion behind (see
+  // services/users.ts): start above it, so its tokens stay invalid.
+  const deleted = data.deletedTokenVersions?.[username];
   data.users.push({
     username,
     passwordHash: await bcrypt.hash(pw, 12),
     roleId: 'admin',
     createdAt: new Date().toISOString(),
-    tokenVersion: 1,
+    tokenVersion: typeof deleted === 'number' && Number.isFinite(deleted) ? deleted + 1 : 1,
   });
+  if (data.deletedTokenVersions) delete data.deletedTokenVersions[username];
   await writeUsers(data);
 
   console.log(`Admin user '${username}' created.`);

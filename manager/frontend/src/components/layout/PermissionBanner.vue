@@ -2,8 +2,10 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { healthApi, type PermissionHealthResponse } from '@/api/health'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const permissionHealth = ref<PermissionHealthResponse | null>(null)
 const loading = ref(true)
@@ -20,7 +22,8 @@ const showBanner = computed(() => {
 async function checkPermissions() {
   try {
     loading.value = true
-    permissionHealth.value = await healthApi.checkPermissions()
+    // null (no banner) for an account that may not run the check
+    permissionHealth.value = await healthApi.checkPermissionsIfAllowed(authStore.permissions)
   } catch (err) {
     console.error('Failed to check permissions:', err)
     // Don't show banner if check fails - we don't want to annoy users

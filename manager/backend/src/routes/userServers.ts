@@ -124,6 +124,10 @@ router.put(
   authMiddleware,
   requirePermission('apikeys.manage'),
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
+    if (isDemoMode()) {
+      res.json({ success: true, message: '[DEMO] Servers updated (simulated)' });
+      return;
+    }
     const list = await readServerList(req.body, 'serverIds');
     if (!list.ok) {
       res.status(list.status).json(list.body);

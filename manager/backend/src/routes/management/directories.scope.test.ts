@@ -209,3 +209,55 @@ describe('mods and plugins routes per server', () => {
     expect(logActivity.mock.calls[0][5]).toBe('Deleted mod: Gone.jar');
   });
 });
+
+describe('mod and plugin uploads', () => {
+  const upload = async (content: Buffer | string, name: string, kind = 'mods') => {
+    const form = new FormData();
+    form.append('file', new Blob([content]), name);
+    return fetch(`${scoped}/${kind}/upload`, { method: 'POST', body: form });
+  };
+
+  it('checks the content before anything lands in the mods folder', async () => {
+    const res = await upload('#!/bin/sh\necho not a jar\n', 'Fake.jar');
+    expect(res.status).toBe(400);
+    // no rejected file, no temporary file
+    expect(list(b.paths.mods)).toEqual([]);
+  });
+
+  it('takes a short script', async () => {
+    expect((await upload('print("hi")\n', 'small.lua')).status).toBe(200);
+    expect(list(b.paths.mods)).toHaveLength(1);
+  });
+
+  it('refuses a script with binary content', async () => {
+    expect((await upload(Buffer.from([0x2d, 0x2d, 0x00, 0x41]), 'bad.lua', 'plugins')).status).toBe(
+      400,
+    );
+    expect(list(b.paths.plugins)).toEqual([]);
+  });
+
+  // Uploads wait in the manager volume (not in memory, not where a server
+  // could see them) until they are checked.
+  it('leaves nothing in the staging folder, stored or refused', async () => {
+    const staging = path.join(process.env.MANAGER_DATA_PATH!, 'staging');
+    const big = Buffer.concat([JAR, Buffer.alloc(256 * 1024, 0x61)]);
+
+    const stored = await upload(big, 'Big.jar');
+    expect(stored.status).toBe(200);
+    const { filename } = (await stored.json()) as { filename: string };
+    expect(fs.readFileSync(path.join(b.paths.mods, filename))).toEqual(big);
+    expect(await upload('not a jar', 'Fake.jar')).toHaveProperty('status', 400);
+    const gone = await fetch(`${scoped.replace('srv-b', 'gone')}/mods/upload`, {
+      method: 'POST',
+      body: (() => {
+        const form = new FormData();
+        form.append('file', new Blob([JAR]), 'Lost.jar');
+        return form;
+      })(),
+    });
+    expect(gone.status).toBe(500);
+
+    // Removed right after the answer is sent.
+    await vi.waitFor(() => expect(fs.readdirSync(staging)).toEqual([]));
+  });
+});

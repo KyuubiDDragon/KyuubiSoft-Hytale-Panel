@@ -84,7 +84,8 @@ function toPublicUser(user: User): Omit<User, 'passwordHash'> {
 // which usernames are valid. Computed once at startup.
 const TIMING_DUMMY_HASH = bcrypt.hashSync('timing-equalizer-not-a-real-password', 12);
 
-// Track deleted users for session-based invalidation
+// Accounts deleted while the panel runs (WebMap sessions check it; tokens are
+// checked against users.json itself, see sessionProblem()).
 const invalidatedUsers = new Set<string>();
 
 export function isUserInvalidated(username: string): boolean {
@@ -93,6 +94,11 @@ export function isUserInvalidated(username: string): boolean {
 
 interface UsersData {
   users: User[];
+  /**
+   * Last tokenVersion of deleted accounts. An account created again under the
+   * same name starts above it, so tokens of the old account never match.
+   */
+  deletedTokenVersions?: Record<string, number>;
 }
 
 // Path to users file in the persistent data volume
@@ -375,10 +381,27 @@ export async function createUser(
     if (current.users.some((u) => u.username === username)) {
       throw new Error('Username already exists');
     }
+    newUser.tokenVersion = claimTokenVersion(current, username);
     current.users.push(newUser);
   });
 
   return toPublicUser(newUser);
+}
+
+/**
+ * The tokenVersion a new account named `username` starts with, for writers
+ * inside updateUsers(): above that of a deleted account of the same name, so
+ * its tokens never match. Takes that record out of `data`.
+ */
+export function claimTokenVersion(
+  data: { deletedTokenVersions?: Record<string, number> },
+  username: string,
+): number {
+  invalidatedUsers.delete(username);
+  const deleted = data.deletedTokenVersions?.[username];
+  if (typeof deleted !== 'number' || !Number.isFinite(deleted)) return 1;
+  delete data.deletedTokenVersions![username];
+  return deleted + 1;
 }
 
 // Update user
@@ -479,6 +502,11 @@ export async function deleteUser(username: string): Promise<void> {
     // Add to invalidation list before deleting
     invalidatedUsers.add(username);
 
+    // Kept in the file, so it also holds after a restart.
+    current.deletedTokenVersions = {
+      ...current.deletedTokenVersions,
+      [username]: userToDelete.tokenVersion || 1,
+    };
     current.users = current.users.filter((u) => u.username !== username);
   });
 }
@@ -515,6 +543,41 @@ export async function getTokenVersion(username: string): Promise<number> {
 
   const user = await getUser(username);
   return user?.tokenVersion ?? 1;
+}
+
+export type SessionProblem = 'USER_DELETED' | 'TOKEN_INVALIDATED';
+
+/**
+ * Why a token of `username` carrying `tokenVersion` is no longer good, or null
+ * while it is: the account must exist, and its tokenVersion must still match.
+ * Throws when users.json cannot be read.
+ */
+export async function sessionProblem(
+  username: string,
+  tokenVersion: number | undefined,
+): Promise<SessionProblem | null> {
+  if (isDemoMode()) return null;
+  const user = await getUser(username);
+  if (!user) return 'USER_DELETED';
+  if (tokenVersion !== undefined && tokenVersion !== (user.tokenVersion ?? 1)) {
+    return 'TOKEN_INVALIDATED';
+  }
+  return null;
+}
+
+/**
+ * Whether an API key created at `keyCreatedAt` still belongs to `username`:
+ * the account exists and is not younger than the key (a key of a deleted
+ * account does not pass to a new account with the same name).
+ */
+export async function isKeyOwnerCurrent(username: string, keyCreatedAt: string): Promise<boolean> {
+  if (isDemoMode()) return true;
+  const user = await getUser(username);
+  if (!user) return false;
+  const created = Date.parse(user.createdAt);
+  // A creation time in the future (clock moved) says nothing about the key.
+  if (!Number.isFinite(created) || created > Date.now()) return true;
+  return Date.parse(keyCreatedAt) >= created;
 }
 
 // Initialize users on startup

@@ -396,19 +396,28 @@ async function chatScope(serverId: string | null): Promise<string[]> {
   return serverId === null ? serversWithChatData() : [serverId];
 }
 
+/** Which chat lines a data export or erasure covers. */
+export type ChatLineFilter = (message: ChatMessage) => boolean;
+
 /**
  * A player's whole chat history on `serverId` (on every server for null),
- * newest first, each message with its server (data export).
+ * newest first, each message with its server (data export). With `covers`
+ * only the lines it accepts (a name another player also used).
  */
 export async function getPlayerChatHistory(
   playerName: string,
   serverId: string | null,
+  covers?: ChatLineFilter,
 ): Promise<ChatMessage[]> {
   if (isDemoMode()) return [];
   const all: ChatMessage[] = [];
   for (const id of await chatScope(serverId)) {
     const { messages } = await playerMessagesOn(id, playerName, 0);
-    all.push(...messages.map((m) => ({ ...m, serverId: m.serverId ?? id })));
+    all.push(
+      ...messages
+        .filter((m) => !covers || covers(m))
+        .map((m) => ({ ...m, serverId: m.serverId ?? id })),
+    );
   }
   return page(all, undefined).messages;
 }
@@ -483,16 +492,29 @@ export async function getPlayerDeathPositions(
   return result;
 }
 
+/** Drops the lines `covers` accepts from the day files in `dir`; a file left empty goes. */
+async function removeLines(dir: string, covers: ChatLineFilter): Promise<void> {
+  for (const dateKey of await getAvailableDates(dir)) {
+    const file = path.join(dir, `${dateKey}.json`);
+    const messages = await loadMessagesFromFile(file);
+    const rest = messages.filter((m) => !covers(m));
+    if (rest.length === messages.length) continue;
+    if (rest.length === 0) await rm(file, { force: true });
+    else await writeFile(file, JSON.stringify(rest, null, 2), 'utf-8');
+  }
+}
+
 /**
  * Erase a player's per-player chat history + death positions on `serverId`
- * (on every server for null; GDPR erasure). Their lines in the GLOBAL daily logs are left in place —
- * rewriting every global file is expensive and the global log is an
- * aggregate moderation record; the per-player store is the personal-data
- * copy. Returns true if every folder could be removed.
+ * (on every server for null; GDPR erasure). With `covers` only the lines it
+ * accepts, and the death positions stay (a name another player also used:
+ * they carry no UUID). The lines in the server's daily logs are removed with
+ * deletePlayerGlobalChatLines(). Returns true if every folder could be removed.
  */
 export async function deletePlayerChatData(
   playerName: string,
   serverId: string | null,
+  covers?: ChatLineFilter,
 ): Promise<boolean> {
   if (isDemoMode()) return true;
   const normalized = normalizePlayerName(playerName);
@@ -500,9 +522,44 @@ export async function deletePlayerChatData(
   for (const id of await chatScope(serverId)) {
     const dirs = chatDirs(id);
     try {
+      if (covers) {
+        await removeLines(path.join(dirs.players, normalized), covers);
+        continue;
+      }
       await rm(path.join(dirs.players, normalized), { recursive: true, force: true });
       await rm(path.join(dirs.deaths, `${normalized}.json`), { force: true });
       playerDeathPositions.delete(deathKey(id, normalized));
+    } catch {
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+/**
+ * Remove the lines `covers` accepts from the daily chat logs of `serverId`
+ * (every server for null; GDPR erasure), today's cached log included.
+ * Returns true if every log could be rewritten.
+ */
+export async function deletePlayerGlobalChatLines(
+  serverId: string | null,
+  covers: ChatLineFilter,
+): Promise<boolean> {
+  if (isDemoMode()) return true;
+  let ok = true;
+  for (const id of await chatScope(serverId)) {
+    const dirs = chatDirs(id);
+    try {
+      // The cache is written back whole with the next message: filter it too.
+      const today = todaysChatLogs.get(id);
+      if (today) {
+        const rest = today.messages.filter((m) => !covers(m));
+        if (rest.length !== today.messages.length) {
+          today.messages = rest;
+          await saveMessagesToFile(dirs, getGlobalChatFilePath(dirs, today.dateKey), rest);
+        }
+      }
+      await removeLines(dirs.global, covers);
     } catch {
       ok = false;
     }

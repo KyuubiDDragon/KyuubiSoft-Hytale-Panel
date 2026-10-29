@@ -1,4 +1,4 @@
-import { Router, Request, Response, CookieOptions } from 'express';
+import { Router, Request, Response, NextFunction, CookieOptions } from 'express';
 import rateLimit from 'express-rate-limit';
 import {
   verifyCredentials,
@@ -31,7 +31,7 @@ import {
   deleteUser,
   getUser,
   invalidateUserTokens,
-  getTokenVersion,
+  sessionProblem,
 } from '../services/users.js';
 import { getUserPermissions, hasPermission } from '../services/roles.js';
 import { legacyServerScope } from '../middleware/serverScope.js';
@@ -46,7 +46,7 @@ import {
   isTotpEnabled,
   verifyTotpOrBackup,
 } from '../services/totp.js';
-import { createApiKey, listApiKeys, revokeApiKey } from '../services/apiKeys.js';
+import { createApiKey, listApiKeys, revokeApiKey, revokeApiKeysOf } from '../services/apiKeys.js';
 import { scopeAllows } from '../services/commandPolicy.js';
 import { audit } from '../services/audit.js';
 import { publish } from '../services/eventBus.js';
@@ -266,9 +266,22 @@ router.post(
 
 // ============== 2FA / TOTP ==============
 
+/**
+ * Changing 2FA needs a signed-in user: an API key must not be able to enrol
+ * its owner (and lock them out) or turn their 2FA off.
+ */
+function rejectApiKey(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  if (req.apiKey) {
+    res.status(403).json({ detail: 'Not available with an API key', code: 'API_KEY_NOT_ALLOWED' });
+    return;
+  }
+  next();
+}
+
 router.post(
   '/2fa/setup',
   authMiddleware,
+  rejectApiKey,
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     try {
       const result = await startTotpEnrollment(req.user!);
@@ -285,6 +298,7 @@ router.post(
 router.post(
   '/2fa/verify-enable',
   authMiddleware,
+  rejectApiKey,
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const { code } = req.body as { code?: string };
     if (!code) {
@@ -305,6 +319,7 @@ router.post(
 router.post(
   '/2fa/disable',
   authMiddleware,
+  rejectApiKey,
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const { password, code } = req.body as { password?: string; code?: string };
     if (!password || !code) {
@@ -329,6 +344,7 @@ router.post(
 router.post(
   '/2fa/regenerate-backup-codes',
   authMiddleware,
+  rejectApiKey,
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const { password } = req.body as { password?: string };
     if (!password) {
@@ -360,6 +376,27 @@ router.get(
 
 // ============== REST API KEYS ==============
 
+/**
+ * The expiry of a new key: the requested one (an ISO date, or none), never
+ * later than the key creating it (`callerExpiry`), which it inherits when none
+ * is requested.
+ */
+function keyExpiry(
+  requested: unknown,
+  callerExpiry: string | null,
+): { ok: true; value: string | null } | { ok: false; status: number; detail: string } {
+  if (requested !== undefined && requested !== null && requested !== '') {
+    if (typeof requested !== 'string' || !Number.isFinite(Date.parse(requested))) {
+      return { ok: false, status: 400, detail: 'expiresAt must be a date' };
+    }
+    if (callerExpiry !== null && Date.parse(requested) > Date.parse(callerExpiry)) {
+      return { ok: false, status: 403, detail: 'A key cannot create a key that outlives it' };
+    }
+    return { ok: true, value: requested };
+  }
+  return { ok: true, value: callerExpiry };
+}
+
 router.get(
   '/api-keys',
   authMiddleware,
@@ -376,22 +413,36 @@ router.post(
   asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
     const { name, scopes, expiresAt } = req.body as {
       name?: string;
-      scopes?: string[];
-      expiresAt?: string;
+      scopes?: unknown[];
+      expiresAt?: unknown;
     };
-    if (!name || !Array.isArray(scopes) || scopes.length === 0) {
+    if (
+      !name ||
+      !Array.isArray(scopes) ||
+      scopes.length === 0 ||
+      !scopes.every((s): s is string => typeof s === 'string')
+    ) {
       res.status(400).json({ detail: 'name and scopes[] required' });
       return;
     }
-    // Disallow giving an API key more rights than its owner has, except for
+    // Disallow giving an API key more rights than the caller has, except for
     // admins (`*`). This prevents privilege escalation through key creation.
-    const ownerPerms = await getUserPermissions(req.user!);
-    if (!ownerPerms.includes('*')) {
-      const bad = scopes.filter((s) => !(ownerPerms as string[]).includes(s));
+    // A key creating a key holds only its own scopes (narrowed by its owner's
+    // rights), not everything its owner may do.
+    const callerPerms = await effectivePermissions(req);
+    if (!callerPerms.includes('*')) {
+      const bad = scopes.filter((s) => !callerPerms.includes(s));
       if (bad.length) {
         res.status(403).json({ detail: 'Cannot grant scopes you do not hold', scopes: bad });
         return;
       }
+    }
+    // Nor one that outlives the key creating it: without an expiry of its
+    // own it ends with that key.
+    const expiry = keyExpiry(expiresAt, req.apiKey?.expiresAt ?? null);
+    if (!expiry.ok) {
+      res.status(expiry.status).json({ detail: expiry.detail });
+      return;
     }
     // Optional server list, set with the key itself so it is never wider than
     // chosen. Without one the key follows its owner, which is only "no more
@@ -421,7 +472,7 @@ router.post(
       ownerUsername: req.user!,
       name,
       scopes,
-      expiresAt: expiresAt ?? null,
+      expiresAt: expiry.value,
       serverIds,
     });
     audit(req, 'apikey.created', {
@@ -467,13 +518,17 @@ router.post(
       return;
     }
 
-    // Verify the refresh token wasn't invalidated by a password or role change.
-    if (!isDemoMode()) {
-      const currentVersion = await getTokenVersion(result.username);
-      if (result.tokenVersion !== undefined && result.tokenVersion !== currentVersion) {
-        res.status(401).json({ detail: 'Refresh token invalidated', code: 'TOKEN_INVALIDATED' });
-        return;
-      }
+    // Verify the account still exists and the refresh token wasn't
+    // invalidated by a password or role change (or a deleted account of the
+    // same name).
+    const problem = await sessionProblem(result.username, result.tokenVersion);
+    if (problem === 'USER_DELETED') {
+      res.status(401).json({ detail: 'User session invalidated', code: 'USER_DELETED' });
+      return;
+    }
+    if (problem === 'TOKEN_INVALIDATED') {
+      res.status(401).json({ detail: 'Refresh token invalidated', code: 'TOKEN_INVALIDATED' });
+      return;
     }
 
     // Demo mode: Create new tokens for demo users
@@ -643,15 +698,13 @@ router.get(
     }
 
     const user = await getUser(username);
-    const permissions = await getUserPermissions(username);
     if (!user) {
-      // Validly-signed token for a username with no users.json record (the
-      // env-bootstrap admin before the file is written). It claims the admin
-      // role, so return admin permissions to match — otherwise the client would
-      // render a full admin as a permission-less "viewer".
-      res.json({ username, role: 'admin', permissions: ['*'] });
+      // authMiddleware already refuses tokens of accounts that are gone; an
+      // account deleted in the meantime gets no rights either.
+      res.status(401).json({ detail: 'User session invalidated', code: 'USER_DELETED' });
       return;
     }
+    const permissions = await getUserPermissions(username);
     res.json({ username, role: user.roleId, permissions });
   }),
 );
@@ -837,6 +890,15 @@ router.delete(
       }
 
       await deleteUser(username);
+      // Its keys go with it: an account created again under this name must
+      // not inherit them.
+      const revokedKeys = revokeApiKeysOf(username);
+      if (revokedKeys > 0) {
+        audit(req, 'apikey.revoked', {
+          target: `user:${username}`,
+          metadata: { reason: 'account deleted', count: revokedKeys },
+        });
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ error: (error as Error).message });

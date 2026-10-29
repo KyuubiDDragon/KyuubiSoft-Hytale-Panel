@@ -14,6 +14,7 @@ import {
 } from '../../services/activityLog.js';
 import type { AuthenticatedRequest } from '../../types/index.js';
 import { isPathSafe, sanitizeFileName } from '../../utils/pathSecurity.js';
+import { discardStaged, readStagedHead } from '../../utils/staging.js';
 import {
   isDemoMode,
   getDemoMods,
@@ -21,7 +22,9 @@ import {
   getDemoActivityLog,
 } from '../../services/demoData.js';
 import {
+  MAGIC_CHECK_BYTES,
   verifyFileMagic,
+  storeUpload,
   uploadMod,
   uploadPlugin,
   scanDirectory,
@@ -383,10 +386,10 @@ router.post(
       const expectedType: 'zip' | 'lua' | 'js' =
         ext === '.jar' || ext === '.zip' ? 'zip' : ext === '.lua' ? 'lua' : 'js';
 
-      // SECURITY: Verify file magic bytes match expected type
-      if (!verifyFileMagic(req.file.path, expectedType)) {
-        // Delete the uploaded file
-        await unlink(req.file.path).catch(() => {});
+      // SECURITY: Verify file magic bytes match expected type before the
+      // upload is stored (it is still in the staging folder)
+      const head = await readStagedHead(req.file.path, MAGIC_CHECK_BYTES);
+      if (!verifyFileMagic(head, expectedType)) {
         console.warn(
           `[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`,
         );
@@ -396,27 +399,27 @@ router.post(
         return;
       }
 
+      const filename = await storeUpload(req.serverId, 'mods', req.file);
+
       await logActivity(
         req.user || 'unknown',
         'upload_mod',
         'mod',
         true,
         req.file.originalname,
-        `Uploaded mod: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)${onServer(req.serverId)}`,
+        `Uploaded mod: ${filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)${onServer(req.serverId)}`,
       );
 
       res.json({
         success: true,
-        filename: req.file.filename,
+        filename,
         originalName: req.file.originalname,
         size: req.file.size,
       });
     } catch (error) {
-      // Try to clean up uploaded file on error
-      if (req.file?.path) {
-        await unlink(req.file.path).catch(() => {});
-      }
       res.status(500).json({ error: 'Failed to upload mod' });
+    } finally {
+      await discardStaged(req.file?.path);
     }
   },
 );
@@ -438,10 +441,10 @@ router.post(
       const expectedType: 'zip' | 'lua' | 'js' =
         ext === '.jar' || ext === '.zip' ? 'zip' : ext === '.lua' ? 'lua' : 'js';
 
-      // SECURITY: Verify file magic bytes match expected type
-      if (!verifyFileMagic(req.file.path, expectedType)) {
-        // Delete the uploaded file
-        await unlink(req.file.path).catch(() => {});
+      // SECURITY: Verify file magic bytes match expected type before the
+      // upload is stored (it is still in the staging folder)
+      const head = await readStagedHead(req.file.path, MAGIC_CHECK_BYTES);
+      if (!verifyFileMagic(head, expectedType)) {
         console.warn(
           `[SECURITY] Blocked upload with invalid magic bytes: ${req.file.originalname}`,
         );
@@ -451,27 +454,27 @@ router.post(
         return;
       }
 
+      const filename = await storeUpload(req.serverId, 'plugins', req.file);
+
       await logActivity(
         req.user || 'unknown',
         'upload_plugin',
         'mod',
         true,
         req.file.originalname,
-        `Uploaded plugin: ${req.file.filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)${onServer(req.serverId)}`,
+        `Uploaded plugin: ${filename} (original: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB)${onServer(req.serverId)}`,
       );
 
       res.json({
         success: true,
-        filename: req.file.filename,
+        filename,
         originalName: req.file.originalname,
         size: req.file.size,
       });
     } catch (error) {
-      // Try to clean up uploaded file on error
-      if (req.file?.path) {
-        await unlink(req.file.path).catch(() => {});
-      }
       res.status(500).json({ error: 'Failed to upload plugin' });
+    } finally {
+      await discardStaged(req.file?.path);
     }
   },
 );

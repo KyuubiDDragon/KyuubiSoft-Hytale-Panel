@@ -69,6 +69,8 @@ export const PERMISSIONS = {
   'players.effects': 'Manage effects',
   'players.clear_inventory': 'Clear inventory',
   'players.message': 'Send messages',
+  'players.export_data': "Export a player's stored data (notes, punishments, chat; GDPR access)",
+  'players.erase_data': "Erase a player's stored data (GDPR erasure)",
 
   // Chat
   'chat.view': 'View chat',

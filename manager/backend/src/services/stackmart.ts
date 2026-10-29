@@ -7,12 +7,13 @@ import { logger } from '../utils/logger.js';
 
 import { mkdir, access, unlink } from 'fs/promises';
 import path from 'path';
-import https from 'https';
 import { config } from '../config.js';
 import { sanitizeFileName, resolveFileInDir } from '../utils/pathSecurity.js';
 import type { ServerContext } from './serverContext.js';
 import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
 import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
+import { outboundErrorMessage, safeDownload, safeRequest } from '../utils/safeFetch.js';
+import { removeReplacedFile } from '../utils/replacedFile.js';
 
 // Security: Regex pattern for validating resource IDs (MongoDB ObjectId or slug)
 const RESOURCE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -20,6 +21,11 @@ const RESOURCE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 // StackMart API Configuration
 const STACKMART_API_BASE = 'https://stackmart.org';
 const STACKMART_PUBLIC_API = 'https://stackmart.org/api/public';
+// API calls and the start of a download stay on StackMart. Where its download
+// links redirect to (storage) is not known, so redirects of a download may
+// lead to any public host.
+export const STACKMART_HOSTS = ['stackmart.org'];
+const API_MAX_BYTES = 10 * 1024 * 1024;
 
 // Cache configuration
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -259,8 +265,8 @@ function getApiKey(): string | undefined {
 let apiKeyLogged = false;
 
 /**
- * Make a request to the StackMart API using native fetch
- * This works better with Cloudflare and other DDoS protection services
+ * Make a request to the StackMart API (browser-like User-Agent, which works
+ * better with Cloudflare and other DDoS protection services)
  */
 async function stackmartRequest<T>(
   endpoint: string,
@@ -298,96 +304,50 @@ async function stackmartRequest<T>(
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(url.toString(), {
+    const response = await safeRequest(url.toString(), {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+      allowedHosts: STACKMART_HOSTS,
+      maxBytes: API_MAX_BYTES,
     });
 
     if (response.status === 200) {
-      const data = await response.json();
-      return data as T;
+      return JSON.parse(response.body.toString('utf-8')) as T;
     } else if (response.status === 429) {
       logger.error('StackMart API rate limit exceeded');
       return null;
     } else {
-      const text = await response.text();
+      const text = response.body.toString('utf-8').slice(0, 500);
       logger.error(`StackMart API error: ${response.status} - ${text}`);
       return null;
     }
   } catch (e) {
-    logger.error('StackMart request error:', e);
+    logger.error(`StackMart request error: ${outboundErrorMessage(e)}`);
     return null;
   }
 }
 
 /**
- * Download a file from URL
+ * Download a resource file. StackMart states no hash for its files; the
+ * download starts on StackMart, within the size and time limit.
  */
 async function downloadFile(url: string, destPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const request = (currentUrl: string) => {
-      const urlObj = new URL(currentUrl);
-      const proto = https;
-
-      const options: https.RequestOptions = {
-        hostname: urlObj.hostname,
-        path: urlObj.pathname + urlObj.search,
-        headers: {
-          'User-Agent': 'KyuubiSoft-HytalePanel/1.0',
-        },
-      };
-
-      proto
-        .get(options, (res) => {
-          // Handle redirects
-          if (res.statusCode === 301 || res.statusCode === 302) {
-            const redirectUrl = res.headers.location;
-            if (redirectUrl) {
-              // Handle relative redirects
-              const newUrl = redirectUrl.startsWith('http')
-                ? redirectUrl
-                : new URL(redirectUrl, currentUrl).toString();
-              request(newUrl);
-              return;
-            }
-          }
-
-          if (res.statusCode !== 200) {
-            logger.error(`Download failed: ${res.statusCode}`);
-            resolve(false);
-            return;
-          }
-
-          const chunks: Buffer[] = [];
-
-          res.on('data', (chunk) => chunks.push(chunk));
-          res.on('end', async () => {
-            try {
-              const buffer = Buffer.concat(chunks);
-              // destPath is <folder>/<plain name>. The game server can write
-              // to that folder: the file is replaced, never written through
-              // a link planted under its name.
-              await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
-              resolve(true);
-            } catch (e) {
-              logger.error('Failed to write file:', e);
-              resolve(false);
-            }
-          });
-          res.on('error', (e) => {
-            logger.error('Download error:', e);
-            resolve(false);
-          });
-        })
-        .on('error', (e) => {
-          logger.error('Request error:', e);
-          resolve(false);
-        });
-    };
-
-    request(url);
-  });
+  try {
+    // destPath is <folder>/<plain name>. The game server can write to that
+    // folder: the file is replaced, never written through a link planted
+    // under its name.
+    await safeDownload(url, {
+      allowedHosts: STACKMART_HOSTS,
+      redirectHosts: null,
+      headers: { 'User-Agent': 'KyuubiSoft-HytalePanel/1.0' },
+      saveTo: destPath,
+    });
+    return true;
+  } catch (e) {
+    logger.error(`[StackMart] Download failed: ${outboundErrorMessage(e)}`);
+    return false;
+  }
 }
 
 // ============== Public API ==============
@@ -545,21 +505,8 @@ export async function installResourceFromStackMart(
     await mkdir(targetPath, { recursive: true });
   }
 
-  // Check if this resource is already installed (for updates) and remove old file
+  // An update: the old file is removed once the new one is in place.
   const existingInstall = await isStackMartResourceInstalled(server, resourceId);
-  if (existingInstall && existingInstall.filename) {
-    const oldBasePath = folderFor(server, existingInstall.category);
-    // The stored filename is untrusted (shared data dir): only a bare name in the base folder.
-    const oldFilePath = resolveFileInDir(oldBasePath, existingInstall.filename);
-    try {
-      if (!oldFilePath) throw new Error('invalid stored filename');
-      await unlink(oldFilePath);
-      logger.info(`[StackMart] Removed old resource file: ${existingInstall.filename}`);
-    } catch (e) {
-      // File might not exist, that's ok
-      logger.info(`[StackMart] Could not remove old file ${existingInstall.filename}:`, e);
-    }
-  }
 
   // Security: Construct destination path and verify it's within allowed directory
   const destPath = path.join(targetPath, validatedFilename);
@@ -582,6 +529,13 @@ export async function installResourceFromStackMart(
 
   if (!downloaded) {
     return { success: false, error: 'Failed to download resource file' };
+  }
+
+  if (existingInstall?.filename) {
+    const oldBasePath = folderFor(server, existingInstall.category);
+    // The stored filename is untrusted (shared data dir): only a bare name in the base folder.
+    const oldFilePath = resolveFileInDir(oldBasePath, existingInstall.filename);
+    await removeReplacedFile(oldFilePath, destPath, '[StackMart]');
   }
 
   // Track the installed resource

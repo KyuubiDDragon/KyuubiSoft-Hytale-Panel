@@ -4,12 +4,14 @@
 // Everything here is behavior-preserving — utilities used to live as private
 // functions inside the original file and are now exported for reuse across
 // the worlds / configs / cache / directories / worldConfigs submodules.
-import { readdir, readFile, stat, realpath } from 'fs/promises';
+import { readdir, readFile, stat, lstat, realpath } from 'fs/promises';
 import * as fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import multer from 'multer';
 import { resolveRealPathWithin } from '../utils/pathSecurity.js';
+import { replaceFileFromFile } from '../utils/noFollowFs.js';
+import { ensureStagingDirSync } from '../utils/staging.js';
 import { COMPOSE_SERVER_ID } from './servers.js';
 import { getServerContext } from './serverContext.js';
 
@@ -27,32 +29,17 @@ export const FILE_SIGNATURES: Record<string, number[][] | null> = {
   js: null, // Text file, check extension only
 };
 
-// SECURITY: Verify file magic bytes match expected type
-export function verifyFileMagic(filePath: string, expectedType: 'zip' | 'lua' | 'js'): boolean {
-  try {
-    const signatures = FILE_SIGNATURES[expectedType];
-    if (!signatures) {
-      // Text files - verify they don't contain binary data
-      const buffer = Buffer.alloc(512);
-      const fd = fs.openSync(filePath, 'r');
-      fs.readSync(fd, buffer, 0, 512, 0);
-      fs.closeSync(fd);
-      // Check for null bytes (binary indicator)
-      for (let i = 0; i < Math.min(buffer.length, 512); i++) {
-        if (buffer[i] === 0) return false;
-      }
-      return true;
-    }
+// How much of an upload verifyFileMagic looks at.
+export const MAGIC_CHECK_BYTES = 512;
 
-    const buffer = Buffer.alloc(8);
-    const fd = fs.openSync(filePath, 'r');
-    fs.readSync(fd, buffer, 0, 8, 0);
-    fs.closeSync(fd);
-
-    return signatures.some((sig) => sig.every((byte, i) => buffer[i] === byte));
-  } catch {
-    return false;
+// SECURITY: Verify the uploaded content's magic bytes match the expected type
+export function verifyFileMagic(content: Buffer, expectedType: 'zip' | 'lua' | 'js'): boolean {
+  const signatures = FILE_SIGNATURES[expectedType];
+  if (!signatures) {
+    // Text files - no null byte (binary indicator) in the first 512 bytes
+    return !content.subarray(0, MAGIC_CHECK_BYTES).includes(0);
   }
+  return signatures.some((sig) => sig.every((byte, i) => content[i] === byte));
 }
 
 // Extension → acceptable leading-byte signatures. Enforced ONLY for these
@@ -118,6 +105,24 @@ export function generateSafeFilename(originalName: string): string {
   return `${safeName}_${uniqueId}${ext}`;
 }
 
+/**
+ * Puts a checked upload (its staged file) into the mods or plugins folder of
+ * the request's server under a generated name. It is copied to a temporary
+ * file there and renamed, so the server never loads a half-written file, and
+ * a link planted under the name is replaced, not written through. Returns the
+ * file name.
+ */
+export async function storeUpload(
+  serverId: string | undefined,
+  folder: 'mods' | 'plugins',
+  file: { originalname: string; path: string },
+): Promise<string> {
+  const dir = (await getServerContext(serverId)).paths[folder];
+  const filename = generateSafeFilename(file.originalname);
+  await replaceFileFromFile(path.join(dir, filename), file.path, [dir]);
+  return filename;
+}
+
 // SECURITY: Allowed file extensions for uploads
 // Removed .dll and .so as they are native executables
 export const ALLOWED_MOD_EXTENSIONS = ['.jar', '.zip', '.js', '.lua'];
@@ -131,27 +136,24 @@ export function onServer(serverId: string | undefined): string {
   return serverId && serverId !== COMPOSE_SERVER_ID ? ` (server ${serverId})` : '';
 }
 
-// Configure multer for file uploads with security improvements. Uploads land
-// in the folder of the request's server (legacy routes: the default server).
-function uploadStorage(folder: 'mods' | 'plugins') {
-  return multer.diskStorage({
-    destination: (req, _file, cb) => {
-      getServerContext(req.serverId)
-        .then((ctx) => cb(null, ctx.paths[folder]))
-        .catch((err: Error) => cb(err, ''));
-    },
-    filename: (_req, file, cb) => {
-      // SECURITY: Generate safe filename to prevent path traversal and overwrites
-      cb(null, generateSafeFilename(file.originalname));
-    },
-  });
-}
-
-const modsStorage = uploadStorage('mods');
-const pluginsStorage = uploadStorage('plugins');
+// Uploads wait in the staging folder of the manager volume (utils/staging.ts),
+// at most MAX_UPLOAD_SIZE each, until their content is checked; storeUpload()
+// then puts them into the folder of the request's server. Nothing unchecked
+// ever lands where a running server loads mods, and no upload is held in
+// memory. The route removes the staged file (discardStaged) when it is done;
+// multer removes it itself when the upload fails.
+const stagedUploads = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    try {
+      cb(null, ensureStagingDirSync());
+    } catch (err) {
+      cb(err as Error, '');
+    }
+  },
+});
 
 export const uploadMod = multer({
-  storage: modsStorage,
+  storage: stagedUploads,
   limits: { fileSize: MAX_UPLOAD_SIZE },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -165,7 +167,7 @@ export const uploadMod = multer({
 });
 
 export const uploadPlugin = multer({
-  storage: pluginsStorage,
+  storage: stagedUploads,
   limits: { fileSize: MAX_UPLOAD_SIZE },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -368,7 +370,8 @@ export async function scanDirectory(dirPath: string, _type: 'mod' | 'plugin'): P
     for (const entry of entries) {
       const entryPath = path.join(dirPath, entry);
       try {
-        const stats = await stat(entryPath);
+        // lstat: a link (e.g. to another server's jar) is not listed.
+        const stats = await lstat(entryPath);
         if (stats.isFile()) {
           // Check for common mod/plugin extensions
           const ext = path.extname(entry).toLowerCase();

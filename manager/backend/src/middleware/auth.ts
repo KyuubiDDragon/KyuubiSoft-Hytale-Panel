@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { verifyToken } from '../services/auth.js';
-import { getTokenVersion, isUserInvalidated } from '../services/users.js';
+import { isKeyOwnerCurrent, sessionProblem, type SessionProblem } from '../services/users.js';
 import { verifyApiKey } from '../services/apiKeys.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
@@ -31,8 +31,24 @@ export async function authMiddleware(
       res.status(401).json({ detail: 'Invalid or revoked API key' });
       return;
     }
+    let ownerCurrent: boolean;
+    try {
+      ownerCurrent = await isKeyOwnerCurrent(result.ownerUsername, result.createdAt);
+    } catch (err) {
+      next(err);
+      return;
+    }
+    if (!ownerCurrent) {
+      res.status(401).json({ detail: 'The owner of this API key no longer exists' });
+      return;
+    }
     req.user = result.ownerUsername;
-    req.apiKey = { id: result.keyId, scopes: result.scopes, serverIds: result.serverIds };
+    req.apiKey = {
+      id: result.keyId,
+      scopes: result.scopes,
+      serverIds: result.serverIds,
+      expiresAt: result.expiresAt,
+    };
     next();
     return;
   }
@@ -51,27 +67,27 @@ export async function authMiddleware(
     return;
   }
 
-  if (isUserInvalidated(result.username)) {
+  // The account must still exist (also after a restart) and its tokenVersion
+  // match: deleted accounts, and accounts created again under the same name,
+  // get none of the old sessions.
+  let problem: SessionProblem | null;
+  try {
+    problem = await sessionProblem(result.username, result.tokenVersion);
+  } catch (err) {
+    // users.json unreadable (corrupt, permissions): fail closed with 500
+    // via the global error handler instead of leaving the request hanging.
+    next(err);
+    return;
+  }
+  if (problem === 'USER_DELETED') {
     res.status(401).json({ detail: 'User session invalidated', code: 'USER_DELETED' });
     return;
   }
-
-  if (result.tokenVersion !== undefined) {
-    let currentVersion: number;
-    try {
-      currentVersion = await getTokenVersion(result.username);
-    } catch (err) {
-      // users.json unreadable (corrupt, permissions): fail closed with 500
-      // via the global error handler instead of leaving the request hanging.
-      next(err);
-      return;
-    }
-    if (currentVersion !== result.tokenVersion) {
-      res
-        .status(401)
-        .json({ detail: 'Session expired due to account changes', code: 'TOKEN_INVALIDATED' });
-      return;
-    }
+  if (problem === 'TOKEN_INVALIDATED') {
+    res
+      .status(401)
+      .json({ detail: 'Session expired due to account changes', code: 'TOKEN_INVALIDATED' });
+    return;
   }
 
   req.user = result.username;

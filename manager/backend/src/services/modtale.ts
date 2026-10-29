@@ -13,6 +13,8 @@ import { sanitizeFileName, isPathSafe, resolveFileInDir } from '../utils/pathSec
 import type { ServerContext } from './serverContext.js';
 import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
 import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
+import { outboundErrorMessage, safeDownload } from '../utils/safeFetch.js';
+import { removeReplacedFile } from '../utils/replacedFile.js';
 
 // Security: Regex pattern for validating project IDs
 const PROJECT_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -21,6 +23,8 @@ const VERSION_PATTERN = /^[a-zA-Z0-9._-]{1,32}$/;
 // Modtale API Configuration
 const MODTALE_API_BASE = 'https://api.modtale.net';
 const MODTALE_CDN_BASE = 'https://cdn.modtale.net';
+// Downloads (API and CDN) stay on Modtale's own hosts.
+export const MODTALE_DOWNLOAD_HOSTS = ['modtale.net'];
 
 // Cache configuration
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -390,68 +394,24 @@ async function modtaleRequest<T>(
 }
 
 /**
- * Download a file from URL
+ * Download a mod file from Modtale. Modtale states no size or hash for its
+ * files, so only the host, size limit and time limit are checked.
  */
 async function downloadFile(url: string, destPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const request = (currentUrl: string) => {
-      const urlObj = new URL(currentUrl);
-      const proto = https;
-
-      const options: https.RequestOptions = {
-        hostname: urlObj.hostname,
-        path: urlObj.pathname + urlObj.search,
-        headers: {
-          'User-Agent': 'KyuubiSoft-HytalePanel/1.0',
-        },
-      };
-
-      proto
-        .get(options, (res) => {
-          // Handle redirects
-          if (res.statusCode === 301 || res.statusCode === 302) {
-            const redirectUrl = res.headers.location;
-            if (redirectUrl) {
-              request(redirectUrl);
-              return;
-            }
-          }
-
-          if (res.statusCode !== 200) {
-            logger.error(`Download failed: ${res.statusCode}`);
-            resolve(false);
-            return;
-          }
-
-          const chunks: Buffer[] = [];
-
-          res.on('data', (chunk) => chunks.push(chunk));
-          res.on('end', async () => {
-            try {
-              const buffer = Buffer.concat(chunks);
-              // destPath is <folder>/<plain name>. The game server can write
-              // to that folder: the file is replaced, never written through
-              // a link planted under its name.
-              await replaceFileContent(destPath, buffer, [path.dirname(destPath)]);
-              resolve(true);
-            } catch (e) {
-              logger.error('Failed to write file:', e);
-              resolve(false);
-            }
-          });
-          res.on('error', (e) => {
-            logger.error('Download error:', e);
-            resolve(false);
-          });
-        })
-        .on('error', (e) => {
-          logger.error('Request error:', e);
-          resolve(false);
-        });
-    };
-
-    request(url);
-  });
+  try {
+    // destPath is <folder>/<plain name>. The game server can write to that
+    // folder: the file is replaced, never written through a link planted
+    // under its name.
+    await safeDownload(url, {
+      allowedHosts: MODTALE_DOWNLOAD_HOSTS,
+      headers: { 'User-Agent': 'KyuubiSoft-HytalePanel/1.0' },
+      saveTo: destPath,
+    });
+    return true;
+  } catch (e) {
+    logger.error(`[Modtale] Download failed: ${outboundErrorMessage(e)}`);
+    return false;
+  }
 }
 
 // ============== Public API ==============
@@ -680,21 +640,8 @@ export async function installModFromModtale(
     await mkdir(targetPath, { recursive: true });
   }
 
-  // Check if this mod is already installed (for updates) and remove old file
+  // An update: the old file is removed once the new one is in place.
   const existingInstall = await isModtaleModInstalled(server, projectId);
-  if (existingInstall && existingInstall.filename) {
-    const oldBasePath = folderFor(server, existingInstall.classification);
-    // The stored filename is untrusted (shared data dir): only a bare name in the base folder.
-    const oldFilePath = resolveFileInDir(oldBasePath, existingInstall.filename);
-    try {
-      if (!oldFilePath) throw new Error('invalid stored filename');
-      await unlink(oldFilePath);
-      logger.info(`[Modtale] Removed old mod file: ${existingInstall.filename}`);
-    } catch (e) {
-      // File might not exist, that's ok
-      logger.info(`[Modtale] Could not remove old file ${existingInstall.filename}:`, e);
-    }
-  }
 
   // Security: Construct destination path and verify it's within allowed directory
   const destPath = path.join(targetPath, validatedFilename);
@@ -711,6 +658,13 @@ export async function installModFromModtale(
 
   if (!downloaded) {
     return { success: false, error: 'Failed to download mod file' };
+  }
+
+  if (existingInstall?.filename) {
+    const oldBasePath = folderFor(server, existingInstall.classification);
+    // The stored filename is untrusted (shared data dir): only a bare name in the base folder.
+    const oldFilePath = resolveFileInDir(oldBasePath, existingInstall.filename);
+    await removeReplacedFile(oldFilePath, destPath, '[Modtale]');
   }
 
   // Track the installed mod

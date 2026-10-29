@@ -19,6 +19,7 @@ import {
   readRegularFile,
   removeTree,
   replaceFileContent,
+  replaceFileFromFile,
 } from './noFollowFs.js';
 
 function canCreateLink(type: 'file' | 'junction'): boolean {
@@ -205,6 +206,40 @@ describe('replaceFileContent', () => {
     fs.writeFileSync(inServer('big.json'), 'x'.repeat(200_000));
     const buf = await readRegularFile(inServer('big.json'), [server], { maxBytes: 200_000 });
     expect(buf.length).toBe(200_000);
+  });
+});
+
+describe('replaceFileFromFile', () => {
+  // A checked file of the panel's own (the staging folder), outside the server folder.
+  const staged = path.join(panel, 'staged-upload');
+  const CONTENT = Buffer.concat([Buffer.from('PK\u0003\u0004'), Buffer.alloc(5 * 1024 * 1024, 7)]);
+
+  beforeEach(() => fs.writeFileSync(staged, CONTENT));
+
+  it('copies the file into place and leaves no temporary file behind', async () => {
+    await replaceFileFromFile(inServer('Mod.jar'), staged, [server]);
+    expect(fs.readFileSync(inServer('Mod.jar')).equals(CONTENT)).toBe(true);
+    expect(fs.readdirSync(server).sort()).toEqual(['HytaleServer.jar', 'Mod.jar']);
+    expect(fs.existsSync(staged)).toBe(true);
+  });
+
+  it.skipIf(!CAN_LINK_FILES)(
+    'replaces a link at the destination instead of writing through it',
+    async () => {
+      fs.symlinkSync(secret, inServer('Mod.jar'), 'file');
+      await replaceFileFromFile(inServer('Mod.jar'), staged, [server]);
+      expect(fs.readFileSync(secret, 'utf-8')).toBe(SECRET);
+      expect(fs.lstatSync(inServer('Mod.jar')).isFile()).toBe(true);
+      expect(fs.readFileSync(inServer('Mod.jar')).equals(CONTENT)).toBe(true);
+    },
+  );
+
+  it.skipIf(!CAN_LINK_DIRS)('refuses a destination in a linked folder', async () => {
+    fs.symlinkSync(panel, inServer('mods'), 'junction');
+    await expect(
+      replaceFileFromFile(inServer('mods', 'Mod.jar'), staged, [server]),
+    ).rejects.toThrow(UnsafeFileError);
+    expect(fs.existsSync(path.join(panel, 'Mod.jar'))).toBe(false);
   });
 });
 

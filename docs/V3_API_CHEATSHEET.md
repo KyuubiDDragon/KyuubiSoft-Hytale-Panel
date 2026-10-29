@@ -37,7 +37,8 @@ Alles unter `/api/`:
 /api/metrics          Prometheus-Metriken
 /api/setup/*          Einrichtungsassistent
 /api/public/status    öffentliche Statusseite (abschaltbar)
-/api/health, /api/health/permissions
+/api/health           öffentlich
+/api/health/permissions  Ordnerrechte (Login, settings.view, Zugriff auf alle Server)
 ```
 
 **Serverbezogen** heißt: Die Route gibt es zweimal, siehe [Multi-Server](#multi-server).

@@ -43,12 +43,17 @@ let client: AnyClient | null = null;
 let unsubscribeChat: (() => void) | null = null;
 let running = false;
 
+// Players write the relayed chat: @everyone, @here, <@id> and role mentions
+// stay plain text and ping no one (also the default for every other message
+// the bot sends).
+const NO_MENTIONS = { parse: [] as never[] };
+
 async function sendToChannel(channelId: string, content: string): Promise<void> {
   if (!client) return;
   try {
     const ch = (await client.channels.fetch(channelId)) as {
       isTextBased?: () => boolean;
-      send?: (c: string) => Promise<unknown>;
+      send?: (m: { content: string; allowedMentions: typeof NO_MENTIONS }) => Promise<unknown>;
     } | null;
     if (
       ch &&
@@ -56,7 +61,7 @@ async function sendToChannel(channelId: string, content: string): Promise<void> 
       ch.isTextBased() &&
       typeof ch.send === 'function'
     ) {
-      await ch.send(content.slice(0, 1900));
+      await ch.send({ content: content.slice(0, 1900), allowedMentions: NO_MENTIONS });
     }
   } catch (err) {
     logger.warn(`[Discord] send failed: ${err instanceof Error ? err.message : err}`);
@@ -95,6 +100,7 @@ export async function startDiscordBot(): Promise<void> {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
     ],
+    allowedMentions: NO_MENTIONS,
   });
   client = c as unknown as AnyClient;
   running = true;
@@ -166,9 +172,7 @@ export async function startDiscordBot(): Promise<void> {
         const { getStatus } = await import('./docker.js');
         const status = await getStatus(serverId);
         const name = await serverDisplayName(serverId);
-        let line = status.running
-          ? `🟢 ${name} is **online**`
-          : `🔴 ${name} is **offline**`;
+        let line = status.running ? `🟢 ${name} is **online**` : `🔴 ${name} is **offline**`;
         if (status.running) {
           try {
             const kyuubi = await import('./kyuubiApi.js');

@@ -1773,11 +1773,12 @@ const scopeLabel = (scope: PlayerDataScope) =>
 
 // GET /api/players/:name/export-data - download everything the panel stores
 // about a player (notes, punishments, sessions, chat) on this server as a
-// JSON file; ?allServers=true for every server.
+// JSON file; ?allServers=true for every server. A right of its own: the
+// export holds staff notes and punishments, players.view does not show those.
 router.get(
   '/:name/export-data',
   authMiddleware,
-  requirePermission('players.view'),
+  requirePermission('players.export_data'),
   async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     if (!validatePlayerName(res, playerName)) return;
@@ -1805,12 +1806,12 @@ router.get(
 
 // DELETE /api/players/:name/data - erase the panel's personal data for a player
 // on this server (right to be forgotten); ?allServers=true for every server.
-// Gated behind players.ban — the highest-trust player permission moderators
-// hold. Punishments still in effect and the on-disk game save are kept.
+// A right of its own, so a moderator cannot erase the records of their own
+// punishments. Punishments still in effect and the on-disk game save are kept.
 router.delete(
   '/:name/data',
   authMiddleware,
-  requirePermission('players.ban'),
+  requirePermission('players.erase_data'),
   async (req: AuthenticatedRequest, res: Response) => {
     const playerName = req.params.name;
     if (!validatePlayerName(res, playerName)) return;

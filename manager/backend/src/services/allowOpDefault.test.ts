@@ -72,18 +72,19 @@ describe('allowOp default', () => {
   it('stays off when the security step is saved without an explicit choice', async () => {
     const result = await setupService.saveStepData('security-settings', { whitelist: true });
     expect(result.success).toBe(true);
-    expect((await readJson('setup-config.json')).server.allowOp).toBe(false);
+    // setup-config.json lives in the manager volume.
+    expect((await readJson('setup-config.json', managerDir)).server.allowOp).toBe(false);
   });
 
   it('is on only when the operator explicitly enables it', async () => {
     await setupService.saveStepData('security-settings', { allowOp: true });
-    expect((await readJson('setup-config.json')).server.allowOp).toBe(true);
+    expect((await readJson('setup-config.json', managerDir)).server.allowOp).toBe(true);
   });
 
   it('is off after migrating an env-based install without a panel config', async () => {
     expect(await migration.runMigration()).toBe(true);
     expect((await readJson('panel-config.json')).allowOp).toBe(false);
-    expect((await readJson('setup-config.json')).server.allowOp).toBe(false);
+    expect((await readJson('setup-config.json', managerDir)).server.allowOp).toBe(false);
   });
 
   it('keeps an explicit earlier choice when migrating', async () => {
@@ -126,10 +127,25 @@ describe('env migration and users.json', () => {
     const legacy = JSON.stringify({
       users: [{ username: 'alice', passwordHash: `$2b$12$${'x'.repeat(53)}`, roleId: 'admin' }],
     });
+    // A finished install whose wizard put its admin into the data folder.
+    await fsp.writeFile(path.join(managerDir, 'config.json'), '{"setupComplete":true}', 'utf-8');
     await fsp.writeFile(path.join(dataDir, 'users.json'), legacy, 'utf-8');
     expect(await migration.checkAndRunMigration()).toBe(true);
     expect(await fsp.readFile(path.join(managerDir, 'users.json'), 'utf-8')).toBe(legacy);
     // Taken over, so it no longer lies in the game server's data folder.
+    await expect(fsp.access(path.join(dataDir, 'users.json'))).rejects.toThrow();
+  });
+
+  it('does not let a users.json from DATA_PATH name the admins of a fresh install', async () => {
+    const planted = JSON.stringify({
+      users: [{ username: 'mallory', passwordHash: `$2b$12$${'x'.repeat(53)}`, roleId: 'admin' }],
+    });
+    await fsp.writeFile(path.join(dataDir, 'users.json'), planted, 'utf-8');
+    expect(await migration.checkAndRunMigration()).toBe(true);
+    const current = await fsp
+      .readFile(path.join(managerDir, 'users.json'), 'utf-8')
+      .catch(() => '');
+    expect(current).not.toContain('mallory');
     await expect(fsp.access(path.join(dataDir, 'users.json'))).rejects.toThrow();
   });
 });

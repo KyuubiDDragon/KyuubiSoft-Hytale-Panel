@@ -18,9 +18,7 @@ import { installMod, ensureEasyWebMapConfig } from './modStore.js';
 import { COMPOSE_SERVER_ID } from './servers.js';
 import { getServerContext } from './serverContext.js';
 import { escapeShellArg } from '../utils/sanitize.js';
-import { updateJsonFile } from '../utils/jsonStore.js';
-import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
-import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
+import { readJsonFile, updateJsonFile, writeJsonAtomic } from '../utils/jsonStore.js';
 import { writePanelConfig } from '../routes/server/shared.js';
 import {
   restartWithWizardConfig,
@@ -133,9 +131,13 @@ export interface DownloadProgress {
   error?: string;
 }
 
-// Paths
-const DATA_DIR = config.dataPath;
-const SETUP_CONFIG_FILE = path.join(DATA_DIR, 'setup-config.json');
+// Paths. setup-config.json holds the server password, store keys and, during
+// the wizard, the admin password hash: it lives in the manager volume, which
+// the game server cannot read (older versions kept it in the data folder,
+// services/legacyManagerFiles.ts moves it).
+const MANAGER_DIR = getManagerDataDir();
+const SETUP_CONFIG_FILE = path.join(MANAGER_DIR, 'setup-config.json');
+const USERS_FILE = path.join(MANAGER_DIR, 'users.json');
 
 // Step definitions
 const SETUP_STEPS = [
@@ -176,73 +178,106 @@ let downloadProgress: DownloadProgress = {
   estimatedSeconds: 0,
 };
 
-// Ensure data directory exists
-async function ensureDataDir(): Promise<void> {
-  try {
-    await mkdir(DATA_DIR, { recursive: true });
-  } catch {
-    // Directory may already exist
-  }
-}
+const isJsonObject = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-// setup-config.json lies in the game server's data folder: only read when it
-// is a regular file there, and replaced instead of written through a link.
+// A missing file is a fresh setup; a damaged or unreadable one throws.
 async function readSetupConfig(): Promise<SetupConfig> {
-  try {
-    const content = await readRegularFile(SETUP_CONFIG_FILE, [DATA_DIR], {
-      maxBytes: MAX_SERVER_FILE_BYTES,
-    });
-    return JSON.parse(content.toString('utf-8')) as SetupConfig;
-  } catch {
-    // Return default config if file doesn't exist
-    return {
-      setupComplete: false,
-      language: 'en',
-    };
-  }
+  const stored = await readJsonFile<SetupConfig>(SETUP_CONFIG_FILE, { isValid: isJsonObject });
+  return stored ?? { setupComplete: false, language: 'en' };
 }
 
 // Write setup config to file
 async function writeSetupConfig(setupConfig: SetupConfig): Promise<void> {
-  await ensureDataDir();
-  await replaceFileContent(SETUP_CONFIG_FILE, JSON.stringify(setupConfig, null, 2), [DATA_DIR]);
+  await mkdir(MANAGER_DIR, { recursive: true });
+  await writeJsonAtomic(SETUP_CONFIG_FILE, setupConfig);
+}
+
+const reportedUnreadable = new Set<string>();
+
+function reportUnreadable(file: string, err: unknown): void {
+  if (reportedUnreadable.has(file)) return;
+  reportedUnreadable.add(file);
+  logger.error(
+    `[Setup] ${file} cannot be read (${err instanceof Error ? err.message : err}); the setup ` +
+      'endpoints stay closed. Repair or restore the file; delete it only to run the setup wizard again.',
+  );
 }
 
 /**
- * Check if setup is complete
- * Returns true if config exists and has setupComplete=true
- * In demo mode, always returns true (setup is skipped)
+ * Whether the setup is finished. Fails closed: the setup endpoints need no
+ * login, so a damaged or missing file never reopens them on a finished panel.
+ *  - config.json in the manager volume says finished (written at the end of
+ *    the wizard and by the migration): finished, whatever setup-config.json
+ *    holds;
+ *  - setup-config.json says finished: finished, also when config.json is
+ *    gone (reported; the wizard is reopened only by deleting the file);
+ *  - either file cannot be read: finished (reported).
+ * In demo mode always true (setup is skipped).
  */
 export async function isSetupComplete(): Promise<boolean> {
-  // Demo mode: setup is always complete
   if (isDemoMode()) {
     return true;
   }
 
+  let main: { setupComplete?: unknown } | null;
   try {
-    const setupConfig = await readSetupConfig();
-    if (setupConfig.setupComplete !== true) {
-      return false;
-    }
-
-    // Cross-check: config.json in the named volume must also exist.
-    // If it is missing the named volume was deleted/recreated (new stack) while
-    // the bind-mounted setup-config.json was left behind from a previous installation.
-    // In that case reset the setup state so the wizard runs again.
-    try {
-      await access(getConfigFilePath(), constants.F_OK);
-    } catch {
-      logger.info(
-        '[Setup] setup-config.json says complete but config.json is missing — resetting setup state for fresh installation.',
-      );
-      await writeSetupConfig({ ...setupConfig, setupComplete: false });
-      return false;
-    }
-
+    main = await readJsonFile<{ setupComplete?: unknown }>(getConfigFilePath(), {
+      isValid: isJsonObject,
+    });
+  } catch (err) {
+    reportUnreadable(getConfigFilePath(), err);
     return true;
-  } catch {
-    return false;
   }
+  if (main?.setupComplete === true) return true;
+
+  let setupConfig: SetupConfig | null;
+  try {
+    setupConfig = await readJsonFile<SetupConfig>(SETUP_CONFIG_FILE, { isValid: isJsonObject });
+  } catch (err) {
+    reportUnreadable(SETUP_CONFIG_FILE, err);
+    return true;
+  }
+  if (setupConfig?.setupComplete !== true) return false;
+  if (!main) {
+    reportUnreadable(
+      getConfigFilePath(),
+      new Error('setup-config.json says the setup is finished, but config.json is missing'),
+    );
+  }
+  return true;
+}
+
+/**
+ * Whether the wizard may give `username` its admin password: a name no account
+ * has, or the account the panel created from MANAGER_USERNAME/MANAGER_PASSWORD
+ * that still has that password. Any other account keeps its password and role.
+ */
+async function mayTakeAdminName(username: string): Promise<boolean> {
+  const data = await readJsonFile<{ users: Array<Record<string, unknown>> }>(USERS_FILE, {
+    isValid: (value) => Array.isArray((value as { users?: unknown } | null)?.users),
+  });
+  const existing = data?.users.find((u) => u.username === username);
+  if (!existing) return true;
+  return (
+    username === config.managerUsername &&
+    config.managerPassword !== '' &&
+    typeof existing.passwordHash === 'string' &&
+    (await bcrypt.compare(config.managerPassword, existing.passwordHash))
+  );
+}
+
+const ADMIN_NAME_TAKEN =
+  'An account with this name already exists. Choose another name for the admin account.';
+
+/** The wizard state the public status may show: nothing secret, no account names. */
+function publicSetupConfig(setupConfig: SetupConfig): Partial<SetupConfig> {
+  const shown: Partial<SetupConfig> = {};
+  if (setupConfig.language) shown.language = setupConfig.language;
+  if (setupConfig.downloadMethod) shown.downloadMethod = setupConfig.downloadMethod;
+  if (setupConfig.patchline) shown.patchline = setupConfig.patchline;
+  if (setupConfig.autoUpdate !== undefined) shown.autoUpdate = setupConfig.autoUpdate;
+  return shown;
 }
 
 /**
@@ -261,6 +296,14 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   }
 
   try {
+    if (await isSetupComplete()) {
+      return {
+        setupComplete: true,
+        currentStep: SETUP_STEPS.length,
+        totalSteps: SETUP_STEPS.length,
+        stepsCompleted: [...SETUP_STEPS],
+      };
+    }
     const setupConfig = await readSetupConfig();
     const stepsCompleted: string[] = [];
 
@@ -287,11 +330,13 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     }
 
     return {
-      setupComplete: setupConfig.setupComplete,
+      setupComplete: false,
       currentStep,
       totalSteps: SETUP_STEPS.length,
       stepsCompleted,
-      config: setupConfig.setupComplete ? undefined : setupConfig,
+      // No login is needed for this: never the password hash, the server
+      // password or store keys.
+      config: publicSetupConfig(setupConfig),
     };
   } catch {
     return {
@@ -348,6 +393,9 @@ export async function saveStepData(
           if (policyError) {
             return { success: false, nextStep: stepId, error: policyError };
           }
+        }
+        if (!(await mayTakeAdminName(data.username as string))) {
+          return { success: false, nextStep: stepId, error: ADMIN_NAME_TAKEN };
         }
 
         // Store admin info (we'll create the user during finalization)
@@ -617,12 +665,27 @@ export async function finalizeSetup(): Promise<{
     // operators unable to tell which credentials were still valid.
     // Only a missing file starts fresh; a corrupt one aborts (and is kept)
     // instead of being replaced by a file with just the wizard admin.
+    // An existing account is only taken over when it is the untouched one
+    // from MANAGER_USERNAME/MANAGER_PASSWORD (mayTakeAdminName): the wizard
+    // needs no login, so it must not reset anyone else's password or role.
+    const adminUsername = setupConfig.admin.username;
     try {
-      const usersFile = path.join(getManagerDataDir(), 'users.json');
-      const adminUsername = setupConfig.admin.username;
-      await ensureDataDir();
-      await updateJsonFile<{ users: Array<Record<string, unknown>> }>(
-        usersFile,
+      if (!(await mayTakeAdminName(adminUsername))) {
+        logger.error(`[Setup] Not taking over the existing account '${adminUsername}'`);
+        return { success: false, error: ADMIN_NAME_TAKEN };
+      }
+    } catch (error) {
+      logger.error('[Setup] Failed to read users.json:', error);
+      return { success: false, error: 'Failed to create admin account' };
+    }
+    try {
+      await mkdir(MANAGER_DIR, { recursive: true });
+      const { claimTokenVersion } = await import('./users.js');
+      await updateJsonFile<{
+        users: Array<Record<string, unknown>>;
+        deletedTokenVersions?: Record<string, number>;
+      }>(
+        USERS_FILE,
         (current) => {
           const usersData = current ?? { users: [] };
           const existing = usersData.users.find((u) => u.username === adminUsername);
@@ -642,7 +705,8 @@ export async function finalizeSetup(): Promise<{
               passwordHash: adminPasswordHash,
               roleId: 'admin',
               createdAt: new Date().toISOString(),
-              tokenVersion: 1,
+              // Above a deleted account of the same name, so its tokens never match.
+              tokenVersion: claimTokenVersion(usersData, adminUsername),
             });
             logger.info(`[Setup] Created admin user '${adminUsername}' (existing accounts kept)`);
           }

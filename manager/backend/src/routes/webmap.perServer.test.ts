@@ -27,6 +27,8 @@ vi.mock('../services/roles.js', () => ({
 }));
 vi.mock('../services/users.js', () => ({
   getTokenVersion: async () => 1,
+  sessionProblem: async () => null,
+  isKeyOwnerCurrent: async () => true,
   isUserInvalidated: () => false,
 }));
 // The default server is "a".

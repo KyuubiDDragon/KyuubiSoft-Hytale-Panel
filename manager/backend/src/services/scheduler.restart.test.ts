@@ -364,4 +364,32 @@ describe('welcome message', () => {
       expect.objectContaining({ enabled: false }),
     ]);
   });
+
+  it("leaves another server's welcome rule alone when the data file names it", async () => {
+    // The game server can write its manager-config.json.
+    h.rules.set('rule-of-a', {
+      id: 'rule-of-a',
+      name: 'Welcome message (Scheduler)',
+      createdBy: 'scheduler',
+      actionType: 'announce',
+      serverId: 'srv-a',
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, 'manager-config.json'),
+      JSON.stringify({
+        announcements: { enabled: true, welcome: 'x', scheduled: [], welcomeActionId: 'rule-of-a' },
+      }),
+    );
+    await scheduler.loadConfig('srv-b');
+    vi.mocked(eventActions.updateEventAction).mockClear();
+
+    await scheduler.saveConfig(
+      { announcements: { enabled: true, welcome: 'Hi', scheduled: [] } } as never,
+      'srv-b',
+    );
+
+    expect(eventActions.updateEventAction).not.toHaveBeenCalledWith('rule-of-a', expect.anything());
+    expect(h.rules.get('rule-of-a')?.serverId).toBe('srv-a');
+    expect(scheduler.getConfig('srv-b').announcements.welcomeActionId).not.toBe('rule-of-a');
+  });
 });

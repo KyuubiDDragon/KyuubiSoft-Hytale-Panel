@@ -8,11 +8,11 @@ import { logger } from '../utils/logger.js';
 import { mkdir, access, unlink } from 'fs/promises';
 import path from 'path';
 import https from 'https';
-import http from 'http';
 import { resolveFileInDir, resolveRealPathWithin } from '../utils/pathSecurity.js';
 import { listServers } from './servers.js';
 import { checkServerFiles, contextFromServer, type ServerContext } from './serverContext.js';
 import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
+import { outboundErrorMessage, safeDownload } from '../utils/safeFetch.js';
 import { MAX_SERVER_FILE_BYTES } from '../utils/serverFiles.js';
 
 // CFWidget API Configuration
@@ -619,101 +619,35 @@ export async function updateInstalledVersion(
 
 // ============== Download & Install ==============
 
+// The CurseForge CDN (mediafilez.forgecdn.net); redirects stay on it.
+const CDN_HOSTS = ['forgecdn.net', 'curseforge.com'];
+
 /**
- * Download a file from URL to destination
+ * Download a file from the CurseForge CDN to destination
  */
-async function downloadFile(url: string, destPath: string, redirectCount = 0): Promise<boolean> {
-  // Prevent infinite redirects
-  if (redirectCount > 10) {
-    logger.error('[CFWidget] Too many redirects');
+async function downloadFile(url: string, destPath: string): Promise<boolean> {
+  try {
+    logger.info(`[CFWidget] Downloading from: ${url}`);
+    // destPath is <mods folder>/<plain name>. The game server can write to
+    // that folder: the file is replaced, never written through a link
+    // planted under its name.
+    await safeDownload(url.replace(/ /g, '%20'), {
+      allowedHosts: CDN_HOSTS,
+      httpsOnly: true,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: '*/*',
+        'Accept-Encoding': 'identity',
+      },
+      saveTo: destPath,
+    });
+    logger.info(`[CFWidget] Download complete: ${destPath}`);
+    return true;
+  } catch (err) {
+    logger.error(`[CFWidget] Download failed: ${outboundErrorMessage(err)}`);
     return false;
   }
-
-  return new Promise((resolve) => {
-    try {
-      // Handle URL encoding for spaces and special chars
-      const encodedUrl = url.replace(/ /g, '%20');
-      const parsedUrl = new URL(encodedUrl);
-      const protocol = parsedUrl.protocol === 'https:' ? https : http;
-
-      const options = {
-        hostname: parsedUrl.hostname,
-        port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-        path: parsedUrl.pathname + parsedUrl.search,
-        method: 'GET',
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: '*/*',
-          'Accept-Encoding': 'identity',
-          Host: parsedUrl.hostname,
-        },
-      };
-
-      logger.info(`[CFWidget] Downloading from: ${parsedUrl.hostname}${parsedUrl.pathname}`);
-
-      const request = protocol.request(options, (response) => {
-        // Handle redirects
-        if (
-          response.statusCode === 301 ||
-          response.statusCode === 302 ||
-          response.statusCode === 307 ||
-          response.statusCode === 308
-        ) {
-          let redirectUrl = response.headers.location;
-          if (redirectUrl) {
-            // Handle relative redirects
-            if (redirectUrl.startsWith('/')) {
-              redirectUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}${redirectUrl}`;
-            }
-            logger.info(`[CFWidget] Redirect (${response.statusCode}) to: ${redirectUrl}`);
-            downloadFile(redirectUrl, destPath, redirectCount + 1).then(resolve);
-            return;
-          }
-        }
-
-        if (response.statusCode !== 200) {
-          logger.error(
-            `[CFWidget] Download failed with status: ${response.statusCode} from ${parsedUrl.hostname}${parsedUrl.pathname}`,
-          );
-          // Log response headers for debugging
-          logger.error(`[CFWidget] Response headers: ${JSON.stringify(response.headers)}`);
-          resolve(false);
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', async () => {
-          try {
-            // destPath is <mods folder>/<plain name>. The game server can write
-            // to that folder: the file is replaced, never written through a
-            // link planted under its name.
-            await replaceFileContent(destPath, Buffer.concat(chunks), [path.dirname(destPath)]);
-            logger.info(`[CFWidget] Download complete: ${destPath}`);
-            resolve(true);
-          } catch (err) {
-            logger.error('[CFWidget] File write error:', err);
-            resolve(false);
-          }
-        });
-        response.on('error', (err) => {
-          logger.error('[CFWidget] Download error:', err);
-          resolve(false);
-        });
-      });
-
-      request.on('error', (err) => {
-        logger.error('[CFWidget] Download request error:', err);
-        resolve(false);
-      });
-
-      request.end();
-    } catch (err) {
-      logger.error('[CFWidget] URL parse error:', err);
-      resolve(false);
-    }
-  });
 }
 
 /**

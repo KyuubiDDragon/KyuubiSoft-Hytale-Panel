@@ -12,13 +12,14 @@
  * files) without ever holding the full JAR in memory.
  */
 
-import { readdir, readFile, writeFile, mkdir, stat, open } from 'fs/promises';
+import { readdir, readFile, writeFile, mkdir, lstat } from 'fs/promises';
 import path from 'path';
 import { inflateRawSync } from 'zlib';
 import { isDemoMode } from './demoData.js';
 import { getConfig, updateConfig } from './configService.js';
 import { managerDataDir } from './perServerData.js';
 import { checkServerFiles, type ServerContext } from './serverContext.js';
+import { openRegularFile } from '../utils/noFollowFs.js';
 
 function wikiDir(server: Pick<ServerContext, 'id'>): string {
   return path.join(managerDataDir(server.id), 'wiki');
@@ -97,8 +98,17 @@ const EOCD_SIGNATURE = 0x06054b50;
 const CD_FILE_HEADER = 0x02014b50;
 const LOCAL_FILE_HEADER = 0x04034b50;
 
-async function readEntryFromJar(jarPath: string, targetName: string): Promise<Buffer | null> {
-  const handle = await open(jarPath, 'r');
+/**
+ * One entry of a jar. Only a regular file inside `root` is opened: the game
+ * server can write to its mods folder and put a link to another server's jar
+ * there.
+ */
+async function readEntryFromJar(
+  jarPath: string,
+  root: string,
+  targetName: string,
+): Promise<Buffer | null> {
+  const { fh: handle } = await openRegularFile(jarPath, [root]);
   try {
     const { size } = await handle.stat();
     if (size < 22) return null;
@@ -224,7 +234,8 @@ async function scanDir(dir: string, source: 'mod' | 'plugin'): Promise<WikiEntry
     if (!f.toLowerCase().endsWith('.jar')) continue;
     const full = path.join(dir, f);
     try {
-      const s = await stat(full);
+      // lstat: a link is skipped, not followed.
+      const s = await lstat(full);
       if (!s.isFile()) continue;
     } catch {
       continue;
@@ -232,7 +243,7 @@ async function scanDir(dir: string, source: 'mod' | 'plugin'): Promise<WikiEntry
 
     let manifest: RawManifest | null = null;
     try {
-      const buf = await readEntryFromJar(full, 'manifest.json');
+      const buf = await readEntryFromJar(full, dir, 'manifest.json');
       if (buf) manifest = JSON.parse(buf.toString('utf-8')) as RawManifest;
     } catch (err) {
       console.log(`[wiki] could not read manifest.json from ${f}:`, (err as Error).message);

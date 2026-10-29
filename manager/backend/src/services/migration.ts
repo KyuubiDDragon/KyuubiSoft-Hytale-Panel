@@ -24,7 +24,12 @@ import path from 'path';
 import bcrypt from 'bcrypt';
 import { config, reloadConfigFromFile, getConfigFilePath, getManagerDataDir } from '../config.js';
 import { getCurrentVersion } from './panelVersionService.js';
-import { readJsonFile, updateJsonFile } from '../utils/jsonStore.js';
+import {
+  JsonFileCorruptError,
+  readJsonFile,
+  updateJsonFile,
+  writeJsonAtomic,
+} from '../utils/jsonStore.js';
 import { migrateLegacyUpdateBlock } from './updateSettings.js';
 import { adoptLegacyManagerFiles } from './legacyManagerFiles.js';
 import { readRegularFile, replaceFileContent } from '../utils/noFollowFs.js';
@@ -34,11 +39,12 @@ export { adoptLegacyManagerFiles };
 
 // Paths
 const DATA_DIR = config.dataPath;
-// config.json and users.json belong to the manager volume (what the panel reads
-// at runtime); the rest stays in the game server's data folder.
+// config.json, users.json and setup-config.json belong to the manager volume
+// (what the panel reads at runtime); panel-config.json stays in the game
+// server's data folder, its start script reads it.
 const MANAGER_DIR = getManagerDataDir();
 const CONFIG_JSON_FILE = getConfigFilePath();
-const SETUP_CONFIG_FILE = path.join(DATA_DIR, 'setup-config.json');
+const SETUP_CONFIG_FILE = path.join(MANAGER_DIR, 'setup-config.json');
 const PANEL_CONFIG_FILE = path.join(DATA_DIR, 'panel-config.json');
 const USERS_FILE = path.join(MANAGER_DIR, 'users.json');
 const SERVER_CONFIG_FILE = path.join(config.serverPath, 'config.json');
@@ -282,6 +288,27 @@ function extractDomain(corsOrigins: string): string | undefined {
 /**
  * Run the migration process
  */
+const isJsonObject = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Before the migration writes `file` anew: a damaged file is kept as a copy
+ * (`<name>.corrupt-<time>`, mode 0600, saved by readJsonFile) and named in the
+ * log, so its content (server password, store keys, ...) is not lost. A file
+ * that cannot be read at all, or whose copy could not be saved, stops the
+ * migration and stays as it is.
+ */
+async function keepDamagedCopy(file: string): Promise<void> {
+  try {
+    await readJsonFile(file, { isValid: isJsonObject });
+  } catch (err) {
+    if (!(err instanceof JsonFileCorruptError) || !err.backupPath) throw err;
+    logger.warn(
+      `[Migration] ${file} was damaged and is written anew; its old content was kept as ${err.backupPath}`,
+    );
+  }
+}
+
 export async function runMigration(): Promise<boolean> {
   logger.info('[Migration] Starting migration of existing installation...');
 
@@ -289,6 +316,10 @@ export async function runMigration(): Promise<boolean> {
     // Ensure data directory exists
     await mkdir(DATA_DIR, { recursive: true });
     await mkdir(MANAGER_DIR, { recursive: true });
+
+    // Written anew below; checked before anything is written.
+    await keepDamagedCopy(SETUP_CONFIG_FILE);
+    await keepDamagedCopy(CONFIG_JSON_FILE);
 
     // Read all source data
     const envConfig = readEnvConfig();
@@ -434,7 +465,7 @@ export async function runMigration(): Promise<boolean> {
       disableSentry: existingPanelConfig?.disableSentry ?? false,
     };
 
-    await replaceFileContent(SETUP_CONFIG_FILE, JSON.stringify(setupConfig, null, 2), [DATA_DIR]);
+    await writeJsonAtomic(SETUP_CONFIG_FILE, setupConfig);
     logger.info('[Migration] Setup config created');
 
     // 4. Create config.json (main config)

@@ -7,15 +7,13 @@ import { createServer, IncomingMessage } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { access, constants, writeFile as fsWriteFile, unlink } from 'fs/promises';
-import { randomBytes } from 'crypto';
-
 import { config, checkSecurityConfig } from './config.js';
 import { setupWebSocket } from './websocket.js';
 import { isLocationsSocketPath, setupLocationsSocket } from './locationsSocket.js';
 import { getServerContext } from './services/serverContext.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { logger } from './utils/logger.js';
+import { resetStagingDir } from './utils/staging.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -45,6 +43,8 @@ import pushRoutes from './routes/push.js';
 import publicRoutes from './routes/public.js';
 import eventActionsRoutes from './routes/eventActions.js';
 import modPanelRoutes from './routes/modPanel.js';
+import healthRoutes from './routes/health.js';
+import { createProxyCheck } from './middleware/proxyCheck.js';
 import webMapRoutes, { createWebMapProxy, WEBMAP_PROXY_PREFIX } from './routes/webmap.js';
 import { metricsMiddleware } from './services/metrics.js';
 
@@ -96,6 +96,9 @@ if (config.trustProxy) {
   app.set('trust proxy', 1);
   console.log('Reverse proxy mode enabled (TRUST_PROXY=true)');
 }
+// The setting can be wrong either way (middleware/proxyCheck.ts): logged once
+// the requests show it.
+app.use(createProxyCheck(config.trustProxy));
 
 // WebSocket server - use noServer mode so we can handle multiple WebSocket paths
 // Console messages are small JSON frames (a command line, a ping).
@@ -337,8 +340,14 @@ app.use(bindCommandActor);
 // (server start/stop, /auth console injection, raw log/SSE streams that leak
 // OAuth device codes) would otherwise stay reachable without any auth. After
 // completion we allow only the two read-only status probes the SPA needs and
-// return 410 for everything else. Fails open during first run so the wizard
-// can never lock itself out.
+// return 410 for everything else. Fails closed: isSetupComplete() counts a
+// damaged or unreadable file as finished, and an error here refuses the
+// request. Until the startup migration has taken over files of older versions
+// the action endpoints wait, so they never answer from a half-migrated state.
+let releaseSetupGate: () => void = () => {};
+const setupGateReady = new Promise<void>((resolve) => {
+  releaseSetupGate = resolve;
+});
 app.use(async (req, res, next) => {
   // Lower-cased comparison so a case-variant path can't slip past the seal
   // (belt-and-braces with `case sensitive routing` set above).
@@ -348,6 +357,7 @@ app.use(async (req, res, next) => {
   const readOnlyAllowed = req.method === 'GET' && (sub === '/status' || sub === '/check');
   if (readOnlyAllowed) return next();
   try {
+    await setupGateReady;
     if (await isSetupComplete()) {
       res.status(410).json({
         error: 'Setup already completed',
@@ -356,8 +366,12 @@ app.use(async (req, res, next) => {
       return;
     }
   } catch (err) {
-    // If we can't determine setup state, fail open so first-run isn't blocked.
-    console.error('[Setup Gate] Could not determine setup state, allowing:', err);
+    console.error('[Setup Gate] Could not determine setup state, refusing:', err);
+    res.status(503).json({
+      error: 'Setup state unknown',
+      detail: 'The setup state could not be read; see the panel log.',
+    });
+    return;
   }
   next();
 });
@@ -507,83 +521,8 @@ app.use('/api/servers/:serverId/files', scopedWithFiles, filesRoutes);
 app.use('/api/servers/:serverId/mod-panel', scoped, modPanelRoutes);
 app.use('/api/servers/:serverId/wiki', scoped, wikiRoutes);
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'hytale-manager' });
-});
-
-// Permission health check - checks if data directories are writable
-// Used to warn users about permission issues after upgrading to non-root container
-interface PermissionCheckResult {
-  path: string;
-  name: string;
-  readable: boolean;
-  writable: boolean;
-  error?: string;
-}
-
-interface PermissionHealthResponse {
-  ok: boolean;
-  issues: PermissionCheckResult[];
-  message?: string;
-}
-
-app.get('/api/health/permissions', async (_req, res) => {
-  const pathsToCheck = [
-    { path: config.serverPath, name: 'Server' },
-    { path: config.backupsPath, name: 'Backups' },
-    { path: config.dataPath, name: 'Data' },
-    { path: config.modsPath, name: 'Mods' },
-    { path: config.pluginsPath, name: 'Plugins' },
-  ];
-
-  const results: PermissionCheckResult[] = [];
-  let hasIssues = false;
-
-  for (const { path: dirPath, name } of pathsToCheck) {
-    const result: PermissionCheckResult = {
-      path: dirPath,
-      name,
-      readable: false,
-      writable: false,
-    };
-
-    try {
-      // Check if directory is readable
-      await access(dirPath, constants.R_OK);
-      result.readable = true;
-
-      // Check if directory is writable by actually trying to write a temp file
-      const testFile = path.join(dirPath, `.perm-test-${randomBytes(4).toString('hex')}`);
-      try {
-        await fsWriteFile(testFile, 'test', 'utf-8');
-        await unlink(testFile);
-        result.writable = true;
-      } catch (writeErr) {
-        result.writable = false;
-        result.error = `Cannot write: ${writeErr instanceof Error ? writeErr.message : 'Unknown error'}`;
-        hasIssues = true;
-      }
-    } catch (readErr) {
-      result.readable = false;
-      result.error = `Cannot access: ${readErr instanceof Error ? readErr.message : 'Unknown error'}`;
-      hasIssues = true;
-    }
-
-    results.push(result);
-  }
-
-  const response: PermissionHealthResponse = {
-    ok: !hasIssues,
-    issues: results.filter((r) => !r.readable || !r.writable),
-  };
-
-  if (hasIssues) {
-    response.message = `Some directories have permission issues. This may happen after upgrading to v2.0.0 which runs as non-root. Run: sudo chown -R 9999:9999 ${config.hostDataPath}`;
-  }
-
-  res.json(response);
-});
+// Health check (public) and folder permission check (settings.view)
+app.use('/api/health', healthRoutes);
 
 // Serve static frontend files
 const staticPath = path.join(__dirname, '..', 'static');
@@ -654,6 +593,9 @@ process.on('unhandledRejection', (reason, promise) => {
   // Don't exit, just log - but this shouldn't happen in production
 });
 
+// Downloads and uploads a crash or restart left half-done; before any request.
+resetStagingDir();
+
 // Start server
 server.listen(config.port, '0.0.0.0', async () => {
   const panelVersion = await getCurrentVersion(); // single source of truth: package.json
@@ -670,7 +612,11 @@ server.listen(config.port, '0.0.0.0', async () => {
 
   // Check for existing installation and run migration if needed
   // This must happen BEFORE security check as it may create config files
-  await checkAndRunMigration();
+  try {
+    await checkAndRunMigration();
+  } finally {
+    releaseSetupGate();
+  }
 
   // Migrate UpdateConfig for native update system (Hytale 24.01.2026+); only
   // while the game server is stopped (it would write its own config back).

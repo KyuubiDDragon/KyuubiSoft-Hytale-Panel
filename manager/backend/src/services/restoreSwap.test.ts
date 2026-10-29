@@ -106,6 +106,21 @@ describe('swapDataContents', () => {
     expect(fs.readdirSync(data).filter(isInternalDataEntry)).toEqual([]);
   });
 
+  it("never brings the manager volume's files back from an old archive", async () => {
+    const stage = await setUp();
+    write('setup-config.json', '{"server":{"password":"from backup"}}', stage);
+    write('users.json', '{"users":[]}', stage);
+    write('config.json', '{"jwtSecret":"from backup"}', stage);
+
+    const result = await swapDataContents(data, stage, '20261022_120000');
+
+    for (const name of ['setup-config.json', 'users.json', 'config.json']) {
+      expect(fs.existsSync(path.join(data, name))).toBe(false);
+      expect(result.restored).not.toContain(name);
+    }
+    expect(read('worlds/default/chunks.bin')).toBe('backup world');
+  });
+
   it('refuses a stage outside the data dir', async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-swap-outside-'));
     try {

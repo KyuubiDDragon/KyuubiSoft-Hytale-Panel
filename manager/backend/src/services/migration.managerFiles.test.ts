@@ -4,10 +4,11 @@
  * check never looks at. They are taken over from there once (marker), only
  * when they have the panel's shape, and then removed from the data folder.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import fs, { promises as fsp } from 'fs';
 import path from 'path';
 import os from 'os';
+import { logger } from '../utils/logger.js';
 
 const ENV_KEYS = [
   'DATA_PATH',
@@ -85,18 +86,87 @@ const exists = (dir: string, name: string) =>
 const writeData = (name: string, content: string) =>
   fsp.writeFile(path.join(dataDir, name), content);
 
+const readJson = async (dir: string, name: string) => JSON.parse(await read(dir, name));
+const keptCopies = async () => {
+  try {
+    return await fsp.readdir(path.join(managerDir, 'legacy-data-files'));
+  } catch {
+    return [];
+  }
+};
+
 describe('adoptLegacyManagerFiles', () => {
-  it('takes both files over and removes them from the data folder', async () => {
+  it('takes users.json over into a manager volume whose setup was finished before', async () => {
+    await fsp.mkdir(managerDir, { recursive: true });
+    await fsp.writeFile(path.join(managerDir, 'config.json'), '{"setupComplete":true}');
+    await writeData('users.json', USERS);
+
+    const adopted = await migration.adoptLegacyManagerFiles();
+
+    expect(adopted).toEqual(['users.json']);
+    expect(await read(managerDir, 'users.json')).toBe(USERS);
+    expect(await exists(dataDir, 'users.json')).toBe(false);
+  });
+
+  it('never takes users.json over into a fresh manager volume, also not with config.json', async () => {
     await writeData('config.json', CONFIG);
     await writeData('users.json', USERS);
 
     const adopted = await migration.adoptLegacyManagerFiles();
 
-    expect(adopted.sort()).toEqual(['config.json', 'users.json']);
-    expect(await read(managerDir, 'config.json')).toBe(CONFIG);
-    expect(await read(managerDir, 'users.json')).toBe(USERS);
-    expect(await exists(dataDir, 'config.json')).toBe(false);
+    expect(adopted).toEqual(['config.json']);
+    expect(await exists(managerDir, 'users.json')).toBe(false);
+    // Out of the game's folder and its backups, kept aside, not used.
     expect(await exists(dataDir, 'users.json')).toBe(false);
+    const kept = await keptCopies();
+    expect(kept.some((name) => name.startsWith('users.json.'))).toBe(true);
+  });
+
+  it('never takes the JWT secret over; JWT_SECRET from the environment stays in charge', async () => {
+    process.env.JWT_SECRET = 'an-environment-jwt-secret-that-is-long-enough-456';
+    try {
+      await writeData('config.json', CONFIG);
+
+      expect(await migration.adoptLegacyManagerFiles()).toEqual(['config.json']);
+
+      const adopted = await readJson(managerDir, 'config.json');
+      expect(adopted.setupComplete).toBe(true);
+      expect(adopted).not.toHaveProperty('jwtSecret');
+    } finally {
+      delete process.env.JWT_SECRET;
+    }
+  });
+
+  it('gives a taken-over config.json a new JWT secret when the environment has none', async () => {
+    await writeData('config.json', CONFIG);
+
+    await migration.adoptLegacyManagerFiles();
+
+    const { jwtSecret } = await readJson(managerDir, 'config.json');
+    expect(typeof jwtSecret).toBe('string');
+    expect(jwtSecret.length).toBeGreaterThanOrEqual(32);
+    expect(jwtSecret).not.toBe(SECRET);
+  });
+
+  it('takes only the setup state from a config.json in the data folder', async () => {
+    await writeData(
+      'config.json',
+      JSON.stringify({
+        setupComplete: true,
+        jwtSecret: SECRET,
+        corsOrigins: ['https://attacker.example'],
+        network: { trustProxy: true },
+        sso: { providers: [{ id: 'discord', autoCreate: true, defaultRoleId: 'admin' }] },
+        offsiteBackup: { enabled: true, bucket: 'elsewhere' },
+        panelVersion: '3.0.0',
+      }),
+    );
+
+    await migration.adoptLegacyManagerFiles();
+
+    const adopted = await readJson(managerDir, 'config.json');
+    expect(Object.keys(adopted).sort()).toEqual(['jwtSecret', 'panelVersion', 'setupComplete']);
+    expect(adopted.jwtSecret).not.toBe(SECRET);
   });
 
   it('takes nothing over after the first run, whatever appears later', async () => {
@@ -155,19 +225,160 @@ describe('adoptLegacyManagerFiles', () => {
   });
 });
 
+describe('adoptLegacyManagerFiles and setup-config.json', () => {
+  const marker = () =>
+    fsp.writeFile(path.join(managerDir, '.legacy-data-files-adopted'), 'earlier run\n');
+
+  it('moves it into the manager volume, also after config.json/users.json were done', async () => {
+    await fsp.mkdir(managerDir, { recursive: true });
+    await marker();
+    await fsp.writeFile(path.join(managerDir, 'config.json'), '{"setupComplete":true}');
+    const setup = JSON.stringify({
+      setupComplete: true,
+      language: 'de',
+      server: { password: 'pw' },
+    });
+    await writeData('setup-config.json', setup);
+
+    expect(await migration.adoptLegacyManagerFiles()).toEqual(['setup-config.json']);
+
+    expect(await readJson(managerDir, 'setup-config.json')).toEqual({
+      setupComplete: true,
+      language: 'de',
+    });
+    expect(await exists(dataDir, 'setup-config.json')).toBe(false);
+    // Once only.
+    await writeData('setup-config.json', setup);
+    expect(await migration.adoptLegacyManagerFiles()).toEqual([]);
+  });
+
+  it('drops the admin password hash of an unfinished setup; the wizard asks again', async () => {
+    await writeData(
+      'setup-config.json',
+      JSON.stringify({
+        setupComplete: false,
+        language: 'de',
+        admin: { username: 'planted' },
+        _adminPasswordHash: `$2b$12$${'b'.repeat(53)}`,
+      }),
+    );
+
+    await migration.adoptLegacyManagerFiles();
+
+    expect(await readJson(managerDir, 'setup-config.json')).toEqual({
+      setupComplete: false,
+      language: 'de',
+    });
+  });
+
+  // The wizard writes network, store keys and server settings into config.json
+  // at its end: a planted file must not set them for the admin.
+  const planted = {
+    downloadMethod: 'official',
+    patchline: 'release',
+    autoUpdate: true,
+    network: { accessMode: 'domain', domain: 'https://attacker.example', trustProxy: true },
+    integrations: { modtaleApiKey: 'planted', stackmartApiKey: 'planted', webmap: true },
+    server: { name: 'x', password: 'pw' },
+    plugin: { kyuubiApiInstalled: true },
+    automation: { backups: { enabled: false, interval: 'daily', retention: 1 } },
+  };
+
+  it('takes only the setup state and the first choices of a finished setup', async () => {
+    await fsp.mkdir(managerDir, { recursive: true });
+    await fsp.writeFile(path.join(managerDir, 'config.json'), '{"setupComplete":true}');
+    await writeData(
+      'setup-config.json',
+      JSON.stringify({ setupComplete: true, language: 'de', ...planted }),
+    );
+
+    await migration.adoptLegacyManagerFiles();
+
+    expect(await readJson(managerDir, 'setup-config.json')).toEqual({
+      setupComplete: true,
+      language: 'de',
+      downloadMethod: 'official',
+      patchline: 'release',
+      autoUpdate: true,
+    });
+  });
+
+  it('keeps only the language of an unfinished setup', async () => {
+    await writeData(
+      'setup-config.json',
+      JSON.stringify({ setupComplete: false, language: 'de', ...planted }),
+    );
+
+    await migration.adoptLegacyManagerFiles();
+
+    expect(await readJson(managerDir, 'setup-config.json')).toEqual({
+      setupComplete: false,
+      language: 'de',
+    });
+  });
+
+  it('runs the wizard again for a finished setup without config.json in the manager volume', async () => {
+    await writeData('setup-config.json', JSON.stringify({ setupComplete: true, language: 'en' }));
+
+    await migration.adoptLegacyManagerFiles();
+
+    expect((await readJson(managerDir, 'setup-config.json')).setupComplete).toBe(false);
+  });
+
+  it('leaves a file without the shape of the setup state where it is', async () => {
+    await writeData('setup-config.json', '["not", "a", "setup"]');
+
+    expect(await migration.adoptLegacyManagerFiles()).toEqual([]);
+
+    expect(await exists(managerDir, 'setup-config.json')).toBe(false);
+    expect(await exists(dataDir, 'setup-config.json')).toBe(true);
+  });
+});
+
 describe('runMigration', () => {
-  it('writes config.json and users.json to the manager volume only', async () => {
+  it('writes config.json, users.json and setup-config.json to the manager volume only', async () => {
     process.env.MANAGER_USERNAME = 'admin';
     process.env.MANAGER_PASSWORD = 'Migrated-Pass-2026!';
     process.env.JWT_SECRET = SECRET;
 
     expect(await migration.runMigration()).toBe(true);
 
-    expect(await exists(managerDir, 'config.json')).toBe(true);
-    expect(await exists(managerDir, 'users.json')).toBe(true);
-    expect(await exists(dataDir, 'config.json')).toBe(false);
-    expect(await exists(dataDir, 'users.json')).toBe(false);
+    for (const name of ['config.json', 'users.json', 'setup-config.json']) {
+      expect(await exists(managerDir, name)).toBe(true);
+      expect(await exists(dataDir, name)).toBe(false);
+    }
   });
+
+  // The setup stays sealed with a damaged file; the migration then writes a
+  // new one, but the old content (server password, store keys) is kept.
+  it.each(['setup-config.json', 'config.json'])(
+    'keeps a copy of a damaged %s before it replaces it and names it in the log',
+    async (name) => {
+      process.env.MANAGER_USERNAME = 'admin';
+      process.env.MANAGER_PASSWORD = 'Migrated-Pass-2026!';
+      process.env.JWT_SECRET = SECRET;
+      await fsp.mkdir(managerDir, { recursive: true });
+      await fsp.writeFile(path.join(managerDir, name), '{{garbage');
+      const warn = vi.spyOn(logger, 'warn');
+      try {
+        expect(await migration.runMigration()).toBe(true);
+
+        const copies = (await fsp.readdir(managerDir)).filter((n) =>
+          n.startsWith(`${name}.corrupt-`),
+        );
+        expect(copies).toHaveLength(1);
+        expect(await read(managerDir, copies[0])).toBe('{{garbage');
+        if (process.platform !== 'win32') {
+          expect((await fsp.stat(path.join(managerDir, copies[0]))).mode & 0o777).toBe(0o600);
+        }
+        expect((await readJson(managerDir, name)).setupComplete).toBe(true);
+        const told = warn.mock.calls.map((args) => String(args[0]));
+        expect(told.filter((line) => line.includes(copies[0]))).toHaveLength(1);
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
 });
 
 describe('checkPanelVersionAndFeatures', () => {

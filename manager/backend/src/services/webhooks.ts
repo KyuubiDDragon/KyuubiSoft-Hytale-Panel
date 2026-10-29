@@ -23,7 +23,8 @@ import crypto from 'crypto';
 import { getDb } from '../db/index.js';
 import { publish as publishEvent, subscribe } from './eventBus.js';
 import { webhookDeliveries } from './metrics.js';
-import { assertSafeResolvedUrl } from '../utils/urlGuard.js';
+import { internalTargetsAllowed } from '../utils/urlGuard.js';
+import { outboundErrorMessage, safeRequest } from '../utils/safeFetch.js';
 import { logger } from '../utils/logger.js';
 import { eventServerId } from './eventServer.js';
 import { serverDisplayName } from './perServerData.js';
@@ -38,6 +39,9 @@ import {
 const RETRY_DELAYS_MS = [30_000, 5 * 60_000, 30 * 60_000, 6 * 3600_000, 24 * 3600_000];
 const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
 const DELIVERY_TIMEOUT_MS = 10_000;
+// Only the start of the receiver's answer is stored with the delivery.
+const RESPONSE_SNIPPET_CHARS = 500;
+const RESPONSE_SNIPPET_BYTES = 16 * 1024;
 const TICK_MS = 5_000;
 
 export interface Webhook {
@@ -388,31 +392,30 @@ async function deliverOne(delivery: DeliveryRow, webhook: Webhook): Promise<void
     headers['X-KyuubiSoft-Signature'] = `sha256=${sig}`;
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
   let code: number | null = null;
   let bodySnippet: string | null = null;
   let success = false;
   try {
-    // SECURITY: re-validate at delivery time. The create/update guard only
-    // checks the hostname; a name that was public then but now resolves to a
-    // loopback/link-local/RFC1918 address (DNS rebinding) is blocked here,
-    // immediately before the request leaves the process.
-    await assertSafeResolvedUrl(webhook.url);
-    const resp = await fetch(webhook.url, {
+    // SECURITY: the create/update guard only checks the hostname. Here every
+    // hop (redirects included) is checked on the address the connection
+    // really uses, so a name that now resolves to a loopback/RFC1918 address
+    // (DNS rebinding) or a redirect to one is blocked; metadata addresses
+    // always are.
+    const resp = await safeRequest(webhook.url, {
       method: 'POST',
       body,
       headers,
-      signal: controller.signal,
+      allowPrivate: internalTargetsAllowed(),
+      timeoutMs: DELIVERY_TIMEOUT_MS,
+      maxBytes: RESPONSE_SNIPPET_BYTES,
+      truncate: true,
     });
     code = resp.status;
     success = resp.status >= 200 && resp.status < 300;
-    bodySnippet = (await resp.text()).slice(0, 500);
+    bodySnippet = resp.body.toString('utf-8').slice(0, RESPONSE_SNIPPET_CHARS);
   } catch (err) {
     code = null;
-    bodySnippet = err instanceof Error ? err.message.slice(0, 500) : 'unknown error';
-  } finally {
-    clearTimeout(timer);
+    bodySnippet = outboundErrorMessage(err).slice(0, RESPONSE_SNIPPET_CHARS);
   }
   markCompleted(delivery.id, success, code, bodySnippet, delivery.attempt + 1);
 }
