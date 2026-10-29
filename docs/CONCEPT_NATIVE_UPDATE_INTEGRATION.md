@@ -417,7 +417,7 @@ Volume für `updater/` Verzeichnis hinzufügen:
 ```yaml
 volumes:
   - ./server:/opt/hytale/server
-  - ./updater:/opt/hytale/server/updater  # Für staged updates
+  - ./updater:/opt/hytale/updater  # Für staged updates; neben dem Server-Ordner, der Server sucht ../updater
 ```
 
 ---

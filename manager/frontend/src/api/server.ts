@@ -1,5 +1,15 @@
 import api from './client'
 
+/** Stop/restart wait for a clean shutdown: up to 120 s, then 30 s forced, then the start. */
+export const LIFECYCLE_TIMEOUT_MS = 200_000
+
+/** A rollback stops the server, copies up to ~4 GB (Assets.zip) and starts it again. */
+export const ROLLBACK_TIMEOUT_MS = 600_000
+
+/** Downloader calls in the game container: version probe (~35 s), self-update (~160 s). */
+const DOWNLOADER_PROBE_TIMEOUT_MS = 90_000
+const DOWNLOADER_UPDATE_TIMEOUT_MS = 180_000
+
 export interface ServerStatus {
   status: string
   running: boolean
@@ -121,14 +131,88 @@ export interface UpdateConfig {
   autoApplyDelayMinutes: number
 }
 
+export type UpdateActionBlock =
+  | 'server_stopped'
+  | 'server_running'
+  | 'no_updater'
+  | 'invalid_layout'
+  | 'already_staged'
+  | 'nothing_staged'
+  | 'disk_space'
+  | 'no_backup'
+  | 'staged_invalid'
+  | 'patchline_mismatch'
+  | 'lifecycle_busy'
+
+export interface UpdateActionState {
+  allowed: boolean
+  reason?: UpdateActionBlock
+}
+
+export interface DiskVolumeCheck {
+  dirs: string[]
+  requiredBytes: number
+  freeBytes: number
+  sufficient: boolean
+}
+
+// Built from the installation's files (staged update, previous version in
+// updater/backup) - the server's console replies are not visible to the panel.
 export interface NativeUpdateStatus {
   available: boolean
   currentVersion: string
   latestVersion: string
-  state: 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'APPLYING' | 'ERROR'
-  progress?: number
-  message?: string
-  error?: string
+  state: 'IDLE' | 'READY'
+  currentPatchline: string | null
+  staged: {
+    version: string | null
+    patchline: string | null
+    jarBytes: number
+    assetsBytes: number
+    stagedAt: string
+  } | null
+  backup: {
+    version: string | null
+    patchline: string | null
+    hasAssets: boolean
+    createdAt: string
+  } | null
+  serverRunning: boolean
+  updaterMounted: boolean
+  // missing: not mounted in the panel; not_shared: the game container uses another updater folder
+  updaterMount: 'mounted' | 'missing' | 'not_shared'
+  // A stop, start, rollback or restore of the server runs or waits
+  lifecycleBusy: boolean
+  layoutValid: boolean | null
+  disk: {
+    checked: boolean
+    sufficient: boolean
+    requiredBytes: number
+    volumes: DiskVolumeCheck[]
+  } | null
+  lastCheck: {
+    patchline: string
+    latestVersion: string
+    checkedAt: string
+    authRequired?: boolean
+    error?: string
+  } | null
+  actions: {
+    download: UpdateActionState
+    apply: UpdateActionState
+    cancel: UpdateActionState
+    rollbackNative: UpdateActionState
+    rollbackSnapshot: UpdateActionState
+  }
+}
+
+export interface DownloaderVersion {
+  installed: boolean
+  version: string | null
+  latestVersion: string | null
+  updateAvailable: boolean
+  busy: boolean
+  checkedAt: string
 }
 
 export interface UpdateHistoryEntry {
@@ -139,6 +223,8 @@ export interface UpdateHistoryEntry {
   action: 'apply' | 'rollback'
   by: string | null
   success: boolean
+  /** Apply requested, not confirmed by the installed version yet. */
+  pending?: boolean
   note?: string
 }
 
@@ -148,6 +234,26 @@ export interface JarSnapshot {
   createdAt: string
   sizeBytes: number
   file: string
+  /** Assets.zip of that version is kept with the snapshot. */
+  hasAssets?: boolean
+  assetsSizeBytes?: number
+  /** HytaleServer.aot of that version is kept with the snapshot. */
+  hasAot?: boolean
+}
+
+export interface RollbackOptions {
+  /** Delete a downloaded (staged) update along with the rollback. */
+  discardStaged?: boolean
+}
+
+export interface RollbackResponse {
+  success: boolean
+  message?: string
+  warning?: string
+  restoredVersion?: string | null
+  restoredAssets?: boolean
+  discardedStagedVersion?: string | null
+  error?: string
 }
 
 export interface NewFeaturesStatus {
@@ -563,6 +669,16 @@ export interface JvmSettings {
   javaMaxRam: string
   extraJavaArgs: string
   extraServerArgs: string
+  bootCommands: string[]
+  aotCache: boolean
+  nativeBackupMaxCount: number
+  nativeBackupArchiveMaxCount: number
+  /** Container memory limit; null = none / unknown. */
+  memoryLimitMb: number | null
+  /** Largest heap that leaves the JVM enough room inside the limit. */
+  maxHeapMb: number | null
+  /** Stored values the current validation would reject (saved by an older panel). */
+  invalid?: { extraJavaArgs: string | null; extraServerArgs: string | null }
   envDefaults: { javaMinRam: string; javaMaxRam: string }
 }
 
@@ -571,6 +687,10 @@ export interface JvmSettingsUpdate {
   javaMaxRam: string
   extraJavaArgs: string
   extraServerArgs: string
+  bootCommands?: string[]
+  aotCache?: boolean
+  nativeBackupMaxCount?: number
+  nativeBackupArchiveMaxCount?: number
 }
 
 export const serverApi = {
@@ -604,13 +724,19 @@ export const serverApi = {
     return response.data
   },
 
+  // The panel waits until the server has saved and exited (up to ~2.5 min
+  // before it forces the stop), so these outlast the default 30 s timeout.
   async stop(): Promise<ActionResponse> {
-    const response = await api.post<ActionResponse>('/server/stop')
+    const response = await api.post<ActionResponse>('/server/stop', undefined, {
+      timeout: LIFECYCLE_TIMEOUT_MS,
+    })
     return response.data
   },
 
   async restart(): Promise<ActionResponse> {
-    const response = await api.post<ActionResponse>('/server/restart')
+    const response = await api.post<ActionResponse>('/server/restart', undefined, {
+      timeout: LIFECYCLE_TIMEOUT_MS,
+    })
     return response.data
   },
 
@@ -841,12 +967,22 @@ export const serverApi = {
     return response.data
   },
 
+  // The server only accepts the change while it is stopped: with a running
+  // server this rejects with 409 `requiresRestart` unless `restart` is set,
+  // which stops the server, saves and starts it again (it takes as long as a restart).
   async saveUpdateConfig(
     config: Partial<UpdateConfig>,
-  ): Promise<{ success: boolean; message?: string; data?: UpdateConfig }> {
-    const response = await api.put<{ success: boolean; message?: string; data?: UpdateConfig }>(
+    options: { restart?: boolean } = {},
+  ): Promise<{ success: boolean; message?: string; restarted?: boolean; data?: UpdateConfig }> {
+    const response = await api.put<{
+      success: boolean
+      message?: string
+      restarted?: boolean
+      data?: UpdateConfig
+    }>(
       '/server/update-config',
-      config,
+      { ...config, ...(options.restart ? { restart: true } : {}) },
+      options.restart ? { timeout: LIFECYCLE_TIMEOUT_MS } : undefined,
     )
     return response.data
   },
@@ -873,7 +1009,7 @@ export const serverApi = {
       data?: NativeUpdateStatus
       message?: string
       error?: string
-    }>('/server/update-check')
+    }>('/server/update-check', undefined, { timeout: DOWNLOADER_PROBE_TIMEOUT_MS })
     return response.data
   },
 
@@ -884,7 +1020,11 @@ export const serverApi = {
     return response.data
   },
 
-  async applyNativeUpdate(): Promise<{
+  // force: apply despite the disk-space estimate; allowPatchlineSwitch:
+  // install a staged build of another patchline.
+  async applyNativeUpdate(
+    options: { force?: boolean; allowPatchlineSwitch?: boolean } = {},
+  ): Promise<{
     success: boolean
     message?: string
     warning?: string
@@ -895,14 +1035,27 @@ export const serverApi = {
       message?: string
       warning?: string
       error?: string
-    }>('/server/update-apply')
+    }>('/server/update-apply', {
+      ...(options.force ? { force: true } : {}),
+      ...(options.allowPatchlineSwitch ? { allowPatchlineSwitch: true } : {}),
+    })
     return response.data
   },
 
-  async cancelNativeUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
-    const response = await api.post<{ success: boolean; message?: string; error?: string }>(
-      '/server/update-cancel',
-    )
+  // A running server discards it itself (asynchronously); for a stopped one the
+  // panel deletes it right away (`discarded: true`).
+  async cancelNativeUpdate(): Promise<{
+    success: boolean
+    discarded?: boolean
+    message?: string
+    error?: string
+  }> {
+    const response = await api.post<{
+      success: boolean
+      discarded?: boolean
+      message?: string
+      error?: string
+    }>('/server/update-cancel')
     return response.data
   },
 
@@ -923,18 +1076,50 @@ export const serverApi = {
     return response.data
   },
 
-  async rollbackJar(snapshotId: string): Promise<{
+  // `discardStaged`: a downloaded update would be installed again by the next
+  // start, so the rollback is refused (409 staged_update) unless it discards it.
+  // The answer comes after the stop, the copy and the start.
+  async rollbackJar(snapshotId: string, options: RollbackOptions = {}): Promise<RollbackResponse> {
+    const response = await api.post<RollbackResponse>(
+      '/server/rollback',
+      { snapshotId, ...(options.discardStaged ? { discardStaged: true } : {}) },
+      { timeout: ROLLBACK_TIMEOUT_MS },
+    )
+    return response.data
+  },
+
+  // Previous version kept in updater/backup (JAR, Assets.zip, Licenses).
+  async rollbackNative(options: RollbackOptions = {}): Promise<RollbackResponse> {
+    const response = await api.post<RollbackResponse>(
+      '/server/rollback',
+      { source: 'native', ...(options.discardStaged ? { discardStaged: true } : {}) },
+      { timeout: ROLLBACK_TIMEOUT_MS },
+    )
+    return response.data
+  },
+
+  async getDownloaderVersion(
+    refresh = false,
+  ): Promise<{ success: boolean; data?: DownloaderVersion; error?: string }> {
+    const response = await api.get<{ success: boolean; data?: DownloaderVersion; error?: string }>(
+      '/server/downloader-version',
+      { params: refresh ? { refresh: '1' } : {}, timeout: DOWNLOADER_PROBE_TIMEOUT_MS },
+    )
+    return response.data
+  },
+
+  async updateDownloader(): Promise<{
     success: boolean
     message?: string
-    restoredVersion?: string | null
+    data?: DownloaderVersion
     error?: string
   }> {
     const response = await api.post<{
       success: boolean
       message?: string
-      restoredVersion?: string | null
+      data?: DownloaderVersion
       error?: string
-    }>('/server/rollback', { snapshotId })
+    }>('/server/downloader-update', undefined, { timeout: DOWNLOADER_UPDATE_TIMEOUT_MS })
     return response.data
   },
 

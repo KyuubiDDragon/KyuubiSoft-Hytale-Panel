@@ -3,13 +3,21 @@
 # Fully automated - downloads server files on first start
 # ============================================================
 
-# Pinned by multi-arch index digest (tag 25-jdk-noble = 25.0.4.1_1-jdk-noble at
-# pin time). To update: `docker buildx imagetools inspect eclipse-temurin:25-jdk-noble`.
-FROM eclipse-temurin:25-jdk-noble@sha256:ba0f0e1a33864105e1d454e88105c617ab40f71062db1f306bf58be32a3f8e5e
+# Java runtime only (JRE): the server needs no JDK tools. Pinned by multi-arch
+# index digest (tag 25-jre-noble = 25.0.4.1_1-jre-noble at pin time). To update:
+# `docker buildx imagetools inspect eclipse-temurin:25-jre-noble`.
+# Plugins that need JDK-only modules (e.g. jdk.attach for agents that attach
+# themselves at runtime) can build on the JDK image instead:
+#   docker compose build --build-arg JAVA_IMAGE=eclipse-temurin:25-jdk-noble
+ARG JAVA_IMAGE=eclipse-temurin:25-jre-noble@sha256:3f2223fe04b750aa5a8179e29b5c9a1ddf7665fc9bb08bfe11ad01d143bc13a5
+FROM ${JAVA_IMAGE}
 
+# Release builds pass the panel version (`--build-arg IMAGE_VERSION=...`); a
+# hard-coded value here only goes stale.
+ARG IMAGE_VERSION=dev
 LABEL maintainer="Andy - Kyuubi D. Dragon"
 LABEL description="Hytale Dedicated Server - Auto-Setup"
-LABEL version="2.0"
+LABEL org.opencontainers.image.version="${IMAGE_VERSION}"
 
 # ============================================================
 # Environment Variables
@@ -33,15 +41,16 @@ ENV JAVA_MIN_RAM="3G" \
 # ============================================================
 # Install dependencies
 # ============================================================
+# wget: downloads, unzip: server/downloader archives, procps: pgrep for the
+# healthcheck, gosu: drop from root to the hytale user.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
     wget \
     unzip \
     jq \
+    procps \
     tzdata \
     gosu \
     ca-certificates \
-    dbus \
     && rm -rf /var/lib/apt/lists/*
 # Note: Timezone is set at runtime in entrypoint.sh using TZ env variable
 
@@ -52,15 +61,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN groupadd -g 9999 hytale \
     && useradd -u 9999 -g hytale -m -s /bin/bash hytale \
     && mkdir -p /opt/hytale/server \
-                /opt/hytale/server/updater \
+                /opt/hytale/updater \
                 /opt/hytale/data \
                 /opt/hytale/backups \
                 /opt/hytale/plugins \
                 /opt/hytale/mods \
-                /opt/hytale/logs \
                 /opt/hytale/downloader \
                 /opt/hytale/auth \
-    && chown -R hytale:hytale /opt/hytale
+    && chown -R hytale:hytale /opt/hytale \
+    && chown root:root /opt/hytale
+# /opt/hytale itself stays root's: it holds the scripts that run as root at
+# every start, and whoever can write a directory can replace the files in it.
+# The server only writes inside the subdirectories.
 
 WORKDIR /opt/hytale
 
@@ -69,13 +81,13 @@ WORKDIR /opt/hytale
 # ============================================================
 COPY --chmod=755 scripts/entrypoint.sh /opt/hytale/entrypoint.sh
 COPY --chmod=755 scripts/start-server.sh /opt/hytale/start-server.sh
-COPY --chmod=755 scripts/backup.sh /opt/hytale/backup.sh
-COPY --chmod=755 scripts/backup-hook.sh /opt/hytale/backup-hook.sh
+COPY --chmod=644 scripts/start-args.sh /opt/hytale/start-args.sh
+COPY --chmod=755 scripts/healthcheck.sh /opt/hytale/healthcheck.sh
 
 # ============================================================
 # Volumes for persistent data
 # ============================================================
-VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server", "/opt/hytale/downloader", "/opt/hytale/auth"]
+VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server", "/opt/hytale/downloader", "/opt/hytale/auth", "/opt/hytale/updater"]
 
 # ============================================================
 # Expose UDP port (QUIC protocol)
@@ -85,10 +97,12 @@ EXPOSE 5520/udp
 # ============================================================
 # Health check
 # ============================================================
-# Match the configured launcher jar, not a hardcoded name — otherwise an
-# alternative launcher (SERVER_JAR=Hyinit-*.jar) leaves the container forever
-# "unhealthy" and a manager with depends_on:service_healthy never starts.
-HEALTHCHECK --interval=60s --timeout=10s --start-period=180s --retries=3 \
-    CMD pgrep -f "${SERVER_JAR:-HytaleServer.jar}" > /dev/null || exit 1
+# Healthy only while a java process runs AND the game's UDP port is bound
+# (scripts/healthcheck.sh). The start period covers the first boot of a large
+# world; while the server files are still being downloaded the container is
+# reported unhealthy, which is accurate (the manager only waits for
+# service_started).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
+    CMD ["/opt/hytale/healthcheck.sh"]
 
 ENTRYPOINT ["/opt/hytale/entrypoint.sh"]

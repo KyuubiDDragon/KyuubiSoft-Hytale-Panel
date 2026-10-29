@@ -6,8 +6,9 @@
  *   GET  /api/commands/complete  console-style completion for a line
  *
  * The plugin runs commands as "Panel:<user>" with console rights, so callers
- * must have passed the panel's own checks (validateCommand / commandPolicy)
- * before calling runCommandViaPlugin. docker.execCommand is the only caller.
+ * must have passed the panel's own checks (validateCommand / commandPolicy, or
+ * the fixed command set of the lifecycle) before calling runCommandViaPlugin.
+ * docker.execCommand and docker.sendLifecycleCommand are the only callers.
  */
 import { z } from 'zod';
 import { getPluginAuthHeaders, isPluginInstalled, resolvePluginEndpoint } from './kyuubiApi.js';

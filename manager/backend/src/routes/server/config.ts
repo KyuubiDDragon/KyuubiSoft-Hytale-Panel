@@ -1,7 +1,7 @@
 // Server config endpoints: quick-settings, panel toggles (patchline, accept-early-plugins,
 // disable-sentry, allow-op), and arbitrary config file read/write.
 import { Router, Request, Response } from 'express';
-import { readdir, readFile, writeFile, stat } from 'fs/promises';
+import { readdir, readFile, writeFile, stat, rm } from 'fs/promises';
 import path from 'path';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/permissions.js';
@@ -16,9 +16,39 @@ import {
   getDemoServerConfig,
   getDemoPatchlineConfig,
 } from '../../services/demoData.js';
-import { CONFIG_EXTENSIONS, QuickSettings, readPanelConfig, writePanelConfig } from './shared.js';
+import {
+  CONFIG_EXTENSIONS,
+  QuickSettings,
+  readPanelConfig,
+  writePanelConfig,
+  DEFAULT_NATIVE_BACKUP_MAX_COUNT,
+  DEFAULT_NATIVE_BACKUP_ARCHIVE_MAX_COUNT,
+} from './shared.js';
+import {
+  validateExtraJavaArgs,
+  validateExtraServerArgs,
+  normalizeBootCommands,
+  maxHeapMbForLimit,
+  ramToMb,
+} from '../../services/jvmSettings.js';
+import { authorizeCommand, actorFromRequest } from '../../services/commandPolicy.js';
+import { resolveInstallPaths, discardStagedUpdate } from '../../services/serverInstall.js';
+import { withServerStopped, LifecycleBusyError } from '../../services/serverLifecycle.js';
+import { updateCommandRefusal } from '../../services/updateStatusReply.js';
+import type { AuthenticatedRequest } from '../../types/index.js';
 
 const router = Router();
+
+async function isServerRunning(): Promise<boolean> {
+  const state = await dockerService.getContainerState().catch(() => null);
+  return state?.running === true;
+}
+
+/** Removed on a patchline switch, so the next start downloads the new build. */
+const patchlineSwitchFiles = () =>
+  ['HytaleServer.jar', 'Assets.zip', '.hytale-version'].map((name) =>
+    path.join(config.serverPath, name),
+  );
 
 // GET /api/server/quick-settings - Get quick settings from config.json
 router.get(
@@ -158,27 +188,67 @@ router.put(
       const oldPatchline = panelConfig.patchline;
       const patchlineChanged = oldPatchline !== patchline;
 
-      // Update config
-      panelConfig.patchline = patchline;
-      await writePanelConfig(panelConfig);
-
-      // If patchline changed, delete server files to force redownload on restart
-      if (patchlineChanged) {
-        const serverJar = path.join(config.serverPath, 'HytaleServer.jar');
-        const assetsZip = path.join(config.serverPath, 'Assets.zip');
-        const versionFile = path.join(config.serverPath, '.hytale-version');
-
-        // Delete via container exec to ensure proper permissions. Paths are
-        // config-derived, but shell-escaped so the command stays injection-proof.
+      if (!patchlineChanged) {
+        await writePanelConfig({ ...panelConfig, patchline });
+      } else if (await isServerRunning()) {
+        // A downloaded update (or a download in progress) is for the old
+        // patchline; the start script would install it over the new build.
+        // The running server drops it itself.
+        if ((await dockerService.isServerProcessRunning()) === false) {
+          res.status(409).json({
+            success: false,
+            reason: 'lifecycle_busy',
+            error: 'The server is starting or installing an update; try again in a moment.',
+          });
+          return;
+        }
+        const cancelled = await dockerService.execCommand('/update cancel');
+        if (!cancelled.success) {
+          res.status(503).json({
+            success: false,
+            error: `Could not ask the server to discard its downloaded update: ${cancelled.error}`,
+          });
+          return;
+        }
+        // The server answered (through the plugin) that it could not drop it.
+        const refused = updateCommandRefusal(cancelled);
+        if (refused) {
+          res.status(409).json({
+            success: false,
+            reason: refused,
+            error: `The server could not discard its downloaded update: ${cancelled.message ?? refused}`,
+          });
+          return;
+        }
+        await writePanelConfig({ ...panelConfig, patchline });
+        // Deleted via container exec so the running container's view stays
+        // consistent. Paths are config-derived, but shell-escaped so the
+        // command stays injection-proof.
         await dockerService.execInContainer(
-          `rm -f ${escapeShellArg(serverJar)} ${escapeShellArg(assetsZip)} ${escapeShellArg(versionFile)} 2>/dev/null || true`,
+          `rm -f ${patchlineSwitchFiles().map(escapeShellArg).join(' ')} 2>/dev/null || true`,
         );
+      } else {
+        // Stopped: the panel removes the staged update and the files itself,
+        // under the lifecycle lock so nothing starts the server meanwhile.
+        const { updaterPath } = await resolveInstallPaths();
+        await withServerStopped(
+          undefined,
+          { reason: 'config', actor: (req as AuthenticatedRequest).user, rejectIfBusy: true },
+          async () => {
+            await discardStagedUpdate(updaterPath);
+            await writePanelConfig({ ...panelConfig, patchline });
+            for (const file of patchlineSwitchFiles()) await rm(file, { force: true });
+          },
+        );
+      }
 
+      // If patchline changed, the server files are gone: the next start downloads the new build
+      if (patchlineChanged) {
         res.json({
           success: true,
           patchline,
           changed: true,
-          message: `Patchline changed from ${oldPatchline} to ${patchline}. Server files deleted. Restart to download the new version.`,
+          message: `Patchline changed from ${oldPatchline} to ${patchline}. Server files deleted and the downloaded update discarded. Restart to download the new version.`,
         });
       } else {
         res.json({
@@ -189,6 +259,10 @@ router.put(
         });
       }
     } catch (error) {
+      if (error instanceof LifecycleBusyError) {
+        res.status(409).json({ success: false, reason: 'lifecycle_busy', error: error.message });
+        return;
+      }
       res.status(500).json({
         error: 'Failed to set patchline',
         message: error instanceof Error ? error.message : 'Unknown error',
@@ -428,35 +502,68 @@ router.put(
   },
 );
 
-// RAM like "3G" / "512M"; args allow only safe token characters (the start
-// script word-splits them, never evals — but we still reject shell metachars).
+// RAM like "3G" / "512M".
 const RAM_RE = /^\d{1,5}[MmGg]$/;
-const SAFE_ARGS_RE = /^[A-Za-z0-9 _.:=+\-/@]*$/;
+const MIN_NATIVE_BACKUP_COUNT = 1;
+const MAX_NATIVE_BACKUP_COUNT = 100;
 
-// GET /api/server/jvm - current JVM/startup tuning (RAM + extra args).
+function nativeBackupCount(value: unknown, fallback: number): number | null {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= MIN_NATIVE_BACKUP_COUNT && n <= MAX_NATIVE_BACKUP_COUNT
+    ? n
+    : null;
+}
+
+// GET /api/server/jvm - current JVM/startup tuning (RAM, extra args, boot
+// commands, AOT cache, native backup retention) plus the container limit.
 router.get(
   '/jvm',
   authMiddleware,
   requirePermission('config.view'),
-  async (_req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
         javaMinRam: '3G',
         javaMaxRam: '4G',
         extraJavaArgs: '',
         extraServerArgs: '',
+        bootCommands: [],
+        aotCache: false,
+        nativeBackupMaxCount: DEFAULT_NATIVE_BACKUP_MAX_COUNT,
+        nativeBackupArchiveMaxCount: DEFAULT_NATIVE_BACKUP_ARCHIVE_MAX_COUNT,
+        memoryLimitMb: 8192,
+        maxHeapMb: 8192 - 1536,
         envDefaults: { javaMinRam: '3G', javaMaxRam: '4G' },
       });
       return;
     }
     try {
-      const panelConfig = await readPanelConfig();
+      const [panelConfig, limit] = await Promise.all([
+        readPanelConfig(),
+        dockerService.getContainerMemoryLimit(req.serverId),
+      ]);
+      // Values saved before the validation existed are still passed on by the
+      // start script; report them so the UI can ask for a fix.
+      const javaCheck = validateExtraJavaArgs(panelConfig.extraJavaArgs ?? '');
+      const serverCheck = validateExtraServerArgs(panelConfig.extraServerArgs ?? '');
       res.json({
+        invalid: {
+          extraJavaArgs: javaCheck.ok ? null : javaCheck.error,
+          extraServerArgs: serverCheck.ok ? null : serverCheck.error,
+        },
         // Effective values fall back to the container env defaults when unset.
         javaMinRam: panelConfig.javaMinRam ?? process.env.JAVA_MIN_RAM ?? '3G',
         javaMaxRam: panelConfig.javaMaxRam ?? process.env.JAVA_MAX_RAM ?? '4G',
         extraJavaArgs: panelConfig.extraJavaArgs ?? '',
         extraServerArgs: panelConfig.extraServerArgs ?? '',
+        bootCommands: panelConfig.bootCommands ?? [],
+        aotCache: panelConfig.aotCache ?? false,
+        nativeBackupMaxCount: panelConfig.nativeBackupMaxCount ?? DEFAULT_NATIVE_BACKUP_MAX_COUNT,
+        nativeBackupArchiveMaxCount:
+          panelConfig.nativeBackupArchiveMaxCount ?? DEFAULT_NATIVE_BACKUP_ARCHIVE_MAX_COUNT,
+        memoryLimitMb: limit ? Math.floor(limit / 1024 / 1024) : null,
+        maxHeapMb: maxHeapMbForLimit(limit),
         envDefaults: {
           javaMinRam: process.env.JAVA_MIN_RAM ?? '3G',
           javaMaxRam: process.env.JAVA_MAX_RAM ?? '4G',
@@ -472,11 +579,14 @@ router.get(
 );
 
 // PUT /api/server/jvm - persist JVM/startup tuning to panel-config.json.
+// Everything is checked here because the start script passes it on as is: a
+// heap above the container limit ends in an OOM-kill loop, an unknown server
+// option stops the server, and code-loading JVM options are refused.
 router.put(
   '/jvm',
   authMiddleware,
   requirePermission('config.edit'),
-  async (req: Request, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     if (isDemoMode()) {
       res.json({
         success: true,
@@ -496,33 +606,89 @@ router.put(
         res.status(400).json({ error: 'RAM must look like "3G" or "512M".' });
         return;
       }
-      const toMb = (v: string) =>
-        v.toUpperCase().endsWith('G') ? parseInt(v) * 1024 : parseInt(v);
-      if (toMb(minRam) > toMb(maxRam)) {
+      const minMb = ramToMb(minRam) as number;
+      const maxMb = ramToMb(maxRam) as number;
+      if (minMb > maxMb) {
         res.status(400).json({ error: 'Minimum RAM cannot exceed maximum RAM.' });
         return;
       }
-      for (const [name, val] of [
-        ['extraJavaArgs', extraJava],
-        ['extraServerArgs', extraServer],
-      ] as const) {
-        if (val.length > 1024 || !SAFE_ARGS_RE.test(val)) {
-          res.status(400).json({ error: `${name} contains invalid characters or is too long.` });
+      const panelConfig = await readPanelConfig();
+      // Only a new value is held against the memory limit: the form always
+      // sends the RAM along, and a value that is already in use (say
+      // JAVA_MAX_RAM=7G with an 8G limit, which the docs used to allow) must
+      // not block saving boot commands or other settings. The start script
+      // still warns about it.
+      const currentMaxMb = ramToMb(panelConfig.javaMaxRam ?? process.env.JAVA_MAX_RAM ?? '4G');
+      const limit = await dockerService.getContainerMemoryLimit(req.serverId);
+      const maxHeapMb = maxHeapMbForLimit(limit);
+      if (maxHeapMb !== null && maxMb > maxHeapMb && maxMb !== currentMaxMb) {
+        res.status(400).json({
+          error: `Maximum RAM ${maxRam} does not fit the container memory limit of ${Math.floor((limit as number) / 1024 / 1024)} MB. The JVM needs memory beyond the heap; use at most ${maxHeapMb}M or raise DOCKER_MEMORY_LIMIT.`,
+          maxHeapMb,
+        });
+        return;
+      }
+      for (const check of [
+        validateExtraJavaArgs(extraJava),
+        validateExtraServerArgs(extraServer),
+      ]) {
+        if (!check.ok) {
+          res.status(400).json({ error: check.error });
           return;
         }
       }
 
-      const panelConfig = await readPanelConfig();
-      const changed =
-        panelConfig.javaMinRam !== minRam ||
-        panelConfig.javaMaxRam !== maxRam ||
-        (panelConfig.extraJavaArgs ?? '') !== extraJava ||
-        (panelConfig.extraServerArgs ?? '') !== extraServer;
-      panelConfig.javaMinRam = minRam;
-      panelConfig.javaMaxRam = maxRam;
-      panelConfig.extraJavaArgs = extraJava;
-      panelConfig.extraServerArgs = extraServer;
-      await writePanelConfig(panelConfig);
+      const boot = normalizeBootCommands(body.bootCommands ?? panelConfig.bootCommands);
+      if (!boot.ok) {
+        res.status(400).json({ error: boot.error });
+        return;
+      }
+      // Boot commands run with full console rights on every start: new ones
+      // need the same whitelist and permission tier as typing them into the
+      // console. Commands already stored (maybe saved by an admin) stay as they are.
+      const stored = new Set(panelConfig.bootCommands ?? []);
+      for (const command of boot.commands.filter((c) => !stored.has(c))) {
+        const auth = await authorizeCommand(actorFromRequest(req), `/${command}`, req.serverId);
+        if (!auth.allowed) {
+          res.status(auth.status).json({ error: `Boot command "${command}": ${auth.error}` });
+          return;
+        }
+      }
+      const backupMax = nativeBackupCount(
+        body.nativeBackupMaxCount,
+        panelConfig.nativeBackupMaxCount ?? DEFAULT_NATIVE_BACKUP_MAX_COUNT,
+      );
+      const archiveMax = nativeBackupCount(
+        body.nativeBackupArchiveMaxCount,
+        panelConfig.nativeBackupArchiveMaxCount ?? DEFAULT_NATIVE_BACKUP_ARCHIVE_MAX_COUNT,
+      );
+      if (backupMax === null || archiveMax === null) {
+        res.status(400).json({
+          error: `Native backup counts must be whole numbers from ${MIN_NATIVE_BACKUP_COUNT} to ${MAX_NATIVE_BACKUP_COUNT}.`,
+        });
+        return;
+      }
+      if (body.aotCache !== undefined && typeof body.aotCache !== 'boolean') {
+        res.status(400).json({ error: 'aotCache must be a boolean.' });
+        return;
+      }
+      const aotCache = body.aotCache ?? panelConfig.aotCache ?? false;
+
+      const next = {
+        ...panelConfig,
+        javaMinRam: minRam,
+        javaMaxRam: maxRam,
+        extraJavaArgs: extraJava,
+        extraServerArgs: extraServer,
+        bootCommands: boot.commands,
+        aotCache,
+        nativeBackupMaxCount: backupMax,
+        nativeBackupArchiveMaxCount: archiveMax,
+      };
+      const changed = (Object.keys(next) as (keyof typeof next)[]).some(
+        (k) => JSON.stringify(next[k]) !== JSON.stringify(panelConfig[k]),
+      );
+      await writePanelConfig(next);
 
       res.json({
         success: true,

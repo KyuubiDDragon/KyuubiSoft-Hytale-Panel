@@ -37,6 +37,12 @@ export interface CreateOptions {
 export interface DeleteOptions {
   /** Best-effort removal of the host-side bind-mount data. Default false. */
   removeData?: boolean;
+  /**
+   * Runs `remove` once the server is stopped. The route passes the lifecycle
+   * (`/stop`, wait for the exit, Docker fallback, under the server's lock);
+   * without it Docker stops the container with its own stop timeout.
+   */
+  whileStopped?: (remove: () => Promise<void>) => Promise<void>;
 }
 
 export type CreateResult =
@@ -45,8 +51,10 @@ export type CreateResult =
 export type DeleteResult =
   | { ok: true }
   // not_managed: the container exists but is not the panel's container for
-  // this server, so it was left untouched. docker_error: anything else.
-  | { ok: false; code: 'not_managed' | 'docker_error'; error: string };
+  // this server, so it was left untouched. stop_failed: whileStopped could not
+  // stop the server (or another operation holds it); nothing was removed.
+  // docker_error: anything else.
+  | { ok: false; code: 'not_managed' | 'stop_failed' | 'docker_error'; error: string };
 
 const STACK_NAME = process.env.STACK_NAME || 'hytale';
 const STACK_NETWORK = `${STACK_NAME}-net`;
@@ -141,8 +149,12 @@ function buildCreateOptions(
       // the panel cannot write that file for them.
       ...(pluginToken ? [`KYUUBISOFT_API_TOKEN=${pluginToken}`] : []),
     ],
+    // Same console setup as the compose service: commands via stdin, no TTY
+    // (Ctrl+C in `docker attach` would kill the server), and time to save on
+    // `docker stop` instead of Docker's 10 s default.
     OpenStdin: true,
-    Tty: true,
+    Tty: false,
+    StopTimeout: 120,
     ExposedPorts: buildExposedPorts(instance),
     HostConfig: {
       Binds: buildBinds(instance),
@@ -287,13 +299,36 @@ export async function deleteInstanceContainer(
     // Address the inspected container by id so a rename in between cannot
     // redirect the removal to a different container.
     const container = docker.getContainer(containerId);
-    // Best-effort stop. Ignore errors for already-stopped containers.
-    try {
-      await container.stop({ t: 10 });
-    } catch {
-      /* not running */
+    let removeFailed = false;
+    const remove = async () => {
+      try {
+        await container.remove({ force: true, v: !!opts.removeData });
+      } catch (err) {
+        removeFailed = true;
+        throw err;
+      }
+    };
+    // Only after the ownership check: a container that is not ours is never stopped.
+    if (opts.whileStopped) {
+      try {
+        await opts.whileStopped(remove);
+      } catch (err) {
+        if (removeFailed) throw err;
+        return {
+          ok: false,
+          code: 'stop_failed',
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    } else {
+      try {
+        // No `t`: the container's StopTimeout (120 s) gives the server time to save.
+        await container.stop();
+      } catch {
+        /* not running */
+      }
+      await remove();
     }
-    await container.remove({ force: true, v: !!opts.removeData });
     return { ok: true };
   } catch (err) {
     if (isNoSuchContainer(err)) return { ok: true };

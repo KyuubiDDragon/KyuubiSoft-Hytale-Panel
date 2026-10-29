@@ -9,16 +9,23 @@ export interface ScheduleConfig {
   }
   announcements: {
     enabled: boolean
+    /** Posted in chat on join ({player}); the server keeps an Event Action rule for it. */
     welcome: string
+    /** Server-managed id of that rule. */
+    welcomeActionId?: string
     scheduled: ScheduledAnnouncement[]
   }
   scheduledRestarts: {
     enabled: boolean
     times: string[]
     warningMinutes: number[]
+    /** Countdown text; {time} becomes "5 minutes", "30 seconds", … */
     warningMessage: string
     restartMessage: string
+    /** Back up while the server is stopped for the restart. */
     createBackup: boolean
+    /** Restart only when nobody is online (no countdown), else skip that slot. */
+    onlyWhenEmpty: boolean
   }
   quickCommands: QuickCommand[]
   scheduledCommands: ScheduledCommand[]
@@ -80,6 +87,8 @@ export interface SchedulerStatus {
     enabled: boolean
     nextRestart: string | null
     pendingRestart: { time: string; scheduledAt: string } | null
+    /** The in-game countdown of the pending restart is running. */
+    countdownRunning?: boolean
     times: string[]
   }
   scheduledCommands: ScheduledCommandStatus[]

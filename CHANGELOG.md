@@ -150,6 +150,243 @@ upgrade notes** below before updating.
 - Shell scripts keep LF line endings on Windows checkouts (`.gitattributes`),
   so locally built images start again.
 
+### Server lifecycle, updates, backups and image
+
+Rebuild **both** images (game server and manager) and use the updated
+`docker-compose.yml`; see **Upgrade notes** at the end of this section.
+
+**Stop, restart and crashes**
+- Stopping or restarting the server no longer kills it without saving. The
+  start script forwards SIGTERM to the server, and the panel stops it with
+  `/stop`, waits until it has saved and exited, and only then falls back to
+  `docker stop`. Compose gives the server 120 s to shut down
+  (`stop_grace_period`, panel side `SERVER_STOP_TIMEOUT_SECONDS`).
+- One graceful lifecycle for every stop/restart path (dashboard, setup,
+  scheduler, watchdog, updates, rollback, restore, deleting an extra server)
+  with an optional in-game countdown; operations on the same server never
+  overlap. Deleting an extra server used to stop it with a 10-second
+  `docker stop`.
+- The game container runs without a TTY (`tty: false`), so Ctrl+C in
+  `docker attach` no longer shuts the server down, and console logs are
+  decoded correctly with and without a TTY. The first console command after
+  the panel (re)connected is no longer lost, and a console that cannot be
+  reached is reported as an error instead of success.
+- The watchdog explains why a server stopped (clean `/stop`, signal, crash,
+  out of memory, authentication failed, broken mod, missing assets, …), no
+  longer treats an in-game `/stop` as a crash, never auto-restarts failures a
+  restart cannot fix and also notices crashes Docker restarted before the next
+  poll. It no longer auto-restarts a crashed server that was stopped or taken
+  over by the panel (e.g. for a restore) in the meantime. The `WATCHDOG_*`
+  settings from `.env.example` now reach the panel.
+- The start script prints a plain-text diagnosis for every exit code (with a
+  hint to `/auth login device` for authentication failures) and no longer lets
+  Docker retry failures a restart cannot fix.
+
+**Scheduled restarts**
+- Scheduled restarts warn players on screen (`/notify`, a large title in the
+  last minute), save all worlds 10 seconds before, stop the server cleanly and
+  take the optional backup while it is stopped. New option to restart only
+  when no players are online; the scheduler shows the restart plan and a
+  running countdown.
+- Cancelling a scheduled restart really cancels it (it used to be re-armed a
+  minute later), and players are told when a countdown is cancelled.
+- Restart times are checked: strictly `HH:MM`, at most 24, at least 60
+  minutes apart (also across midnight), so the default 30-minute countdown,
+  the stop, the backup and the boot always fit in. An invalid time used to
+  restart the server in a loop; it is now refused when saving, and a stored
+  plan is corrected (with a log warning) when the panel starts. At most 10
+  countdown warnings are kept.
+- The old "Backup before restart" switch in the backup settings never did
+  anything; its value now carries over to the restart plan's backup option,
+  and the duplicate switch is gone.
+- The scheduler's welcome message works: it is posted in chat when a player
+  joins (requires the KyuubiSoft API plugin; Hytale has no private messages).
+
+**Updates**
+- The Update Center works with the server's own updater: the updater folder
+  is a persistent mount, `Assets.zip` and the launcher are where the updater
+  expects them, and a staged update is installed by the start script before
+  Java starts. Update settings are written under the key the server reads.
+- The server is started with `--universe`, `--backup-dir` and `--mods` for the
+  panel's folders, so native backups contain the worlds and uploaded plugins
+  are actually loaded.
+- JAR rollback no longer overwrites the running JAR: it stops the server,
+  swaps the JAR (and its AOT cache) and discards a staged update, which the
+  next start used to install again. A downloaded update can also be discarded
+  while the server is stopped.
+- The Update Center refuses to apply or download while another
+  stop/start/rollback/restore runs and asks before installing a build of
+  another patchline. A stop requested while the start script installs an
+  update no longer starts the server afterwards.
+- Rollbacks, JAR snapshots, the update history and the update settings never
+  follow a link the game server could have put into its folders. A file is
+  only read or copied when it is a regular file with a single link inside its
+  folder; a linked `HytaleServer.jar`, `Assets.zip` or `Licenses` folder (or
+  one with an extra hard link) stops the action with a message naming the
+  file. `.hytale-version`, snapshot data and the history are replaced instead
+  of written through, and a `config.json` that is a link is refused. Such a
+  link used to make the panel copy its own files (secrets) into the server
+  folder or overwrite them.
+- A rollback, saving the update settings with a restart and the downloader
+  self-update no longer fail in the browser after 30 s while the server is
+  still working. A second rollback, save or start while one of them (or any
+  stop/start/restore) runs is refused (`409 lifecycle_busy`) instead of running
+  again afterwards, and the Update Center locks its buttons meanwhile.
+  Rolling back to the oldest of five snapshots no longer deletes it first.
+- The Update Center notices when the game container uses another updater
+  folder than the panel (an older `docker-compose.yml` with a new image):
+  downloads, applying, the previous version and rollbacks are then blocked
+  with a hint to update the compose file. A staged update the panel could not
+  see used to be installed over a rollback.
+- Switching the patchline discards a downloaded update (and a running
+  download) of the old patchline, and after the downloader installed a build
+  the start discards an update staged before; the start script used to install
+  it over the new build. With the server stopped the switch now really deletes
+  the server files.
+- The server version is read from the JAR itself (`--version` and the JAR
+  manifest) at every start. The downloader runs with a timeout and a lock, and
+  its self-update is only reported or run after confirmation. The downloader,
+  its lock and its time limit run as the server user, also for the panel's
+  version checks and the downloader update, so root no longer opens files in
+  the server's downloader folder.
+- Legacy update settings in `config.json` are only migrated while the server
+  is stopped, and the setup wizard no longer drops JVM settings and boot
+  commands.
+
+**JVM and server arguments**
+- The game container checks the RAM, JVM and server arguments from the panel
+  again at every start, with the same rules as the panel. Values saved by an
+  older panel version that would load code (`-javaagent`, `@argfiles`, native
+  library paths), overwrite files in the server directory or keep the server
+  from starting are left out with a warning, and options Java itself rejects
+  are dropped so the server still starts.
+- Extra JVM arguments are stricter: `-D` only for the server's own `hytale.*`
+  properties and a few Java ones, `-Xlog` only to stdout/stderr or `logs/`,
+  and at most one garbage collector (it replaces the default G1).
+  `--early-plugins` is no longer accepted as an extra server argument.
+  Operators can still pass anything through `EXTRA_JAVA_ARGS`.
+- Saving the JVM settings is no longer refused because of a maximum RAM that
+  is already in use; only a new value is checked against the container limit.
+  The documented rule now matches the panel's: the limit must hold the heap
+  plus a quarter of the limit, at most 1.5 GB (8G limit: heap up to 6.5G).
+- Tokens passed in `EXTRA_SERVER_ARGS` or `EXTRA_JAVA_ARGS`
+  (`--session-token`, `--identity-token`, `-D…password=…`) are masked in the
+  container log.
+
+**Backups and restore**
+- Restoring a backup works again in the standard Docker setup. The panel no
+  longer renames the bind-mounted data directory (which failed with "device or
+  resource busy"); it stops the server cleanly, saves the current state as a
+  safety backup, swaps the directory contents in place with a crash-safe
+  journal, keeps its own files (panel settings, machine id) and starts the
+  server again.
+- Restores, server-backup restores, world restores and world imports run as
+  background jobs with progress on the page, so the panel stays responsive.
+  API scripts can keep the old blocking behaviour with `?wait=true` (backup
+  restores).
+- Restored and imported archives are checked before anything is unpacked (no
+  links, special files, absolute paths or `..`, no ambiguous tar headers),
+  ownership from the archive is never applied, and the unpacked size is capped
+  (`ARCHIVE_EXTRACT_MAX_GB`, default 50) with a free-space guard. The check
+  reads the archive member by member and stops at the first problem; member
+  names are limited to 1024 bytes and an archive to `ARCHIVE_MAX_ENTRIES`
+  (default 500 000) files and folders, so a small archive can no longer
+  exhaust the manager's memory or the inodes of the data volume. Tar headers
+  are read the way the manager's BusyBox tar reads them (number fields,
+  prefix field) and zip names the way unzip picks them; this was verified
+  against both extractors in the manager image.
+- A restore journal the panel did not write (for example one planted in the
+  data folder, or one pointing at a link) is discarded with a log warning
+  instead of moving files or blocking every later restore. Leftover restore
+  and staging folders are deleted without following a folder the game server
+  swaps for a link while they are removed.
+- Panel self-backups (panel database, users, settings) are kept in the
+  manager's own data volume instead of the backups volume, which the game
+  server can read; see the upgrade notes.
+- The server's own backups (`/backup`) on the Backups page: create, list,
+  download, upload off-site, delete and restore. They stay consistent with
+  players online. Panel backups of a running server now save all worlds first.
+- Backup retention only deletes automatic backups (new `auto_` prefix), never
+  a manual backup whose name happens to contain "auto". An event rule with a
+  backup action can no longer trigger itself in a loop.
+- Removed the unused `scripts/backup.sh`.
+
+**Game server image**
+- The container is only healthy while a `java` process runs and the game's UDP
+  port is bound (`scripts/healthcheck.sh`); the old check always reported
+  healthy.
+- Faster, quieter starts: file ownership is repaired in one pass that only
+  touches entries with the wrong owner (200k-file world: ~6 s → <1 s) and no
+  longer rewrites the ctime of every file. Opt out with `FIX_OWNERSHIP=false`.
+- The saved server login (`auth.enc`) is encrypted with a generated key file
+  in the auth volume (`HYTALE_AUTH_KEY_FILE`) instead of a machine id kept in
+  the world folder and therefore in every world backup. Existing logins are
+  migrated on first start.
+- The downloader's OAuth token is no longer copied into the auth volume; the
+  panel reads it through a read-only mount. The start scripts can no longer
+  be replaced by the server user (`/opt/hytale` is root-owned), and root no
+  longer follows links in the server-owned volumes: `.hytale-version` and the
+  unpacked download are written and moved as the server user, and the
+  patchline from `panel-config.json` is only used when it is a plain name
+  (`[a-z0-9-]`).
+- `docker stop` while the container is still downloading, waiting for the
+  downloader login or for server files ends within a second; it used to wait
+  for the whole grace period (120 s) and then kill the container. A download
+  cut short this way is removed so the next start does not take it for a
+  complete file; unpacking a downloaded build always finishes first.
+- Old server logs and stale lock files are removed on start
+  (`LOG_RETENTION_DAYS`, default 14; `LOG_MAX_FILES`, default 50).
+- The image is based on the Java 25 JRE instead of the JDK (568 MB → 441 MB).
+  Plugins that need JDK-only modules can build with
+  `--build-arg JAVA_IMAGE=eclipse-temurin:25-jdk-noble`.
+
+**Upgrade notes**
+- Rebuild both images and take over the new `docker-compose.yml` (new mounts
+  for the updater and the downloader, `tty: false`, `stop_grace_period`). If
+  you keep your own compose file, both services must mount the same `updater`
+  folder (writable for the manager); otherwise the Update Center blocks
+  downloads, applying and rollbacks and says so.
+- Plugins in `plugins/` are loaded from now on (they never were). An old,
+  incompatible JAR there stops the server with exit code 9; check the folder
+  before you update.
+- Server logs older than 14 days or beyond the newest 50 files are deleted on
+  start; set `LOG_RETENTION_DAYS=0` and `LOG_MAX_FILES=0` to keep them all.
+- The first start migrates the saved server login without a new
+  `/auth login`. Rolling back to an older image afterwards needs a new login.
+- Stored JVM or server arguments that fail the new checks are skipped at start
+  with a warning in the container log ("Ignoring … from the panel"); fix them
+  in the settings.
+- A restore now stops the server and replaces the data directory instead of
+  merging into it; a safety backup `manual_pre_restore_<timestamp>` is taken
+  first and is not deleted automatically. Backups that contain symlinks cannot
+  be restored any more.
+- Restore endpoints answer `202` with a job; poll `GET …/jobs/:id` or use
+  `?wait=true`. `POST /rollback` takes `discardStaged` instead of `force`, and
+  switching the patchline on apply needs `allowPatchlineSwitch`.
+- World imports only create new world folders; importing over an existing
+  world is refused.
+- Automatic backups are now named `auto_<label>_<timestamp>`; older automatic
+  backups are still covered by the retention. Server backups `backup_*` that
+  older images wrote into the backups folder (`ENABLE_BACKUP=true`) are no
+  longer removed by it; delete them by hand.
+- Panel self-backups now live in the manager volume under
+  `/app/data/panel-backups/` and are named `panel-backup_<timestamp>.tar.gz`.
+  On the first start the panel moves the copies an older version left in
+  `<backups>/_panel/` to `/app/data/panel-backups/from-backups-volume/legacy-…`
+  (they lay where the game server could change them; check one before you rely
+  on it). Links are never followed and nothing there is deleted recursively;
+  whatever is not moved (unfinished `.stage_*` snapshots, unknown files, files
+  over the size limits) stays and is named in the log; delete it by hand. If
+  copying fails, the move is tried again on the next start. The local
+  self-backups now share the manager volume, so only the off-site upload
+  protects them against its loss.
+- Scheduled restart plans with times less than an hour apart lose the later of
+  two close times on the first start (warning in the log); check the plan.
+- Deleting an extra server answers `409` (`SERVER_STOP_FAILED`) when the
+  server cannot be stopped or another operation is running on it; nothing is
+  removed then. `POST /api/scheduler/backup/run` needs `backups.create` in
+  addition to `scheduler.edit`.
+
 ### Platform
 
 - The manager runs on Node.js 24 LTS (Node 20 reached end of life); Docker,
@@ -218,10 +455,17 @@ working as before (stdin console, log-based status).
 - Messages a command sends after its reply (download progress, results from a
   world thread) are written to the server console instead of being lost. Only
   the user who ran a command sees its reply; the server log records who ran
-  it.
-- The Updates page reads the server's real `/update status` reply (version,
-  staged update, latest version, download progress); an update only counts as
-  ready to apply when one is actually staged.
+  it. Replies the panel itself reads from the server log (`/auth`, `/backup`
+  and the world save before a panel backup) are also printed there.
+- The panel's own lifecycle commands (`/stop`, countdown notices, world save)
+  take the same way: through the plugin, with the stdin console as fallback.
+- The Update Center keeps reading the installed and staged version from the
+  server's files and now also reads the server's answer to its `/update`
+  commands: a download the server turns down (not signed in, no newer build,
+  a download already running), an apply without a staged update or whose
+  backup before the update failed, and a discard that failed are reported
+  instead of counting as done, and a failed apply leaves no entry in the
+  update history.
 - Console autocomplete uses the server's real command list, including the
   commands of installed mods, with syntax hints, descriptions and the server's
   own argument suggestions. Commands the panel does not allow are marked, and
@@ -266,7 +510,9 @@ working as before (stdin console, log-based status).
   include it; select it by its exact name. A webhook receives it at most 10
   times per minute.
 - An event action rule runs at most 10 times per minute for the same event
-  name; further runs are dropped and logged once per minute.
+  name; further runs are dropped and logged once per minute. Events a rule
+  caused itself and events inside a backup rule's cooldown do not count
+  against this limit, and a run it drops does not start the cooldown.
 
 **Mod Status page**
 - KyuubiSoft mods can register a status page (metric tiles, tables, notices)
@@ -328,7 +574,8 @@ working as before (stdin console, log-based status).
 - "MSPT" is now the real tick time (around 0.5 ms instead of ~33 ms), and the
   main TPS figure shows the slowest world instead of the default world. An
   explicit `WATCHDOG_TPS_ALERT` stays an absolute threshold, now measured
-  against 30-TPS worlds.
+  against 30-TPS worlds; `docker-compose.yml` leaves it empty and passes
+  `WATCHDOG_TPS_ALERT_PERCENT` (default 75) instead.
 - The plugin's `/inventory` and `/appearance` responses have a new shape.
 - On the first start the built-in Operator and Viewer roles get
   `mods.panel.view`, exactly as new installations; `mods.panel.action` stays

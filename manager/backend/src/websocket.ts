@@ -2,6 +2,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { verifyToken, verifyWsTicket } from './services/auth.js';
 import { getDockerInstance, execCommand, getLogs } from './services/docker.js';
+import { createDockerOutputDecoder } from './services/dockerStream.js';
 import { parseLogLine } from './services/logs.js';
 import { processLogLine } from './services/players.js';
 import { hasPermission } from './services/roles.js';
@@ -314,38 +315,6 @@ function broadcast(serverId: string, message: object): void {
   }
 }
 
-/**
- * Demultiplex Docker stream data
- */
-function demuxDockerStream(chunk: Buffer): string[] {
-  const results: string[] = [];
-  let offset = 0;
-
-  while (offset < chunk.length) {
-    if (offset + 8 > chunk.length) {
-      const remaining = chunk.slice(offset).toString('utf-8');
-      if (remaining.trim()) results.push(remaining);
-      break;
-    }
-
-    const streamType = chunk.readUInt8(offset);
-    const size = chunk.readUInt32BE(offset + 4);
-
-    if (streamType > 2 || size > chunk.length - offset - 8) {
-      const rawData = chunk.slice(offset).toString('utf-8');
-      results.push(...rawData.split('\n'));
-      break;
-    }
-
-    const payload = chunk.slice(offset + 8, offset + 8 + size).toString('utf-8');
-    results.push(...payload.split('\n'));
-
-    offset += 8 + size;
-  }
-
-  return results;
-}
-
 // Demo mode: simulate log streaming with periodic log messages
 function startDemoLogStreaming(serverId: string): void {
   const state = getOrCreateStreamState(serverId);
@@ -430,13 +399,10 @@ async function startLogStreaming(serverId: string): Promise<void> {
     state.stream = stream;
     console.log(`Log streaming started for server ${serverId}`);
 
+    // Stateful: Docker frames (no TTY) are split arbitrarily across chunks.
+    const decoder = createDockerOutputDecoder();
     stream.on('data', (chunk: Buffer) => {
-      let lines: string[];
-      try {
-        lines = demuxDockerStream(chunk);
-      } catch {
-        lines = chunk.toString('utf-8').split('\n');
-      }
+      const lines = decoder.push(chunk).split('\n');
 
       for (const line of lines) {
         const trimmed = line.trim();

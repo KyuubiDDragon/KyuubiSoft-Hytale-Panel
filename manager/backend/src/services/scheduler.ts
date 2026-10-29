@@ -14,9 +14,9 @@
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
-import { createBackup, listBackups, deleteBackup } from './backup.js';
+import { createBackup, listBackups, deleteBackup, isAutomaticBackupId } from './backup.js';
 import * as dockerService from './docker.js';
-import { validateCommand, isValidPlayerName, stripControlChars } from '../utils/sanitize.js';
+import { validateCommand, stripControlChars } from '../utils/sanitize.js';
 import {
   authorizeCommand,
   authorizeStoredCommand,
@@ -33,6 +33,14 @@ import {
   onServerAdded,
   onServerDeleted,
 } from './servers.js';
+import {
+  LifecycleError,
+  restartServerGracefully,
+  withServerStopped,
+  type GracefulOptions,
+} from './serverLifecycle.js';
+import { getOnlinePlayers } from './players.js';
+import { createEventAction, getEventAction, updateEventAction } from './eventActions.js';
 
 // Scheduler configuration
 interface ScheduleConfig {
@@ -44,16 +52,20 @@ interface ScheduleConfig {
   };
   announcements: {
     enabled: boolean;
+    // Posted in chat when a player joins ({player} = name), by an Event Action
+    // rule kept in sync on save (see syncWelcomeAction).
     welcome: string;
+    welcomeActionId?: string;
     scheduled: ScheduledAnnouncement[];
   };
   scheduledRestarts: {
     enabled: boolean;
     times: string[]; // Array of times like ["03:00", "15:00"]
-    warningMinutes: number[]; // Warning intervals before restart, e.g. [30, 15, 5, 1]
-    warningMessage: string; // Message template, {minutes} placeholder
-    restartMessage: string; // Final message before restart
-    createBackup: boolean; // Create backup before restart
+    warningMinutes: number[]; // Countdown announcements before the restart, e.g. [30, 15, 5, 1]
+    warningMessage: string; // Countdown text: {time} ("5 minutes", "30 seconds"), {minutes}
+    restartMessage: string; // Announced right before /stop
+    createBackup: boolean; // Back up while the server is stopped for the restart
+    onlyWhenEmpty: boolean; // Restart only when no player is online, else skip this slot
   };
   quickCommands: QuickCommand[];
   scheduledCommands: ScheduledCommand[];
@@ -113,9 +125,10 @@ const DEFAULT_CONFIG: ScheduleConfig = {
     enabled: false,
     times: [],
     warningMinutes: [30, 15, 5, 1],
-    warningMessage: 'Server restart in {minutes} minute(s)!',
+    warningMessage: 'Server restart in {time}!',
     restartMessage: 'Server is restarting now!',
     createBackup: true,
+    onlyWhenEmpty: false,
   },
   quickCommands: [
     { id: '1', name: 'Save World', command: '/save', icon: 'save', category: 'server' },
@@ -136,7 +149,10 @@ interface SchedulerTimers {
   backupTimer: NodeJS.Timeout | null;
   announcementTimers: Map<string, NodeJS.Timeout>;
   restartTimers: Map<string, NodeJS.Timeout>;
-  restartWarningTimers: NodeJS.Timeout[];
+  // Running restart countdown; aborting it leaves the server untouched.
+  restartCountdown: AbortController | null;
+  // Epoch-ms of the restart slot that last ran, was skipped or cancelled.
+  lastRestartSlot: number;
   pendingRestart: { time: string; scheduledAt: Date } | null;
   // One timer per scheduled command id. Daily-mode commands store a setTimeout
   // (re-armed on fire); interval-mode commands store a setInterval.
@@ -151,7 +167,8 @@ function emptyTimers(): SchedulerTimers {
     backupTimer: null,
     announcementTimers: new Map(),
     restartTimers: new Map(),
-    restartWarningTimers: [],
+    restartCountdown: null,
+    lastRestartSlot: 0,
     pendingRestart: null,
     commandTimers: new Map(),
     commandLastRun: new Map(),
@@ -230,7 +247,23 @@ export async function loadConfig(serverId?: string): Promise<ScheduleConfig> {
     if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath, 'utf-8');
       const loaded = JSON.parse(data);
-      cfg = deepMerge(DEFAULT_CONFIG, loaded);
+      cfg = deepMerge(DEFAULT_CONFIG, carryOverRestartBackup(loaded));
+      // The file sits in the server's data dir; its restart plan gets the same
+      // checks as one saved through the API.
+      const plan = normalizeRestartPlan(cfg.scheduledRestarts);
+      const storedTimes = (cfg.scheduledRestarts as { times?: unknown } | null)?.times;
+      // Order and duplicates alone are not worth a warning.
+      const comparable = Array.isArray(storedTimes)
+        ? [...new Set(storedTimes)].sort()
+        : storedTimes;
+      if (JSON.stringify(plan.times) !== JSON.stringify(comparable)) {
+        console.warn(
+          `[Scheduler:${id}] Restart times ${JSON.stringify(storedTimes)?.slice(0, 200)} ` +
+            `adjusted to ${JSON.stringify(plan.times)} (strict "HH:MM", at most ` +
+            `${MAX_RESTART_TIMES}, at least ${MIN_RESTART_GAP_MINUTES} minutes apart)`,
+        );
+      }
+      cfg = { ...cfg, scheduledRestarts: plan };
       console.log(`[Scheduler:${id}] Config loaded from file:`, filePath);
     } else {
       console.log(`[Scheduler:${id}] No config file found, using defaults`);
@@ -262,7 +295,22 @@ function doSaveSync(cfg: Partial<ScheduleConfig>, serverIdOverride?: string): bo
   try {
     const id = serverIdOverride ?? Object.keys(schedulerConfig)[0] ?? 'default';
     const current = schedulerConfig[id] ?? { ...DEFAULT_CONFIG };
-    const merged = deepMerge(current, cfg);
+    // The welcome rule id is managed here, never taken from a client.
+    const incoming = cfg.announcements
+      ? { ...cfg, announcements: { ...cfg.announcements, welcomeActionId: undefined } }
+      : cfg;
+    let merged: ScheduleConfig = deepMerge(current, incoming);
+    merged = { ...merged, scheduledRestarts: normalizeRestartPlan(merged.scheduledRestarts) };
+    if (cfg.announcements) {
+      const welcomeActionId = syncWelcomeAction(id, {
+        ...merged,
+        announcements: {
+          ...merged.announcements,
+          welcomeActionId: current.announcements?.welcomeActionId,
+        },
+      });
+      merged = { ...merged, announcements: { ...merged.announcements, welcomeActionId } };
+    }
     schedulerConfig[id] = merged;
     // Fire-and-forget async persist + restart for the resolved server.
     void (async () => {
@@ -315,7 +363,7 @@ function getNextBackupTime(serverId: string): Date | null {
 async function runAutoBackup(serverId: string): Promise<void> {
   console.log(`[Scheduler:${serverId}] Running automatic backup...`);
 
-  const result = await createBackup('auto', serverId);
+  const result = await createBackup({ kind: 'auto', label: 'daily' }, serverId);
 
   if (result.success) {
     console.log(`[Scheduler:${serverId}] Backup created: ${result.backup?.filename}`);
@@ -335,7 +383,8 @@ async function cleanOldBackups(serverId: string): Promise<void> {
 
   let deleted = 0;
   for (const backup of backups) {
-    if (backup.type === 'auto' && new Date(backup.created_at) < cutoffDate) {
+    // Exact name prefix only: a manual backup called e.g. "autumn" is never pruned.
+    if (isAutomaticBackupId(backup.id) && new Date(backup.created_at) < cutoffDate) {
       const result = await deleteBackup(backup.id, serverId);
       if (result.success) deleted++;
     }
@@ -360,22 +409,29 @@ async function sendAnnouncement(message: string, serverId: string): Promise<void
   }
 }
 
-// Calculate next restart time
-function getNextRestartTime(serverId: string): { time: string; date: Date } | null {
+// Calculate next restart time. Slots up to `notBeforeMs` (the one that just
+// ran, was skipped or cancelled) are not offered again.
+function getNextRestartTime(
+  serverId: string,
+  notBeforeMs = 0,
+): { time: string; date: Date } | null {
   const cfg = schedulerConfig[serverId];
   if (!cfg || !cfg.scheduledRestarts.enabled || cfg.scheduledRestarts.times.length === 0) {
     return null;
   }
 
   const now = new Date();
+  const earliest = Math.max(now.getTime(), notBeforeMs);
   let nearestRestart: { time: string; date: Date } | null = null;
 
   for (const timeStr of cfg.scheduledRestarts.times) {
+    // Normalized on load and save; anything else would plan an invalid date.
+    if (typeof timeStr !== 'string' || !DAILY_TIME.test(timeStr)) continue;
     const [hours, minutes] = timeStr.split(':').map(Number);
     const restartDate = new Date(now);
     restartDate.setHours(hours, minutes, 0, 0);
 
-    if (restartDate <= now) {
+    if (restartDate.getTime() <= earliest) {
       restartDate.setDate(restartDate.getDate() + 1);
     }
 
@@ -387,73 +443,115 @@ function getNextRestartTime(serverId: string): { time: string; date: Date } | nu
   return nearestRestart;
 }
 
-// Send restart warning
-async function sendRestartWarning(minutesLeft: number, serverId: string): Promise<void> {
-  const cfg = schedulerConfig[serverId];
-  if (!cfg) return;
-  const message = cfg.scheduledRestarts.warningMessage.replace('{minutes}', minutesLeft.toString());
-  await sendAnnouncement(message, serverId);
-  console.log(`[Scheduler:${serverId}] Sent restart warning: ${minutesLeft} minutes remaining`);
+// The countdown runs from the earliest warning; a restart planned without
+// warnings (or only when empty) fires at the restart time itself.
+function countdownMsFor(cfg: ScheduleConfig): number {
+  const plan = cfg.scheduledRestarts;
+  if (plan.onlyWhenEmpty) return 0;
+  const minutes = (plan.warningMinutes ?? []).filter((m) => Number.isFinite(m) && m > 0);
+  return minutes.length ? Math.max(...minutes) * 60_000 : 0;
 }
 
-// Execute the scheduled restart
-async function executeScheduledRestart(serverId: string): Promise<void> {
+// Abort reasons of a running countdown: a cancelled restart is skipped, a
+// rescheduled one (config saved meanwhile) is planned again from the new config.
+const CANCELLED = 'cancel';
+const RESCHEDULED = 'reschedule';
+
+/**
+ * The scheduled restart: countdown in game (/notify, /eventtitle in the last
+ * minute, /world save shortly before), then /stop, wait for the exit and start
+ * again – all through the lifecycle service, so the worlds are saved and no
+ * update or restore runs at the same time. The optional backup is taken while
+ * the server is stopped, so it is consistent.
+ */
+async function executeScheduledRestart(serverId: string, restartAt: Date): Promise<void> {
   const cfg = schedulerConfig[serverId];
-  if (!cfg) return;
-  console.log(`[Scheduler:${serverId}] Executing scheduled restart...`);
+  const timers = timersByServer[serverId];
+  if (!cfg || !timers) return;
+  const plan = cfg.scheduledRestarts;
+  const abort = new AbortController();
+  timers.restartCountdown = abort;
+  const log = (msg: string) => console.log(`[Scheduler:${serverId}] ${msg}`);
+  let countdownAborted = false;
 
-  await sendAnnouncement(cfg.scheduledRestarts.restartMessage, serverId);
+  try {
+    if (!(await dockerService.getStatus(serverId)).running) {
+      log('Scheduled restart skipped: the server is not running');
+      return;
+    }
+    if (plan.onlyWhenEmpty) {
+      const online = await getOnlinePlayers(serverId).catch(() => null);
+      if (online === null || online.length > 0) {
+        log(
+          `Scheduled restart skipped: ${online === null ? 'player count unknown' : `${online.length} player(s) online`}`,
+        );
+        return;
+      }
+    }
 
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+    const opts: GracefulOptions = {
+      reason: 'scheduled',
+      actor: 'scheduler',
+      countdownSeconds: plan.onlyWhenEmpty
+        ? 0
+        : Math.max(0, Math.round((restartAt.getTime() - Date.now()) / 1000)),
+      warningSeconds: (plan.warningMinutes ?? []).map((m) => m * 60),
+      message: plan.warningMessage,
+      finalMessage: plan.restartMessage,
+      signal: abort.signal,
+    };
+    log(`Scheduled restart: countdown ${opts.countdownSeconds}s`);
 
-  if (cfg.scheduledRestarts.createBackup) {
-    console.log(`[Scheduler:${serverId}] Creating pre-restart backup...`);
-    const result = await createBackup('scheduled_restart', serverId);
-    if (result.success) {
-      console.log(`[Scheduler:${serverId}] Pre-restart backup created: ${result.backup?.filename}`);
+    if (plan.createBackup) {
+      await withServerStopped(serverId, opts, async () => {
+        const result = await createBackup({ kind: 'auto', label: 'scheduled_restart' }, serverId);
+        if (result.success) log(`Pre-restart backup created: ${result.backup?.filename}`);
+        else console.error(`[Scheduler:${serverId}] Pre-restart backup failed:`, result.error);
+      });
+      log('Server restarted');
     } else {
-      console.error(`[Scheduler:${serverId}] Pre-restart backup failed:`, result.error);
+      const result = await restartServerGracefully(serverId, opts);
+      if (result.ok) log(`Server restarted (${result.method})`);
+      else if (result.method === 'cancelled') countdownAborted = true;
+      else console.error(`[Scheduler:${serverId}] Server restart failed:`, result.error);
+    }
+  } catch (error) {
+    if (error instanceof LifecycleError && error.phase === 'cancelled') countdownAborted = true;
+    else console.error(`[Scheduler:${serverId}] Scheduled restart failed:`, error);
+  } finally {
+    if (timers.restartCountdown === abort) timers.restartCountdown = null;
+    // Players were warned; tell them it is off (not for a mere reschedule).
+    if (countdownAborted && abort.signal.reason === CANCELLED) {
+      log('Scheduled restart cancelled');
+      void dockerService.sendLifecycleCommand(
+        '/notify warning The scheduled restart was cancelled.',
+        serverId,
+      );
+    }
+    // A rescheduled countdown has already been planned again by the caller.
+    if (abort.signal.reason !== RESCHEDULED) {
+      timers.lastRestartSlot = restartAt.getTime();
+      scheduleNextRestart(serverId);
     }
   }
-
-  const restartResult = await dockerService.restartContainer(serverId);
-  if (restartResult.success) {
-    console.log(`[Scheduler:${serverId}] Server restart initiated successfully`);
-  } else {
-    console.error(`[Scheduler:${serverId}] Server restart failed:`, restartResult.error);
-  }
-
-  // Clear pending restart and schedule next one
-  const timers = timersByServer[serverId];
-  if (timers) timers.pendingRestart = null;
-  scheduleNextRestart(serverId);
 }
 
-// Schedule a single restart with warnings
+// Arm one restart: a single timer at the start of its countdown.
 function scheduleRestartWithWarnings(restartTime: Date, timeStr: string, serverId: string): void {
   const cfg = schedulerConfig[serverId];
   const timers = timersByServer[serverId];
   if (!cfg || !timers) return;
-  const now = Date.now();
-  const restartMs = restartTime.getTime();
-  const msUntilRestart = restartMs - now;
-
-  for (const timer of timers.restartWarningTimers) clearTimeout(timer);
-  timers.restartWarningTimers = [];
-
-  for (const warningMinutes of cfg.scheduledRestarts.warningMinutes) {
-    const warningMs = msUntilRestart - warningMinutes * 60 * 1000;
-    if (warningMs > 0) {
-      const timer = setTimeout(() => {
-        sendRestartWarning(warningMinutes, serverId);
-      }, warningMs);
-      timers.restartWarningTimers.push(timer);
-    }
+  const msUntilRestart = restartTime.getTime() - Date.now();
+  const fireIn = Math.max(0, msUntilRestart - countdownMsFor(cfg));
+  // setTimeout(NaN) fires at once; a broken time must never become a restart loop.
+  if (!Number.isFinite(fireIn)) {
+    console.error(`[Scheduler:${serverId}] Restart time ${timeStr} is invalid; not scheduled`);
+    return;
   }
 
   const restartTimer = setTimeout(() => {
-    executeScheduledRestart(serverId);
-  }, msUntilRestart);
+    void executeScheduledRestart(serverId, restartTime);
+  }, fireIn);
   timers.restartTimers.set(timeStr, restartTimer);
 
   timers.pendingRestart = { time: timeStr, scheduledAt: restartTime };
@@ -463,46 +561,47 @@ function scheduleRestartWithWarnings(restartTime: Date, timeStr: string, serverI
   );
 }
 
+function clearRestartTimers(timers: SchedulerTimers, abortReason: string): void {
+  for (const [, timer] of timers.restartTimers) clearTimeout(timer);
+  timers.restartTimers.clear();
+  timers.restartCountdown?.abort(abortReason);
+  timers.restartCountdown = null;
+  timers.pendingRestart = null;
+}
+
 // Schedule the next restart
 function scheduleNextRestart(serverId: string): void {
   const cfg = schedulerConfig[serverId];
   const timers = timersByServer[serverId];
   if (!cfg || !timers) return;
 
-  for (const [, timer] of timers.restartTimers) clearTimeout(timer);
-  timers.restartTimers.clear();
-
-  for (const timer of timers.restartWarningTimers) clearTimeout(timer);
-  timers.restartWarningTimers = [];
-  timers.pendingRestart = null;
+  clearRestartTimers(timers, RESCHEDULED);
 
   if (!cfg.scheduledRestarts.enabled) return;
 
-  const nextRestart = getNextRestartTime(serverId);
+  const nextRestart = getNextRestartTime(serverId, timers.lastRestartSlot);
   if (nextRestart) {
     scheduleRestartWithWarnings(nextRestart.date, nextRestart.time, serverId);
   }
 }
 
-// Cancel pending restart
+// Cancel the pending restart (also mid-countdown); the next slot is planned.
 export function cancelPendingRestart(serverId?: string): boolean {
   const id = serverId ?? Object.keys(timersByServer)[0];
   if (!id) return false;
   const timers = timersByServer[id];
   if (!timers || !timers.pendingRestart) return false;
 
-  for (const [, timer] of timers.restartTimers) clearTimeout(timer);
-  timers.restartTimers.clear();
-
-  for (const timer of timers.restartWarningTimers) clearTimeout(timer);
-  timers.restartWarningTimers = [];
-
+  const slot = timers.pendingRestart.scheduledAt;
   console.log(
-    `[Scheduler:${id}] Cancelled pending restart that was scheduled for ${timers.pendingRestart.scheduledAt.toISOString()}`,
+    `[Scheduler:${id}] Cancelled pending restart that was scheduled for ${slot.toISOString()}`,
   );
-  timers.pendingRestart = null;
-
-  setTimeout(() => scheduleNextRestart(id), 60000);
+  timers.lastRestartSlot = slot.getTime();
+  const countdown = timers.restartCountdown;
+  timers.restartCountdown = null;
+  // A running countdown announces the cancellation and plans the next slot itself.
+  countdown?.abort(CANCELLED);
+  if (!countdown) scheduleNextRestart(id);
 
   return true;
 }
@@ -689,11 +788,8 @@ function stopSchedulersForServer(serverId: string): void {
   }
   for (const [, t] of timers.announcementTimers) clearInterval(t);
   timers.announcementTimers.clear();
-  for (const [, t] of timers.restartTimers) clearTimeout(t);
-  timers.restartTimers.clear();
-  for (const t of timers.restartWarningTimers) clearTimeout(t);
-  timers.restartWarningTimers = [];
-  timers.pendingRestart = null;
+  // A running countdown is re-planned from the (new) config by the next start.
+  clearRestartTimers(timers, RESCHEDULED);
   clearScheduledCommands(timers);
   console.log(`[Scheduler:${serverId}] Schedulers stopped`);
 }
@@ -737,31 +833,184 @@ export function stopSchedulers(): void {
   }
 }
 
-// Create backup before restart (if enabled) — used by routes
-export async function backupBeforeRestart(serverId?: string): Promise<boolean> {
-  const id = await resolveServerId(serverId);
-  const cfg = schedulerConfig[id] ?? (await loadConfig(id));
-  if (!cfg.backups.beforeRestart) return true;
-  console.log(`[Scheduler:${id}] Creating pre-restart backup...`);
-  const result = await createBackup('pre_restart', id);
-  return result.success;
+/**
+ * Configs from before the restart plan kept "back up before restart" under
+ * backups.beforeRestart, which nothing ever read. Carry it over to the plan's
+ * createBackup unless the plan already has its own value.
+ */
+export function carryOverRestartBackup(loaded: any): any {
+  const legacy = loaded?.backups?.beforeRestart;
+  if (typeof legacy !== 'boolean' || typeof loaded?.scheduledRestarts?.createBackup === 'boolean') {
+    return loaded;
+  }
+  return { ...loaded, scheduledRestarts: { ...loaded.scheduledRestarts, createBackup: legacy } };
 }
 
-// Send welcome message to a player joining a specific server
-export async function sendWelcomeMessage(playerName: string, serverId?: string): Promise<void> {
-  const id = await resolveServerId(serverId);
-  const cfg = schedulerConfig[id] ?? (await loadConfig(id));
-  if (!cfg.announcements.enabled || !cfg.announcements.welcome) return;
-  if (!isValidPlayerName(playerName)) {
-    console.warn(
-      `[Scheduler:${id}] Skipping welcome message: invalid player name ${JSON.stringify(String(playerName).slice(0, 40))}`,
-    );
-    return;
+const WELCOME_ACTION_NAME = 'Welcome message (Scheduler)';
+
+/**
+ * The welcome message is an Event Action rule (player.joined → announce), so
+ * it fires from the plugin's join event without its own wiring. Hytale 0.7 has
+ * no private message command, which makes it a chat line for everyone. The
+ * rule follows the scheduler settings; its id is stored in the config.
+ */
+function syncWelcomeAction(serverId: string, cfg: ScheduleConfig): string | undefined {
+  const text = stripControlChars(cfg.announcements.welcome ?? '').trim();
+  const enabled = cfg.announcements.enabled && text !== '';
+  const storedId = cfg.announcements.welcomeActionId;
+  try {
+    const stored = storedId ? getEventAction(storedId) : null;
+    // Only ever touch the rule this created, whatever id a config file holds.
+    const ours =
+      stored?.createdBy === 'scheduler' &&
+      stored.name === WELCOME_ACTION_NAME &&
+      stored.actionType === 'announce'
+        ? stored
+        : null;
+    if (ours) {
+      updateEventAction(ours.id, { actionPayload: { message: text }, enabled, serverId });
+      return ours.id;
+    }
+    if (!enabled) return undefined;
+    return createEventAction({
+      name: WELCOME_ACTION_NAME,
+      serverId,
+      eventPattern: 'player.joined',
+      actionType: 'announce',
+      actionPayload: { message: text },
+      createdBy: 'scheduler',
+    }).id;
+  } catch (error) {
+    console.error(`[Scheduler:${serverId}] Could not update the welcome message rule:`, error);
+    return storedId;
   }
-  const message = stripControlChars(
-    cfg.announcements.welcome.replace('{player}', playerName),
-  ).trim();
-  await dockerService.execCommand(`/msg ${playerName} ${message}`, id, { actor: 'scheduler' });
+}
+
+const MAX_WARNING_MINUTES = 240;
+// Each warning is an on-screen notice for every player; the earliest one sets
+// the countdown length and is always kept.
+const MAX_WARNINGS = 10;
+const MAX_MESSAGE_LENGTH = 200;
+// Restart times are "HH:MM" (local time of the manager), daily.
+const MAX_RESTART_TIMES = 24;
+// Minimum distance between two restart times, also across midnight. One
+// restart needs the countdown (30 minutes by default), up to about 2.5
+// minutes to stop (SERVER_STOP_TIMEOUT_SECONDS plus the Docker fallback), the
+// optional backup and the boot. An hour covers that with room to spare, so
+// the default countdown always runs in full and the server is up for most of
+// every hour; at most 24 restarts a day, matching MAX_RESTART_TIMES. A longer
+// countdown than the gap is shortened, never overlapped: the next time is
+// only armed once the previous restart has finished.
+const MIN_RESTART_GAP_MINUTES = 60;
+const MINUTES_PER_DAY = 24 * 60;
+
+function minutesOfDay(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** First pair of (sorted, unique) times closer than the minimum gap, or null. */
+function restartGapConflict(sorted: string[]): [string, string] | null {
+  for (let i = 1; i < sorted.length; i++) {
+    if (minutesOfDay(sorted[i]) - minutesOfDay(sorted[i - 1]) < MIN_RESTART_GAP_MINUTES) {
+      return [sorted[i - 1], sorted[i]];
+    }
+  }
+  if (sorted.length > 1) {
+    const last = sorted[sorted.length - 1];
+    if (minutesOfDay(sorted[0]) + MINUTES_PER_DAY - minutesOfDay(last) < MIN_RESTART_GAP_MINUTES) {
+      return [last, sorted[0]];
+    }
+  }
+  return null;
+}
+
+/**
+ * Check restart times from a client: strict "HH:MM", at most
+ * MAX_RESTART_TIMES, at least MIN_RESTART_GAP_MINUTES apart. Duplicates are
+ * dropped; the result is sorted.
+ */
+export function reviewRestartTimes(
+  value: unknown,
+): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(value)) {
+    return { ok: false, error: 'scheduledRestarts.times must be a list of "HH:MM" times' };
+  }
+  for (const t of value) {
+    if (typeof t !== 'string' || !DAILY_TIME.test(t)) {
+      return {
+        ok: false,
+        error: `Restart time ${JSON.stringify(t)?.slice(0, 40)} is not a time of day ("HH:MM")`,
+      };
+    }
+  }
+  const times = [...new Set(value as string[])].sort();
+  if (times.length > MAX_RESTART_TIMES) {
+    return { ok: false, error: `At most ${MAX_RESTART_TIMES} restart times are allowed` };
+  }
+  const conflict = restartGapConflict(times);
+  if (conflict) {
+    return {
+      ok: false,
+      error:
+        `Restart times ${conflict[0]} and ${conflict[1]} are less than ` +
+        `${MIN_RESTART_GAP_MINUTES} minutes apart`,
+    };
+  }
+  return { ok: true, value: times };
+}
+
+/**
+ * The same rules for a stored plan (a config written by an older version or
+ * by hand): invalid entries are dropped, and of two times too close together
+ * the later one.
+ */
+function normalizeRestartTimes(value: unknown): string[] {
+  const valid = [
+    ...new Set(
+      (Array.isArray(value) ? value : []).filter(
+        (t): t is string => typeof t === 'string' && DAILY_TIME.test(t),
+      ),
+    ),
+  ].sort();
+  const kept: string[] = [];
+  for (const t of valid) {
+    const prev = kept[kept.length - 1];
+    if (prev === undefined || minutesOfDay(t) - minutesOfDay(prev) >= MIN_RESTART_GAP_MINUTES) {
+      kept.push(t);
+    }
+  }
+  while (kept.length > 1 && restartGapConflict(kept)) kept.pop();
+  return kept.slice(0, MAX_RESTART_TIMES);
+}
+
+// Keep a saved restart plan within sane bounds (the client sends it as-is).
+function normalizeRestartPlan(raw: unknown): ScheduleConfig['scheduledRestarts'] {
+  const plan: ScheduleConfig['scheduledRestarts'] =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as ScheduleConfig['scheduledRestarts'])
+      : DEFAULT_CONFIG.scheduledRestarts;
+  const sorted = [
+    ...new Set(
+      (Array.isArray(plan.warningMinutes) ? plan.warningMinutes : [])
+        .map(Number)
+        .filter((m) => Number.isInteger(m) && m >= 1 && m <= MAX_WARNING_MINUTES),
+    ),
+  ].sort((a, b) => b - a);
+  const warningMinutes =
+    sorted.length > MAX_WARNINGS
+      ? [sorted[0], ...sorted.slice(sorted.length - (MAX_WARNINGS - 1))]
+      : sorted;
+  const text = (value: unknown, fallback: string) =>
+    (typeof value === 'string' ? value : fallback).slice(0, MAX_MESSAGE_LENGTH);
+  return {
+    ...plan,
+    times: normalizeRestartTimes(plan.times),
+    warningMinutes,
+    warningMessage: text(plan.warningMessage, DEFAULT_CONFIG.scheduledRestarts.warningMessage),
+    restartMessage: text(plan.restartMessage, DEFAULT_CONFIG.scheduledRestarts.restartMessage),
+    onlyWhenEmpty: plan.onlyWhenEmpty === true,
+  };
 }
 
 // Quick commands
@@ -1086,6 +1335,8 @@ export async function getSchedulerStatus(serverId?: string): Promise<{
     enabled: boolean;
     nextRestart: string | null;
     pendingRestart: { time: string; scheduledAt: string } | null;
+    /** The in-game countdown for the pending restart is running. */
+    countdownRunning: boolean;
     times: string[];
   };
   scheduledCommands: ScheduledCommandStatus[];
@@ -1096,7 +1347,7 @@ export async function getSchedulerStatus(serverId?: string): Promise<{
   const nextBackup = getNextBackupTime(id);
   const backups = await listBackups(id);
   const lastAutoBackup = backups.find((b) => b.type === 'auto');
-  const nextRestart = getNextRestartTime(id);
+  const nextRestart = getNextRestartTime(id, timers.lastRestartSlot);
 
   return {
     backups: {
@@ -1113,6 +1364,7 @@ export async function getSchedulerStatus(serverId?: string): Promise<{
       enabled: cfg.scheduledRestarts.enabled,
       nextRestart: nextRestart?.date.toISOString() || null,
       pendingRestart: getPendingRestart(id),
+      countdownRunning: timers.restartCountdown !== null,
       times: cfg.scheduledRestarts.times,
     },
     scheduledCommands: getScheduledCommandStatuses(id),

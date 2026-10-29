@@ -1,13 +1,23 @@
 /**
  * Server Watchdog.
  *
- * Polls every registered server's container and:
- *   - detects an unexpected stop (a crash, i.e. a running→stopped transition
- *     that the panel did NOT initiate) and emits `server.crashed`;
- *   - optionally auto-restarts it with a crash-loop guard, emitting
- *     `server.restarted`, or `server.alert` once the restart budget is spent;
+ * Follows Docker's container events and polls every registered server's
+ * container to:
+ *   - notice a stop the panel did NOT initiate and explain it from the exit
+ *     code (see serverExit.ts): a clean `/stop` or a signal is reported as
+ *     `server.stopped`, a crash as `server.crashed` with the reason in plain
+ *     text, an OOM kill additionally as `server.alert`;
+ *   - optionally auto-restart a crash with a crash-loop guard, emitting
+ *     `server.restarted`, or `server.alert` once the restart budget is spent.
+ *     Exits a restart cannot fix (auth failed, broken mod, …) are never
+ *     restarted, and Docker's own restart policy gets the first try;
  *   - emits a debounced `server.alert` when container memory crosses a
  *     threshold.
+ *
+ * The events matter because Docker's restart policy brings a crashed
+ * container back within milliseconds, long before the next poll; polling
+ * alone would never see the crash (it still catches it via a changed start
+ * time, just without the exit code).
  *
  * All events go through the panel EventBus, so the existing webhook and
  * notification sinks deliver them with no extra wiring.
@@ -21,7 +31,14 @@ import { logger } from '../utils/logger.js';
 import { publish } from './eventBus.js';
 import { listServers, type ServerInstance } from './servers.js';
 import { findLaggingWorld, getWorldTicks, startTpsState, tpsRatio } from './tpsState.js';
-import { getStatus, getStats, startContainer, wasRecentlyStoppedIntentionally } from './docker.js';
+import {
+  getContainerState,
+  getDockerInstance,
+  getStats,
+  wasRecentlyStoppedIntentionally,
+} from './docker.js';
+import { getActiveOperation, startServer } from './serverLifecycle.js';
+import { classifyExit, isRestartable, type ExitInfo } from './serverExit.js';
 import { isDemoMode } from './demoData.js';
 
 function envBool(name: string, def: boolean): boolean {
@@ -58,10 +75,19 @@ const TPS_STALE_MS = envInt('WATCHDOG_TPS_STALE_MS', 60_000); // ignore TPS read
 // Low-disk alert on each server's data volume.
 const DISK_ALERT_MIN_GB = envInt('WATCHDOG_DISK_ALERT_MIN_GB', 2); // alert when free < this; 0 = off
 const DISK_ALERT_COOLDOWN_MS = envInt('WATCHDOG_DISK_ALERT_COOLDOWN_MS', 30 * 60_000);
+// Docker emits `oom` just before the `die` of the killed run.
+const OOM_EVENT_WINDOW_MS = 10_000;
+const EVENTS_RETRY_MS = 30_000;
 
 interface WatchState {
   wasRunning: boolean | null; // null until the first observation
+  startedAt: string | null; // start time of the run last seen running
   restartTimes: number[]; // epoch-ms of recent auto-restarts (windowed)
+  // A restartable crash waiting for the next poll: Docker's restart policy
+  // gets the first try, the watchdog only starts what is still down then.
+  pendingRestart: ExitInfo | null;
+  lastCrash: { reason: string; at: number } | null; // de-duplicates Docker's retries
+  lastOomAt: number;
   lastMemAlertAt: number;
   lastTpsAlertAt: number;
   lastDiskAlertAt: number;
@@ -75,7 +101,11 @@ function getState(serverId: string): WatchState {
   if (!s) {
     s = {
       wasRunning: null,
+      startedAt: null,
       restartTimes: [],
+      pendingRestart: null,
+      lastCrash: null,
+      lastOomAt: 0,
       lastMemAlertAt: 0,
       lastTpsAlertAt: 0,
       lastDiskAlertAt: 0,
@@ -85,63 +115,153 @@ function getState(serverId: string): WatchState {
   return s;
 }
 
+// A stop the panel caused itself (UI, scheduler, update, restore, console /stop).
+async function isDeliberateStop(serverId: string): Promise<boolean> {
+  return (
+    getActiveOperation(serverId) !== null ||
+    (await wasRecentlyStoppedIntentionally(serverId, INTENTIONAL_GRACE_MS))
+  );
+}
+
+// Report an exit the panel did not cause, and queue a restart if one can help.
+function handleExit(serverId: string, s: WatchState, info: ExitInfo): void {
+  const details = {
+    serverId,
+    exitCode: info.code,
+    reason: info.reason,
+    message: info.message,
+    hint: info.hint,
+  };
+  s.pendingRestart = null;
+
+  if (info.kind === 'clean' || info.kind === 'signal' || info.kind === 'update') {
+    // e.g. /stop typed in game, or `docker stop` outside the panel: no crash.
+    logger.info(`[Watchdog] Server ${serverId} stopped: ${info.message} (exit ${info.code})`);
+    if (info.kind !== 'update')
+      publish('server.stopped', { ...details, initiator: 'server' }, serverId);
+    return;
+  }
+
+  // Docker's restart policy retries an unrecoverable failure a few times in a
+  // row; one notification per failure is enough.
+  const now = Date.now();
+  const repeat =
+    s.lastCrash !== null &&
+    s.lastCrash.reason === info.reason &&
+    now - s.lastCrash.at < RESTART_WINDOW_MS;
+  s.lastCrash = { reason: info.reason, at: now };
+
+  if (!repeat || info.kind !== 'unrecoverable') {
+    logger.warn(`[Watchdog] Server ${serverId} crashed: ${info.message} (exit ${info.code})`);
+    publish(
+      'server.crashed',
+      { ...details, restartable: isRestartable(info), detectedAt: new Date(now).toISOString() },
+      serverId,
+    );
+    if (info.reason === 'out_of_memory') {
+      publish('server.alert', { ...details, reason: 'out_of_memory' }, serverId);
+    }
+  }
+
+  if (!AUTO_RESTART) return;
+  if (isRestartable(info)) {
+    s.pendingRestart = info;
+  } else if (!repeat) {
+    logger.warn(
+      `[Watchdog] Not auto-restarting ${serverId}: a restart cannot fix "${info.reason}"`,
+    );
+  }
+}
+
+// Restart a queued crash, unless Docker's restart policy already did.
+async function maybeAutoRestart(serverId: string, s: WatchState, running: boolean): Promise<void> {
+  const crash = s.pendingRestart;
+  if (!crash) return;
+  s.pendingRestart = null;
+  if (running) return;
+  // The panel took the server over since the crash (a stop clicked on the
+  // crashed server, a restore): leave it the way the panel wants it.
+  if (await isDeliberateStop(serverId)) {
+    logger.info(
+      `[Watchdog] Not auto-restarting ${serverId} after "${crash.reason}": the panel stopped or took over the server meanwhile`,
+    );
+    return;
+  }
+
+  const now = Date.now();
+  s.restartTimes = s.restartTimes.filter((t) => now - t < RESTART_WINDOW_MS);
+  if (s.restartTimes.length >= MAX_RESTARTS) {
+    logger.error(
+      `[Watchdog] ${serverId} exceeded ${MAX_RESTARTS} restarts in window — backing off (crash loop)`,
+    );
+    publish(
+      'server.alert',
+      {
+        serverId,
+        reason: 'crash_loop',
+        message: `Server crashed ${MAX_RESTARTS}+ times within ${Math.round(RESTART_WINDOW_MS / 60000)} min; auto-restart paused.`,
+      },
+      serverId,
+    );
+    return;
+  }
+  s.restartTimes.push(now);
+  logger.warn(
+    `[Watchdog] Auto-restarting ${serverId} after "${crash.reason}" (attempt ${s.restartTimes.length}/${MAX_RESTARTS})`,
+  );
+  const r = await startServer(serverId, { reason: 'watchdog', actor: 'watchdog' });
+  publish(
+    r.ok ? 'server.restarted' : 'server.alert',
+    {
+      serverId,
+      reason: r.ok ? 'auto_restart' : 'auto_restart_failed',
+      crashReason: crash.reason,
+      error: r.ok ? undefined : r.error,
+      attempt: s.restartTimes.length,
+    },
+    serverId,
+  );
+}
+
 async function tickServer(srv: ServerInstance): Promise<void> {
   const serverId = srv.id;
   const s = getState(serverId);
 
-  let running: boolean;
+  let state: Awaited<ReturnType<typeof getContainerState>>;
   try {
-    running = (await getStatus(serverId)).running;
+    state = await getContainerState(serverId);
   } catch {
     return; // transient docker error — try again next tick
   }
+  if (!state) return; // container gone (deleted/recreated): nothing to watch
+  if (state.status === 'restarting') return; // Docker's restart policy is between attempts
+  const running = state.running;
 
-  // Crash detection: a running→stopped transition we didn't cause.
+  // A running→stopped transition we didn't cause (the event stream may have
+  // reported it already, which resets wasRunning).
   if (s.wasRunning === true && !running) {
-    if (await wasRecentlyStoppedIntentionally(serverId, INTENTIONAL_GRACE_MS)) {
-      // Deliberate stop/restart — not a crash.
-      s.wasRunning = running;
-      return;
+    if (!(await isDeliberateStop(serverId))) {
+      handleExit(serverId, s, classifyExit(state.exitCode, state.oomKilled));
     }
-
-    logger.warn(`[Watchdog] Server ${serverId} stopped unexpectedly (crash)`);
-    publish('server.crashed', { serverId, detectedAt: new Date().toISOString() }, serverId);
-
-    if (AUTO_RESTART) {
-      const now = Date.now();
-      s.restartTimes = s.restartTimes.filter((t) => now - t < RESTART_WINDOW_MS);
-      if (s.restartTimes.length < MAX_RESTARTS) {
-        s.restartTimes.push(now);
-        logger.warn(
-          `[Watchdog] Auto-restarting ${serverId} (attempt ${s.restartTimes.length}/${MAX_RESTARTS})`,
-        );
-        const r = await startContainer(serverId);
-        publish(
-          r.success ? 'server.restarted' : 'server.alert',
-          {
-            serverId,
-            reason: r.success ? 'auto_restart' : 'auto_restart_failed',
-            error: r.success ? undefined : r.error,
-            attempt: s.restartTimes.length,
-          },
-          serverId,
-        );
-      } else {
-        logger.error(
-          `[Watchdog] ${serverId} exceeded ${MAX_RESTARTS} restarts in window — backing off (crash loop)`,
-        );
-        publish(
-          'server.alert',
-          {
-            serverId,
-            reason: 'crash_loop',
-            message: `Server crashed ${MAX_RESTARTS}+ times within ${Math.round(RESTART_WINDOW_MS / 60000)} min; auto-restart paused.`,
-          },
-          serverId,
-        );
-      }
-    }
+  } else if (
+    s.wasRunning === true &&
+    running &&
+    s.startedAt !== null &&
+    state.startedAt !== s.startedAt &&
+    !(await isDeliberateStop(serverId))
+  ) {
+    // Stopped and brought back by Docker between two polls without an event
+    // reaching us; Docker has reset the exit code by now.
+    handleExit(serverId, s, {
+      code: -1,
+      reason: 'restarted_by_docker',
+      kind: 'crash',
+      message: 'The server stopped unexpectedly and Docker restarted it.',
+      hint: 'See the console log for the cause.',
+    });
   }
+  await maybeAutoRestart(serverId, s, running);
+  s.startedAt = running ? state.startedAt : null;
 
   // Memory threshold alert (only while running), debounced per server.
   if (running && MEM_ALERT_PERCENT > 0) {
@@ -242,6 +362,86 @@ async function tick(): Promise<void> {
   }
 }
 
+// ---------- Docker events (exit codes the poll would miss) ----------
+
+interface DockerEvent {
+  Action?: string;
+  status?: string; // older API versions
+  Actor?: { Attributes?: Record<string, string> };
+}
+
+async function onDockerEvent(evt: DockerEvent): Promise<void> {
+  const action = evt.Action ?? evt.status;
+  const name = evt.Actor?.Attributes?.name;
+  if (!name || (action !== 'die' && action !== 'oom')) return;
+  const srv = (await listServers()).find((x) => x.containerName === name);
+  if (!srv) return;
+  const s = getState(srv.id);
+  if (action === 'oom') {
+    s.lastOomAt = Date.now();
+    return;
+  }
+
+  // This run is over; the poll must not report it a second time.
+  s.wasRunning = false;
+  s.startedAt = null;
+  if (await isDeliberateStop(srv.id)) return;
+
+  const raw = evt.Actor?.Attributes?.exitCode;
+  const code = raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : -1;
+  let oom = Date.now() - s.lastOomAt < OOM_EVENT_WINDOW_MS;
+  if (!oom && code === 137) {
+    oom = (await getContainerState(srv.id).catch(() => null))?.oomKilled === true;
+  }
+  handleExit(srv.id, s, classifyExit(code, oom));
+}
+
+let eventStream: NodeJS.ReadableStream | null = null;
+
+async function watchDockerEvents(): Promise<void> {
+  if (eventStream || !timer) return;
+  const retry = (): void => {
+    const t = setTimeout(() => void watchDockerEvents(), EVENTS_RETRY_MS);
+    t.unref?.();
+  };
+  let stream: NodeJS.ReadableStream;
+  try {
+    stream = await getDockerInstance().getEvents({
+      filters: { type: ['container'], event: ['die', 'oom'] },
+    });
+  } catch (err) {
+    logger.warn('[Watchdog] Docker events unavailable, relying on polling:', err);
+    retry();
+    return;
+  }
+  eventStream = stream;
+  let buffered = '';
+  stream.on('data', (chunk: Buffer | string) => {
+    buffered += chunk.toString();
+    let nl: number;
+    while ((nl = buffered.indexOf('\n')) >= 0) {
+      const line = buffered.slice(0, nl).trim();
+      buffered = buffered.slice(nl + 1);
+      if (!line) continue;
+      try {
+        void onDockerEvent(JSON.parse(line) as DockerEvent).catch((err) =>
+          logger.error('[Watchdog] event handling failed:', err),
+        );
+      } catch {
+        /* not JSON — ignore the line */
+      }
+    }
+  });
+  const reconnect = (): void => {
+    if (eventStream !== stream) return;
+    eventStream = null;
+    if (timer) retry();
+  };
+  stream.on('end', reconnect);
+  stream.on('close', reconnect);
+  stream.on('error', reconnect);
+}
+
 export function startWatchdog(): void {
   if (!ENABLED || isDemoMode()) {
     logger.info(`[Watchdog] disabled (enabled=${ENABLED}, demo=${isDemoMode()})`);
@@ -261,6 +461,7 @@ export function startWatchdog(): void {
     void tick();
   }, POLL_MS);
   timer.unref?.();
+  void watchDockerEvents();
 }
 
 export function stopWatchdog(): void {
@@ -268,9 +469,13 @@ export function stopWatchdog(): void {
     clearInterval(timer);
     timer = null;
   }
+  const stream = eventStream as (NodeJS.ReadableStream & { destroy?: () => void }) | null;
+  eventStream = null;
+  stream?.destroy?.();
 }
 
 // Exposed for unit tests so they can drive a poll cycle without the timer.
 export const __test__ = {
   tick,
+  onDockerEvent,
 };

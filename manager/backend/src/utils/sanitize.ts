@@ -261,6 +261,8 @@ const ALLOWED_COMMAND_PREFIXES = [
   '/auth',
   // Native update system (Hytale 24.01.2026+)
   '/update',
+  // Native backup (Hytale 0.7, needs --backup-dir)
+  '/backup',
 ];
 
 /**
@@ -291,6 +293,8 @@ const ADMIN_COMMAND_PREFIXES = new Set([
   '/auth',
   // Turning saving off silently risks losing world data.
   '/save-off',
+  // Holds chunk saving while it writes a full copy of the universe to disk.
+  '/backup',
 ]);
 
 /**

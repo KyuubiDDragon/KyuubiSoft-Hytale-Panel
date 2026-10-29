@@ -9,6 +9,8 @@ import {
   getLatestVersion,
   downloaderOAuthState,
   setDownloaderOAuthState,
+  downloaderShellCommand,
+  DOWNLOADER_BUSY_MARKER,
 } from './shared.js';
 
 const router = Router();
@@ -84,12 +86,19 @@ router.post(
       // cannot read them, so it loops "downloading" forever without ever
       // succeeding. Authenticating as hytale keeps the credential file usable by
       // the server process.
+      // Shares the downloader lock with the entrypoint and the version probes.
       const authResult = await dockerService.execInContainer(
-        `cd /opt/hytale/downloader && timeout 60 gosu hytale ./hytale-downloader-linux-amd64 2>&1 || true`,
+        downloaderShellCommand('-skip-update-check', 60),
       );
 
       const output = authResult.output || '';
       console.log('[Server] Downloader auth output:', output.substring(0, 1000));
+      if (output.includes(DOWNLOADER_BUSY_MARKER)) {
+        return res.status(409).json({
+          success: false,
+          error: 'The downloader is busy (a download is running). Try again in a few minutes.',
+        });
+      }
 
       // Parse OAuth URLs from output
       // The downloader outputs: "Visit: https://oauth.accounts.hytale.com/oauth2/device/verify"

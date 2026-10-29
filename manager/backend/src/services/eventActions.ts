@@ -15,7 +15,14 @@
  * Placeholder values come from event payloads, some of them attacker-controlled
  * (the username of a failed login), so they are normalized before substitution:
  * name fields must look like a name, everything else loses control characters.
+ *
+ * Loops: an event published while a rule's action runs (backup.completed from
+ * the rule's own backup) is tagged with the chain of running rules. A rule
+ * never fires for an event its own action caused, chains stop after
+ * MAX_RULE_CHAIN rules, and a backup rule runs at most once per cooldown.
+ * Floods: every rule runs at most RULE_RUNS_PER_MINUTE times per event name.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getDb } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 import { subscribe } from './eventBus.js';
@@ -433,7 +440,8 @@ async function runAction(rule: EventAction, evt: PanelEvent): Promise<void> {
       if (!result.success) return commandFailed(rule, evt, result.error);
     } else if (rule.actionType === 'backup') {
       const { createBackup } = await import('./backup.js');
-      await createBackup('event', serverId);
+      const result = await createBackup({ kind: 'auto', label: 'event' }, serverId);
+      if (!result.success) throw new Error(result.error ?? 'backup failed');
     }
     logger.info(`[EventAction] "${rule.name}" ran for ${evt.name}`);
   } catch (err) {
@@ -443,12 +451,53 @@ async function runAction(rule: EventAction, evt: PanelEvent): Promise<void> {
   }
 }
 
+// Ids of the rules whose actions are running in the current async context.
+// eventBus.publish() calls listeners synchronously, so an event an action
+// causes is seen with that action's chain.
+const ruleChain = new AsyncLocalStorage<readonly string[]>();
+const MAX_RULE_CHAIN = 3;
+export const BACKUP_ACTION_COOLDOWN_MS = 10 * 60 * 1000;
+const lastBackupAction = new Map<string, number>();
+
+/**
+ * Whether `rule` may fire for an event seen with `chain`; records backup runs.
+ * A backup run counts at its start, also when it fails: a rule whose backup
+ * keeps failing (full disk) must not retry on every matching event.
+ *
+ * The checks without side effects come first, so an event the rule must not
+ * run for (its own, or one inside the backup cooldown) costs it no run of its
+ * per-event budget, and a run the budget drops starts no backup cooldown.
+ */
+function mayFire(rule: EventAction, evt: PanelEvent, chain: readonly string[]): boolean {
+  if (chain.includes(rule.id)) return false; // its own action caused this event
+  if (rule.actionType !== 'backup') return withinRuleBudget(rule, evt);
+  const now = Date.now();
+  // Expired entries are dropped, so deleted rules and servers don't pile up.
+  for (const [k, at] of lastBackupAction) {
+    if (now - at >= BACKUP_ACTION_COOLDOWN_MS) lastBackupAction.delete(k);
+  }
+  // Per target server: a rule for all servers may back up each of them.
+  const key = `${rule.id}:${rule.serverId ?? evt.serverId ?? ''}`;
+  if (lastBackupAction.has(key)) {
+    logger.info(`[EventAction] "${rule.name}" skipped for ${evt.name}: backup cooldown`);
+    return false;
+  }
+  if (!withinRuleBudget(rule, evt)) return false;
+  lastBackupAction.set(key, now);
+  return true;
+}
+
 let started = false;
 
 export function startEventActions(): void {
   if (started) return;
   started = true;
   subscribe(['*'], (evt: PanelEvent) => {
+    const chain = ruleChain.getStore() ?? [];
+    if (chain.length >= MAX_RULE_CHAIN) {
+      logger.warn(`[EventAction] ${evt.name} ignored: rule chain too long (${chain.length})`);
+      return;
+    }
     let rules: EventAction[];
     try {
       rules = listEventActions();
@@ -460,8 +509,8 @@ export function startEventActions(): void {
       if (rule.serverId && evt.serverId && rule.serverId !== evt.serverId) continue;
       // Wildcards never cover events outsiders can cause (schemas/events.ts).
       if (!eventPatternMatches(rule.eventPattern, evt.name)) continue;
-      if (!withinRuleBudget(rule, evt)) continue;
-      void runAction(rule, evt);
+      if (!mayFire(rule, evt, chain)) continue;
+      void ruleChain.run([...chain, rule.id], () => runAction(rule, evt));
     }
   });
   logger.info('[EventAction] engine started');

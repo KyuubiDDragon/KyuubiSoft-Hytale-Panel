@@ -11,6 +11,8 @@ const authStore = useAuthStore()
 defineProps<{
   backups: BackupInfo[]
   loading?: boolean
+  /** A restore or native backup is running; restore and delete wait for it. */
+  busy?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -68,6 +70,8 @@ function formatDate(isoString: string): string {
                 v-if="authStore.hasPermission('backups.restore')"
                 size="sm"
                 variant="primary"
+                :disabled="busy"
+                :aria-label="t('backups.restore')"
                 @click="emit('restore', backup.id)"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -78,6 +82,8 @@ function formatDate(isoString: string): string {
                 v-if="authStore.hasPermission('backups.delete')"
                 size="sm"
                 variant="danger"
+                :disabled="busy"
+                :aria-label="t('backups.delete')"
                 @click="emit('delete', backup.id)"
               >
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

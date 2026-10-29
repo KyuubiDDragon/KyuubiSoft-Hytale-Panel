@@ -2,11 +2,13 @@
 //
 // Extracted from the previously monolithic routes/server.ts to keep behavior
 // identical while splitting the router into smaller, focused modules.
-import { readFile, writeFile, access, constants } from 'fs/promises';
+import { readFile, access, constants } from 'fs/promises';
+import path from 'path';
+import { config } from '../../config.js';
 import * as dockerService from '../../services/docker.js';
 import { escapeShellArg } from '../../utils/sanitize.js';
+import { withFileLock, writeJsonAtomic } from '../../utils/jsonStore.js';
 import { DEFAULT_TARGET_TPS } from '../../services/tpsState.js';
-import { parseUpdateStatusReply } from '../../services/updateStatusReply.js';
 
 // Allowed config file extensions
 export const CONFIG_EXTENSIONS = [
@@ -30,8 +32,13 @@ export interface QuickSettings {
   defaultGameMode: string;
 }
 
-// Panel config file path (for patchline + related toggles)
-export const PANEL_CONFIG_PATH = '/opt/hytale/data/panel-config.json';
+// Panel config file (patchline, start flags, JVM tuning). Read by the game
+// container's entrypoint.sh / start-server.sh at every start.
+export const PANEL_CONFIG_PATH = path.join(config.dataPath, 'panel-config.json');
+
+// Defaults for the native backup retention flags (same as the server's own).
+export const DEFAULT_NATIVE_BACKUP_MAX_COUNT = 5;
+export const DEFAULT_NATIVE_BACKUP_ARCHIVE_MAX_COUNT = 5;
 
 // Panel config interface
 export interface PanelConfig {
@@ -45,7 +52,22 @@ export interface PanelConfig {
   javaMaxRam?: string;
   extraJavaArgs?: string;
   extraServerArgs?: string;
+  // One `--boot-command` per entry (Hytale splits every value at commas).
+  bootCommands?: string[];
+  // -XX:AOTCache=HytaleServer.aot; off unless chosen (the shipped cache rarely
+  // matches the container's JVM build).
+  aotCache?: boolean;
+  // Downloader version check on every container start; overrides AUTO_UPDATE.
+  autoUpdate?: boolean;
+  // --backup-max-count / --backup-archive-max-count for native backups.
+  nativeBackupMaxCount?: number;
+  nativeBackupArchiveMaxCount?: number;
 }
+
+const optionalString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+const optionalBool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
+const optionalInt = (v: unknown): number | undefined =>
+  Number.isInteger(v) ? (v as number) : undefined;
 
 // Helper to read panel config
 export async function readPanelConfig(): Promise<PanelConfig> {
@@ -58,10 +80,17 @@ export async function readPanelConfig(): Promise<PanelConfig> {
       acceptEarlyPlugins: cfg.acceptEarlyPlugins ?? false,
       disableSentry: cfg.disableSentry ?? false,
       allowOp: cfg.allowOp ?? false,
-      javaMinRam: typeof cfg.javaMinRam === 'string' ? cfg.javaMinRam : undefined,
-      javaMaxRam: typeof cfg.javaMaxRam === 'string' ? cfg.javaMaxRam : undefined,
-      extraJavaArgs: typeof cfg.extraJavaArgs === 'string' ? cfg.extraJavaArgs : undefined,
-      extraServerArgs: typeof cfg.extraServerArgs === 'string' ? cfg.extraServerArgs : undefined,
+      javaMinRam: optionalString(cfg.javaMinRam),
+      javaMaxRam: optionalString(cfg.javaMaxRam),
+      extraJavaArgs: optionalString(cfg.extraJavaArgs),
+      extraServerArgs: optionalString(cfg.extraServerArgs),
+      bootCommands: Array.isArray(cfg.bootCommands)
+        ? cfg.bootCommands.filter((c: unknown): c is string => typeof c === 'string')
+        : undefined,
+      aotCache: optionalBool(cfg.aotCache),
+      autoUpdate: optionalBool(cfg.autoUpdate),
+      nativeBackupMaxCount: optionalInt(cfg.nativeBackupMaxCount),
+      nativeBackupArchiveMaxCount: optionalInt(cfg.nativeBackupArchiveMaxCount),
     };
   } catch {
     // Return defaults if file doesn't exist
@@ -74,28 +103,45 @@ export async function readPanelConfig(): Promise<PanelConfig> {
   }
 }
 
-// Helper to write panel config
+// Helper to write panel config. Merges into the file so keys this version of
+// the panel does not model are kept; `undefined` values leave a key as it is.
+// Atomic (tmp + rename) under a per-file lock: the start scripts read the file
+// at any moment and must never see it half-written.
 export async function writePanelConfig(cfg: PanelConfig): Promise<void> {
-  await writeFile(PANEL_CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf-8');
+  await withFileLock(PANEL_CONFIG_PATH, async () => {
+    let existing: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(await readFile(PANEL_CONFIG_PATH, 'utf-8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed;
+    } catch {
+      // missing or unreadable: start from the given values
+    }
+    const defined = Object.fromEntries(Object.entries(cfg).filter(([, v]) => v !== undefined));
+    await writeJsonAtomic(PANEL_CONFIG_PATH, { ...existing, ...defined }, { mode: 0o644 });
+  });
 }
 
-// Helper to check if downloader credentials exist
-export async function checkDownloaderCredentials(): Promise<{ exists: boolean; error?: string }> {
-  // Check multiple possible locations for downloader credentials
-  const credentialPaths = [
-    '/opt/hytale/downloader/.hytale-downloader-credentials.json',
-    '/opt/hytale/auth/credentials.json',
-    '/opt/hytale/auth/oauth_credentials.json',
-  ];
+export const DOWNLOADER_CREDENTIALS_PATH =
+  '/opt/hytale/downloader/.hytale-downloader-credentials.json';
 
-  for (const credPath of credentialPaths) {
-    try {
-      await access(credPath, constants.R_OK);
-      console.log(`[Server] Found downloader credentials at: ${credPath}`);
-      return { exists: true };
-    } catch {
-      // Continue checking
-    }
+// Helper to check if downloader credentials exist. The token lives in the
+// downloader volume of the game container. The default compose mounts that
+// volume read-only into the manager; setups without the mount are answered
+// by the game container itself. (The game entrypoint no longer copies the
+// token into the auth volume.)
+export async function checkDownloaderCredentials(): Promise<{ exists: boolean; error?: string }> {
+  try {
+    await access(DOWNLOADER_CREDENTIALS_PATH, constants.R_OK);
+    return { exists: true };
+  } catch {
+    // Not visible from the manager - ask the game container.
+  }
+
+  const probe = await dockerService.execInContainer(
+    `test -f ${escapeShellArg(DOWNLOADER_CREDENTIALS_PATH)} && echo present || echo missing`,
+  );
+  if (probe.success && probe.output?.trim().endsWith('present')) {
+    return { exists: true };
   }
 
   console.log('[Server] No downloader credentials found');
@@ -105,10 +151,36 @@ export async function checkDownloaderCredentials(): Promise<{ exists: boolean; e
 // SECURITY: Defense-in-depth validation - even though callers use hardcoded values
 export const VALID_PATCHLINES = ['release', 'pre-release'] as const;
 
+const VERSION_PROBE_TIMEOUT_SECONDS = 30;
+
 export interface VersionCheckResult {
   version: string;
   authRequired?: boolean;
   error?: string;
+}
+
+// The game container's entrypoint and the panel share this lock around every
+// downloader call: any call may rewrite the credentials file when it refreshes
+// the token. Panel probes never wait for it (a container start may hold it for
+// a whole download) and report "busy" instead.
+export const DOWNLOADER_BUSY_MARKER = '__DOWNLOADER_BUSY__';
+const DOWNLOADER_LOCK_EXIT = 75;
+
+/**
+ * Shell command that runs the downloader as the hytale user with a time limit
+ * and the shared lock. The lock file is opened as hytale too: the folder
+ * belongs to the server, and root would follow a link planted under its name.
+ * timeout runs as hytale so the time limit works: the container has no
+ * CAP_KILL, so root could not signal the downloader. `args` must already be
+ * shell-safe.
+ */
+export function downloaderShellCommand(args: string, timeoutSeconds: number): string {
+  return (
+    `cd /opt/hytale/downloader && gosu hytale timeout ${Math.floor(timeoutSeconds)} ` +
+    `flock -n -E ${DOWNLOADER_LOCK_EXIT} .downloader.lock ` +
+    `./hytale-downloader-linux-amd64 ${args} 2>&1; ` +
+    `[ $? -eq ${DOWNLOADER_LOCK_EXIT} ] && echo ${DOWNLOADER_BUSY_MARKER}; true`
+  );
 }
 
 export async function getLatestVersion(patchline: string): Promise<VersionCheckResult> {
@@ -116,6 +188,13 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   if (!VALID_PATCHLINES.includes(patchline as (typeof VALID_PATCHLINES)[number])) {
     console.error(`Invalid patchline attempted: ${patchline}`);
     return { version: 'unknown', error: 'Invalid patchline' };
+  }
+
+  // Without saved credentials -print-version starts a device login and waits
+  // for it until the time limit; there is nothing to probe.
+  const credentials = await checkDownloaderCredentials();
+  if (!credentials.exists) {
+    return { version: 'unknown', authRequired: true, error: credentials.error };
   }
 
   // Run downloader and capture both stdout and stderr to detect auth issues.
@@ -126,8 +205,15 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   // the hytale-user download can't actually fetch, and (b) leave root-owned
   // cache/credential files in /opt/hytale/downloader that then block the
   // hytale-user download. Running as hytale keeps probe and download in sync.
+  // -skip-update-check keeps the downloader's notice about its own new
+  // version (which carries a date-like version) out of the output.
   const checkResult = await dockerService.execInContainer(
-    `cd /opt/hytale/downloader && gosu hytale ./hytale-downloader-linux-amd64 -patchline ${escapeShellArg(patchline)} -print-version 2>&1`,
+    downloaderShellCommand(
+      `-patchline ${escapeShellArg(patchline)} -print-version -skip-update-check`,
+      VERSION_PROBE_TIMEOUT_SECONDS,
+    ),
+    undefined,
+    { timeoutMs: (VERSION_PROBE_TIMEOUT_SECONDS + 5) * 1000 },
   );
 
   if (!checkResult.success) {
@@ -136,6 +222,12 @@ export async function getLatestVersion(patchline: string): Promise<VersionCheckR
   }
 
   const output = checkResult.output || '';
+  if (output.includes(DOWNLOADER_BUSY_MARKER)) {
+    return {
+      version: 'unknown',
+      error: 'The downloader is busy (download in progress). Try again later.',
+    };
+  }
 
   // Check for authentication errors in output
   const authErrorPatterns = [
@@ -212,115 +304,6 @@ export function setDownloaderOAuthState(next: {
   downloaderOAuthState.verificationUrl = next.verificationUrl;
   downloaderOAuthState.userCode = next.userCode;
   downloaderOAuthState.expiresAt = next.expiresAt;
-}
-
-// UpdateConfig interface
-export interface UpdateConfig {
-  enabled: boolean;
-  checkIntervalSeconds: number;
-  notifyPlayersOnAvailable: boolean;
-  patchline: 'release' | 'pre-release';
-  runBackupBeforeUpdate: boolean;
-  backupConfigBeforeUpdate: boolean;
-  autoApplyMode: 'DISABLED' | 'WHEN_EMPTY' | 'SCHEDULED';
-  autoApplyDelayMinutes: number;
-}
-
-// Default UpdateConfig values
-export function getDefaultUpdateConfig(): UpdateConfig {
-  return {
-    enabled: true,
-    checkIntervalSeconds: 3600,
-    notifyPlayersOnAvailable: true,
-    patchline: 'release',
-    runBackupBeforeUpdate: true,
-    backupConfigBeforeUpdate: true,
-    autoApplyMode: 'DISABLED',
-    autoApplyDelayMinutes: 5,
-  };
-}
-
-// Native update status interface
-export interface NativeUpdateStatus {
-  available: boolean;
-  currentVersion: string;
-  latestVersion: string;
-  state: 'IDLE' | 'CHECKING' | 'DOWNLOADING' | 'READY' | 'APPLYING' | 'ERROR';
-  progress?: number;
-  message?: string;
-  error?: string;
-  stagedVersion?: string;
-  patchline?: string;
-}
-
-// Helper to parse /update status output
-export function parseUpdateStatusOutput(output: string): NativeUpdateStatus {
-  if (!output || typeof output !== 'string') {
-    return {
-      available: false,
-      currentVersion: 'unknown',
-      latestVersion: 'unknown',
-      state: 'IDLE',
-      error: 'No output from server',
-    };
-  }
-
-  // The real reply (through the KyuubiSoft API plugin) is read field by field;
-  // the keyword heuristic below is only for other text.
-  const reply = parseUpdateStatusReply(output);
-  if (reply) return reply;
-
-  const lower = output.toLowerCase();
-
-  // Detect state
-  let state: NativeUpdateStatus['state'] = 'IDLE';
-  if (lower.includes('error') || lower.includes('failed')) state = 'ERROR';
-  else if (lower.includes('applying') || lower.includes('installing')) state = 'APPLYING';
-  else if (lower.includes('ready') || lower.includes('staged') || lower.includes('downloaded'))
-    state = 'READY';
-  else if (lower.includes('downloading') || lower.includes('download')) state = 'DOWNLOADING';
-  else if (lower.includes('checking')) state = 'CHECKING';
-
-  // Extract versions using multiple patterns
-  const versionPatterns = [
-    /(?:current|installed).*?([0-9]+\.[0-9]+\.[0-9]+)/i,
-    /version[:\s]+([0-9]+\.[0-9]+\.[0-9]+)/i,
-  ];
-
-  let currentVersion = 'unknown';
-  for (const pattern of versionPatterns) {
-    const match = output.match(pattern);
-    if (match) {
-      currentVersion = match[1];
-      break;
-    }
-  }
-
-  // Extract latest version
-  const latestPatterns = [/(?:latest|available|new).*?([0-9]+\.[0-9]+\.[0-9]+)/i];
-
-  let latestVersion = 'unknown';
-  for (const pattern of latestPatterns) {
-    const match = output.match(pattern);
-    if (match) {
-      latestVersion = match[1];
-      break;
-    }
-  }
-
-  // Extract progress
-  const progressMatch = output.match(/(\d+)\s*%/);
-  const progress = progressMatch ? parseInt(progressMatch[1]) : undefined;
-
-  return {
-    available:
-      state === 'READY' || (latestVersion !== 'unknown' && currentVersion !== latestVersion),
-    currentVersion,
-    latestVersion,
-    state,
-    progress,
-    message: output.substring(0, 200),
-  };
 }
 
 // Helper function to parse Prometheus text format

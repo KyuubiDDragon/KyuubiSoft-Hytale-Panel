@@ -105,8 +105,9 @@ describe('docker.execCommand stdin gate', () => {
     const result = await execCommand('/say hello', 'default');
     expect(result.success).toBe(true);
     expect(result.via).toBe('stdin');
-    expect(stdinWrite).toHaveBeenCalledOnce();
-    expect(stdinWrite).toHaveBeenCalledWith('/say hello\n');
+    // A fresh attach first terminates the request body Docker leaks into stdin.
+    const commandWrites = stdinWrite.mock.calls.filter(([data]) => data !== '\n');
+    expect(commandWrites).toEqual([['/say hello\n']]);
   });
 
   const blocked = [
@@ -258,6 +259,40 @@ describe('docker.execCommand through the KyuubiSoft API plugin', () => {
     expect(stdinWrite).not.toHaveBeenCalled();
   });
 
+  it('counts /update apply --confirm without a reply as sent (the server restarts into the update)', async () => {
+    fetchMock.mockRejectedValue(connectError('ECONNRESET'));
+    const result = await execCommand('/update apply --confirm', 'default');
+    expect(result).toMatchObject({ success: true, via: 'plugin' });
+    expect(stdinWrite).not.toHaveBeenCalled();
+  });
+
+  it('does not count an unanswered /update apply without --confirm as sent', async () => {
+    fetchMock.mockRejectedValue(connectError('ECONNRESET'));
+    const result = await execCommand('/update apply', 'default');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/may still have run/);
+  });
+
+  it('passes the message ids of a reply on, so callers can read a refusal', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        200,
+        reply({
+          command: 'update apply --confirm',
+          output: ['No update is staged.'],
+          messageIds: ['server.commands.update.no_staged'],
+        }),
+      ),
+    );
+    const result = await execCommand('/update apply --confirm', 'default');
+    expect(result).toMatchObject({
+      success: true,
+      status: 'DONE',
+      message: 'No update is staged.',
+      messageIds: ['server.commands.update.no_staged'],
+    });
+  });
+
   it('does not use stdin when the plugin refuses the command line itself', async () => {
     fetchMock.mockResolvedValue(jsonResponse(400, { status: 400, error: 'Command is too long' }));
     const result = await execCommand('/say hello', 'default');
@@ -275,6 +310,13 @@ describe('docker.execCommand through the KyuubiSoft API plugin', () => {
   it('echoes /auth answers to the server log, which the sign-in flow reads', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, reply()));
     await execCommand('/auth status', 'default');
+    expect(sentBody()).toMatchObject({ echo: true, timeoutMs: 1500 });
+  });
+
+  it('echoes /backup answers to the server log, which the native backup reads', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, reply({ status: 'RUNNING', output: [] })));
+    const result = await execCommand('/backup', 'default');
+    expect(result.success).toBe(true);
     expect(sentBody()).toMatchObject({ echo: true, timeoutMs: 1500 });
   });
 

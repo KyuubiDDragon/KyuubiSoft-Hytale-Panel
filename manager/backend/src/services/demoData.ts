@@ -962,23 +962,55 @@ export function isDemoMode(): boolean {
 // Update System
 // ============================================================
 
+// Same shape as the real Update Center status (services/updateCenter.ts).
 export function getDemoUpdateStatus() {
+  const stagedAt = new Date(Date.now() - 3600_000).toISOString();
   return {
+    available: true,
     currentVersion: '1.0.0-demo',
     latestVersion: '1.0.1-demo',
-    updateAvailable: true,
-    releaseNotes: 'Demo release notes: Bug fixes and performance improvements.',
-    downloadProgress: null,
-    status: 'update_available',
+    state: 'READY' as const,
+    currentPatchline: 'release',
+    staged: {
+      version: '1.0.1-demo',
+      patchline: 'release',
+      jarBytes: 112_000_000,
+      assetsBytes: 3_900_000_000,
+      stagedAt,
+    },
+    backup: null,
+    serverRunning: true,
+    updaterMounted: true,
+    updaterMount: 'mounted' as const,
+    lifecycleBusy: false,
+    layoutValid: true,
+    disk: null,
+    lastCheck: {
+      patchline: 'release',
+      latestVersion: '1.0.1-demo',
+      checkedAt: stagedAt,
+    },
+    actions: {
+      download: { allowed: false, reason: 'already_staged' as const },
+      apply: { allowed: true },
+      cancel: { allowed: true },
+      rollbackNative: { allowed: false, reason: 'no_backup' as const },
+      rollbackSnapshot: { allowed: true },
+    },
   };
 }
 
+// Same shape as GET /api/server/update-config (services/updateSettings.ts).
 export function getDemoUpdateConfig() {
   return {
-    autoCheck: true,
-    autoDownload: false,
-    checkInterval: 3600,
-    notifyOnUpdate: true,
+    enabled: true,
+    checkIntervalSeconds: 3600,
+    notifyPlayersOnAvailable: true,
+    patchline: 'release',
+    runBackupBeforeUpdate: true,
+    backupConfigBeforeUpdate: true,
+    autoApplyMode: 'DISABLED' as const,
+    autoApplyDelayMinutes: 30,
   };
 }
 

@@ -103,3 +103,34 @@ describe('scheduler per-server config', () => {
     expect(persisted.backups.enabled).toBe(true);
   });
 });
+
+describe('carryOverRestartBackup', () => {
+  let carryOverRestartBackup: typeof import('./scheduler.js').carryOverRestartBackup;
+
+  beforeAll(async () => {
+    ({ carryOverRestartBackup } = await import('./scheduler.js'));
+  });
+
+  it('moves the old backups.beforeRestart switch to the restart plan', () => {
+    const loaded = { backups: { beforeRestart: false }, scheduledRestarts: { enabled: true } };
+    expect(carryOverRestartBackup(loaded).scheduledRestarts).toEqual({
+      enabled: true,
+      createBackup: false,
+    });
+    // The input is not mutated.
+    expect(loaded.scheduledRestarts).toEqual({ enabled: true });
+  });
+
+  it('keeps a value the restart plan already has', () => {
+    const loaded = {
+      backups: { beforeRestart: false },
+      scheduledRestarts: { createBackup: true },
+    };
+    expect(carryOverRestartBackup(loaded)).toBe(loaded);
+  });
+
+  it('ignores configs without the old switch', () => {
+    expect(carryOverRestartBackup({ backups: {} })).toEqual({ backups: {} });
+    expect(carryOverRestartBackup(null)).toBeNull();
+  });
+});

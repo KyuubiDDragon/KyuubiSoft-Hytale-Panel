@@ -16,6 +16,7 @@
  */
 import {
   readFile,
+  writeFile,
   open,
   rename,
   stat,
@@ -26,6 +27,7 @@ import {
 } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import { readRegularFile } from './noFollowFs.js';
 
 const NEW_FILE_MODE = 0o600;
 const RENAME_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
@@ -54,7 +56,16 @@ export class JsonFileCorruptError extends Error {
 export interface ReadJsonOptions {
   /** Structural check; returning false marks the file as corrupt. */
   isValid?: (value: unknown) => boolean;
+  /**
+   * For files in directories the game server can write to: only a regular
+   * file inside one of these directories is read (no symlink, no extra hard
+   * link, see noFollowFs), and a corrupt copy is written from what was read.
+   */
+  confineTo?: string[];
 }
+
+// A JSON file in a server folder bigger than this is not one the panel wrote.
+const CONFINED_MAX_BYTES = 16 * 1024 * 1024;
 
 export interface WriteJsonOptions {
   /** Mode for a newly created file. An existing file keeps its mode. */
@@ -104,7 +115,10 @@ export async function withFileLock<T>(filePath: string, fn: () => Promise<T>): P
 // that is read on every request does not produce a copy per request.
 const corruptCopies = new Map<string, Promise<string | null>>();
 
-async function preserveCorruptCopy(filePath: string): Promise<string | null> {
+async function preserveCorruptCopy(
+  filePath: string,
+  confinedContent?: string,
+): Promise<string | null> {
   let signature: string;
   try {
     const st = await stat(filePath);
@@ -119,7 +133,12 @@ async function preserveCorruptCopy(filePath: string): Promise<string | null> {
   const pending = (async () => {
     const backupPath = `${filePath}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`;
     try {
-      await copyFile(filePath, backupPath, fsConstants.COPYFILE_EXCL);
+      if (confinedContent !== undefined) {
+        // Not copied from the path again: that could now be a link.
+        await writeFile(backupPath, confinedContent, { flag: 'wx', mode: NEW_FILE_MODE });
+      } else {
+        await copyFile(filePath, backupPath, fsConstants.COPYFILE_EXCL);
+      }
       await chmod(backupPath, NEW_FILE_MODE).catch(() => {});
       console.error(
         `[JsonStore] ${filePath} is corrupt. It is left untouched; a copy was saved as ${backupPath}. ` +
@@ -144,11 +163,16 @@ export async function readJsonFile<T>(
 ): Promise<T | null> {
   let raw: string;
   try {
-    raw = await readFile(filePath, 'utf-8');
+    raw = options.confineTo
+      ? (
+          await readRegularFile(filePath, options.confineTo, { maxBytes: CONFINED_MAX_BYTES })
+        ).toString('utf-8')
+      : await readFile(filePath, 'utf-8');
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;
   }
+  const confinedContent = options.confineTo ? raw : undefined;
 
   let parsed: unknown;
   try {
@@ -157,14 +181,18 @@ export async function readJsonFile<T>(
   } catch {
     // The parser message is not included: recent V8 versions quote a slice
     // of the input, which here would be password hashes or TOTP secrets.
-    throw new JsonFileCorruptError(filePath, 'invalid JSON', await preserveCorruptCopy(filePath));
+    throw new JsonFileCorruptError(
+      filePath,
+      'invalid JSON',
+      await preserveCorruptCopy(filePath, confinedContent),
+    );
   }
 
   if (options.isValid && !options.isValid(parsed)) {
     throw new JsonFileCorruptError(
       filePath,
       'unexpected structure',
-      await preserveCorruptCopy(filePath),
+      await preserveCorruptCopy(filePath, confinedContent),
     );
   }
   return parsed as T;

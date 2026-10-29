@@ -274,6 +274,10 @@ docker exec -it hytale-manager node dist/cli.js list-users
 | `EXTRA_JAVA_ARGS` | - | Zusätzliche JVM-Argumente |
 | `AUTH_MODE` | authenticated | `offline` für LAN-only |
 | `TZ` | Europe/Berlin | Zeitzone |
+| `LOG_RETENTION_DAYS` | 14 | Server-Logs älter als N Tage beim Start löschen (`0` = aus) |
+| `LOG_MAX_FILES` | 50 | Höchstens N Server-Logs behalten (`0` = unbegrenzt) |
+| `FIX_OWNERSHIP` | true | Beim Start nur abweichende Datei-Besitzer auf UID 9999 setzen (`false` z. B. bei NFS mit root_squash) |
+| `HYTALE_AUTH_KEY_FILE` | `auth/auth.passphrase` | Schlüsseldatei für die gespeicherten Server-Logindaten (`auth.enc`), wird automatisch erzeugt |
 
 #### Download
 
@@ -565,6 +569,10 @@ Roles can be customized in the panel under "Roles". You can also create custom r
 | `EXTRA_JAVA_ARGS` | - | Additional JVM arguments |
 | `AUTH_MODE` | authenticated | `offline` for LAN-only |
 | `TZ` | Europe/Berlin | Timezone |
+| `LOG_RETENTION_DAYS` | 14 | Delete server logs older than N days on start (`0` = off) |
+| `LOG_MAX_FILES` | 50 | Keep at most N server logs (`0` = unlimited) |
+| `FIX_OWNERSHIP` | true | On start, set only deviating file owners to UID 9999 (`false` e.g. for NFS with root_squash) |
+| `HYTALE_AUTH_KEY_FILE` | `auth/auth.passphrase` | Key file for the saved server login (`auth.enc`), generated automatically |
 
 #### Download
 
