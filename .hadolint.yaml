@@ -1,0 +1,5 @@
+# Distro packages are not pinned on purpose: a rebuild of the image should pick
+# up the distribution's security fixes.
+ignored:
+  - DL3008
+  - DL3018

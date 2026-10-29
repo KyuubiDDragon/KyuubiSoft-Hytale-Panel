@@ -115,7 +115,8 @@ ENV MANAGER_PORT=18080
 # Expose port
 EXPOSE 18080
 
-# Health check
+# Health check (shell form on purpose, for the "|| exit 1")
+# hadolint ignore=DL3025
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --quiet --tries=1 -O /dev/null http://localhost:18080/api/health || exit 1
 
