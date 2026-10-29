@@ -40,6 +40,7 @@ export const MOTD_MAX = 256;
 export const PASSWORD_MAX = 128;
 /** 0 = no limit (the server treats every value below 1 that way). */
 export const MAX_PLAYERS_LIMIT = 10_000;
+// eslint-disable-next-line no-control-regex -- rejects control characters
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
 interface LiveCommand {
@@ -274,7 +275,7 @@ export async function applyLiveQuickSettings(
 
 /** The first whole number in a reply ("Max players is set to 1,000" → 1000). */
 export function numberFromReply(lines: string[]): number | null {
-  const match = lines.join(' ').match(/\d[\d.,   ]*/);
+  const match = lines.join(' ').match(/\d[\d.,\u00a0\u202f ]*/);
   if (!match) return null;
   const digits = match[0].replace(/\D/g, '');
   return digits ? Number(digits) : null;

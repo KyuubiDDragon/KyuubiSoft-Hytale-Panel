@@ -181,7 +181,7 @@ function attachAuthRefreshInterceptor(client: AxiosInstance): void {
       // in-memory refresh token for installations that haven't picked up the
       // cookie flow yet.
       if (error.response?.status === 401 && originalRequest && !(originalRequest as any)._retry) {
-        ;(originalRequest as any)._retry = true
+        Object.assign(originalRequest, { _retry: true })
         const hadSession = !!authStore.accessToken
 
         try {

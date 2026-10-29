@@ -37,7 +37,7 @@ const ea = await import('./eventActions.js');
 const { publish } = await import('./eventBus.js');
 const { logger } = await import('../utils/logger.js');
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
+const flush = () => ea.eventActionsIdle();
 
 beforeAll(() => {
   ea.startEventActions();

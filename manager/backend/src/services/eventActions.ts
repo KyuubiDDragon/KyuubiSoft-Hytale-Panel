@@ -602,6 +602,21 @@ function mayFire(rule: EventAction, evt: PanelEvent, chain: readonly string[]): 
 
 let started = false;
 
+// Dispatches and rule runs still going, so callers can wait for them instead of guessing a delay.
+const inFlight = new Set<Promise<unknown>>();
+
+function track<T>(work: Promise<T>): Promise<T> {
+  inFlight.add(work);
+  const done = () => inFlight.delete(work);
+  work.then(done, done);
+  return work;
+}
+
+/** Resolves once every event published so far, and every rule it ran, has finished. */
+export async function eventActionsIdle(): Promise<void> {
+  while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
+}
+
 /**
  * Run the matching rules for one event. `chain` is the rule chain the event
  * was published in, read when it was published.
@@ -625,7 +640,7 @@ async function dispatch(evt: PanelEvent, chain: readonly string[]): Promise<void
     if (rule.serverId && rule.serverId !== serverId) continue;
     if (commandFromLogEvent(rule, scoped)) continue;
     if (!mayFire(rule, scoped, chain)) continue;
-    void ruleChain.run([...chain, rule.id], () => runAction(rule, scoped));
+    void track(ruleChain.run([...chain, rule.id], () => runAction(rule, scoped)));
   }
 }
 
@@ -638,7 +653,7 @@ export function startEventActions(): void {
       logger.warn(`[EventAction] ${evt.name} ignored: rule chain too long (${chain.length})`);
       return;
     }
-    dispatch(evt, chain).catch((err) =>
+    track(dispatch(evt, chain)).catch((err) =>
       logger.warn(
         `[EventAction] ${evt.name} not handled: ${err instanceof Error ? err.message : err}`,
       ),

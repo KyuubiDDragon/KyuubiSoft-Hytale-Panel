@@ -839,7 +839,7 @@ export function readAssetFile(relativePath: string): {
  */
 function globToRegex(pattern: string): RegExp {
   // Escape regex special chars except * and ?
-  let regexStr = pattern
+  const regexStr = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*\*/g, '{{GLOBSTAR}}') // Temporarily replace **
     .replace(/\*/g, '[^/]*') // * matches anything except /
@@ -957,7 +957,7 @@ export function searchAssets(
   // Determine search mode
   let searchMode: 'text' | 'glob' | 'regex' = 'text';
   let searchRegex: RegExp | null = null;
-  let queryLower = query.toLowerCase();
+  const queryLower = query.toLowerCase();
 
   // Auto-detect or use explicit mode
   if (options?.useRegex || isRegexPattern(query)) {

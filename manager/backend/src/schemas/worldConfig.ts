@@ -143,6 +143,7 @@ export function migrateLegacyWorldConfig(
 export const MAX_DURATION_SECONDS = 86_400;
 const DISPLAY_NAME_MAX = 64;
 const ASSET_ID = /^[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,127}$/;
+// eslint-disable-next-line no-control-regex -- rejects control characters
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
 function isDurationSeconds(v: unknown): v is number {

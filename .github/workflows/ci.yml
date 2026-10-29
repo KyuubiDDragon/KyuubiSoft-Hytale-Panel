@@ -11,14 +11,17 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
+# Actions and tool images are pinned to a commit or digest; the comment names
+# the tag it was taken from. Bump both together.
+
 jobs:
   backend:
     name: Backend (TypeScript)
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: manager/backend } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version-file: '.nvmrc', cache: 'npm', cache-dependency-path: manager/backend/package-lock.json }
       # bcrypt and better-sqlite3 ship prebuilt binaries for node 24 + linux-x64,
       # but apt-installing the toolchain keeps fallbacks working if a future
@@ -27,11 +30,9 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: TypeScript build
         run: npx tsc --noEmit
-      # ESLint reports a pre-existing backlog; non-blocking so the build stays
-      # green while it's burned down. Flip to blocking once it reaches zero.
-      - name: Lint (eslint, non-blocking)
+      # Errors fail the build; warnings are the remaining backlog.
+      - name: Lint (eslint)
         run: npm run lint
-        continue-on-error: true
       - name: Vitest (if any)
         run: npx vitest run --passWithNoTests
       # In the manager container /opt/hytale/data is a bind mount; renaming a
@@ -48,18 +49,19 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: manager/frontend } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version-file: '.nvmrc', cache: 'npm', cache-dependency-path: manager/frontend/package-lock.json }
       - run: npm ci --no-audit --no-fund
       # Frontend type-check (vue-tsc 2.x). The pre-existing backlog has been
       # cleared, so this is now a blocking gate — keep it green.
       - name: Type check (vue-tsc)
         run: npm run type-check
-      # ESLint (vue3-essential) — non-blocking pre-existing backlog.
-      - name: Lint (eslint, non-blocking)
+      # ESLint (vue3-essential). Errors fail the build; warnings are the backlog.
+      - name: Lint (eslint)
         run: npm run lint
-        continue-on-error: true
+      - name: Vitest
+        run: npx vitest run
       - name: Vite build
         run: npx vite build
 
@@ -67,17 +69,62 @@ jobs:
     name: backup-hook.sh is in sync
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: diff scripts/backup-hook.sh ↔ manager/backup-hook.sh
         run: diff -u scripts/backup-hook.sh manager/backup-hook.sh
 
-  docker-image:
-    name: Docker images build
+  infra:
+    name: Shell scripts, Dockerfiles, compose
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # koalaman/shellcheck v0.11.0
+      - name: shellcheck
+        run: |
+          git ls-files -z '*.sh' | xargs -0 docker run --rm -v "$PWD:/mnt:ro" -w /mnt \
+            koalaman/shellcheck@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d \
+            -S warning
+      # hadolint/hadolint v2.15.1; exceptions with reasons in .hadolint.yaml
+      - name: hadolint
+        run: |
+          docker run --rm -v "$PWD:/mnt:ro" -w /mnt \
+            hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d \
+            hadolint --config .hadolint.yaml Dockerfile manager/Dockerfile
+      # Without an .env (every variable has a default) and with the example one.
+      - name: docker compose config
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.yml --env-file .env.example config -q
+
+  docker-image:
+    name: Docker images build and start
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build hytale image
-        run: docker buildx build --platform linux/amd64 -f Dockerfile .
+        run: docker buildx build --platform linux/amd64 --load -t kp-hytale:ci -f Dockerfile .
       - name: Build manager image
-        run: docker buildx build --platform linux/amd64 -f manager/Dockerfile ./manager
+        run: docker buildx build --platform linux/amd64 --load -t kp-manager:ci -f manager/Dockerfile ./manager
+      # Building is not enough: the server image needs a working Java and start
+      # scripts, the manager image has to come up and answer its health check.
+      - name: Smoke test hytale image
+        run: |
+          docker run --rm --entrypoint java kp-hytale:ci -version
+          docker run --rm --entrypoint bash kp-hytale:ci -c '
+            for f in entrypoint start-server healthcheck; do
+              test -x "/opt/hytale/$f.sh" && bash -n "/opt/hytale/$f.sh" || { echo "broken: $f.sh"; exit 1; }
+            done
+            bash -n /opt/hytale/start-args.sh'
+      - name: Smoke test manager image
+        run: |
+          docker run -d --name kp-manager-ci -p 127.0.0.1:18080:18080 \
+            -e MANAGER_USERNAME=ci-admin -e MANAGER_PASSWORD=ci-smoke-password-123 \
+            -e JWT_SECRET="$(openssl rand -base64 48)" -e CORS_ORIGINS=http://localhost:18080 \
+            kp-manager:ci
+          for _ in $(seq 1 30); do
+            if curl -fs http://127.0.0.1:18080/api/health; then exit 0; fi
+            sleep 2
+          done
+          docker logs kp-manager-ci
+          exit 1

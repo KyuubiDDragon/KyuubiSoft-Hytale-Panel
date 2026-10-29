@@ -30,7 +30,7 @@ interface ServerOption {
 }
 
 // An absolute path below /opt/hytale without ".." segments.
-const PATH_VALUE = /^\/opt\/hytale\/(?!(?:.*\/)?\.\.(?:\/|$))[A-Za-z0-9_.\/-]+$/;
+const PATH_VALUE = /^\/opt\/hytale\/(?!(?:.*\/)?\.\.(?:\/|$))[A-Za-z0-9_./-]+$/;
 const LOG_LEVEL = '(?:OFF|SEVERE|WARNING|INFO|CONFIG|FINE|FINER|FINEST|ALL)';
 const LOG_VALUE = new RegExp(
   `^(?:[A-Za-z0-9_.$-]+:)?${LOG_LEVEL}(?:,(?:[A-Za-z0-9_.$-]+:)?${LOG_LEVEL})*$`,

@@ -48,7 +48,7 @@ function rule(over: Partial<Parameters<typeof ea.createEventAction>[0]>) {
   });
 }
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 60));
+const flush = () => ea.eventActionsIdle();
 
 beforeAll(() => {
   ea.startEventActions();

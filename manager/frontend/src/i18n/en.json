@@ -1282,7 +1282,7 @@
   "performance": {
     "title": "Performance Monitor",
     "storage": "Storage",
-    "free": "free",
+    "storageFree": "free",
     "lowDiskWarning": "Low disk space — free up backups or worlds to avoid the server failing to start.",
     "storageCategories": {
       "worlds": "Worlds",
