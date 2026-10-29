@@ -210,6 +210,10 @@ services:
       - ARCHIVE_EXTRACT_MAX_GB=${ARCHIVE_EXTRACT_MAX_GB:-50}
       # Most files and folders such an archive may create
       - ARCHIVE_MAX_ENTRIES=${ARCHIVE_MAX_ENTRIES:-500000}
+      # Outbound requests (see .env.example): webhooks to private addresses,
+      # extra Web Push services
+      - ALLOW_INTERNAL_WEBHOOKS=${ALLOW_INTERNAL_WEBHOOKS:-false}
+      - WEB_PUSH_EXTRA_HOSTS=${WEB_PUSH_EXTRA_HOSTS:-}
 
       # Settings
       - TZ=${TZ:-Europe/Berlin}
