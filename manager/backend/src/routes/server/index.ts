@@ -27,9 +27,14 @@ router.get('/demo', (_req: Request, res: Response) => {
 });
 
 // GET /api/server/perf-history - TPS/MSPT/CPU/memory time-series for charts
-router.get('/perf-history', authMiddleware, requirePermission('performance.view'), (_req: Request, res: Response) => {
-  res.json(getPerfHistory());
-});
+router.get(
+  '/perf-history',
+  authMiddleware,
+  requirePermission('performance.view'),
+  (_req: Request, res: Response) => {
+    res.json(getPerfHistory());
+  },
+);
 
 // Mount submodules at root so all original /api/server/* paths still resolve
 router.use('/', lifecycleRoutes);

@@ -37,7 +37,9 @@ describe('requestLogger middleware', () => {
       emit: () => true,
     } as unknown as Parameters<typeof requestLogger>[1];
     let nextCalled = false;
-    requestLogger(req, res, () => { nextCalled = true });
+    requestLogger(req, res, () => {
+      nextCalled = true;
+    });
     expect(nextCalled).toBe(true);
     // pino-http stamps x-request-id on the response — proof it actually ran.
     expect(headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/i);

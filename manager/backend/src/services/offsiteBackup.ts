@@ -41,7 +41,10 @@ function hmac(key: string | Buffer, data: string): Buffer {
 
 /** RFC 3986 encoding for a single path segment (keeps unreserved chars). */
 function encodeSegment(seg: string): string {
-  return encodeURIComponent(seg).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+  return encodeURIComponent(seg).replace(
+    /[!'()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase(),
+  );
 }
 
 /** Resolve the endpoint host/protocol for a config (AWS default if blank). */
@@ -49,7 +52,11 @@ function resolveEndpoint(cfg: OffsiteConfig): { protocol: string; host: string; 
   const raw = (cfg.endpoint || '').trim();
   if (raw) {
     const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-    return { protocol: u.protocol.replace(':', ''), host: u.hostname, port: u.port ? Number(u.port) : undefined };
+    return {
+      protocol: u.protocol.replace(':', ''),
+      host: u.hostname,
+      port: u.port ? Number(u.port) : undefined,
+    };
   }
   return { protocol: 'https', host: `s3.${cfg.region || 'us-east-1'}.amazonaws.com` };
 }
@@ -93,17 +100,27 @@ function putObject(
       `x-amz-content-sha256:${UNSIGNED_PAYLOAD}\n` +
       `x-amz-date:${amzDate}\n`;
     const canonicalRequest = [
-      'PUT', canonicalUri, '', canonicalHeaders, signedHeaders, UNSIGNED_PAYLOAD,
+      'PUT',
+      canonicalUri,
+      '',
+      canonicalHeaders,
+      signedHeaders,
+      UNSIGNED_PAYLOAD,
     ].join('\n');
 
     const scope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256Hex(canonicalRequest)].join('\n');
+    const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256Hex(canonicalRequest)].join(
+      '\n',
+    );
 
     const kDate = hmac(`AWS4${cfg.secretAccessKey}`, dateStamp);
     const kRegion = hmac(kDate, region);
     const kService = hmac(kRegion, service);
     const kSigning = hmac(kService, 'aws4_request');
-    const signature = crypto.createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+    const signature = crypto
+      .createHmac('sha256', kSigning)
+      .update(stringToSign, 'utf8')
+      .digest('hex');
 
     const authorization =
       `AWS4-HMAC-SHA256 Credential=${cfg.accessKeyId}/${scope}, ` +
@@ -131,10 +148,19 @@ function putObject(
         res.on('end', () => {
           const status = res.statusCode ?? 0;
           if (status >= 200 && status < 300) {
-            resolve({ success: true, key, url: `${protocol}://${hostHeader}${canonicalUri}`, statusCode: status });
+            resolve({
+              success: true,
+              key,
+              url: `${protocol}://${hostHeader}${canonicalUri}`,
+              statusCode: status,
+            });
           } else {
             const text = Buffer.concat(chunks).toString('utf8').slice(0, 500);
-            resolve({ success: false, statusCode: status, error: `HTTP ${status}: ${text || 'upload rejected'}` });
+            resolve({
+              success: false,
+              statusCode: status,
+              error: `HTTP ${status}: ${text || 'upload rejected'}`,
+            });
           }
         });
       },
@@ -149,10 +175,18 @@ export function isOffsiteConfigured(cfg: OffsiteConfig | undefined): cfg is Offs
 }
 
 /** Upload a local backup file off-site. Returns a structured result. */
-export async function uploadBackup(absolutePath: string, now: Date = new Date()): Promise<OffsiteResult> {
+export async function uploadBackup(
+  absolutePath: string,
+  now: Date = new Date(),
+): Promise<OffsiteResult> {
   let cfg: OffsiteConfig | undefined;
-  try { cfg = (await getConfig()).offsiteBackup; } catch { /* config not ready */ }
-  if (!isOffsiteConfigured(cfg)) return { success: false, error: 'Off-site backup is not configured' };
+  try {
+    cfg = (await getConfig()).offsiteBackup;
+  } catch {
+    /* config not ready */
+  }
+  if (!isOffsiteConfigured(cfg))
+    return { success: false, error: 'Off-site backup is not configured' };
   if (!fs.existsSync(absolutePath)) return { success: false, error: 'Backup file not found' };
 
   const filename = path.basename(absolutePath);
@@ -187,8 +221,13 @@ export function uploadBackupAsync(absolutePath: string): void {
  */
 export async function testConnection(now: Date = new Date()): Promise<OffsiteResult> {
   let cfg: OffsiteConfig | undefined;
-  try { cfg = (await getConfig()).offsiteBackup; } catch { /* config not ready */ }
-  if (!isOffsiteConfigured(cfg)) return { success: false, error: 'Off-site backup is not configured' };
+  try {
+    cfg = (await getConfig()).offsiteBackup;
+  } catch {
+    /* config not ready */
+  }
+  if (!isOffsiteConfigured(cfg))
+    return { success: false, error: 'Off-site backup is not configured' };
 
   const key = buildKey(cfg, '.kyuubisoft-connection-test');
   const marker = Buffer.from(`kyuubisoft-panel offsite test ${now.toISOString()}\n`, 'utf8');

@@ -10,9 +10,16 @@ import { logger } from '../utils/logger.js';
  */
 
 import { getUpdateStatus as getCFWidgetStatus, type TrackedMod } from './cfwidget.js';
-import { getInstalledCurseForgeInfo, checkForUpdates as checkCurseForgeUpdates, getFileChangelog as getCurseForgeChangelog } from './curseforge.js';
+import {
+  getInstalledCurseForgeInfo,
+  checkForUpdates as checkCurseForgeUpdates,
+  getFileChangelog as getCurseForgeChangelog,
+} from './curseforge.js';
 import { getInstalledModtaleInfo, getModDetails as getModtaleDetails } from './modtale.js';
-import { getInstalledStackMartInfo, getResourceDetails as getStackMartDetails } from './stackmart.js';
+import {
+  getInstalledStackMartInfo,
+  getResourceDetails as getStackMartDetails,
+} from './stackmart.js';
 import { getModRegistry, isModInstalled, getLatestRelease } from './modStore.js';
 import { sanitizeExternalHtml } from '../utils/htmlSanitizer.js';
 
@@ -92,10 +99,10 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
 
     for (const [modIdStr, info] of Object.entries(curseforgeInstalled)) {
       // Skip if already tracked in CFWidget (by filename)
-      if (allMods.some(m => m.filename === info.filename)) continue;
+      if (allMods.some((m) => m.filename === info.filename)) continue;
 
       // Find update info
-      const updateInfo = curseforgeUpdates.find(u => u.modId === parseInt(modIdStr));
+      const updateInfo = curseforgeUpdates.find((u) => u.modId === parseInt(modIdStr));
       const hasUpdate = updateInfo?.hasUpdate || false;
       const latestVersion = updateInfo?.latestVersion || info.version;
 
@@ -133,7 +140,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
     const modtaleInstalled = await getInstalledModtaleInfo();
     for (const [, info] of Object.entries(modtaleInstalled)) {
       // Skip if already tracked in CFWidget (by filename)
-      if (allMods.some(m => m.filename === info.filename)) continue;
+      if (allMods.some((m) => m.filename === info.filename)) continue;
 
       // Check for updates
       let hasUpdate = false;
@@ -142,7 +149,8 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       try {
         const project = await getModtaleDetails(info.projectId);
         if (project && project.versions && project.versions.length > 0) {
-          const latestVer = project.versions.find(v => v.channel === 'RELEASE') || project.versions[0];
+          const latestVer =
+            project.versions.find((v) => v.channel === 'RELEASE') || project.versions[0];
           latestVersion = latestVer.versionNumber;
           // Use normalized version comparison to handle 'v' prefix differences
           hasUpdate = !versionsAreEqual(info.version, latestVersion);
@@ -177,7 +185,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
     const stackmartInstalled = await getInstalledStackMartInfo();
     for (const [, info] of Object.entries(stackmartInstalled)) {
       // Skip if already tracked in CFWidget (by filename)
-      if (allMods.some(m => m.filename === info.filename)) continue;
+      if (allMods.some((m) => m.filename === info.filename)) continue;
 
       // Check for updates
       let hasUpdate = false;
@@ -217,7 +225,7 @@ export async function getUnifiedUpdateStatus(): Promise<UnifiedUpdateStatus> {
       if (!installed.installed || !installed.filename) continue;
 
       // Skip if already tracked in CFWidget (by filename)
-      if (allMods.some(m => m.filename === installed.filename)) continue;
+      if (allMods.some((m) => m.filename === installed.filename)) continue;
 
       // Check for updates via GitHub
       let hasUpdate = false;

@@ -8,7 +8,12 @@ import { pushApi } from '@/api/push'
 
 const VAPID_KEY = ref<string | null>(null)
 const subscribed = ref(false)
-const supported = ref(typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window)
+const supported = ref(
+  typeof window !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window,
+)
 const busy = ref(false)
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
@@ -37,7 +42,10 @@ export function usePush() {
     try {
       const info = await pushApi.getVapidKey()
       VAPID_KEY.value = info.key
-      if (!info.enabled) { subscribed.value = false; return }
+      if (!info.enabled) {
+        subscribed.value = false
+        return
+      }
       const reg = await getRegistration()
       const sub = reg ? await reg.pushManager.getSubscription() : null
       subscribed.value = !!sub
@@ -95,7 +103,12 @@ export function usePush() {
   }
 
   async function test(): Promise<boolean> {
-    try { await pushApi.test(); return true } catch { return false }
+    try {
+      await pushApi.test()
+      return true
+    } catch {
+      return false
+    }
   }
 
   return { supported, subscribed, busy, refresh, enable, disable, test }

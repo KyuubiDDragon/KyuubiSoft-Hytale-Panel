@@ -4,9 +4,8 @@ import en from './en.json'
 import pt_br from './pt_br.json'
 
 // Get saved language or default to German
-const savedLocale = typeof localStorage !== 'undefined'
-  ? localStorage.getItem('locale') || 'de'
-  : 'de'
+const savedLocale =
+  typeof localStorage !== 'undefined' ? localStorage.getItem('locale') || 'de' : 'de'
 
 export const i18n = createI18n({
   legacy: false,

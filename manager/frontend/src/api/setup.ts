@@ -514,7 +514,9 @@ export const setupApi = {
    * Uses extended timeout as server startup can take time
    */
   async startServerFirstTime(): Promise<ServerFirstStartResponse> {
-    const response = await setupApiClient.post<ServerFirstStartResponse>('/setup/server/start-first')
+    const response = await setupApiClient.post<ServerFirstStartResponse>(
+      '/setup/server/start-first',
+    )
     return response.data
   },
 
@@ -583,7 +585,7 @@ export function createProgressStream(
   url: string,
   onProgress: (event: ProgressEvent) => void,
   onComplete: () => void,
-  onError: (error: string) => void
+  onError: (error: string) => void,
 ): () => void {
   const eventSource = new EventSource(`/api${url}`)
 
@@ -592,7 +594,9 @@ export function createProgressStream(
       const data = JSON.parse(event.data) as ProgressEvent & { status?: string }
 
       // Support both 'type' (frontend standard) and 'status' (backend legacy) fields
-      const eventType = data.type || (data.status === 'complete' ? 'complete' : data.status === 'error' ? 'error' : 'progress')
+      const eventType =
+        data.type ||
+        (data.status === 'complete' ? 'complete' : data.status === 'error' ? 'error' : 'progress')
 
       if (eventType === 'complete') {
         onProgress(data) // Send final progress update before completing
@@ -624,7 +628,7 @@ export function createProgressStream(
 export function subscribeToDownloadProgress(
   onProgress: (event: ProgressEvent) => void,
   onComplete: () => void,
-  onError: (error: string) => void
+  onError: (error: string) => void,
 ): () => void {
   return createProgressStream('/setup/download/progress', onProgress, onComplete, onError)
 }
@@ -633,7 +637,7 @@ export function subscribeToDownloadProgress(
 export function subscribeToExtractionProgress(
   onProgress: (event: ProgressEvent) => void,
   onComplete: () => void,
-  onError: (error: string) => void
+  onError: (error: string) => void,
 ): () => void {
   return createProgressStream('/setup/assets/progress', onProgress, onComplete, onError)
 }
@@ -641,7 +645,7 @@ export function subscribeToExtractionProgress(
 // Server console stream during setup
 export function subscribeToServerConsole(
   onMessage: (message: string) => void,
-  onError: (error: string) => void
+  onError: (error: string) => void,
 ): () => void {
   const eventSource = new EventSource('/api/setup/server/console')
 

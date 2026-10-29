@@ -25,7 +25,13 @@ beforeAll(async () => {
     path.join(tmpDir, 'users.json'),
     JSON.stringify({
       users: [
-        { username: 'boss', passwordHash: 'x', roleId: 'admin', createdAt: new Date().toISOString(), tokenVersion: 1 },
+        {
+          username: 'boss',
+          passwordHash: 'x',
+          roleId: 'admin',
+          createdAt: new Date().toISOString(),
+          tokenVersion: 1,
+        },
       ],
     }),
     'utf-8',
@@ -38,7 +44,15 @@ beforeAll(async () => {
       version: 1,
       lastModified: new Date().toISOString(),
       roles: [
-        { id: 'viewer', name: 'Viewer', description: '', permissions: ['players.view'], isSystem: true, createdAt: '', updatedAt: '' },
+        {
+          id: 'viewer',
+          name: 'Viewer',
+          description: '',
+          permissions: ['players.view'],
+          isSystem: true,
+          createdAt: '',
+          updatedAt: '',
+        },
       ],
     }),
     'utf-8',

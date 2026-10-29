@@ -48,7 +48,9 @@ export const settingsApi = {
     return data
   },
 
-  async saveIntegrations(payload: IntegrationsUpdate): Promise<{ success: boolean; message?: string; data: IntegrationsStatus }> {
+  async saveIntegrations(
+    payload: IntegrationsUpdate,
+  ): Promise<{ success: boolean; message?: string; data: IntegrationsStatus }> {
     const { data } = await api.put('/settings/integrations', payload)
     return data
   },
@@ -58,7 +60,9 @@ export const settingsApi = {
     return data
   },
 
-  async saveAutoMod(payload: AutoModConfig): Promise<{ success: boolean; message?: string; data: AutoModConfig }> {
+  async saveAutoMod(
+    payload: AutoModConfig,
+  ): Promise<{ success: boolean; message?: string; data: AutoModConfig }> {
     const { data } = await api.put('/settings/automod', payload)
     return data
   },
@@ -68,7 +72,9 @@ export const settingsApi = {
     return data
   },
 
-  async saveDiscord(payload: DiscordUpdate): Promise<{ success: boolean; message?: string; data: DiscordStatus }> {
+  async saveDiscord(
+    payload: DiscordUpdate,
+  ): Promise<{ success: boolean; message?: string; data: DiscordStatus }> {
     const { data } = await api.put('/settings/discord', payload)
     return data
   },
@@ -78,7 +84,9 @@ export const settingsApi = {
     return data
   },
 
-  async saveOffsiteBackup(payload: OffsiteBackupUpdate): Promise<{ success: boolean; message?: string }> {
+  async saveOffsiteBackup(
+    payload: OffsiteBackupUpdate,
+  ): Promise<{ success: boolean; message?: string }> {
     const { data } = await api.put('/settings/offsite-backup', payload)
     return data
   },

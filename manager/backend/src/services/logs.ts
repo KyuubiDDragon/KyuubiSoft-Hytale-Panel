@@ -40,7 +40,10 @@ export function parseLogLine(line: string): LogEntry | null {
     const dockerMatch = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/.exec(trimmed);
     if (dockerMatch) {
       timestamp = dockerMatch[1];
-      message = trimmed.substring(dockerMatch[0].length).replace(/^[\.\d]*Z?\s*/, '').trim();
+      message = trimmed
+        .substring(dockerMatch[0].length)
+        .replace(/^[\.\d]*Z?\s*/, '')
+        .trim();
     }
   }
 

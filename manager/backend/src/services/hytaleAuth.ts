@@ -73,7 +73,7 @@ export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<Acti
     }
 
     // Wait for the command to execute and for files to be written
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Get logs to verify the change
     const logs = await getLogs(150);
@@ -86,10 +86,10 @@ export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<Acti
       /persistence.*(?:set|changed|enabled|configured).*encrypted/i,
       /encrypted.*persistence.*(?:enabled|active|set)/i,
       /credentials.*(?:will be|are now).*(?:saved|stored|persisted)/i,
-      /persistence.*type.*encrypted/i
+      /persistence.*type.*encrypted/i,
     ];
 
-    const hasSuccess = successPatterns.some(pattern => pattern.test(cleanLogs));
+    const hasSuccess = successPatterns.some((pattern) => pattern.test(cleanLogs));
 
     // Also check if there are still memory-only warnings
     const hasMemoryWarning = /credentials stored in memory only/i.test(cleanLogs);
@@ -117,10 +117,13 @@ export async function setPersistence(type: 'Memory' | 'Encrypted'): Promise<Acti
 
     // If we still see memory warnings, it didn't work
     if (hasMemoryWarning) {
-      logger.warn('[HytaleAuth] Persistence command executed but still seeing memory-only warnings');
+      logger.warn(
+        '[HytaleAuth] Persistence command executed but still seeing memory-only warnings',
+      );
       return {
         success: false,
-        error: 'Persistence command executed but credentials are still in memory only. The server may not support encrypted persistence yet.',
+        error:
+          'Persistence command executed but credentials are still in memory only. The server may not support encrypted persistence yet.',
       };
     }
 
@@ -164,7 +167,7 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
     }
 
     // Wait a bit for the server to output the device code
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // Get recent logs to find the device code and URL
     const logs = await getLogs(50);
@@ -179,7 +182,9 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
     // "Or visit: https://oauth.accounts.hytale.com/oauth2/device/verify?user_code=fHmkjxFE"
 
     // First, try to get the complete URL with user_code parameter (preferred)
-    const completeUrlMatch = cleanLogs.match(/(https?:\/\/oauth\.accounts\.hytale\.com\/[^\s]*\?user_code=[a-zA-Z0-9]+)/i);
+    const completeUrlMatch = cleanLogs.match(
+      /(https?:\/\/oauth\.accounts\.hytale\.com\/[^\s]*\?user_code=[a-zA-Z0-9]+)/i,
+    );
 
     // Fallback: get any oauth URL
     const basicUrlMatch = cleanLogs.match(/(https?:\/\/oauth\.accounts\.hytale\.com\/[^\s?]+)/i);
@@ -188,7 +193,11 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
     const codeMatch = cleanLogs.match(/(?:enter|authorization)\s+code:\s*([a-zA-Z0-9]+)/i);
 
     // Use complete URL if available, otherwise use basic URL
-    let verificationUrl = completeUrlMatch ? completeUrlMatch[1].trim() : (basicUrlMatch ? basicUrlMatch[1].trim() : null);
+    let verificationUrl = completeUrlMatch
+      ? completeUrlMatch[1].trim()
+      : basicUrlMatch
+        ? basicUrlMatch[1].trim()
+        : null;
     const userCode = codeMatch ? codeMatch[1].trim() : null;
 
     // If we only have basic URL, try to extract code from URL or use authorization code
@@ -200,14 +209,15 @@ export async function initiateDeviceLogin(): Promise<HytaleDeviceCodeResponse> {
       logger.error('[HytaleAuth] Could not parse auth response from server logs');
       return {
         success: false,
-        error: 'Could not parse authentication response from server logs. Make sure the server is running.',
+        error:
+          'Could not parse authentication response from server logs. Make sure the server is running.',
       };
     }
 
     const deviceCode = userCode; // Use userCode as deviceCode
 
     // Save status with expiry (typically 15 minutes for device codes)
-    const expiresAt = Date.now() + (15 * 60 * 1000);
+    const expiresAt = Date.now() + 15 * 60 * 1000;
     await saveAuthStatus({
       authenticated: false,
       deviceCode,
@@ -250,8 +260,8 @@ export async function listAuthFiles(): Promise<string[]> {
 
   // Check auth directories at different locations
   const authDirs = [
-    path.join(basePath, 'auth'),           // /opt/hytale/auth (main auth folder)
-    path.join(config.serverPath, 'auth'),  // /opt/hytale/server/auth
+    path.join(basePath, 'auth'), // /opt/hytale/auth (main auth folder)
+    path.join(config.serverPath, 'auth'), // /opt/hytale/server/auth
     path.join(config.serverPath, '.auth'), // /opt/hytale/server/.auth
   ];
 
@@ -274,7 +284,11 @@ export async function listAuthFiles(): Promise<string[]> {
  * Reads and returns the structure of the downloader credentials file
  * This helps understand what format the credentials are in
  */
-export async function inspectDownloaderCredentials(): Promise<{ exists: boolean; structure?: any; error?: string }> {
+export async function inspectDownloaderCredentials(): Promise<{
+  exists: boolean;
+  structure?: any;
+  error?: string;
+}> {
   try {
     const downloaderCredsPath = '/opt/hytale/downloader/.hytale-downloader-credentials.json';
 
@@ -375,7 +389,9 @@ async function checkTokenFileExists(): Promise<boolean> {
 
     // If we have ANY files in the .auth directory, consider it as having tokens
     if (authFiles.length > 0) {
-      logger.info(`[HytaleAuth] Found ${authFiles.length} file(s) in .auth directory, considering as authenticated`);
+      logger.info(
+        `[HytaleAuth] Found ${authFiles.length} file(s) in .auth directory, considering as authenticated`,
+      );
       return true;
     }
 
@@ -444,23 +460,27 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
         /logged\s+in\s+successfully/i,
       ];
 
-      const isAuthSuccessful = authSuccessPatterns.some(pattern => pattern.test(cleanLogs));
+      const isAuthSuccessful = authSuccessPatterns.some((pattern) => pattern.test(cleanLogs));
 
       if (isAuthSuccessful) {
-        logger.info('[HytaleAuth] Authentication successful detected in logs! Setting persistence...');
+        logger.info(
+          '[HytaleAuth] Authentication successful detected in logs! Setting persistence...',
+        );
 
         // Authentication successful - now set persistence to save credentials
         const persistenceResult = await execCommand('/auth persistence Encrypted');
 
         if (persistenceResult.success) {
           // Wait for the persistence command to create auth.enc
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise((resolve) => setTimeout(resolve, 3000));
 
           // Verify auth.enc was created
           for (const tokenPath of serverTokenPaths) {
             try {
               await fs.access(tokenPath);
-              logger.info(`[HytaleAuth] Persistence successful - auth.enc created at: ${tokenPath}`);
+              logger.info(
+                `[HytaleAuth] Persistence successful - auth.enc created at: ${tokenPath}`,
+              );
               await saveAuthStatus({
                 authenticated: true,
                 persistent: true,
@@ -477,7 +497,9 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
           }
 
           // auth.enc not found but persistence command succeeded - auth is in memory
-          logger.info('[HytaleAuth] Persistence command ran but auth.enc not found. Auth may be memory-only.');
+          logger.info(
+            '[HytaleAuth] Persistence command ran but auth.enc not found. Auth may be memory-only.',
+          );
           await saveAuthStatus({
             authenticated: true,
             persistent: false,
@@ -486,7 +508,8 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
           });
           return {
             success: true,
-            message: 'Server is authenticated (memory only - credentials may not persist after restart).',
+            message:
+              'Server is authenticated (memory only - credentials may not persist after restart).',
           };
         } else {
           logger.warn('[HytaleAuth] Failed to set persistence:', persistenceResult.error);
@@ -499,14 +522,16 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
           });
           return {
             success: true,
-            message: 'Server is authenticated but persistence failed. Credentials will be lost on restart.',
+            message:
+              'Server is authenticated but persistence failed. Credentials will be lost on restart.',
           };
         }
       }
 
       return {
         success: false,
-        error: 'Authentication not yet completed. Please complete the authentication in your browser.',
+        error:
+          'Authentication not yet completed. Please complete the authentication in your browser.',
       };
     }
 
@@ -514,7 +539,8 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
     if (status.authenticated) {
       return {
         success: true,
-        message: 'Server appears to be authenticated (memory only - will need re-auth after restart).',
+        message:
+          'Server appears to be authenticated (memory only - will need re-auth after restart).',
       };
     }
 
@@ -528,7 +554,9 @@ export async function checkAuthCompletion(): Promise<ActionResponse> {
     const downloaderCredsExist = await checkDownloaderCredentialsExist();
 
     if (serverAuthNeeded) {
-      logger.info('[HytaleAuth] Server requires authentication (detected "No server tokens configured")');
+      logger.info(
+        '[HytaleAuth] Server requires authentication (detected "No server tokens configured")',
+      );
 
       // Update status to indicate server auth is specifically required
       await saveAuthStatus({

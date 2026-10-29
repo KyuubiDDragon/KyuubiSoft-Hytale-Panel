@@ -2,13 +2,7 @@ import { logger } from '../utils/logger.js';
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
-import {
-  getAllRoles,
-  getRole,
-  createRole,
-  updateRole,
-  deleteRole,
-} from '../services/roles.js';
+import { getAllRoles, getRole, createRole, updateRole, deleteRole } from '../services/roles.js';
 import { PERMISSIONS, Permission } from '../types/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import { logActivity } from '../services/activityLog.js';
@@ -35,7 +29,7 @@ router.get(
       logger.error('Failed to get roles:', error);
       res.status(500).json({ error: 'Failed to get roles' });
     }
-  }
+  },
 );
 
 // GET /permissions - List all available permissions
@@ -50,7 +44,7 @@ router.get(
       logger.error('Failed to get permissions:', error);
       res.status(500).json({ error: 'Failed to get permissions' });
     }
-  }
+  },
 );
 
 // GET /:id - Get single role
@@ -62,7 +56,7 @@ router.get(
     // Demo mode: return demo role
     if (isDemoMode()) {
       const demoRoles = getDemoRoles();
-      const role = demoRoles.find(r => r.id === req.params.id);
+      const role = demoRoles.find((r) => r.id === req.params.id);
       if (!role) {
         res.status(404).json({ error: 'Role not found' });
         return;
@@ -85,7 +79,7 @@ router.get(
       logger.error('Failed to get role:', error);
       res.status(500).json({ error: 'Failed to get role' });
     }
-  }
+  },
 );
 
 // POST / - Create new role
@@ -145,7 +139,7 @@ router.post(
         'user',
         true,
         name,
-        `Created role: ${name}`
+        `Created role: ${name}`,
       );
 
       res.status(201).json({ success: true, role });
@@ -154,7 +148,7 @@ router.post(
       const message = error instanceof Error ? error.message : 'Failed to create role';
       res.status(400).json({ error: message });
     }
-  }
+  },
 );
 
 // PUT /:id - Update role
@@ -167,7 +161,7 @@ router.put(
     if (isDemoMode()) {
       const { id } = req.params;
       const demoRoles = getDemoRoles();
-      const existingRole = demoRoles.find(r => r.id === id);
+      const existingRole = demoRoles.find((r) => r.id === id);
       res.json({
         success: true,
         message: '[DEMO] Role updated (simulated)',
@@ -201,7 +195,7 @@ router.put(
         'user',
         true,
         role.name,
-        `Updated role: ${role.name}`
+        `Updated role: ${role.name}`,
       );
 
       res.json({ success: true, role });
@@ -210,7 +204,7 @@ router.put(
       const message = error instanceof Error ? error.message : 'Failed to update role';
       res.status(400).json({ error: message });
     }
-  }
+  },
 );
 
 // DELETE /:id - Delete role
@@ -223,7 +217,7 @@ router.delete(
     if (isDemoMode()) {
       const { id } = req.params;
       const demoRoles = getDemoRoles();
-      const role = demoRoles.find(r => r.id === id);
+      const role = demoRoles.find((r) => r.id === id);
 
       if (role?.isSystem) {
         res.status(400).json({ error: 'Cannot delete system roles' });
@@ -259,7 +253,7 @@ router.delete(
         'user',
         true,
         role.name,
-        `Deleted role: ${role.name}`
+        `Deleted role: ${role.name}`,
       );
 
       res.json({ success: true });
@@ -268,7 +262,7 @@ router.delete(
       const message = error instanceof Error ? error.message : 'Failed to delete role';
       res.status(400).json({ error: message });
     }
-  }
+  },
 );
 
 export default router;

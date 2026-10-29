@@ -116,7 +116,7 @@ export const assetsApi = {
       limit?: number
       useRegex?: boolean
       useGlob?: boolean
-    }
+    },
   ): Promise<{ query: string; count: number; results: SearchResult[]; mode: string }> {
     const params: Record<string, string> = { q: query }
     if (options?.searchContent) params.content = 'true'
@@ -141,7 +141,9 @@ export const assetsApi = {
     return '/api/assets/player-avatar'
   },
 
-  async searchItemIcon(itemId: string): Promise<{ itemId: string; found: boolean; paths: string[] }> {
+  async searchItemIcon(
+    itemId: string,
+  ): Promise<{ itemId: string; found: boolean; paths: string[] }> {
     const response = await api.get(`/assets/item-icon-search/${encodeURIComponent(itemId)}`)
     return response.data
   },

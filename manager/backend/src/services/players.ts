@@ -395,7 +395,10 @@ const WORLD_PATTERNS = [
 ];
 
 // Extract extra info from log line
-function extractPlayerInfo(line: string, playerName: string): { uuid?: string; ip?: string; world?: string } {
+function extractPlayerInfo(
+  line: string,
+  playerName: string,
+): { uuid?: string; ip?: string; world?: string } {
   const info: { uuid?: string; ip?: string; world?: string } = {};
 
   for (const pattern of UUID_PATTERNS) {
@@ -429,7 +432,10 @@ function extractPlayerInfo(line: string, playerName: string): { uuid?: string; i
 }
 
 // Set player online
-function setPlayerOnline(name: string, extraInfo: { uuid?: string; ip?: string; world?: string } = {}): void {
+function setPlayerOnline(
+  name: string,
+  extraInfo: { uuid?: string; ip?: string; world?: string } = {},
+): void {
   const now = new Date().toISOString();
   const existing = players.get(name);
 
@@ -551,7 +557,9 @@ export async function getOnlinePlayers(serverId?: string): Promise<PlayerInfo[]>
     const kyuubiApi = await import('./kyuubiApi.js');
     if (await kyuubiApi.isPluginRunning(serverId)) {
       const resp = await kyuubiApi.getPlayersFromPlugin(serverId);
-      const data = resp.success ? (resp.data as { players?: Array<{ name?: string }> } | undefined) : undefined;
+      const data = resp.success
+        ? (resp.data as { players?: Array<{ name?: string }> } | undefined)
+        : undefined;
       if (data && Array.isArray(data.players)) {
         return data.players
           .filter((p): p is { name: string } => typeof p?.name === 'string' && p.name.length > 0)
@@ -598,7 +606,7 @@ export async function getOfflinePlayers(): Promise<PlayerEntry[]> {
 
   await loadPlayers();
   return Array.from(players.values())
-    .filter(p => !p.online)
+    .filter((p) => !p.online)
     .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
 }
 
@@ -610,8 +618,9 @@ export async function getAllPlayers(): Promise<PlayerEntry[]> {
   }
 
   await loadPlayers();
-  return Array.from(players.values())
-    .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime());
+  return Array.from(players.values()).sort(
+    (a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime(),
+  );
 }
 
 // Get player count
@@ -622,7 +631,7 @@ export async function getPlayerCount(): Promise<number> {
   }
 
   await loadPlayers();
-  return Array.from(players.values()).filter(p => p.online).length;
+  return Array.from(players.values()).filter((p) => p.online).length;
 }
 
 // Get player history (for backwards compatibility)
@@ -642,7 +651,7 @@ export async function initializePlayerTracking(): Promise<void> {
   logger.info('[Players] Initializing player tracking...');
   await loadPlayers();
   await scanLogs();
-  const onlineCount = Array.from(players.values()).filter(p => p.online).length;
+  const onlineCount = Array.from(players.values()).filter((p) => p.online).length;
   logger.info(`[Players] Initialized with ${players.size} total players, ${onlineCount} online`);
 }
 
@@ -718,7 +727,7 @@ function updatePeakOnline(): void {
     peakOnlineToday = 0;
     peakResetDate = today;
   }
-  const onlineCount = Array.from(players.values()).filter(p => p.online).length;
+  const onlineCount = Array.from(players.values()).filter((p) => p.online).length;
   if (onlineCount > peakOnlineToday) {
     peakOnlineToday = onlineCount;
   }
@@ -744,16 +753,21 @@ export async function getPlayerStatistics(): Promise<PlayerStatistics> {
   const topPlayers = allPlayers
     .sort((a, b) => b.playTime - a.playTime)
     .slice(0, 10)
-    .map(p => ({ name: p.name, playTime: p.playTime, sessions: p.sessionCount }));
+    .map((p) => ({ name: p.name, playTime: p.playTime, sessions: p.sessionCount }));
 
-  const newPlayersLast7Days = allPlayers.filter(p => new Date(p.firstSeen) >= sevenDaysAgo).length;
-  const activePlayersLast7Days = allPlayers.filter(p => new Date(p.lastSeen) >= sevenDaysAgo).length;
+  const newPlayersLast7Days = allPlayers.filter(
+    (p) => new Date(p.firstSeen) >= sevenDaysAgo,
+  ).length;
+  const activePlayersLast7Days = allPlayers.filter(
+    (p) => new Date(p.lastSeen) >= sevenDaysAgo,
+  ).length;
 
   return {
     totalPlayers,
     totalPlaytime,
     averagePlaytime: totalPlayers > 0 ? Math.round(totalPlaytime / totalPlayers) : 0,
-    averageSessionsPerPlayer: totalPlayers > 0 ? Math.round((totalSessions / totalPlayers) * 10) / 10 : 0,
+    averageSessionsPerPlayer:
+      totalPlayers > 0 ? Math.round((totalSessions / totalPlayers) * 10) / 10 : 0,
     topPlayers,
     newPlayersLast7Days,
     activePlayersLast7Days,
@@ -784,7 +798,7 @@ export async function getDailyActivity(days: number = 7): Promise<DailyActivity[
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
 
-    const playersOnDay = Array.from(players.values()).filter(p => {
+    const playersOnDay = Array.from(players.values()).filter((p) => {
       const lastSeen = new Date(p.lastSeen);
       return lastSeen.toISOString().split('T')[0] === dateStr;
     });
@@ -833,7 +847,9 @@ function formatItemName(itemId: string): string {
 /**
  * Parse inventory container to list of items
  */
-function parseInventoryContainer(container: PlayerFileInventoryContainer | undefined): ParsedInventoryItem[] {
+function parseInventoryContainer(
+  container: PlayerFileInventoryContainer | undefined,
+): ParsedInventoryItem[] {
   if (!container || !container.Items) return [];
 
   const items: ParsedInventoryItem[] = [];
@@ -907,14 +923,15 @@ async function readPlayerFile(uuid: string): Promise<PlayerFileData | null> {
  * Components.DisplayName.DisplayName.RawText.
  */
 function getPlayerNameFromFile(data: PlayerFileData): string | undefined {
-  return data.Components?.Nameplate?.Text
-      || data.Components?.DisplayName?.DisplayName?.RawText;
+  return data.Components?.Nameplate?.Text || data.Components?.DisplayName?.DisplayName?.RawText;
 }
 
 /**
  * Get player inventory by name
  */
-export async function getPlayerInventoryFromFile(playerName: string): Promise<ParsedPlayerInventory | null> {
+export async function getPlayerInventoryFromFile(
+  playerName: string,
+): Promise<ParsedPlayerInventory | null> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoPlayerInventory(playerName);
@@ -965,12 +982,13 @@ export async function getPlayerInventoryFromFile(playerName: string): Promise<Pa
     // ActiveSlot now lives on the outer Hotbar component; fall back to the
     // legacy Player.Inventory field.
     activeHotbarSlot: comps?.HotbarInventory?.ActiveSlot ?? legacy?.ActiveHotbarSlot ?? 0,
-    totalSlots: (storageC?.Capacity || 0) +
-                (armorC?.Capacity || 0) +
-                (hotbarC?.Capacity || 0) +
-                (utilityC?.Capacity || 0) +
-                (backpackC?.Capacity || 0) +
-                (toolsC?.Capacity || 0),
+    totalSlots:
+      (storageC?.Capacity || 0) +
+      (armorC?.Capacity || 0) +
+      (hotbarC?.Capacity || 0) +
+      (utilityC?.Capacity || 0) +
+      (backpackC?.Capacity || 0) +
+      (toolsC?.Capacity || 0),
     usedSlots: allItems.length,
     capacities: {
       storage: storageC?.Capacity || 36,
@@ -986,7 +1004,9 @@ export async function getPlayerInventoryFromFile(playerName: string): Promise<Pa
 /**
  * Get player details by name
  */
-export async function getPlayerDetailsFromFile(playerName: string): Promise<ParsedPlayerDetails | null> {
+export async function getPlayerDetailsFromFile(
+  playerName: string,
+): Promise<ParsedPlayerDetails | null> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoPlayerDetails(playerName);
@@ -1035,16 +1055,20 @@ export async function getPlayerDetailsFromFile(playerName: string): Promise<Pars
     name: displayName,
     world: player?.PlayerData?.World || 'unknown',
     gameMode: player?.GameMode || 'unknown',
-    position: transform?.Position ? {
-      x: Math.round(transform.Position.X * 100) / 100,
-      y: Math.round(transform.Position.Y * 100) / 100,
-      z: Math.round(transform.Position.Z * 100) / 100,
-    } : null,
-    rotation: transform?.Rotation ? {
-      pitch: transform.Rotation.Pitch,
-      yaw: transform.Rotation.Yaw,
-      roll: transform.Rotation.Roll,
-    } : null,
+    position: transform?.Position
+      ? {
+          x: Math.round(transform.Position.X * 100) / 100,
+          y: Math.round(transform.Position.Y * 100) / 100,
+          z: Math.round(transform.Position.Z * 100) / 100,
+        }
+      : null,
+    rotation: transform?.Rotation
+      ? {
+          pitch: transform.Rotation.Pitch,
+          yaw: transform.Rotation.Yaw,
+          roll: transform.Rotation.Roll,
+        }
+      : null,
     stats: {
       health: healthStat?.Value || 0,
       maxHealth,
@@ -1131,7 +1155,9 @@ export interface ParsedDeathPosition {
  * Get player death positions from file
  * Returns array sorted by most recent (last in array = most recent)
  */
-export async function getPlayerDeathPositionsFromFile(playerName: string): Promise<ParsedDeathPosition[]> {
+export async function getPlayerDeathPositionsFromFile(
+  playerName: string,
+): Promise<ParsedDeathPosition[]> {
   // Demo mode: return mock data
   if (isDemoMode()) {
     return getDemoDeathPositions(playerName);
@@ -1195,8 +1221,8 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
   // Get list of online player names for quick lookup
   const onlinePlayerNames = new Set(
     Array.from(players.values())
-      .filter(p => p.online)
-      .map(p => p.name.toLowerCase())
+      .filter((p) => p.online)
+      .map((p) => p.name.toLowerCase()),
   );
 
   // First, read players from JSON files
@@ -1232,7 +1258,9 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
               players.delete(oldName);
               players.set(displayName, entry);
               sessionData = entry;
-              logger.info(`[Players] Name change detected: "${oldName}" -> "${displayName}" (UUID: ${uuid})`);
+              logger.info(
+                `[Players] Name change detected: "${oldName}" -> "${displayName}" (UUID: ${uuid})`,
+              );
               debouncedSavePlayers();
               break;
             }
@@ -1261,11 +1289,13 @@ export async function getAllPlayersUnified(): Promise<UnifiedPlayerEntry[]> {
           online: isOnline,
           world: playerData?.PlayerData?.World,
           gameMode: playerData?.GameMode,
-          position: transform?.Position ? {
-            x: Math.round(transform.Position.X * 100) / 100,
-            y: Math.round(transform.Position.Y * 100) / 100,
-            z: Math.round(transform.Position.Z * 100) / 100,
-          } : undefined,
+          position: transform?.Position
+            ? {
+                x: Math.round(transform.Position.X * 100) / 100,
+                y: Math.round(transform.Position.Y * 100) / 100,
+                z: Math.round(transform.Position.Z * 100) / 100,
+              }
+            : undefined,
           health: healthStat?.Value,
           maxHealth,
           lastSeen: sessionData?.lastSeen,

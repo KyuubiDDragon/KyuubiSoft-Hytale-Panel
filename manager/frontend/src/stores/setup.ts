@@ -226,13 +226,19 @@ export const useSetupStore = defineStore('setup', () => {
       case 'admin-account':
         return !!(setupData.value.admin?.username && setupData.value.admin?.password)
       case 'download-method':
-        return !!(setupData.value.downloadMethod?.method && setupData.value.downloadMethod?.completed)
+        return !!(
+          setupData.value.downloadMethod?.method && setupData.value.downloadMethod?.completed
+        )
       case 'assets-extract':
-        return setupData.value.assetsExtract?.extracted || setupData.value.assetsExtract?.skipped || false
+        return (
+          setupData.value.assetsExtract?.extracted ||
+          setupData.value.assetsExtract?.skipped ||
+          false
+        )
       case 'server-auth':
         return setupData.value.serverAuth?.authenticated ?? false
       case 'server-config':
-        return !!(setupData.value.serverConfig?.serverName)
+        return !!setupData.value.serverConfig?.serverName
       case 'security-settings':
         return true // Optional step, always valid
       case 'automation':
@@ -558,11 +564,11 @@ export const useSetupStore = defineStore('setup', () => {
         const stepDataMap: Record<string, keyof SetupData> = {
           'server-config': 'serverConfig',
           'security-settings': 'securitySettings',
-          'automation': 'automation',
-          'performance': 'performance',
-          'plugin': 'plugin',
-          'integrations': 'integrations',
-          'network': 'network',
+          automation: 'automation',
+          performance: 'performance',
+          plugin: 'plugin',
+          integrations: 'integrations',
+          network: 'network',
         }
         const dataKey = stepDataMap[stepId]
         if (dataKey) {
@@ -570,7 +576,7 @@ export const useSetupStore = defineStore('setup', () => {
           // matching step expects. We don't have step-typed signatures here
           // so widen via unknown to satisfy the union without resorting to
           // `any`.
-          (setupData.value as Record<keyof SetupData, unknown>)[dataKey] = data
+          ;(setupData.value as Record<keyof SetupData, unknown>)[dataKey] = data
         }
         markStepCompleted(stepId)
         return true

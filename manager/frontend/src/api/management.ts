@@ -14,17 +14,25 @@ export const whitelistApi = {
   },
 
   async setEnabled(enabled: boolean): Promise<{ success: boolean; enabled: boolean }> {
-    const response = await api.put<{ success: boolean; enabled: boolean }>('/management/whitelist/enabled', { enabled })
+    const response = await api.put<{ success: boolean; enabled: boolean }>(
+      '/management/whitelist/enabled',
+      { enabled },
+    )
     return response.data
   },
 
   async addPlayer(player: string): Promise<{ success: boolean; list: string[] }> {
-    const response = await api.post<{ success: boolean; list: string[] }>('/management/whitelist/add', { player })
+    const response = await api.post<{ success: boolean; list: string[] }>(
+      '/management/whitelist/add',
+      { player },
+    )
     return response.data
   },
 
   async removePlayer(player: string): Promise<{ success: boolean; list: string[] }> {
-    const response = await api.delete<{ success: boolean; list: string[] }>(`/management/whitelist/${encodeURIComponent(player)}`)
+    const response = await api.delete<{ success: boolean; list: string[] }>(
+      `/management/whitelist/${encodeURIComponent(player)}`,
+    )
     return response.data
   },
 }
@@ -46,12 +54,17 @@ export const bansApi = {
   },
 
   async add(player: string, reason?: string): Promise<{ success: boolean; bans: BanEntry[] }> {
-    const response = await api.post<{ success: boolean; bans: BanEntry[] }>('/management/bans/add', { player, reason })
+    const response = await api.post<{ success: boolean; bans: BanEntry[] }>(
+      '/management/bans/add',
+      { player, reason },
+    )
     return response.data
   },
 
   async remove(player: string): Promise<{ success: boolean; bans: BanEntry[] }> {
-    const response = await api.delete<{ success: boolean; bans: BanEntry[] }>(`/management/bans/${encodeURIComponent(player)}`)
+    const response = await api.delete<{ success: boolean; bans: BanEntry[] }>(
+      `/management/bans/${encodeURIComponent(player)}`,
+    )
     return response.data
   },
 }
@@ -82,23 +95,40 @@ export const permissionsApi = {
     return response.data
   },
 
-  async addUser(name: string, groups: string[]): Promise<{ success: boolean; users: PermissionUser[] }> {
-    const response = await api.post<{ success: boolean; users: PermissionUser[] }>('/management/permissions/users', { name, groups })
+  async addUser(
+    name: string,
+    groups: string[],
+  ): Promise<{ success: boolean; users: PermissionUser[] }> {
+    const response = await api.post<{ success: boolean; users: PermissionUser[] }>(
+      '/management/permissions/users',
+      { name, groups },
+    )
     return response.data
   },
 
   async removeUser(name: string): Promise<{ success: boolean; users: PermissionUser[] }> {
-    const response = await api.delete<{ success: boolean; users: PermissionUser[] }>(`/management/permissions/users/${encodeURIComponent(name)}`)
+    const response = await api.delete<{ success: boolean; users: PermissionUser[] }>(
+      `/management/permissions/users/${encodeURIComponent(name)}`,
+    )
     return response.data
   },
 
-  async addGroup(name: string, permissions: string[], inherits?: string[]): Promise<{ success: boolean; groups: PermissionGroup[] }> {
-    const response = await api.post<{ success: boolean; groups: PermissionGroup[] }>('/management/permissions/groups', { name, permissions, inherits })
+  async addGroup(
+    name: string,
+    permissions: string[],
+    inherits?: string[],
+  ): Promise<{ success: boolean; groups: PermissionGroup[] }> {
+    const response = await api.post<{ success: boolean; groups: PermissionGroup[] }>(
+      '/management/permissions/groups',
+      { name, permissions, inherits },
+    )
     return response.data
   },
 
   async removeGroup(name: string): Promise<{ success: boolean; groups: PermissionGroup[] }> {
-    const response = await api.delete<{ success: boolean; groups: PermissionGroup[] }>(`/management/permissions/groups/${encodeURIComponent(name)}`)
+    const response = await api.delete<{ success: boolean; groups: PermissionGroup[] }>(
+      `/management/permissions/groups/${encodeURIComponent(name)}`,
+    )
     return response.data
   },
 }
@@ -107,7 +137,7 @@ export const permissionsApi = {
 
 export interface WorldFileInfo {
   name: string
-  path: string  // relative path within world (e.g., "config.json" or "resources/Time.json")
+  path: string // relative path within world (e.g., "config.json" or "resources/Time.json")
   size: number
   lastModified: string
 }
@@ -115,7 +145,7 @@ export interface WorldFileInfo {
 export interface WorldInfo {
   name: string
   hasConfig: boolean
-  files: WorldFileInfo[]  // All editable JSON files in this world
+  files: WorldFileInfo[] // All editable JSON files in this world
 }
 
 export interface WorldClientEffects {
@@ -171,36 +201,54 @@ export const worldsApi = {
   },
 
   async getConfig(worldName: string): Promise<WorldConfig> {
-    const response = await api.get<WorldConfig>(`/management/worlds/${encodeURIComponent(worldName)}/config`)
+    const response = await api.get<WorldConfig>(
+      `/management/worlds/${encodeURIComponent(worldName)}/config`,
+    )
     return response.data
   },
 
-  async updateConfig(worldName: string, updates: Partial<WorldConfig>): Promise<{ success: boolean; message?: string }> {
-    const response = await api.put<{ success: boolean; message?: string }>(`/management/worlds/${encodeURIComponent(worldName)}/config`, updates)
+  async updateConfig(
+    worldName: string,
+    updates: Partial<WorldConfig>,
+  ): Promise<{ success: boolean; message?: string }> {
+    const response = await api.put<{ success: boolean; message?: string }>(
+      `/management/worlds/${encodeURIComponent(worldName)}/config`,
+      updates,
+    )
     return response.data
   },
 
   // Generic file read/write for any JSON file in a world
   async getFile(worldName: string, filePath: string): Promise<WorldFileContent> {
-    const response = await api.get<WorldFileContent>(`/management/worlds/${encodeURIComponent(worldName)}/files/${filePath}`)
+    const response = await api.get<WorldFileContent>(
+      `/management/worlds/${encodeURIComponent(worldName)}/files/${filePath}`,
+    )
     return response.data
   },
 
-  async updateFile(worldName: string, filePath: string, content: Record<string, unknown> | string): Promise<{ success: boolean; message?: string }> {
+  async updateFile(
+    worldName: string,
+    filePath: string,
+    content: Record<string, unknown> | string,
+  ): Promise<{ success: boolean; message?: string }> {
     const response = await api.put<{ success: boolean; message?: string }>(
       `/management/worlds/${encodeURIComponent(worldName)}/files/${filePath}`,
-      { content }
+      { content },
     )
     return response.data
   },
 
   // ----- Per-world management: backup / restore / upload / pregen -----
   async getDetails(worldName: string): Promise<WorldDetails> {
-    const response = await api.get<WorldDetails>(`/management/worlds/${encodeURIComponent(worldName)}/details`)
+    const response = await api.get<WorldDetails>(
+      `/management/worlds/${encodeURIComponent(worldName)}/details`,
+    )
     return response.data
   },
 
-  async backup(worldName: string): Promise<{ success: boolean; backup?: WorldBackup; error?: string }> {
+  async backup(
+    worldName: string,
+  ): Promise<{ success: boolean; backup?: WorldBackup; error?: string }> {
     const response = await api.post(`/management/worlds/${encodeURIComponent(worldName)}/backup`)
     return response.data
   },
@@ -230,8 +278,13 @@ export const worldsApi = {
     return response.data
   },
 
-  async startPregen(worldName: string, radius: number): Promise<{ success: boolean; error?: string }> {
-    const response = await api.post(`/management/worlds/${encodeURIComponent(worldName)}/pregen`, { radius })
+  async startPregen(
+    worldName: string,
+    radius: number,
+  ): Promise<{ success: boolean; error?: string }> {
+    const response = await api.post(`/management/worlds/${encodeURIComponent(worldName)}/pregen`, {
+      radius,
+    })
     return response.data
   },
 
@@ -304,31 +357,43 @@ export const modsApi = {
   },
 
   async checkCompat(filename: string): Promise<CompatResult> {
-    const response = await api.get<CompatResult>(`/management/mods/${encodeURIComponent(filename)}/compat`)
+    const response = await api.get<CompatResult>(
+      `/management/mods/${encodeURIComponent(filename)}/compat`,
+    )
     return response.data
   },
 
   async toggle(filename: string): Promise<{ success: boolean }> {
-    const response = await api.put<{ success: boolean }>(`/management/mods/${encodeURIComponent(filename)}/toggle`)
+    const response = await api.put<{ success: boolean }>(
+      `/management/mods/${encodeURIComponent(filename)}/toggle`,
+    )
     return response.data
   },
 
   async upload(file: File): Promise<{ success: boolean; filename: string; size: number }> {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await api.post<{ success: boolean; filename: string; size: number }>('/management/mods/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    const response = await api.post<{ success: boolean; filename: string; size: number }>(
+      '/management/mods/upload',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    )
     return response.data
   },
 
   async delete(filename: string): Promise<{ success: boolean }> {
-    const response = await api.delete<{ success: boolean }>(`/management/mods/${encodeURIComponent(filename)}`)
+    const response = await api.delete<{ success: boolean }>(
+      `/management/mods/${encodeURIComponent(filename)}`,
+    )
     return response.data
   },
 
   async getConfigs(filename: string): Promise<{ configs: ConfigFile[] }> {
-    const response = await api.get<{ configs: ConfigFile[] }>(`/management/mods/${encodeURIComponent(filename)}/configs`)
+    const response = await api.get<{ configs: ConfigFile[] }>(
+      `/management/mods/${encodeURIComponent(filename)}/configs`,
+    )
     return response.data
   },
 
@@ -346,38 +411,53 @@ export const pluginsApi = {
   },
 
   async toggle(filename: string): Promise<{ success: boolean }> {
-    const response = await api.put<{ success: boolean }>(`/management/plugins/${encodeURIComponent(filename)}/toggle`)
+    const response = await api.put<{ success: boolean }>(
+      `/management/plugins/${encodeURIComponent(filename)}/toggle`,
+    )
     return response.data
   },
 
   async upload(file: File): Promise<{ success: boolean; filename: string; size: number }> {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await api.post<{ success: boolean; filename: string; size: number }>('/management/plugins/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    const response = await api.post<{ success: boolean; filename: string; size: number }>(
+      '/management/plugins/upload',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    )
     return response.data
   },
 
   async delete(filename: string): Promise<{ success: boolean }> {
-    const response = await api.delete<{ success: boolean }>(`/management/plugins/${encodeURIComponent(filename)}`)
+    const response = await api.delete<{ success: boolean }>(
+      `/management/plugins/${encodeURIComponent(filename)}`,
+    )
     return response.data
   },
 
   async getConfigs(filename: string): Promise<{ configs: ConfigFile[] }> {
-    const response = await api.get<{ configs: ConfigFile[] }>(`/management/plugins/${encodeURIComponent(filename)}/configs`)
+    const response = await api.get<{ configs: ConfigFile[] }>(
+      `/management/plugins/${encodeURIComponent(filename)}/configs`,
+    )
     return response.data
   },
 }
 
 export const configApi = {
   async read(path: string): Promise<{ content: string; path: string }> {
-    const response = await api.get<{ content: string; path: string }>('/management/config/read', { params: { path } })
+    const response = await api.get<{ content: string; path: string }>('/management/config/read', {
+      params: { path },
+    })
     return response.data
   },
 
   async write(path: string, content: string): Promise<{ success: boolean }> {
-    const response = await api.put<{ success: boolean }>('/management/config/write', { path, content })
+    const response = await api.put<{ success: boolean }>('/management/config/write', {
+      path,
+      content,
+    })
     return response.data
   },
 }
@@ -412,8 +492,16 @@ export interface ActivityLogEntry {
 }
 
 export const activityApi = {
-  async get(options?: { limit?: number; offset?: number; category?: string; user?: string }): Promise<{ entries: ActivityLogEntry[]; total: number }> {
-    const response = await api.get<{ entries: ActivityLogEntry[]; total: number }>('/management/activity', { params: options })
+  async get(options?: {
+    limit?: number
+    offset?: number
+    category?: string
+    user?: string
+  }): Promise<{ entries: ActivityLogEntry[]; total: number }> {
+    const response = await api.get<{ entries: ActivityLogEntry[]; total: number }>(
+      '/management/activity',
+      { params: options },
+    )
     return response.data
   },
 
@@ -481,7 +569,9 @@ export const modStoreApi = {
   },
 
   async uninstall(modId: string): Promise<{ success: boolean; error?: string }> {
-    const response = await api.delete<{ success: boolean; error?: string }>(`/management/modstore/${modId}/uninstall`)
+    const response = await api.delete<{ success: boolean; error?: string }>(
+      `/management/modstore/${modId}/uninstall`,
+    )
     return response.data
   },
 
@@ -491,7 +581,9 @@ export const modStoreApi = {
   },
 
   async checkCompat(modId: string): Promise<CompatResult> {
-    const response = await api.get<CompatResult>(`/management/modstore/${encodeURIComponent(modId)}/compat`)
+    const response = await api.get<CompatResult>(
+      `/management/modstore/${encodeURIComponent(modId)}/compat`,
+    )
     return response.data
   },
 }
@@ -576,7 +668,8 @@ export interface ModtaleInstalledInfo {
   installedAt: string
 }
 
-export type ModtaleSortOption = 'relevance' | 'downloads' | 'updated' | 'newest' | 'rating' | 'favorites'
+export type ModtaleSortOption =
+  'relevance' | 'downloads' | 'updated' | 'newest' | 'rating' | 'favorites'
 export type ModtaleClassification = 'PLUGIN' | 'DATA' | 'ART' | 'SAVE' | 'MODPACK'
 
 export const modtaleApi = {
@@ -605,29 +698,40 @@ export const modtaleApi = {
     if (options?.gameVersion) params.append('gameVersion', options.gameVersion)
     if (options?.author) params.append('author', options.author)
 
-    const response = await api.get<ModtaleSearchResult>(`/management/modtale/search?${params.toString()}`)
+    const response = await api.get<ModtaleSearchResult>(
+      `/management/modtale/search?${params.toString()}`,
+    )
     return response.data
   },
 
   async getProject(projectId: string): Promise<ModtaleProjectDetails> {
-    const response = await api.get<ModtaleProjectDetails>(`/management/modtale/projects/${projectId}`)
+    const response = await api.get<ModtaleProjectDetails>(
+      `/management/modtale/projects/${projectId}`,
+    )
     return response.data
   },
 
   async install(projectId: string, versionId?: string): Promise<ModtaleInstallResult> {
-    const response = await api.post<ModtaleInstallResult>('/management/modtale/install', { projectId, versionId })
+    const response = await api.post<ModtaleInstallResult>('/management/modtale/install', {
+      projectId,
+      versionId,
+    })
     return response.data
   },
 
   async getFeatured(limit?: number): Promise<{ mods: ModtaleProject[] }> {
     const params = limit ? `?limit=${limit}` : ''
-    const response = await api.get<{ mods: ModtaleProject[] }>(`/management/modtale/featured${params}`)
+    const response = await api.get<{ mods: ModtaleProject[] }>(
+      `/management/modtale/featured${params}`,
+    )
     return response.data
   },
 
   async getRecent(limit?: number): Promise<{ mods: ModtaleProject[] }> {
     const params = limit ? `?limit=${limit}` : ''
-    const response = await api.get<{ mods: ModtaleProject[] }>(`/management/modtale/recent${params}`)
+    const response = await api.get<{ mods: ModtaleProject[] }>(
+      `/management/modtale/recent${params}`,
+    )
     return response.data
   },
 
@@ -637,22 +741,30 @@ export const modtaleApi = {
   },
 
   async getClassifications(): Promise<{ classifications: string[] }> {
-    const response = await api.get<{ classifications: string[] }>('/management/modtale/classifications')
+    const response = await api.get<{ classifications: string[] }>(
+      '/management/modtale/classifications',
+    )
     return response.data
   },
 
   async refresh(): Promise<{ success: boolean; message: string }> {
-    const response = await api.post<{ success: boolean; message: string }>('/management/modtale/refresh')
+    const response = await api.post<{ success: boolean; message: string }>(
+      '/management/modtale/refresh',
+    )
     return response.data
   },
 
   async getInstalled(): Promise<{ installed: Record<string, ModtaleInstalledInfo> }> {
-    const response = await api.get<{ installed: Record<string, ModtaleInstalledInfo> }>('/management/modtale/installed')
+    const response = await api.get<{ installed: Record<string, ModtaleInstalledInfo> }>(
+      '/management/modtale/installed',
+    )
     return response.data
   },
 
   async uninstall(projectId: string): Promise<{ success: boolean; error?: string }> {
-    const response = await api.delete<{ success: boolean; error?: string }>(`/management/modtale/uninstall/${projectId}`)
+    const response = await api.delete<{ success: boolean; error?: string }>(
+      `/management/modtale/uninstall/${projectId}`,
+    )
     return response.data
   },
 }
@@ -756,29 +868,39 @@ export const stackmartApi = {
     if (options?.category) params.append('category', options.category)
     if (options?.subcategory) params.append('subcategory', options.subcategory)
 
-    const response = await api.get<StackMartSearchResult>(`/management/stackmart/search?${params.toString()}`)
+    const response = await api.get<StackMartSearchResult>(
+      `/management/stackmart/search?${params.toString()}`,
+    )
     return response.data
   },
 
   async getResource(resourceId: string): Promise<{ resource: StackMartResourceDetails }> {
-    const response = await api.get<{ resource: StackMartResourceDetails }>(`/management/stackmart/resources/${resourceId}`)
+    const response = await api.get<{ resource: StackMartResourceDetails }>(
+      `/management/stackmart/resources/${resourceId}`,
+    )
     return response.data
   },
 
   async install(resourceId: string): Promise<StackMartInstallResult> {
-    const response = await api.post<StackMartInstallResult>('/management/stackmart/install', { resourceId })
+    const response = await api.post<StackMartInstallResult>('/management/stackmart/install', {
+      resourceId,
+    })
     return response.data
   },
 
   async getPopular(limit?: number): Promise<{ resources: StackMartResource[] }> {
     const params = limit ? `?limit=${limit}` : ''
-    const response = await api.get<{ resources: StackMartResource[] }>(`/management/stackmart/popular${params}`)
+    const response = await api.get<{ resources: StackMartResource[] }>(
+      `/management/stackmart/popular${params}`,
+    )
     return response.data
   },
 
   async getRecent(limit?: number): Promise<{ resources: StackMartResource[] }> {
     const params = limit ? `?limit=${limit}` : ''
-    const response = await api.get<{ resources: StackMartResource[] }>(`/management/stackmart/recent${params}`)
+    const response = await api.get<{ resources: StackMartResource[] }>(
+      `/management/stackmart/recent${params}`,
+    )
     return response.data
   },
 
@@ -788,17 +910,23 @@ export const stackmartApi = {
   },
 
   async refresh(): Promise<{ success: boolean; message: string }> {
-    const response = await api.post<{ success: boolean; message: string }>('/management/stackmart/refresh')
+    const response = await api.post<{ success: boolean; message: string }>(
+      '/management/stackmart/refresh',
+    )
     return response.data
   },
 
   async getInstalled(): Promise<{ installed: Record<string, StackMartInstalledInfo> }> {
-    const response = await api.get<{ installed: Record<string, StackMartInstalledInfo> }>('/management/stackmart/installed')
+    const response = await api.get<{ installed: Record<string, StackMartInstalledInfo> }>(
+      '/management/stackmart/installed',
+    )
     return response.data
   },
 
   async uninstall(resourceId: string): Promise<{ success: boolean; error?: string }> {
-    const response = await api.delete<{ success: boolean; error?: string }>(`/management/stackmart/uninstall/${resourceId}`)
+    const response = await api.delete<{ success: boolean; error?: string }>(
+      `/management/stackmart/uninstall/${resourceId}`,
+    )
     return response.data
   },
 }
@@ -988,14 +1116,17 @@ export const curseforgeApi = {
     if (options?.search) params.append('search', options.search)
     if (options?.gameId !== undefined) params.append('gameId', options.gameId.toString())
     if (options?.classId !== undefined) params.append('classId', options.classId.toString())
-    if (options?.categoryId !== undefined) params.append('categoryId', options.categoryId.toString())
+    if (options?.categoryId !== undefined)
+      params.append('categoryId', options.categoryId.toString())
     if (options?.gameVersion) params.append('gameVersion', options.gameVersion)
     if (options?.sortField) params.append('sortField', options.sortField)
     if (options?.sortOrder) params.append('sortOrder', options.sortOrder)
     if (options?.pageSize !== undefined) params.append('pageSize', options.pageSize.toString())
     if (options?.index !== undefined) params.append('index', options.index.toString())
 
-    const response = await api.get<CurseForgeSearchResult>(`/management/curseforge/search?${params.toString()}`)
+    const response = await api.get<CurseForgeSearchResult>(
+      `/management/curseforge/search?${params.toString()}`,
+    )
     return response.data
   },
 
@@ -1004,71 +1135,98 @@ export const curseforgeApi = {
     return response.data
   },
 
-  async getFiles(modId: number, options?: {
-    gameVersion?: string
-    pageSize?: number
-    index?: number
-  }): Promise<{ data: CurseForgeFile[] }> {
+  async getFiles(
+    modId: number,
+    options?: {
+      gameVersion?: string
+      pageSize?: number
+      index?: number
+    },
+  ): Promise<{ data: CurseForgeFile[] }> {
     const params = new URLSearchParams()
     if (options?.gameVersion) params.append('gameVersion', options.gameVersion)
     if (options?.pageSize !== undefined) params.append('pageSize', options.pageSize.toString())
     if (options?.index !== undefined) params.append('index', options.index.toString())
 
-    const response = await api.get<{ data: CurseForgeFile[] }>(`/management/curseforge/mods/${modId}/files?${params.toString()}`)
+    const response = await api.get<{ data: CurseForgeFile[] }>(
+      `/management/curseforge/mods/${modId}/files?${params.toString()}`,
+    )
     return response.data
   },
 
   async install(modId: number, fileId?: number): Promise<CurseForgeInstallResult> {
-    const response = await api.post<CurseForgeInstallResult>('/management/curseforge/install', { modId, fileId })
+    const response = await api.post<CurseForgeInstallResult>('/management/curseforge/install', {
+      modId,
+      fileId,
+    })
     return response.data
   },
 
   async update(modId: number, fileId?: number): Promise<CurseForgeInstallResult> {
-    const response = await api.post<CurseForgeInstallResult>('/management/curseforge/update', { modId, fileId })
+    const response = await api.post<CurseForgeInstallResult>('/management/curseforge/update', {
+      modId,
+      fileId,
+    })
     return response.data
   },
 
   async checkUpdates(): Promise<{ updates: CurseForgeUpdateInfo[] }> {
-    const response = await api.get<{ updates: CurseForgeUpdateInfo[] }>('/management/curseforge/updates')
+    const response = await api.get<{ updates: CurseForgeUpdateInfo[] }>(
+      '/management/curseforge/updates',
+    )
     return response.data
   },
 
   async getFeatured(limit?: number): Promise<{ data: CurseForgeMod[] }> {
     const params = limit ? `?limit=${limit}` : ''
-    const response = await api.get<{ data: CurseForgeMod[] }>(`/management/curseforge/featured${params}`)
+    const response = await api.get<{ data: CurseForgeMod[] }>(
+      `/management/curseforge/featured${params}`,
+    )
     return response.data
   },
 
   async getRecent(limit?: number): Promise<{ data: CurseForgeMod[] }> {
     const params = limit ? `?limit=${limit}` : ''
-    const response = await api.get<{ data: CurseForgeMod[] }>(`/management/curseforge/recent${params}`)
+    const response = await api.get<{ data: CurseForgeMod[] }>(
+      `/management/curseforge/recent${params}`,
+    )
     return response.data
   },
 
   async getPopular(limit?: number): Promise<{ data: CurseForgeMod[] }> {
     const params = limit ? `?limit=${limit}` : ''
-    const response = await api.get<{ data: CurseForgeMod[] }>(`/management/curseforge/popular${params}`)
+    const response = await api.get<{ data: CurseForgeMod[] }>(
+      `/management/curseforge/popular${params}`,
+    )
     return response.data
   },
 
   async getCategories(gameId?: number): Promise<{ data: CurseForgeCategory[] }> {
     const params = gameId ? `?gameId=${gameId}` : ''
-    const response = await api.get<{ data: CurseForgeCategory[] }>(`/management/curseforge/categories${params}`)
+    const response = await api.get<{ data: CurseForgeCategory[] }>(
+      `/management/curseforge/categories${params}`,
+    )
     return response.data
   },
 
   async refresh(): Promise<{ success: boolean; message: string }> {
-    const response = await api.post<{ success: boolean; message: string }>('/management/curseforge/refresh')
+    const response = await api.post<{ success: boolean; message: string }>(
+      '/management/curseforge/refresh',
+    )
     return response.data
   },
 
   async getInstalled(): Promise<{ mods: Record<string, CurseForgeInstalledInfo> }> {
-    const response = await api.get<{ mods: Record<string, CurseForgeInstalledInfo> }>('/management/curseforge/installed')
+    const response = await api.get<{ mods: Record<string, CurseForgeInstalledInfo> }>(
+      '/management/curseforge/installed',
+    )
     return response.data
   },
 
   async uninstall(modId: number): Promise<{ success: boolean; error?: string }> {
-    const response = await api.delete<{ success: boolean; error?: string }>(`/management/curseforge/uninstall/${modId}`)
+    const response = await api.delete<{ success: boolean; error?: string }>(
+      `/management/curseforge/uninstall/${modId}`,
+    )
     return response.data
   },
 }
@@ -1150,40 +1308,63 @@ export const modupdatesApi = {
 
   /** Check a single mod for updates */
   async checkMod(filename: string): Promise<{ success: boolean; mod?: TrackedMod }> {
-    const response = await api.post<{ success: boolean; mod?: TrackedMod }>(`/management/modupdates/check/${encodeURIComponent(filename)}`)
+    const response = await api.post<{ success: boolean; mod?: TrackedMod }>(
+      `/management/modupdates/check/${encodeURIComponent(filename)}`,
+    )
     return response.data
   },
 
   /** Track a mod by CurseForge URL or slug */
-  async track(filename: string, curseforgeInput: string, currentVersion?: string): Promise<{ success: boolean; error?: string; mod?: TrackedMod }> {
-    const response = await api.post<{ success: boolean; error?: string; mod?: TrackedMod }>('/management/modupdates/track', {
-      filename,
-      curseforgeInput,
-      currentVersion,
-    })
+  async track(
+    filename: string,
+    curseforgeInput: string,
+    currentVersion?: string,
+  ): Promise<{ success: boolean; error?: string; mod?: TrackedMod }> {
+    const response = await api.post<{ success: boolean; error?: string; mod?: TrackedMod }>(
+      '/management/modupdates/track',
+      {
+        filename,
+        curseforgeInput,
+        currentVersion,
+      },
+    )
     return response.data
   },
 
   /** Untrack a mod */
   async untrack(filename: string): Promise<{ success: boolean }> {
-    const response = await api.delete<{ success: boolean }>(`/management/modupdates/track/${encodeURIComponent(filename)}`)
+    const response = await api.delete<{ success: boolean }>(
+      `/management/modupdates/track/${encodeURIComponent(filename)}`,
+    )
     return response.data
   },
 
   /** Lookup mod info by CurseForge URL or slug */
-  async lookup(input: string): Promise<{ success: boolean; project?: CFWidgetProject; error?: string }> {
-    const response = await api.get<{ success: boolean; project?: CFWidgetProject; error?: string }>('/management/modupdates/lookup', {
-      params: { input },
-    })
+  async lookup(
+    input: string,
+  ): Promise<{ success: boolean; project?: CFWidgetProject; error?: string }> {
+    const response = await api.get<{ success: boolean; project?: CFWidgetProject; error?: string }>(
+      '/management/modupdates/lookup',
+      {
+        params: { input },
+      },
+    )
     return response.data
   },
 
   /** Update the installed version of a tracked mod */
-  async updateInstalledVersion(filename: string, version: string, fileId?: number): Promise<{ success: boolean }> {
-    const response = await api.put<{ success: boolean }>(`/management/modupdates/version/${encodeURIComponent(filename)}`, {
-      version,
-      fileId,
-    })
+  async updateInstalledVersion(
+    filename: string,
+    version: string,
+    fileId?: number,
+  ): Promise<{ success: boolean }> {
+    const response = await api.put<{ success: boolean }>(
+      `/management/modupdates/version/${encodeURIComponent(filename)}`,
+      {
+        version,
+        fileId,
+      },
+    )
     return response.data
   },
 
@@ -1194,14 +1375,30 @@ export const modupdatesApi = {
   },
 
   /** Install or update a tracked mod */
-  async install(filename: string): Promise<{ success: boolean; error?: string; filename?: string; modName?: string; version?: string }> {
-    const response = await api.post<{ success: boolean; error?: string; filename?: string; modName?: string; version?: string }>(`/management/modupdates/install/${encodeURIComponent(filename)}`)
+  async install(
+    filename: string,
+  ): Promise<{
+    success: boolean
+    error?: string
+    filename?: string
+    modName?: string
+    version?: string
+  }> {
+    const response = await api.post<{
+      success: boolean
+      error?: string
+      filename?: string
+      modName?: string
+      version?: string
+    }>(`/management/modupdates/install/${encodeURIComponent(filename)}`)
     return response.data
   },
 
   /** Uninstall a tracked mod (delete file and untrack) */
   async uninstall(filename: string): Promise<{ success: boolean; error?: string }> {
-    const response = await api.delete<{ success: boolean; error?: string }>(`/management/modupdates/uninstall/${encodeURIComponent(filename)}`)
+    const response = await api.delete<{ success: boolean; error?: string }>(
+      `/management/modupdates/uninstall/${encodeURIComponent(filename)}`,
+    )
     return response.data
   },
 }

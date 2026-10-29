@@ -23,78 +23,115 @@ function authForSse(req: Request, res: Response, next: NextFunction): void {
 
 const router = Router();
 
-router.get('/', authMiddleware, requirePermission('replay.view'), async (_req: Request, res: Response) => {
-  res.json({ segments: await replay.listSegments() });
-});
+router.get(
+  '/',
+  authMiddleware,
+  requirePermission('replay.view'),
+  async (_req: Request, res: Response) => {
+    res.json({ segments: await replay.listSegments() });
+  },
+);
 
-router.get('/config', authMiddleware, requirePermission('replay.view'), async (_req: Request, res: Response) => {
-  res.json(await replay.getReplayConfig());
-});
+router.get(
+  '/config',
+  authMiddleware,
+  requirePermission('replay.view'),
+  async (_req: Request, res: Response) => {
+    res.json(await replay.getReplayConfig());
+  },
+);
 
-router.put('/config', authMiddleware, requirePermission('replay.manage'), async (req: AuthenticatedRequest, res: Response) => {
-  const { recordingEnabled, retentionDays } = req.body ?? {};
-  const next = await replay.setReplayConfig({
-    recordingEnabled: typeof recordingEnabled === 'boolean' ? recordingEnabled : undefined,
-    retentionDays: typeof retentionDays === 'number' ? retentionDays : undefined,
-  });
-  await logActivity(req.user || 'system', 'replay.config_changed', 'replay', true, undefined, JSON.stringify(next));
-  res.json(next);
-});
+router.put(
+  '/config',
+  authMiddleware,
+  requirePermission('replay.manage'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { recordingEnabled, retentionDays } = req.body ?? {};
+    const next = await replay.setReplayConfig({
+      recordingEnabled: typeof recordingEnabled === 'boolean' ? recordingEnabled : undefined,
+      retentionDays: typeof retentionDays === 'number' ? retentionDays : undefined,
+    });
+    await logActivity(
+      req.user || 'system',
+      'replay.config_changed',
+      'replay',
+      true,
+      undefined,
+      JSON.stringify(next),
+    );
+    res.json(next);
+  },
+);
 
-router.get('/:id/manifest', authMiddleware, requirePermission('replay.view'), async (req: Request, res: Response) => {
-  const m = await replay.getManifest(req.params.id);
-  if (!m) {
-    res.status(404).json({ error: 'Segment not found' });
-    return;
-  }
-  res.json(m);
-});
+router.get(
+  '/:id/manifest',
+  authMiddleware,
+  requirePermission('replay.view'),
+  async (req: Request, res: Response) => {
+    const m = await replay.getManifest(req.params.id);
+    if (!m) {
+      res.status(404).json({ error: 'Segment not found' });
+      return;
+    }
+    res.json(m);
+  },
+);
 
 // Server-Sent Events stream of the decompressed NDJSON ticks. Each NDJSON
 // line is forwarded as a separate `data:` event so the client can replay
 // in real time.
-router.get('/:id/stream', authForSse, requirePermission('replay.view'), (req: Request, res: Response) => {
-  const stream = replay.openTicksStream(req.params.id);
-  if (!stream) {
-    res.status(404).json({ error: 'Segment not found' });
-    return;
-  }
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-
-  let buf = '';
-  stream.on('data', (chunk: Buffer | string) => {
-    buf += chunk.toString();
-    let idx: number;
-    // eslint-disable-next-line no-cond-assign
-    while ((idx = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, idx).trim();
-      buf = buf.slice(idx + 1);
-      if (line.length > 0) res.write(`data: ${line}\n\n`);
+router.get(
+  '/:id/stream',
+  authForSse,
+  requirePermission('replay.view'),
+  (req: Request, res: Response) => {
+    const stream = replay.openTicksStream(req.params.id);
+    if (!stream) {
+      res.status(404).json({ error: 'Segment not found' });
+      return;
     }
-  });
-  stream.on('end', () => {
-    if (buf.trim().length > 0) res.write(`data: ${buf.trim()}\n\n`);
-    res.write('event: end\ndata: {}\n\n');
-    res.end();
-  });
-  stream.on('error', () => res.end());
-  req.on('close', () => {
-    // Best-effort cleanup; readable streams from fs are unref'd by destroy.
-    (stream as { destroy?: () => void }).destroy?.();
-  });
-});
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-router.post('/:id/export', authMiddleware, requirePermission('replay.manage'), async (req: AuthenticatedRequest, res: Response) => {
-  const token = await replay.createExportToken(req.params.id);
-  if (!token) {
-    res.status(404).json({ error: 'Segment not found' });
-    return;
-  }
-  await logActivity(req.user || 'system', 'replay.exported', 'replay', true, req.params.id);
-  res.json({ downloadUrl: `/api/replay/download/${token.token}`, expiresAt: token.expiresAt });
-});
+    let buf = '';
+    stream.on('data', (chunk: Buffer | string) => {
+      buf += chunk.toString();
+      let idx: number;
+      // eslint-disable-next-line no-cond-assign
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (line.length > 0) res.write(`data: ${line}\n\n`);
+      }
+    });
+    stream.on('end', () => {
+      if (buf.trim().length > 0) res.write(`data: ${buf.trim()}\n\n`);
+      res.write('event: end\ndata: {}\n\n');
+      res.end();
+    });
+    stream.on('error', () => res.end());
+    req.on('close', () => {
+      // Best-effort cleanup; readable streams from fs are unref'd by destroy.
+      (stream as { destroy?: () => void }).destroy?.();
+    });
+  },
+);
+
+router.post(
+  '/:id/export',
+  authMiddleware,
+  requirePermission('replay.manage'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const token = await replay.createExportToken(req.params.id);
+    if (!token) {
+      res.status(404).json({ error: 'Segment not found' });
+      return;
+    }
+    await logActivity(req.user || 'system', 'replay.exported', 'replay', true, req.params.id);
+    res.json({ downloadUrl: `/api/replay/download/${token.token}`, expiresAt: token.expiresAt });
+  },
+);
 
 // One-shot download endpoint, token bound and unauth (token is the auth).
 router.get('/download/:token', (req: Request, res: Response) => {
@@ -108,14 +145,19 @@ router.get('/download/:token', (req: Request, res: Response) => {
   createReadStream(meta.filePath).pipe(res);
 });
 
-router.delete('/:id', authMiddleware, requirePermission('replay.manage'), async (req: AuthenticatedRequest, res: Response) => {
-  const ok = await replay.deleteSegment(req.params.id);
-  await logActivity(req.user || 'system', 'replay.deleted', 'replay', ok, req.params.id);
-  if (!ok) {
-    res.status(404).json({ error: 'Segment not found' });
-    return;
-  }
-  res.json({ success: true });
-});
+router.delete(
+  '/:id',
+  authMiddleware,
+  requirePermission('replay.manage'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const ok = await replay.deleteSegment(req.params.id);
+    await logActivity(req.user || 'system', 'replay.deleted', 'replay', ok, req.params.id);
+    if (!ok) {
+      res.status(404).json({ error: 'Segment not found' });
+      return;
+    }
+    res.json({ success: true });
+  },
+);
 
 export default router;

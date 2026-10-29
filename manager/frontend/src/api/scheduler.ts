@@ -133,7 +133,10 @@ export const schedulerApi = {
     return response.data
   },
 
-  async updateQuickCommand(id: string, updates: Partial<QuickCommand>): Promise<{ success: boolean }> {
+  async updateQuickCommand(
+    id: string,
+    updates: Partial<QuickCommand>,
+  ): Promise<{ success: boolean }> {
     const response = await api.put(`/scheduler/quick-commands/${id}`, updates)
     return response.data
   },
@@ -168,7 +171,11 @@ export const schedulerApi = {
     return response.data
   },
 
-  async getRestartStatus(): Promise<{ enabled: boolean; nextRestart: string | null; pendingRestart: { time: string; scheduledAt: string } | null }> {
+  async getRestartStatus(): Promise<{
+    enabled: boolean
+    nextRestart: string | null
+    pendingRestart: { time: string; scheduledAt: string } | null
+  }> {
     const response = await api.get('/scheduler/restart/status')
     return response.data
   },

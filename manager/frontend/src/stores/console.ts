@@ -13,7 +13,8 @@ export interface LogEntry {
  */
 function stripAnsiCodes(text: string): string {
   // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
+  return text
+    .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
     .replace(/\[0;31m/g, '')
     .replace(/\[33m/g, '')
     .replace(/\[m/g, '')

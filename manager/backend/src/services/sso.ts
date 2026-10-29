@@ -44,7 +44,10 @@ export interface SsoProviderConfig {
   autoCreate?: boolean;
 }
 
-interface SsoConfig { enabled: boolean; providers: SsoProviderConfig[] }
+interface SsoConfig {
+  enabled: boolean;
+  providers: SsoProviderConfig[];
+}
 
 async function readSsoConfig(): Promise<SsoConfig> {
   try {
@@ -58,19 +61,22 @@ async function readSsoConfig(): Promise<SsoConfig> {
 export async function listProviders(): Promise<Array<{ id: string; type: string }>> {
   const cfg = await readSsoConfig();
   if (!cfg.enabled) return [];
-  return cfg.providers.map(p => ({ id: p.id, type: p.type }));
+  return cfg.providers.map((p) => ({ id: p.id, type: p.type }));
 }
 
 export async function getProvider(id: string): Promise<SsoProviderConfig | null> {
   const cfg = await readSsoConfig();
   if (!cfg.enabled) return null;
-  return cfg.providers.find(p => p.id === id) ?? null;
+  return cfg.providers.find((p) => p.id === id) ?? null;
 }
 
 // State store — short-lived random tokens to defend the OAuth callback
 // against CSRF. Single process, in-memory; OAuth round-trips finish in
 // seconds so a Map is fine.
-const stateStore = new Map<string, { providerId: string; createdAt: number; linkUsername?: string }>();
+const stateStore = new Map<
+  string,
+  { providerId: string; createdAt: number; linkUsername?: string }
+>();
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of stateStore.entries()) {
@@ -83,7 +89,10 @@ export function issueState(providerId: string, linkUsername?: string): string {
   stateStore.set(state, { providerId, createdAt: Date.now(), linkUsername });
   return state;
 }
-export function consumeState(state: string, providerId: string): { ok: boolean; linkUsername?: string } {
+export function consumeState(
+  state: string,
+  providerId: string,
+): { ok: boolean; linkUsername?: string } {
   const entry = stateStore.get(state);
   if (!entry || entry.providerId !== providerId) return { ok: false };
   stateStore.delete(state);
@@ -93,7 +102,11 @@ export function consumeState(state: string, providerId: string): { ok: boolean; 
 
 // ---------- Discord adapter ----------
 
-export function discordAuthorizeUrl(provider: SsoProviderConfig, redirectUri: string, state: string): string {
+export function discordAuthorizeUrl(
+  provider: SsoProviderConfig,
+  redirectUri: string,
+  state: string,
+): string {
   const scope = ['identify'];
   if (provider.allowedGuildIds?.length) scope.push('guilds');
   const params = new URLSearchParams({
@@ -106,9 +119,19 @@ export function discordAuthorizeUrl(provider: SsoProviderConfig, redirectUri: st
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
 
-interface DiscordTokenResponse { access_token: string; token_type: string; expires_in: number }
-interface DiscordUser { id: string; username: string; global_name?: string }
-interface DiscordGuild { id: string }
+interface DiscordTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+interface DiscordUser {
+  id: string;
+  username: string;
+  global_name?: string;
+}
+interface DiscordGuild {
+  id: string;
+}
 
 export async function discordExchangeAndIdentify(
   provider: SsoProviderConfig,
@@ -142,12 +165,14 @@ export async function discordExchangeAndIdentify(
     });
     if (!guildsResp.ok) return { error: 'guild list failed' };
     const guilds = (await guildsResp.json()) as DiscordGuild[];
-    const allowed = guilds.some(g => provider.allowedGuildIds!.includes(g.id));
+    const allowed = guilds.some((g) => provider.allowedGuildIds!.includes(g.id));
     if (!allowed) return { error: 'not a member of any allowed guild' };
   }
 
   return {
     providerSubject: me.id,
-    suggestedUsername: (me.global_name ?? me.username).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || `discord-${me.id.slice(-8)}`,
+    suggestedUsername:
+      (me.global_name ?? me.username).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) ||
+      `discord-${me.id.slice(-8)}`,
   };
 }

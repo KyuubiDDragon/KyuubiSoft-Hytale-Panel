@@ -18,21 +18,31 @@ describe('modCompat.evaluate', () => {
   });
 
   it('treats pre-release suffixes as the base release for matching', () => {
-    expect(evaluate({ gameVersions: ['1.0.0'] }, '1.0.0-pre1', 'registry').verdict).toBe('compatible');
+    expect(evaluate({ gameVersions: ['1.0.0'] }, '1.0.0-pre1', 'registry').verdict).toBe(
+      'compatible',
+    );
   });
 
   it('honors a minServerVersion lower bound', () => {
     expect(evaluate({ minServerVersion: '1.0.0' }, '1.0.4', 'registry').verdict).toBe('compatible');
-    expect(evaluate({ minServerVersion: '1.1.0' }, '1.0.4', 'registry').verdict).toBe('incompatible');
+    expect(evaluate({ minServerVersion: '1.1.0' }, '1.0.4', 'registry').verdict).toBe(
+      'incompatible',
+    );
   });
 
   it('honors a maxServerVersion upper bound', () => {
     expect(evaluate({ maxServerVersion: '1.1.0' }, '1.0.4', 'registry').verdict).toBe('compatible');
-    expect(evaluate({ maxServerVersion: '1.0.0' }, '1.0.4', 'registry').verdict).toBe('incompatible');
+    expect(evaluate({ maxServerVersion: '1.0.0' }, '1.0.4', 'registry').verdict).toBe(
+      'incompatible',
+    );
   });
 
   it('accepts a value inside a min/max range', () => {
-    const r = evaluate({ minServerVersion: '1.0.0', maxServerVersion: '2.0.0' }, '1.5.0', 'registry');
+    const r = evaluate(
+      { minServerVersion: '1.0.0', maxServerVersion: '2.0.0' },
+      '1.5.0',
+      'registry',
+    );
     expect(r.verdict).toBe('compatible');
   });
 });

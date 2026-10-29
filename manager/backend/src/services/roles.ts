@@ -54,10 +54,10 @@ function createDefaultRolesData(): RolesData {
 
   // Map role names to fixed IDs for backward compatibility
   const roleIdMap: Record<string, string> = {
-    'Administrator': 'admin',
-    'Moderator': 'moderator',
-    'Operator': 'operator',
-    'Viewer': 'viewer',
+    Administrator: 'admin',
+    Moderator: 'moderator',
+    Operator: 'operator',
+    Viewer: 'viewer',
   };
 
   const roles: Role[] = DEFAULT_ROLES.map((roleTemplate) => ({
@@ -150,7 +150,15 @@ function getDemoRoles(): Role[] {
       id: 'moderator',
       name: 'Moderator',
       description: 'Player management and chat moderation',
-      permissions: ['players.view', 'players.kick', 'players.ban', 'players.unban', 'console.view', 'chat.view', 'server.view_status'],
+      permissions: [
+        'players.view',
+        'players.kick',
+        'players.ban',
+        'players.unban',
+        'console.view',
+        'chat.view',
+        'server.view_status',
+      ],
       isSystem: true,
       createdAt: now,
       updatedAt: now,
@@ -159,7 +167,16 @@ function getDemoRoles(): Role[] {
       id: 'operator',
       name: 'Operator',
       description: 'Server management and technical tasks',
-      permissions: ['server.view_status', 'server.start', 'server.stop', 'server.restart', 'console.view', 'console.execute', 'backups.view', 'scheduler.view'],
+      permissions: [
+        'server.view_status',
+        'server.start',
+        'server.stop',
+        'server.restart',
+        'console.view',
+        'console.execute',
+        'backups.view',
+        'scheduler.view',
+      ],
       isSystem: true,
       createdAt: now,
       updatedAt: now,
@@ -240,7 +257,7 @@ export async function updateRole(
     permissions?: PermissionEntry[];
     color?: string;
     isSystem?: boolean;
-  }
+  },
 ): Promise<Role> {
   const data = await readRoles();
   const roleIndex = data.roles.findIndex((r) => r.id === id);
@@ -264,7 +281,8 @@ export async function updateRole(
   }
 
   // Check if permissions are being changed
-  const permissionsChanged = updates.permissions !== undefined &&
+  const permissionsChanged =
+    updates.permissions !== undefined &&
     JSON.stringify(updates.permissions.sort()) !== JSON.stringify(role.permissions.sort());
 
   // Apply updates (excluding isSystem for system roles)
@@ -408,9 +426,8 @@ export async function getUserPermissions(username: string): Promise<PermissionEn
   };
 
   const roleName = roleNameMap[roleId] || roleId;
-  role = roles.find(
-    (r) => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId
-  ) ?? null;
+  role =
+    roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId) ?? null;
 
   if (role) {
     return role.permissions;
@@ -431,10 +448,14 @@ export async function getRolePermissions(roleId: string): Promise<PermissionEntr
   if (role) return role.permissions;
   const roles = await getAllRoles();
   const roleNameMap: Record<string, string> = {
-    admin: 'Administrator', moderator: 'Moderator', operator: 'Operator', viewer: 'Viewer',
+    admin: 'Administrator',
+    moderator: 'Moderator',
+    operator: 'Operator',
+    viewer: 'Viewer',
   };
   const roleName = roleNameMap[roleId] || roleId;
-  role = roles.find(r => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId) ?? null;
+  role =
+    roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase() || r.id === roleId) ?? null;
   return role ? role.permissions : [];
 }
 
@@ -460,7 +481,7 @@ export async function getUserPermissionsForServer(
   if (!scopedRoleId) return global;
   if (isDemoMode()) return global;
   const data = await readRoles();
-  const role = data.roles.find(r => r.id === scopedRoleId);
+  const role = data.roles.find((r) => r.id === scopedRoleId);
   if (!role) return global;
   // Per-server permissions ADD to the global set (least surprise: granting
   // a scoped operator role to a viewer makes them an operator on that server,

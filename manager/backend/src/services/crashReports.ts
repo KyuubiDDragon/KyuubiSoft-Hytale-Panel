@@ -22,8 +22,15 @@ async function onCrash(serverId: string | undefined, detectedAt: string): Promis
     // Container may already be gone — store the record without logs.
   }
   getDb()
-    .prepare('INSERT INTO crash_reports (server_id, detected_at, log_tail, created_at) VALUES (?, ?, ?, ?)')
-    .run(serverId ?? null, detectedAt || nowIso(), logTail ? logTail.slice(-MAX_LOG_CHARS) : null, nowIso());
+    .prepare(
+      'INSERT INTO crash_reports (server_id, detected_at, log_tail, created_at) VALUES (?, ?, ?, ?)',
+    )
+    .run(
+      serverId ?? null,
+      detectedAt || nowIso(),
+      logTail ? logTail.slice(-MAX_LOG_CHARS) : null,
+      nowIso(),
+    );
 }
 
 function markAutoRestarted(serverId: string | undefined): void {
@@ -31,7 +38,9 @@ function markAutoRestarted(serverId: string | undefined): void {
   const db = getDb();
   const where = serverId ? 'server_id = ?' : 'server_id IS NULL';
   const row = db
-    .prepare(`SELECT id FROM crash_reports WHERE ${where} AND auto_restarted = 0 ORDER BY created_at DESC LIMIT 1`)
+    .prepare(
+      `SELECT id FROM crash_reports WHERE ${where} AND auto_restarted = 0 ORDER BY created_at DESC LIMIT 1`,
+    )
     .get(...(serverId ? [serverId] : [])) as { id: number } | undefined;
   if (row) db.prepare('UPDATE crash_reports SET auto_restarted = 1 WHERE id = ?').run(row.id);
 }
@@ -47,7 +56,11 @@ export function startCrashCapture(): void {
     );
   });
   subscribe(['server.restarted'], (event) => {
-    try { markAutoRestarted(event.serverId); } catch (e) { console.error('[crash] flag failed', e); }
+    try {
+      markAutoRestarted(event.serverId);
+    } catch (e) {
+      console.error('[crash] flag failed', e);
+    }
   });
   console.log('[crash] capture started');
 }
@@ -68,8 +81,16 @@ export function getCrashReports(serverId?: string, limit = 50): CrashReport[] {
   const where = serverId ? 'WHERE server_id = ?' : '';
   const params = serverId ? [serverId, Math.max(1, limit)] : [Math.max(1, limit)];
   const rows = db
-    .prepare(`SELECT id, server_id, detected_at, auto_restarted, created_at FROM crash_reports ${where} ORDER BY created_at DESC LIMIT ?`)
-    .all(...params) as Array<{ id: number; server_id: string | null; detected_at: string; auto_restarted: number; created_at: string }>;
+    .prepare(
+      `SELECT id, server_id, detected_at, auto_restarted, created_at FROM crash_reports ${where} ORDER BY created_at DESC LIMIT ?`,
+    )
+    .all(...params) as Array<{
+    id: number;
+    server_id: string | null;
+    detected_at: string;
+    auto_restarted: number;
+    created_at: string;
+  }>;
   return rows.map((r) => ({
     id: r.id,
     serverId: r.server_id,
@@ -81,9 +102,18 @@ export function getCrashReports(serverId?: string, limit = 50): CrashReport[] {
 
 export function getCrashReport(id: number): CrashReportDetail | null {
   const r = getDb()
-    .prepare('SELECT id, server_id, detected_at, log_tail, auto_restarted, created_at FROM crash_reports WHERE id = ?')
+    .prepare(
+      'SELECT id, server_id, detected_at, log_tail, auto_restarted, created_at FROM crash_reports WHERE id = ?',
+    )
     .get(id) as
-    | { id: number; server_id: string | null; detected_at: string; log_tail: string | null; auto_restarted: number; created_at: string }
+    | {
+        id: number;
+        server_id: string | null;
+        detected_at: string;
+        log_tail: string | null;
+        auto_restarted: number;
+        created_at: string;
+      }
     | undefined;
   if (!r) return null;
   return {

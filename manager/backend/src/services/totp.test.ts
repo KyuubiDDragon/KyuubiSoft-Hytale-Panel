@@ -17,7 +17,21 @@ process.env.MANAGER_DATA_PATH = tmpDir;
 // Seed a user fixture before the totp module loads.
 fs.writeFileSync(
   path.join(tmpDir, 'users.json'),
-  JSON.stringify({ users: [{ username: 'alice', passwordHash: 'hash', roleId: 'admin', createdAt: '2026-01-01', tokenVersion: 1 }] }, null, 2),
+  JSON.stringify(
+    {
+      users: [
+        {
+          username: 'alice',
+          passwordHash: 'hash',
+          roleId: 'admin',
+          createdAt: '2026-01-01',
+          tokenVersion: 1,
+        },
+      ],
+    },
+    null,
+    2,
+  ),
 );
 
 describe('totp service', () => {
@@ -68,5 +82,9 @@ describe('totp service', () => {
 });
 
 afterAll(() => {
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* */ }
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* */
+  }
 });

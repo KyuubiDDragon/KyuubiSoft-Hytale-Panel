@@ -88,7 +88,11 @@ export const filesApi = {
     return res.data
   },
 
-  async upload(rootId: string, path: string, file: File): Promise<WriteResponse & { name: string }> {
+  async upload(
+    rootId: string,
+    path: string,
+    file: File,
+  ): Promise<WriteResponse & { name: string }> {
     const form = new FormData()
     form.append('rootId', rootId)
     form.append('path', path)

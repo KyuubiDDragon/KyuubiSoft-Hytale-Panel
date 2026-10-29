@@ -18,11 +18,7 @@
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { config } from '../config.js';
-import {
-  getPluginStatus,
-  fetchFromPlugin,
-  type PluginStatus,
-} from './kyuubiApi.js';
+import { getPluginStatus, fetchFromPlugin, type PluginStatus } from './kyuubiApi.js';
 
 export interface HytaleCapabilities {
   /** Hytale 0.24.01.2026+ has a built-in update mechanism (exit code 8). */

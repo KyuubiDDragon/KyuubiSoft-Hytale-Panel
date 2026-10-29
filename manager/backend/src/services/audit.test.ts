@@ -28,20 +28,20 @@ describe('audit log v2', () => {
   it('filters by actor', async () => {
     const { listAuditEvents } = await import('./audit.js');
     const { events } = listAuditEvents({ actor: 'alice' });
-    expect(events.every(e => e.actorUsername === 'alice')).toBe(true);
+    expect(events.every((e) => e.actorUsername === 'alice')).toBe(true);
   });
 
   it('records success=false explicitly', async () => {
     const { listAuditEvents } = await import('./audit.js');
     const { events } = listAuditEvents({});
-    const failed = events.find(e => e.target === 'thing:2');
+    const failed = events.find((e) => e.target === 'thing:2');
     expect(failed?.success).toBe(false);
   });
 
   it('parses metadata back to object', async () => {
     const { listAuditEvents } = await import('./audit.js');
     const { events } = listAuditEvents({});
-    const withMeta = events.find(e => e.target === 'thing:1');
+    const withMeta = events.find((e) => e.target === 'thing:1');
     expect(withMeta?.metadata).toEqual({ x: 1 });
   });
 });

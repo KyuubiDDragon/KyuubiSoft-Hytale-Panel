@@ -23,16 +23,17 @@
  */
 const PRIVATE_HOST_PATTERNS: RegExp[] = [
   /^localhost$/i,
-  /^127(?:\.\d{1,3}){3}$/,        // 127.0.0.0/8
-  /^10(?:\.\d{1,3}){3}$/,         // 10.0.0.0/8
-  /^192\.168(?:\.\d{1,3}){2}$/,   // 192.168.0.0/16
+  /^127(?:\.\d{1,3}){3}$/, // 127.0.0.0/8
+  /^10(?:\.\d{1,3}){3}$/, // 10.0.0.0/8
+  /^192\.168(?:\.\d{1,3}){2}$/, // 192.168.0.0/16
   /^172\.(1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}$/, // 172.16.0.0/12
-  /^169\.254(?:\.\d{1,3}){2}$/,   // link-local incl. 169.254.169.254
-  /^0(?:\.\d{1,3}){3}$/,          // 0.0.0.0/8
-  /^::1$/,                        // IPv6 loopback
-  /^fe80:/i,                      // IPv6 link-local
-  /^fc00:/i, /^fd00:/i,           // IPv6 unique-local
-  /\.local$/i,                    // .local mDNS
+  /^169\.254(?:\.\d{1,3}){2}$/, // link-local incl. 169.254.169.254
+  /^0(?:\.\d{1,3}){3}$/, // 0.0.0.0/8
+  /^::1$/, // IPv6 loopback
+  /^fe80:/i, // IPv6 link-local
+  /^fc00:/i,
+  /^fd00:/i, // IPv6 unique-local
+  /\.local$/i, // .local mDNS
   /metadata\.google\.internal$/i,
 ];
 
@@ -42,7 +43,10 @@ import { promisify } from 'util';
 const dnsLookup = promisify(lookup);
 
 export class UnsafeUrlError extends Error {
-  constructor(message: string, public reason: string) {
+  constructor(
+    message: string,
+    public reason: string,
+  ) {
     super(message);
     this.name = 'UnsafeUrlError';
   }
@@ -58,12 +62,18 @@ export function assertSafeOutboundUrl(raw: string): URL {
   if (u.protocol !== 'http:' && u.protocol !== 'https:') {
     throw new UnsafeUrlError(`Disallowed protocol: ${u.protocol}`, 'protocol');
   }
-  if (process.env.ALLOW_INTERNAL_WEBHOOKS === 'true' || process.env.ALLOW_INTERNAL_WEBHOOKS === '1') {
+  if (
+    process.env.ALLOW_INTERNAL_WEBHOOKS === 'true' ||
+    process.env.ALLOW_INTERNAL_WEBHOOKS === '1'
+  ) {
     return u;
   }
   const host = u.hostname.toLowerCase();
-  if (PRIVATE_HOST_PATTERNS.some(p => p.test(host))) {
-    throw new UnsafeUrlError(`Hostname ${host} resolves to a private / loopback range`, 'private-host');
+  if (PRIVATE_HOST_PATTERNS.some((p) => p.test(host))) {
+    throw new UnsafeUrlError(
+      `Hostname ${host} resolves to a private / loopback range`,
+      'private-host',
+    );
   }
   return u;
 }
@@ -81,7 +91,10 @@ export function assertSafeOutboundUrl(raw: string): URL {
  */
 export async function assertSafeResolvedUrl(raw: string): Promise<URL> {
   const u = assertSafeOutboundUrl(raw);
-  if (process.env.ALLOW_INTERNAL_WEBHOOKS === 'true' || process.env.ALLOW_INTERNAL_WEBHOOKS === '1') {
+  if (
+    process.env.ALLOW_INTERNAL_WEBHOOKS === 'true' ||
+    process.env.ALLOW_INTERNAL_WEBHOOKS === '1'
+  ) {
     return u;
   }
   let addresses: Array<{ address: string }>;
@@ -91,8 +104,11 @@ export async function assertSafeResolvedUrl(raw: string): Promise<URL> {
     throw new UnsafeUrlError(`Cannot resolve host ${u.hostname}`, 'dns-failure');
   }
   for (const { address } of addresses) {
-    if (PRIVATE_HOST_PATTERNS.some(p => p.test(address))) {
-      throw new UnsafeUrlError(`Host ${u.hostname} resolves to private address ${address}`, 'private-ip');
+    if (PRIVATE_HOST_PATTERNS.some((p) => p.test(address))) {
+      throw new UnsafeUrlError(
+        `Host ${u.hostname} resolves to private address ${address}`,
+        'private-ip',
+      );
     }
   }
   return u;

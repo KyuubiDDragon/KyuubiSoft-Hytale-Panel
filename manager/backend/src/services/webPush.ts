@@ -49,9 +49,18 @@ export interface PushPayload {
 }
 
 /** Ensure VAPID keys exist; generate + persist them on first enable. */
-export async function ensureVapidKeys(): Promise<{ publicKey: string; privateKey: string; subject: string } | null> {
+export async function ensureVapidKeys(): Promise<{
+  publicKey: string;
+  privateKey: string;
+  subject: string;
+} | null> {
   const cfg = await getConfig();
-  const wp = cfg.webPush ?? { enabled: false, vapidPublicKey: '', vapidPrivateKey: '', subject: 'mailto:admin@example.com' };
+  const wp = cfg.webPush ?? {
+    enabled: false,
+    vapidPublicKey: '',
+    vapidPrivateKey: '',
+    subject: 'mailto:admin@example.com',
+  };
   if (wp.vapidPublicKey && wp.vapidPrivateKey) {
     return { publicKey: wp.vapidPublicKey, privateKey: wp.vapidPrivateKey, subject: wp.subject };
   }
@@ -72,14 +81,29 @@ export async function getVapidPublicKey(): Promise<string | null> {
   return keys?.publicKey ?? null;
 }
 
-export function saveSubscription(username: string, sub: PushSubscriptionInput, userAgent?: string): void {
+export function saveSubscription(
+  username: string,
+  sub: PushSubscriptionInput,
+  userAgent?: string,
+): void {
   if (!sub?.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return;
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO push_subscriptions (username, endpoint, p256dh, auth, user_agent, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(endpoint) DO UPDATE SET
       username = excluded.username, p256dh = excluded.p256dh, auth = excluded.auth, user_agent = excluded.user_agent
-  `).run(username, sub.endpoint, sub.keys.p256dh, sub.keys.auth, userAgent ?? null, new Date().toISOString());
+  `,
+    )
+    .run(
+      username,
+      sub.endpoint,
+      sub.keys.p256dh,
+      sub.keys.auth,
+      userAgent ?? null,
+      new Date().toISOString(),
+    );
 }
 
 export function removeSubscription(endpoint: string): boolean {
@@ -88,12 +112,16 @@ export function removeSubscription(endpoint: string): boolean {
 }
 
 export function countSubscriptions(username: string): number {
-  const row = getDb().prepare('SELECT COUNT(*) AS n FROM push_subscriptions WHERE username = ?').get(username) as { n: number };
+  const row = getDb()
+    .prepare('SELECT COUNT(*) AS n FROM push_subscriptions WHERE username = ?')
+    .get(username) as { n: number };
   return row.n;
 }
 
 function rowsForUser(username: string): SubRow[] {
-  return getDb().prepare('SELECT * FROM push_subscriptions WHERE username = ?').all(username) as SubRow[];
+  return getDb()
+    .prepare('SELECT * FROM push_subscriptions WHERE username = ?')
+    .all(username) as SubRow[];
 }
 
 /** Send a push to every device a user has registered. Fire-and-forget safe. */
@@ -115,26 +143,32 @@ export async function pushToUser(username: string, payload: PushPayload): Promis
     link: payload.link ?? '/',
   });
 
-  await Promise.all(rows.map(async (row) => {
-    try {
-      await mod.sendNotification(
-        { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
-        body,
-        { TTL: 600 },
-      );
-    } catch (err) {
-      const status = (err as { statusCode?: number }).statusCode;
-      if (status === 404 || status === 410) {
-        removeSubscription(row.endpoint);
-        logger.info(`[WebPush] pruned expired subscription for ${username}`);
-      } else {
-        logger.warn(`[WebPush] send failed for ${username}: ${err instanceof Error ? err.message : err}`);
+  await Promise.all(
+    rows.map(async (row) => {
+      try {
+        await mod.sendNotification(
+          { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
+          body,
+          { TTL: 600 },
+        );
+      } catch (err) {
+        const status = (err as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) {
+          removeSubscription(row.endpoint);
+          logger.info(`[WebPush] pruned expired subscription for ${username}`);
+        } else {
+          logger.warn(
+            `[WebPush] send failed for ${username}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
       }
-    }
-  }));
+    }),
+  );
 }
 
 /** Fire-and-forget wrapper for hot paths (notify fan-out). */
 export function pushToUserAsync(username: string, payload: PushPayload): void {
-  void pushToUser(username, payload).catch(() => { /* logged inside */ });
+  void pushToUser(username, payload).catch(() => {
+    /* logged inside */
+  });
 }

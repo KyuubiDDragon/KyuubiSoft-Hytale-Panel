@@ -152,7 +152,9 @@ export async function snapshotCurrentJar(serverId?: string): Promise<JarSnapshot
     file: jarFile,
   };
   fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(meta, null, 2), 'utf-8');
-  logger.info(`[UpdateHistory] Snapshotted JAR (version=${version ?? 'unknown'}, ${Math.round(size / 1024 / 1024)} MB)`);
+  logger.info(
+    `[UpdateHistory] Snapshotted JAR (version=${version ?? 'unknown'}, ${Math.round(size / 1024 / 1024)} MB)`,
+  );
 
   // Prune oldest beyond the cap.
   const all = await listJarSnapshots(serverId);
@@ -160,7 +162,9 @@ export async function snapshotCurrentJar(serverId?: string): Promise<JarSnapshot
     try {
       fs.rmSync(path.join(dir, old.file), { force: true });
       fs.rmSync(path.join(dir, `${old.id}.json`), { force: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   return meta;
 }
@@ -169,11 +173,14 @@ export async function snapshotCurrentJar(serverId?: string): Promise<JarSnapshot
  * Restore a snapshot over the live JAR. Does NOT restart the server — the
  * caller decides when (so it can announce/disconnect players first).
  */
-export async function rollbackToSnapshot(snapshotId: string, serverId?: string): Promise<{ success: boolean; error?: string; restoredVersion?: string | null }> {
+export async function rollbackToSnapshot(
+  snapshotId: string,
+  serverId?: string,
+): Promise<{ success: boolean; error?: string; restoredVersion?: string | null }> {
   const serverPath = await serverPathFor(serverId);
   const dir = path.join(serverPath, SNAPSHOT_DIRNAME);
   const snapshots = await listJarSnapshots(serverId);
-  const snap = snapshots.find(s => s.id === snapshotId);
+  const snap = snapshots.find((s) => s.id === snapshotId);
   if (!snap) return { success: false, error: 'Snapshot not found' };
 
   const snapJar = path.join(dir, snap.file);

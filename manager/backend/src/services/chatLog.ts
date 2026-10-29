@@ -111,8 +111,8 @@ async function getAvailableDates(directory: string): Promise<string[]> {
   try {
     const files = await readdir(directory);
     return files
-      .filter(f => f.endsWith('.json'))
-      .map(f => f.replace('.json', ''))
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => f.replace('.json', ''))
       .sort()
       .reverse(); // Most recent first
   } catch {
@@ -166,14 +166,18 @@ async function savePlayerDeathPositions(playerName: string): Promise<void> {
   await writeFile(
     filePath,
     JSON.stringify(positions.slice(-MAX_DEATH_POSITIONS), null, 2),
-    'utf-8'
+    'utf-8',
   );
 }
 
 /**
  * Add a chat message (stores globally and per-player)
  */
-export async function addChatMessage(player: string, message: string, uuid?: string): Promise<ChatMessage> {
+export async function addChatMessage(
+  player: string,
+  message: string,
+  uuid?: string,
+): Promise<ChatMessage> {
   const entry: ChatMessage = {
     id: generateId(),
     timestamp: new Date().toISOString(),
@@ -198,10 +202,12 @@ export async function addChatMessage(player: string, message: string, uuid?: str
 
   // Save to player's daily log
   const playerFilePath = getPlayerChatFilePath(player, today);
-  loadMessagesFromFile(playerFilePath).then(async playerMessages => {
-    playerMessages.push(entry);
-    await saveMessagesToFile(playerFilePath, playerMessages);
-  }).catch(console.error);
+  loadMessagesFromFile(playerFilePath)
+    .then(async (playerMessages) => {
+      playerMessages.push(entry);
+      await saveMessagesToFile(playerFilePath, playerMessages);
+    })
+    .catch(console.error);
 
   return entry;
 }
@@ -237,7 +243,7 @@ export async function getGlobalChatLog(options?: {
     // Load only dates within the range
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
-    datesToLoad = availableDates.filter(dateKey => {
+    datesToLoad = availableDates.filter((dateKey) => {
       const date = parseDateKey(dateKey);
       return date >= cutoffDate;
     });
@@ -279,7 +285,7 @@ export async function getPlayerChatLog(
     days?: number; // Number of days to include (default: 7, 0 = all)
     limit?: number;
     offset?: number;
-  }
+  },
 ): Promise<{ messages: ChatMessage[]; total: number; availableDays: number }> {
   // Demo mode: return mock chat data for player
   if (isDemoMode()) {
@@ -302,7 +308,7 @@ export async function getPlayerChatLog(
   } else {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
-    datesToLoad = availableDates.filter(dateKey => {
+    datesToLoad = availableDates.filter((dateKey) => {
       const date = parseDateKey(dateKey);
       return date >= cutoffDate;
     });
@@ -338,7 +344,7 @@ export async function recordDeathPosition(
   world: string,
   x: number,
   y: number,
-  z: number
+  z: number,
 ): Promise<DeathPosition> {
   const entry: DeathPosition = {
     id: generateId(),
@@ -382,7 +388,7 @@ export async function getPlayerDeathPositions(
   playerName: string,
   options?: {
     limit?: number;
-  }
+  },
 ): Promise<DeathPosition[]> {
   const positions = await loadPlayerDeathPositions(playerName);
   let result = [...positions].reverse(); // Most recent first

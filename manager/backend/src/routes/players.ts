@@ -47,11 +47,9 @@ function requireBulkPermission(req: AuthenticatedRequest, res: Response, next: N
   const action = (req.body as { action?: unknown } | undefined)?.action;
   const required = typeof action === 'string' ? BULK_PERMISSIONS.get(action) : undefined;
   if (!required) {
-    res
-      .status(400)
-      .json({
-        detail: action ? `unsupported action ${String(action)}` : 'names[] and action required',
-      });
+    res.status(400).json({
+      detail: action ? `unsupported action ${String(action)}` : 'names[] and action required',
+    });
     return;
   }
   void requirePermission(required)(req, res, next);

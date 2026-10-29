@@ -15,7 +15,11 @@ const router = Router();
 
 router.get('/status', async (_req: Request, res: Response) => {
   let cfg: Awaited<ReturnType<typeof getConfig>> | null = null;
-  try { cfg = await getConfig(); } catch { /* config not ready */ }
+  try {
+    cfg = await getConfig();
+  } catch {
+    /* config not ready */
+  }
 
   const enabled = isDemoMode() || cfg?.publicStatus?.enabled === true;
   if (!enabled) {
@@ -38,13 +42,21 @@ router.get('/status', async (_req: Request, res: Response) => {
     try {
       const info = await kyuubiApi.getServerInfoFromPlugin();
       if (info.success && info.data) {
-        const d = info.data as { playerCount?: number; onlinePlayers?: number; maxPlayers?: number; version?: string; tps?: number };
+        const d = info.data as {
+          playerCount?: number;
+          onlinePlayers?: number;
+          maxPlayers?: number;
+          version?: string;
+          tps?: number;
+        };
         result.playerCount = d.playerCount ?? d.onlinePlayers ?? 0;
         if (typeof d.maxPlayers === 'number') result.maxPlayers = d.maxPlayers;
         if (typeof d.version === 'string') result.version = d.version;
         if (typeof d.tps === 'number') result.tps = Math.round(d.tps * 10) / 10;
       }
-    } catch { /* plugin not running — return the basic status */ }
+    } catch {
+      /* plugin not running — return the basic status */
+    }
   }
 
   res.set('Cache-Control', 'public, max-age=10');

@@ -70,7 +70,9 @@ export function pushSample(sample: PlayerLocationSample): void {
 
   // Notify listeners.
   for (const l of listeners) {
-    try { l(sample); } catch (err) {
+    try {
+      l(sample);
+    } catch (err) {
       console.error('[playerLocations] listener error:', err);
     }
   }
@@ -116,11 +118,46 @@ export function addListener(l: Listener): () => void {
 function seedSimulatedPlayers(): void {
   if (simPlayers.length > 0) return;
   const demoSeed: Array<Omit<SimulatedPlayerState, 'dx' | 'dz' | 'baseLatency'>> = [
-    { uuid: '550e8400-e29b-41d4-a716-446655440001', playerName: 'KyuubiDDragon', world: 'Orbis', x: 120, y: 64, z: 80 },
-    { uuid: '550e8400-e29b-41d4-a716-446655440002', playerName: 'DragonSlayer99', world: 'Orbis', x: -40, y: 70, z: 130 },
-    { uuid: '550e8400-e29b-41d4-a716-446655440003', playerName: 'CrystalMiner', world: 'Orbis', x: 200, y: 55, z: -60 },
-    { uuid: '550e8400-e29b-41d4-a716-446655440004', playerName: 'SkyBuilder', world: 'Orbis', x: 0, y: 90, z: 0 },
-    { uuid: '550e8400-e29b-41d4-a716-446655440005', playerName: 'NightExplorer', world: 'Orbis', x: -180, y: 62, z: -150 },
+    {
+      uuid: '550e8400-e29b-41d4-a716-446655440001',
+      playerName: 'KyuubiDDragon',
+      world: 'Orbis',
+      x: 120,
+      y: 64,
+      z: 80,
+    },
+    {
+      uuid: '550e8400-e29b-41d4-a716-446655440002',
+      playerName: 'DragonSlayer99',
+      world: 'Orbis',
+      x: -40,
+      y: 70,
+      z: 130,
+    },
+    {
+      uuid: '550e8400-e29b-41d4-a716-446655440003',
+      playerName: 'CrystalMiner',
+      world: 'Orbis',
+      x: 200,
+      y: 55,
+      z: -60,
+    },
+    {
+      uuid: '550e8400-e29b-41d4-a716-446655440004',
+      playerName: 'SkyBuilder',
+      world: 'Orbis',
+      x: 0,
+      y: 90,
+      z: 0,
+    },
+    {
+      uuid: '550e8400-e29b-41d4-a716-446655440005',
+      playerName: 'NightExplorer',
+      world: 'Orbis',
+      x: -180,
+      y: 62,
+      z: -150,
+    },
   ];
   for (const p of demoSeed) {
     simPlayers.push({
@@ -199,7 +236,13 @@ export function initializePlayerLocations(): void {
   // Also harvest death positions as one-shot samples (useful while we have
   // no continuous position stream).
   eventBus.subscribe(['player_death'], (evt: PanelEvent) => {
-    const p = evt.payload as { player?: string; world?: string; x?: number; y?: number; z?: number };
+    const p = evt.payload as {
+      player?: string;
+      world?: string;
+      x?: number;
+      y?: number;
+      z?: number;
+    };
     if (!p.player || p.x === undefined || p.y === undefined || p.z === undefined) return;
     pushSample({
       playerName: p.player,

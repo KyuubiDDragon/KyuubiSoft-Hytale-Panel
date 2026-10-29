@@ -6,7 +6,15 @@
  */
 
 import type { ServerStatus, ServerStats, PlayerInfo } from '../types/index.js';
-import type { PlayerEntry, PlayerStatistics, DailyActivity, UnifiedPlayerEntry, ParsedPlayerInventory, ParsedPlayerDetails, ParsedDeathPosition } from './players.js';
+import type {
+  PlayerEntry,
+  PlayerStatistics,
+  DailyActivity,
+  UnifiedPlayerEntry,
+  ParsedPlayerInventory,
+  ParsedPlayerDetails,
+  ParsedDeathPosition,
+} from './players.js';
 
 // ============================================================
 // Demo Configuration
@@ -154,26 +162,24 @@ export function getDemoStats(): ServerStats {
 
 export function getDemoOnlinePlayers(): PlayerInfo[] {
   const now = new Date();
-  return DEMO_PLAYERS
-    .filter(p => p.online && p.currentSessionStart)
-    .map(p => {
-      const sessionStart = new Date(p.currentSessionStart!);
-      const durationMs = now.getTime() - sessionStart.getTime();
-      const totalSeconds = Math.floor(durationMs / 1000);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return DEMO_PLAYERS.filter((p) => p.online && p.currentSessionStart).map((p) => {
+    const sessionStart = new Date(p.currentSessionStart!);
+    const durationMs = now.getTime() - sessionStart.getTime();
+    const totalSeconds = Math.floor(durationMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
 
-      return {
-        name: p.name,
-        joined_at: p.currentSessionStart!,
-        session_duration_seconds: totalSeconds,
-        session_duration: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
-      };
-    });
+    return {
+      name: p.name,
+      joined_at: p.currentSessionStart!,
+      session_duration_seconds: totalSeconds,
+      session_duration: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+    };
+  });
 }
 
 export function getDemoOfflinePlayers(): PlayerEntry[] {
-  return DEMO_PLAYERS.filter(p => !p.online);
+  return DEMO_PLAYERS.filter((p) => !p.online);
 }
 
 export function getDemoAllPlayers(): PlayerEntry[] {
@@ -184,7 +190,7 @@ export function getDemoAllPlayers(): PlayerEntry[] {
 }
 
 export function getDemoPlayerCount(): number {
-  return DEMO_PLAYERS.filter(p => p.online).length;
+  return DEMO_PLAYERS.filter((p) => p.online).length;
 }
 
 export function getDemoPlayerStatistics(): PlayerStatistics {
@@ -197,10 +203,9 @@ export function getDemoPlayerStatistics(): PlayerStatistics {
     totalPlaytime,
     averagePlaytime: Math.round(totalPlaytime / totalPlayers),
     averageSessionsPerPlayer: Math.round((totalSessions / totalPlayers) * 10) / 10,
-    topPlayers: DEMO_PLAYERS
-      .sort((a, b) => b.playTime - a.playTime)
+    topPlayers: DEMO_PLAYERS.sort((a, b) => b.playTime - a.playTime)
       .slice(0, 10)
-      .map(p => ({ name: p.name, playTime: p.playTime, sessions: p.sessionCount })),
+      .map((p) => ({ name: p.name, playTime: p.playTime, sessions: p.sessionCount })),
     newPlayersLast7Days: 3,
     activePlayersLast7Days: 6,
     peakOnlineToday: 5,
@@ -233,7 +238,7 @@ export function getDemoDailyActivity(days: number = 7): DailyActivity[] {
 }
 
 export function getDemoAllPlayersUnified(): UnifiedPlayerEntry[] {
-  return DEMO_PLAYERS.map(p => ({
+  return DEMO_PLAYERS.map((p) => ({
     name: p.name,
     uuid: p.uuid || '',
     online: p.online,
@@ -256,46 +261,214 @@ export function getDemoAllPlayersUnified(): UnifiedPlayerEntry[] {
 }
 
 export function getDemoPlayerInventory(playerName: string): ParsedPlayerInventory | null {
-  const player = DEMO_PLAYERS.find(p => p.name.toLowerCase() === playerName.toLowerCase());
+  const player = DEMO_PLAYERS.find((p) => p.name.toLowerCase() === playerName.toLowerCase());
   if (!player) return null;
 
   return {
     uuid: player.uuid || '',
     name: player.name,
     storage: [
-      { slot: 0, itemId: 'Material_Ingot_Thorium', displayName: 'Thorium Ingot', amount: 64, durability: 0, maxDurability: 0 },
-      { slot: 1, itemId: 'Material_Ingot_Cobalt', displayName: 'Cobalt Ingot', amount: 32, durability: 0, maxDurability: 0 },
-      { slot: 2, itemId: 'Material_Ingot_Adamantite', displayName: 'Adamantite Ingot', amount: 16, durability: 0, maxDurability: 0 },
-      { slot: 3, itemId: 'Food_Wildmeat_Cooked', displayName: 'Cooked Wildmeat', amount: 24, durability: 0, maxDurability: 0 },
-      { slot: 4, itemId: 'Food_Fish_Grilled', displayName: 'Grilled Fish', amount: 16, durability: 0, maxDurability: 0 },
-      { slot: 5, itemId: 'Food_Kebab_Fruit', displayName: 'Fruit Kebab', amount: 8, durability: 0, maxDurability: 0 },
-      { slot: 8, itemId: 'Material_Wood_Log', displayName: 'Wood Log', amount: 64, durability: 0, maxDurability: 0 },
-      { slot: 9, itemId: 'Potion_Health_Lesser', displayName: 'Lesser Health Potion', amount: 5, durability: 0, maxDurability: 0 },
-      { slot: 10, itemId: 'Potion_Stamina_Lesser', displayName: 'Lesser Stamina Potion', amount: 3, durability: 0, maxDurability: 0 },
+      {
+        slot: 0,
+        itemId: 'Material_Ingot_Thorium',
+        displayName: 'Thorium Ingot',
+        amount: 64,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 1,
+        itemId: 'Material_Ingot_Cobalt',
+        displayName: 'Cobalt Ingot',
+        amount: 32,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 2,
+        itemId: 'Material_Ingot_Adamantite',
+        displayName: 'Adamantite Ingot',
+        amount: 16,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 3,
+        itemId: 'Food_Wildmeat_Cooked',
+        displayName: 'Cooked Wildmeat',
+        amount: 24,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 4,
+        itemId: 'Food_Fish_Grilled',
+        displayName: 'Grilled Fish',
+        amount: 16,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 5,
+        itemId: 'Food_Kebab_Fruit',
+        displayName: 'Fruit Kebab',
+        amount: 8,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 8,
+        itemId: 'Material_Wood_Log',
+        displayName: 'Wood Log',
+        amount: 64,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 9,
+        itemId: 'Potion_Health_Lesser',
+        displayName: 'Lesser Health Potion',
+        amount: 5,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 10,
+        itemId: 'Potion_Stamina_Lesser',
+        displayName: 'Lesser Stamina Potion',
+        amount: 3,
+        durability: 0,
+        maxDurability: 0,
+      },
     ],
     armor: [
-      { slot: 0, itemId: 'Armor_Thorium_Head', displayName: 'Thorium Helmet', amount: 1, durability: 150, maxDurability: 165 },
-      { slot: 1, itemId: 'Armor_Thorium_Chest', displayName: 'Thorium Chestplate', amount: 1, durability: 200, maxDurability: 240 },
-      { slot: 2, itemId: 'Armor_Cobalt_Legs', displayName: 'Cobalt Leggings', amount: 1, durability: 180, maxDurability: 225 },
-      { slot: 3, itemId: 'Armor_Iron_Feet', displayName: 'Iron Boots', amount: 1, durability: 160, maxDurability: 195 },
+      {
+        slot: 0,
+        itemId: 'Armor_Thorium_Head',
+        displayName: 'Thorium Helmet',
+        amount: 1,
+        durability: 150,
+        maxDurability: 165,
+      },
+      {
+        slot: 1,
+        itemId: 'Armor_Thorium_Chest',
+        displayName: 'Thorium Chestplate',
+        amount: 1,
+        durability: 200,
+        maxDurability: 240,
+      },
+      {
+        slot: 2,
+        itemId: 'Armor_Cobalt_Legs',
+        displayName: 'Cobalt Leggings',
+        amount: 1,
+        durability: 180,
+        maxDurability: 225,
+      },
+      {
+        slot: 3,
+        itemId: 'Armor_Iron_Feet',
+        displayName: 'Iron Boots',
+        amount: 1,
+        durability: 160,
+        maxDurability: 195,
+      },
     ],
     hotbar: [
-      { slot: 0, itemId: 'Weapon_Sword_Thorium', displayName: 'Thorium Sword', amount: 1, durability: 1200, maxDurability: 1561 },
-      { slot: 1, itemId: 'Tool_Pickaxe_Thorium', displayName: 'Thorium Pickaxe', amount: 1, durability: 1400, maxDurability: 1561 },
-      { slot: 2, itemId: 'Tool_Hatchet_Cobalt', displayName: 'Cobalt Hatchet', amount: 1, durability: 200, maxDurability: 250 },
-      { slot: 3, itemId: 'Weapon_Shield_Iron', displayName: 'Iron Shield', amount: 1, durability: 300, maxDurability: 350 },
-      { slot: 4, itemId: 'Food_Kebab_Meat', displayName: 'Meat Kebab', amount: 12, durability: 0, maxDurability: 0 },
-      { slot: 5, itemId: 'Tool_Repair_Kit_Iron', displayName: 'Iron Repair Kit', amount: 3, durability: 0, maxDurability: 0 },
-      { slot: 8, itemId: 'Weapon_Shortbow_Adamantite', displayName: 'Adamantite Shortbow', amount: 1, durability: 350, maxDurability: 400 },
+      {
+        slot: 0,
+        itemId: 'Weapon_Sword_Thorium',
+        displayName: 'Thorium Sword',
+        amount: 1,
+        durability: 1200,
+        maxDurability: 1561,
+      },
+      {
+        slot: 1,
+        itemId: 'Tool_Pickaxe_Thorium',
+        displayName: 'Thorium Pickaxe',
+        amount: 1,
+        durability: 1400,
+        maxDurability: 1561,
+      },
+      {
+        slot: 2,
+        itemId: 'Tool_Hatchet_Cobalt',
+        displayName: 'Cobalt Hatchet',
+        amount: 1,
+        durability: 200,
+        maxDurability: 250,
+      },
+      {
+        slot: 3,
+        itemId: 'Weapon_Shield_Iron',
+        displayName: 'Iron Shield',
+        amount: 1,
+        durability: 300,
+        maxDurability: 350,
+      },
+      {
+        slot: 4,
+        itemId: 'Food_Kebab_Meat',
+        displayName: 'Meat Kebab',
+        amount: 12,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 5,
+        itemId: 'Tool_Repair_Kit_Iron',
+        displayName: 'Iron Repair Kit',
+        amount: 3,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 8,
+        itemId: 'Weapon_Shortbow_Adamantite',
+        displayName: 'Adamantite Shortbow',
+        amount: 1,
+        durability: 350,
+        maxDurability: 400,
+      },
     ],
     utility: [
-      { slot: 0, itemId: 'Furniture_Crude_Torch', displayName: 'Crude Torch', amount: 64, durability: 0, maxDurability: 0 },
-      { slot: 1, itemId: 'Tool_Grappling_Hook_Iron', displayName: 'Iron Grappling Hook', amount: 1, durability: 48, maxDurability: 50 },
+      {
+        slot: 0,
+        itemId: 'Furniture_Crude_Torch',
+        displayName: 'Crude Torch',
+        amount: 64,
+        durability: 0,
+        maxDurability: 0,
+      },
+      {
+        slot: 1,
+        itemId: 'Tool_Grappling_Hook_Iron',
+        displayName: 'Iron Grappling Hook',
+        amount: 1,
+        durability: 48,
+        maxDurability: 50,
+      },
     ],
     backpack: [],
     tools: [
-      { slot: 0, itemId: 'Tool_Fishing_Rod_Iron', displayName: 'Iron Fishing Rod', amount: 1, durability: 60, maxDurability: 64 },
-      { slot: 1, itemId: 'Tool_Shovel_Cobalt', displayName: 'Cobalt Shovel', amount: 1, durability: 180, maxDurability: 200 },
+      {
+        slot: 0,
+        itemId: 'Tool_Fishing_Rod_Iron',
+        displayName: 'Iron Fishing Rod',
+        amount: 1,
+        durability: 60,
+        maxDurability: 64,
+      },
+      {
+        slot: 1,
+        itemId: 'Tool_Shovel_Cobalt',
+        displayName: 'Cobalt Shovel',
+        amount: 1,
+        durability: 180,
+        maxDurability: 200,
+      },
     ],
     activeHotbarSlot: 0,
     totalSlots: 55,
@@ -312,7 +485,7 @@ export function getDemoPlayerInventory(playerName: string): ParsedPlayerInventor
 }
 
 export function getDemoPlayerDetails(playerName: string): ParsedPlayerDetails | null {
-  const player = DEMO_PLAYERS.find(p => p.name.toLowerCase() === playerName.toLowerCase());
+  const player = DEMO_PLAYERS.find((p) => p.name.toLowerCase() === playerName.toLowerCase());
   if (!player) return null;
 
   return {
@@ -341,12 +514,18 @@ export function getDemoPlayerDetails(playerName: string): ParsedPlayerDetails | 
     },
     discoveredZones: ['Spawn', 'Forest', 'Mountains', 'Desert', 'Ocean Shore'],
     memoriesCount: Math.floor(Math.random() * 20),
-    uniqueItemsUsed: ['Weapon_Sword_Thorium', 'Tool_Pickaxe_Thorium', 'Weapon_Shortbow_Adamantite', 'Armor_Thorium_Head', 'Food_Wildmeat_Cooked'],
+    uniqueItemsUsed: [
+      'Weapon_Sword_Thorium',
+      'Tool_Pickaxe_Thorium',
+      'Weapon_Shortbow_Adamantite',
+      'Armor_Thorium_Head',
+      'Food_Wildmeat_Cooked',
+    ],
   };
 }
 
 export function getDemoDeathPositions(playerName: string): ParsedDeathPosition[] {
-  const player = DEMO_PLAYERS.find(p => p.name.toLowerCase() === playerName.toLowerCase());
+  const player = DEMO_PLAYERS.find((p) => p.name.toLowerCase() === playerName.toLowerCase());
   if (!player) return [];
 
   return [
@@ -478,12 +657,12 @@ export function getDemoBackups(): DemoBackup[] {
 
 const DEMO_LOG_MESSAGES = [
   '[Server] Server started on port 5520',
-  '[Universe|P] Adding player \'KyuubiDDragon\' to universe',
-  '[World|Orbis] Player \'KyuubiDDragon\' joined world',
-  '[Universe|P] Adding player \'DragonSlayer99\' to universe',
-  '[World|Orbis] Player \'DragonSlayer99\' joined world',
-  '[Universe|P] Adding player \'CrystalMiner\' to universe',
-  '[World|Nexus] Player \'CrystalMiner\' joined world',
+  "[Universe|P] Adding player 'KyuubiDDragon' to universe",
+  "[World|Orbis] Player 'KyuubiDDragon' joined world",
+  "[Universe|P] Adding player 'DragonSlayer99' to universe",
+  "[World|Orbis] Player 'DragonSlayer99' joined world",
+  "[Universe|P] Adding player 'CrystalMiner' to universe",
+  "[World|Nexus] Player 'CrystalMiner' joined world",
   '[Server] TPS: 19.8, MSPT: 35.2ms',
   '[World|Orbis] Entity spawned at (234, 65, -128)',
   '[Server] Auto-save started...',
@@ -554,8 +733,16 @@ export function getDemoActivityLog(): DemoActivityEntry[] {
   const now = Date.now();
   const actions = [
     { action: 'Server started', category: 'server', details: 'Server started successfully' },
-    { action: 'Player kicked', category: 'player', details: 'Kicked player: TestUser (Reason: AFK)' },
-    { action: 'Backup created', category: 'backup', details: 'Manual backup created: backup_2026-01-24.tar.gz' },
+    {
+      action: 'Player kicked',
+      category: 'player',
+      details: 'Kicked player: TestUser (Reason: AFK)',
+    },
+    {
+      action: 'Backup created',
+      category: 'backup',
+      details: 'Manual backup created: backup_2026-01-24.tar.gz',
+    },
     { action: 'Config updated', category: 'config', details: 'Updated MOTD setting' },
     { action: 'Mod enabled', category: 'mods', details: 'Enabled mod: EasyWebMap' },
     { action: 'User logged in', category: 'auth', details: 'Admin user logged in' },
@@ -594,17 +781,53 @@ export interface DemoMod {
 
 export function getDemoMods(): DemoMod[] {
   return [
-    { name: 'EasyWebMap', filename: 'EasyWebMap-1.2.0.jar', enabled: true, size: 2457600, version: '1.2.0' },
-    { name: 'BetterChat', filename: 'BetterChat-0.5.1.jar', enabled: true, size: 524288, version: '0.5.1' },
-    { name: 'AdminTools', filename: 'AdminTools-2.0.0.jar', enabled: true, size: 1048576, version: '2.0.0' },
-    { name: 'CustomNPCs', filename: 'CustomNPCs-1.1.0.jar', enabled: false, size: 3145728, version: '1.1.0' },
+    {
+      name: 'EasyWebMap',
+      filename: 'EasyWebMap-1.2.0.jar',
+      enabled: true,
+      size: 2457600,
+      version: '1.2.0',
+    },
+    {
+      name: 'BetterChat',
+      filename: 'BetterChat-0.5.1.jar',
+      enabled: true,
+      size: 524288,
+      version: '0.5.1',
+    },
+    {
+      name: 'AdminTools',
+      filename: 'AdminTools-2.0.0.jar',
+      enabled: true,
+      size: 1048576,
+      version: '2.0.0',
+    },
+    {
+      name: 'CustomNPCs',
+      filename: 'CustomNPCs-1.1.0.jar',
+      enabled: false,
+      size: 3145728,
+      version: '1.1.0',
+    },
   ];
 }
 
 export function getDemoPlugins(): DemoMod[] {
   return [
-    { name: 'KyuubiAPI', filename: 'KyuubiAPI-1.2.1.jar', enabled: true, size: 1572864, version: '1.2.1' },
-    { name: 'Essentials', filename: 'Essentials-3.0.0.jar', enabled: true, size: 2097152, version: '3.0.0' },
+    {
+      name: 'KyuubiAPI',
+      filename: 'KyuubiAPI-1.2.1.jar',
+      enabled: true,
+      size: 1572864,
+      version: '1.2.1',
+    },
+    {
+      name: 'Essentials',
+      filename: 'Essentials-3.0.0.jar',
+      enabled: true,
+      size: 2097152,
+      version: '3.0.0',
+    },
   ];
 }
 
@@ -622,8 +845,18 @@ export interface DemoWorld {
 export function getDemoWorlds(): DemoWorld[] {
   return [
     { name: 'Orbis', size: 1073741824, playerCount: 2, lastPlayed: new Date().toISOString() },
-    { name: 'Nexus', size: 536870912, playerCount: 1, lastPlayed: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
-    { name: 'Wilderness', size: 268435456, playerCount: 0, lastPlayed: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString() },
+    {
+      name: 'Nexus',
+      size: 536870912,
+      playerCount: 1,
+      lastPlayed: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    },
+    {
+      name: 'Wilderness',
+      size: 268435456,
+      playerCount: 0,
+      lastPlayed: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+    },
   ];
 }
 
@@ -644,14 +877,26 @@ export function getDemoChatLog(): DemoChatMessage[] {
   const chatData = [
     { player: 'KyuubiDDragon', message: 'Hello everyone!', type: 'chat' as const },
     { player: 'DragonSlayer99', message: 'Hey! Ready for the dungeon?', type: 'chat' as const },
-    { player: 'KyuubiDDragon', message: 'Yeah, let me grab some supplies first', type: 'chat' as const },
-    { player: 'CrystalMiner', message: 'Found some rare crystals in the cave!', type: 'chat' as const },
+    {
+      player: 'KyuubiDDragon',
+      message: 'Yeah, let me grab some supplies first',
+      type: 'chat' as const,
+    },
+    {
+      player: 'CrystalMiner',
+      message: 'Found some rare crystals in the cave!',
+      type: 'chat' as const,
+    },
     { player: 'System', message: 'Server auto-save completed', type: 'system' as const },
     { player: 'DragonSlayer99', message: 'Nice! Can you share the coords?', type: 'chat' as const },
     { player: 'CrystalMiner', message: 'Sure, -567, 72, 891', type: 'chat' as const },
     { player: 'admin', message: '/weather clear', type: 'command' as const },
     { player: 'System', message: 'Weather set to clear', type: 'system' as const },
-    { player: 'KyuubiDDragon', message: 'Great, clear skies for our adventure!', type: 'chat' as const },
+    {
+      player: 'KyuubiDDragon',
+      message: 'Great, clear skies for our adventure!',
+      type: 'chat' as const,
+    },
   ];
 
   for (let i = 0; i < chatData.length; i++) {
@@ -948,12 +1193,24 @@ export function getDemoBans() {
 export function getDemoPermissions() {
   return {
     users: [
-      { identifier: 'KyuubiDDragon', type: 'op', addedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() },
-      { identifier: 'DragonSlayer', type: 'moderator', addedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString() },
+      {
+        identifier: 'KyuubiDDragon',
+        type: 'op',
+        addedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        identifier: 'DragonSlayer',
+        type: 'moderator',
+        addedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+      },
     ],
     groups: [
       { name: 'admins', permissions: ['*'], description: 'Full server access' },
-      { name: 'moderators', permissions: ['kick', 'ban', 'mute', 'teleport'], description: 'Moderation permissions' },
+      {
+        name: 'moderators',
+        permissions: ['kick', 'ban', 'mute', 'teleport'],
+        description: 'Moderation permissions',
+      },
       { name: 'builders', permissions: ['build', 'tp'], description: 'Building permissions' },
     ],
   };
@@ -1148,8 +1405,18 @@ export function getDemoItems() {
     { id: 'Weapon_Sword_Adamantite', name: 'Adamantite Sword', category: 'weapon', rarity: 'epic' },
     { id: 'Weapon_Sword_Cobalt', name: 'Cobalt Sword', category: 'weapon', rarity: 'uncommon' },
     { id: 'Weapon_Sword_Iron', name: 'Iron Sword', category: 'weapon', rarity: 'common' },
-    { id: 'Weapon_Shortbow_Adamantite', name: 'Adamantite Shortbow', category: 'weapon', rarity: 'epic' },
-    { id: 'Weapon_Battleaxe_Thorium', name: 'Thorium Battleaxe', category: 'weapon', rarity: 'rare' },
+    {
+      id: 'Weapon_Shortbow_Adamantite',
+      name: 'Adamantite Shortbow',
+      category: 'weapon',
+      rarity: 'epic',
+    },
+    {
+      id: 'Weapon_Battleaxe_Thorium',
+      name: 'Thorium Battleaxe',
+      category: 'weapon',
+      rarity: 'rare',
+    },
     { id: 'Weapon_Shield_Iron', name: 'Iron Shield', category: 'weapon', rarity: 'common' },
     // Armor
     { id: 'Armor_Thorium_Head', name: 'Thorium Helmet', category: 'armor', rarity: 'rare' },
@@ -1164,21 +1431,51 @@ export function getDemoItems() {
     { id: 'Tool_Hatchet_Cobalt', name: 'Cobalt Hatchet', category: 'tool', rarity: 'uncommon' },
     { id: 'Tool_Shovel_Cobalt', name: 'Cobalt Shovel', category: 'tool', rarity: 'uncommon' },
     { id: 'Tool_Repair_Kit_Iron', name: 'Iron Repair Kit', category: 'tool', rarity: 'common' },
-    { id: 'Tool_Grappling_Hook_Iron', name: 'Iron Grappling Hook', category: 'tool', rarity: 'common' },
+    {
+      id: 'Tool_Grappling_Hook_Iron',
+      name: 'Iron Grappling Hook',
+      category: 'tool',
+      rarity: 'common',
+    },
     { id: 'Tool_Fishing_Rod_Iron', name: 'Iron Fishing Rod', category: 'tool', rarity: 'common' },
     // Food
-    { id: 'Food_Wildmeat_Cooked', name: 'Cooked Wildmeat', category: 'consumable', rarity: 'common' },
+    {
+      id: 'Food_Wildmeat_Cooked',
+      name: 'Cooked Wildmeat',
+      category: 'consumable',
+      rarity: 'common',
+    },
     { id: 'Food_Fish_Grilled', name: 'Grilled Fish', category: 'consumable', rarity: 'common' },
     { id: 'Food_Kebab_Fruit', name: 'Fruit Kebab', category: 'consumable', rarity: 'common' },
     { id: 'Food_Kebab_Meat', name: 'Meat Kebab', category: 'consumable', rarity: 'common' },
     // Potions
-    { id: 'Potion_Health_Lesser', name: 'Lesser Health Potion', category: 'consumable', rarity: 'common' },
-    { id: 'Potion_Stamina_Lesser', name: 'Lesser Stamina Potion', category: 'consumable', rarity: 'common' },
-    { id: 'Potion_Health_Greater', name: 'Greater Health Potion', category: 'consumable', rarity: 'uncommon' },
+    {
+      id: 'Potion_Health_Lesser',
+      name: 'Lesser Health Potion',
+      category: 'consumable',
+      rarity: 'common',
+    },
+    {
+      id: 'Potion_Stamina_Lesser',
+      name: 'Lesser Stamina Potion',
+      category: 'consumable',
+      rarity: 'common',
+    },
+    {
+      id: 'Potion_Health_Greater',
+      name: 'Greater Health Potion',
+      category: 'consumable',
+      rarity: 'uncommon',
+    },
     // Materials
     { id: 'Material_Ingot_Thorium', name: 'Thorium Ingot', category: 'material', rarity: 'rare' },
     { id: 'Material_Ingot_Cobalt', name: 'Cobalt Ingot', category: 'material', rarity: 'uncommon' },
-    { id: 'Material_Ingot_Adamantite', name: 'Adamantite Ingot', category: 'material', rarity: 'epic' },
+    {
+      id: 'Material_Ingot_Adamantite',
+      name: 'Adamantite Ingot',
+      category: 'material',
+      rarity: 'epic',
+    },
     { id: 'Material_Ingot_Iron', name: 'Iron Ingot', category: 'material', rarity: 'common' },
     { id: 'Material_Wood_Log', name: 'Wood Log', category: 'material', rarity: 'common' },
     // Utility
@@ -1249,12 +1546,15 @@ export function getDemoGlobalChatLog(options?: { days?: number; limit?: number; 
   };
 }
 
-export function getDemoPlayerChatLog(playerName: string, options?: { days?: number; limit?: number; offset?: number }) {
+export function getDemoPlayerChatLog(
+  playerName: string,
+  options?: { days?: number; limit?: number; offset?: number },
+) {
   const limit = options?.limit ?? 100;
   const offset = options?.offset ?? 0;
 
   const playerMessages = DEMO_STORED_CHAT_MESSAGES.filter(
-    m => m.player.toLowerCase() === playerName.toLowerCase()
+    (m) => m.player.toLowerCase() === playerName.toLowerCase(),
   );
 
   const result = playerMessages.slice(offset, offset + limit);

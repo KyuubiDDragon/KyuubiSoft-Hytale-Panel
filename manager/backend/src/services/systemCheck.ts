@@ -100,10 +100,13 @@ async function checkTcpPort(port: number): Promise<{ free: boolean; process?: st
 
         try {
           // Try to find which process is using the port (Linux)
-          const { stdout } = await execAsync(`ss -tlnp 2>/dev/null | grep ':${port} ' || lsof -i :${port} 2>/dev/null | head -2 || echo ""`);
+          const { stdout } = await execAsync(
+            `ss -tlnp 2>/dev/null | grep ':${port} ' || lsof -i :${port} 2>/dev/null | head -2 || echo ""`,
+          );
           if (stdout.trim()) {
             // Extract process name from output
-            const match = stdout.match(/users:\(\("([^"]+)"/) || stdout.match(/\b(\w+)\s+\d+\s+\w+/);
+            const match =
+              stdout.match(/users:\(\("([^"]+)"/) || stdout.match(/\b(\w+)\s+\d+\s+\w+/);
             if (match) {
               processInfo = match[1];
             } else {
@@ -143,9 +146,12 @@ async function checkUdpPort(port: number): Promise<{ free: boolean; process?: st
         let processInfo: string | undefined;
 
         try {
-          const { stdout } = await execAsync(`ss -ulnp 2>/dev/null | grep ':${port} ' || lsof -i UDP:${port} 2>/dev/null | head -2 || echo ""`);
+          const { stdout } = await execAsync(
+            `ss -ulnp 2>/dev/null | grep ':${port} ' || lsof -i UDP:${port} 2>/dev/null | head -2 || echo ""`,
+          );
           if (stdout.trim()) {
-            const match = stdout.match(/users:\(\("([^"]+)"/) || stdout.match(/\b(\w+)\s+\d+\s+\w+/);
+            const match =
+              stdout.match(/users:\(\("([^"]+)"/) || stdout.match(/\b(\w+)\s+\d+\s+\w+/);
             if (match) {
               processInfo = match[1];
             } else {
@@ -207,9 +213,7 @@ async function checkPorts(): Promise<SystemCheck[]> {
       required,
     };
 
-    const result = protocol === 'UDP'
-      ? await checkUdpPort(port)
-      : await checkTcpPort(port);
+    const result = protocol === 'UDP' ? await checkUdpPort(port) : await checkTcpPort(port);
 
     if (result.free) {
       check.status = 'ok';
@@ -430,9 +434,10 @@ async function checkDnsResolution(): Promise<SystemCheck> {
     const err = error as NodeJS.ErrnoException;
     check.status = 'error';
     check.message = 'DNS failed';
-    check.details = err.code === 'ENOTFOUND'
-      ? 'Cannot resolve DNS. Check internet connection.'
-      : `DNS error: ${err.message}`;
+    check.details =
+      err.code === 'ENOTFOUND'
+        ? 'Cannot resolve DNS. Check internet connection.'
+        : `DNS error: ${err.message}`;
   }
 
   return check;
@@ -468,15 +473,16 @@ async function checkHytaleServer(): Promise<SystemCheck> {
         check.message = 'Reachable';
         check.details = `${hostname} responded with status ${res.statusCode}`;
         resolve(check);
-      }
+      },
     );
 
     req.on('error', (error: NodeJS.ErrnoException) => {
       check.status = 'error';
       check.message = 'Unreachable';
-      check.details = error.code === 'ENOTFOUND'
-        ? `Cannot reach ${hostname}. Check internet connection.`
-        : `Connection error: ${error.message}`;
+      check.details =
+        error.code === 'ENOTFOUND'
+          ? `Cannot reach ${hostname}. Check internet connection.`
+          : `Connection error: ${error.message}`;
       resolve(check);
     });
 
@@ -503,23 +509,16 @@ export async function runSystemChecks(): Promise<SystemCheckResult> {
   const checks: SystemCheck[] = [];
 
   // Run independent checks in parallel for speed
-  const [
-    dockerCheck,
-    portChecks,
-    diskCheck,
-    ramCheck,
-    writeCheck,
-    dnsCheck,
-    hytaleCheck,
-  ] = await Promise.all([
-    checkDockerSocket(),
-    checkPorts(),
-    checkDiskSpace(),
-    checkRam(),
-    checkWritePermissions(),
-    checkDnsResolution(),
-    checkHytaleServer(),
-  ]);
+  const [dockerCheck, portChecks, diskCheck, ramCheck, writeCheck, dnsCheck, hytaleCheck] =
+    await Promise.all([
+      checkDockerSocket(),
+      checkPorts(),
+      checkDiskSpace(),
+      checkRam(),
+      checkWritePermissions(),
+      checkDnsResolution(),
+      checkHytaleServer(),
+    ]);
 
   // Add all checks to results
   checks.push(dockerCheck);
@@ -532,9 +531,7 @@ export async function runSystemChecks(): Promise<SystemCheckResult> {
 
   // Determine if setup can proceed
   // All required checks must be ok or warning (not error)
-  const canProceed = checks
-    .filter((c) => c.required)
-    .every((c) => c.status !== 'error');
+  const canProceed = checks.filter((c) => c.required).every((c) => c.status !== 'error');
 
   return {
     checks,
@@ -579,15 +576,18 @@ export async function runSingleCheck(checkId: string): Promise<SystemCheck | nul
 
           const portConfig = portConfigs.find((p) => p.port === port);
           if (portConfig) {
-            const result = portConfig.protocol === 'UDP'
-              ? await checkUdpPort(port)
-              : await checkTcpPort(port);
+            const result =
+              portConfig.protocol === 'UDP' ? await checkUdpPort(port) : await checkTcpPort(port);
 
             return {
               id: checkId,
               name: `Port ${port} (${portConfig.protocol})`,
-              status: result.free ? 'ok' : (portConfig.required ? 'error' : 'warning'),
-              message: result.free ? 'Available' : (result.process ? `In use by ${result.process}` : 'In use'),
+              status: result.free ? 'ok' : portConfig.required ? 'error' : 'warning',
+              message: result.free
+                ? 'Available'
+                : result.process
+                  ? `In use by ${result.process}`
+                  : 'In use',
               required: portConfig.required,
               details: result.free
                 ? `${portConfig.name} port is free`

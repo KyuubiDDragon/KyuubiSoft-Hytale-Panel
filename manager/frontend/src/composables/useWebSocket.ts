@@ -47,7 +47,9 @@ export function useWebSocket() {
       if (reconnectAttempts.value < maxReconnectAttempts) {
         reconnectAttempts.value++
         const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts.value - 1)
-        console.log(`Will retry in ${delay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`)
+        console.log(
+          `Will retry in ${delay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`,
+        )
         reconnectTimeout = setTimeout(connect, delay)
       }
       return
@@ -140,7 +142,9 @@ export function useWebSocket() {
         reconnectAttempts.value++
         // Exponential backoff: 3s, 6s, 12s, 24s, 48s
         const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts.value - 1)
-        console.log(`Reconnecting in ${delay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`)
+        console.log(
+          `Reconnecting in ${delay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`,
+        )
         reconnectTimeout = setTimeout(connect, delay)
       } else {
         // After max attempts, wait longer and reset counter for eventual retry
@@ -174,10 +178,12 @@ export function useWebSocket() {
   // instead of the command silently vanishing.
   function sendCommand(command: string): boolean {
     if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-      ws.value.send(JSON.stringify({
-        type: 'command',
-        payload: command,
-      }))
+      ws.value.send(
+        JSON.stringify({
+          type: 'command',
+          payload: command,
+        }),
+      )
 
       // Add command to logs
       consoleStore.addLog({

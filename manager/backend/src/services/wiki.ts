@@ -53,7 +53,9 @@ interface WikiConfigSlice {
 // Config
 // ---------------------------------------------------------------------------
 
-interface ConfigWithWiki { wiki?: Partial<WikiConfigSlice> }
+interface ConfigWithWiki {
+  wiki?: Partial<WikiConfigSlice>;
+}
 
 export async function getWikiConfig(): Promise<WikiConfigSlice> {
   try {
@@ -100,12 +102,15 @@ async function readEntryFromJar(jarPath: string, targetName: string): Promise<Bu
     if (size < 22) return null;
 
     // Scan back from EOF to find the EOCD record.
-    const lookup = Math.min(size, 0xFFFF + 22);
+    const lookup = Math.min(size, 0xffff + 22);
     const tail = Buffer.alloc(lookup);
     await handle.read(tail, 0, lookup, size - lookup);
     let eocdOffset = -1;
     for (let i = tail.length - 22; i >= 0; i--) {
-      if (tail.readUInt32LE(i) === EOCD_SIGNATURE) { eocdOffset = i; break; }
+      if (tail.readUInt32LE(i) === EOCD_SIGNATURE) {
+        eocdOffset = i;
+        break;
+      }
     }
     if (eocdOffset === -1) return null;
 
@@ -173,11 +178,13 @@ interface RawManifest {
 }
 
 function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80) || 'unnamed';
+  return (
+    input
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 80) || 'unnamed'
+  );
 }
 
 function categoriseByFileName(name: string): string {
@@ -217,7 +224,9 @@ async function scanDir(dir: string, source: 'mod' | 'plugin'): Promise<WikiEntry
     try {
       const s = await stat(full);
       if (!s.isFile()) continue;
-    } catch { continue; }
+    } catch {
+      continue;
+    }
 
     let manifest: RawManifest | null = null;
     try {
@@ -229,8 +238,9 @@ async function scanDir(dir: string, source: 'mod' | 'plugin'): Promise<WikiEntry
 
     const name = manifest?.name || manifest?.id || f.replace(/\.jar$/i, '');
     const description = manifest?.description;
-    const author = manifest?.author
-      ?? (Array.isArray(manifest?.authors) ? manifest!.authors.join(', ') : manifest?.authors);
+    const author =
+      manifest?.author ??
+      (Array.isArray(manifest?.authors) ? manifest!.authors.join(', ') : manifest?.authors);
     const version = manifest?.version;
     const category = manifest?.category || categoriseByFileName(f);
     const commands = commandsFromManifest(manifest?.commands);
@@ -295,7 +305,8 @@ function demoEntries(): WikiEntry[] {
     {
       slug: 'plugin-kyuubi-api',
       name: 'KyuubiSoft API',
-      description: 'Companion plugin used by the panel to receive chat, join/leave and death events and to issue authoritative commands without going through the console.',
+      description:
+        'Companion plugin used by the panel to receive chat, join/leave and death events and to issue authoritative commands without going through the console.',
       author: 'KyuubiSoft',
       version: '1.2.0',
       category: 'Admin',
@@ -308,7 +319,8 @@ function demoEntries(): WikiEntry[] {
     {
       slug: 'mod-easywebmap',
       name: 'EasyWebMap',
-      description: 'Renders a live, browser-based map of all loaded chunks. Powers the WebMap tab in this panel.',
+      description:
+        'Renders a live, browser-based map of all loaded chunks. Powers the WebMap tab in this panel.',
       author: 'community',
       version: '1.0.9',
       category: 'Maps',
@@ -374,7 +386,9 @@ export async function loadWikiIndex(): Promise<WikiIndex> {
   }
 }
 
-export async function loadWikiPage(slug: string): Promise<{ entry: WikiEntry; markdown: string } | null> {
+export async function loadWikiPage(
+  slug: string,
+): Promise<{ entry: WikiEntry; markdown: string } | null> {
   const safe = slug.replace(/[^a-z0-9-]/gi, '');
   if (!safe) return null;
   try {

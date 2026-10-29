@@ -39,11 +39,11 @@ export function formatItemPath(path: string): string {
 
   // Convert snake_case or kebab-case to Title Case
   name = name
-    .replace(/[_-]/g, ' ')  // Replace underscores and hyphens with spaces
-    .replace(/\s+/g, ' ')   // Normalize multiple spaces
+    .replace(/[_-]/g, ' ') // Replace underscores and hyphens with spaces
+    .replace(/\s+/g, ' ') // Normalize multiple spaces
     .trim()
     .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ')
 
   return name
@@ -60,7 +60,8 @@ export function formatLogMessage(message: string): string {
   }
 
   // Pattern for "server.items.item_name", "server.blocks.block_name", etc.
-  const dotPattern = /\b(server|hytale|game)\.(items?|blocks?|entities?|tools?|weapons?|armor)\.([a-z][a-z0-9_]*)\b/gi
+  const dotPattern =
+    /\b(server|hytale|game)\.(items?|blocks?|entities?|tools?|weapons?|armor)\.([a-z][a-z0-9_]*)\b/gi
 
   // Pattern for "namespace:item/path" or "namespace:item_name"
   const colonPattern = /\b([a-z][a-z0-9_]*):([a-z][a-z0-9_/]*)\b/gi

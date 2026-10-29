@@ -50,7 +50,10 @@ export interface DeclaredCompat {
 // Pre-release suffixes are dropped for ordering (treated as the base release).
 function parseVersion(v: string): number[] | null {
   if (!v || typeof v !== 'string') return null;
-  const m = v.trim().replace(/^v/i, '').match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+  const m = v
+    .trim()
+    .replace(/^v/i, '')
+    .match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
   if (!m) return null;
   return [Number(m[1] || 0), Number(m[2] || 0), Number(m[3] || 0)];
 }
@@ -76,7 +79,9 @@ export async function getServerVersion(serverId?: string): Promise<string | null
     const id = serverId ?? (await getDefaultId());
     const s = await getServer(id);
     if (s) serverPath = s.paths.server;
-  } catch { /* registry not ready */ }
+  } catch {
+    /* registry not ready */
+  }
   try {
     const v = fs.readFileSync(path.join(serverPath, '.hytale-version'), 'utf-8').trim();
     return v || null;
@@ -87,7 +92,11 @@ export async function getServerVersion(serverId?: string): Promise<string | null
 
 // ---------- verdict from declared ranges ----------
 
-export function evaluate(declared: DeclaredCompat, serverVersion: string | null, source: 'registry' | 'jar' | 'none'): CompatResult {
+export function evaluate(
+  declared: DeclaredCompat,
+  serverVersion: string | null,
+  source: 'registry' | 'jar' | 'none',
+): CompatResult {
   const base: CompatResult = {
     verdict: 'unknown',
     serverVersion,
@@ -95,7 +104,10 @@ export function evaluate(declared: DeclaredCompat, serverVersion: string | null,
     reason: '',
   };
 
-  const hasAny = (declared.gameVersions && declared.gameVersions.length) || declared.minServerVersion || declared.maxServerVersion;
+  const hasAny =
+    (declared.gameVersions && declared.gameVersions.length) ||
+    declared.minServerVersion ||
+    declared.maxServerVersion;
   if (!hasAny) {
     base.reason = 'The mod does not declare a compatible server version.';
     return base;
@@ -107,7 +119,7 @@ export function evaluate(declared: DeclaredCompat, serverVersion: string | null,
 
   // Explicit version list wins.
   if (declared.gameVersions && declared.gameVersions.length) {
-    const ok = declared.gameVersions.some(gv => versionsMatch(gv, serverVersion));
+    const ok = declared.gameVersions.some((gv) => versionsMatch(gv, serverVersion));
     base.verdict = ok ? 'compatible' : 'incompatible';
     base.reason = ok
       ? `Declared for server ${declared.gameVersions.join(', ')} — matches ${serverVersion}.`
@@ -151,10 +163,16 @@ function pickDeclared(obj: Record<string, unknown>): DeclaredCompat {
   if (Array.isArray(gv)) out.gameVersions = gv.map(String);
   else if (typeof gv === 'string') out.gameVersions = [gv];
   for (const key of ['minServerVersion', 'minGameVersion', 'minVersion']) {
-    if (typeof obj[key] === 'string') { out.minServerVersion = obj[key] as string; break; }
+    if (typeof obj[key] === 'string') {
+      out.minServerVersion = obj[key] as string;
+      break;
+    }
   }
   for (const key of ['maxServerVersion', 'maxGameVersion', 'maxVersion']) {
-    if (typeof obj[key] === 'string') { out.maxServerVersion = obj[key] as string; break; }
+    if (typeof obj[key] === 'string') {
+      out.maxServerVersion = obj[key] as string;
+      break;
+    }
   }
   return out;
 }
@@ -168,7 +186,9 @@ export async function probeJarCompat(jarPath: string): Promise<DeclaredCompat | 
   if (!fs.existsSync(jarPath)) return null;
   for (const entry of JAR_MANIFEST_CANDIDATES) {
     try {
-      const { stdout } = await execFileAsync('unzip', ['-p', jarPath, entry], { maxBuffer: 1024 * 1024 });
+      const { stdout } = await execFileAsync('unzip', ['-p', jarPath, entry], {
+        maxBuffer: 1024 * 1024,
+      });
       if (!stdout || !stdout.trim()) continue;
       const json = JSON.parse(stdout) as Record<string, unknown>;
       const declared = pickDeclared(json);
@@ -184,9 +204,15 @@ export async function probeJarCompat(jarPath: string): Promise<DeclaredCompat | 
 
 // ---------- public entry points ----------
 
-export async function checkRegistryMod(declared: DeclaredCompat, serverId?: string): Promise<CompatResult> {
+export async function checkRegistryMod(
+  declared: DeclaredCompat,
+  serverId?: string,
+): Promise<CompatResult> {
   const serverVersion = await getServerVersion(serverId);
-  const hasDeclared = (declared.gameVersions && declared.gameVersions.length) || declared.minServerVersion || declared.maxServerVersion;
+  const hasDeclared =
+    (declared.gameVersions && declared.gameVersions.length) ||
+    declared.minServerVersion ||
+    declared.maxServerVersion;
   return evaluate(declared, serverVersion, hasDeclared ? 'registry' : 'none');
 }
 

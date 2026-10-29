@@ -36,11 +36,17 @@ function format(args: unknown[]): [string, Record<string, unknown> | undefined] 
   if (args.length === 1) return [String(args[0]), undefined];
   const first = args[0];
   if (typeof first === 'object' && first !== null && !(first instanceof Error)) {
-    return [args.slice(1).map(a => String(a)).join(' '), first as Record<string, unknown>];
+    return [
+      args
+        .slice(1)
+        .map((a) => String(a))
+        .join(' '),
+      first as Record<string, unknown>,
+    ];
   }
   // First arg is the label. Extras are either an Error or arbitrary values.
   const extras = args.slice(1);
-  const errIdx = extras.findIndex(x => x instanceof Error);
+  const errIdx = extras.findIndex((x) => x instanceof Error);
   if (errIdx >= 0) {
     return [String(first), { err: extras[errIdx], extras: extras.filter((_, i) => i !== errIdx) }];
   }
@@ -65,10 +71,22 @@ export const logger = {
   child(bindings: Record<string, unknown>) {
     const c = base.child(bindings);
     return {
-      debug: (...a: unknown[]) => { const [m, o] = format(a); o ? c.debug(o, m) : c.debug(m); },
-      info:  (...a: unknown[]) => { const [m, o] = format(a); o ? c.info(o, m)  : c.info(m); },
-      warn:  (...a: unknown[]) => { const [m, o] = format(a); o ? c.warn(o, m)  : c.warn(m); },
-      error: (...a: unknown[]) => { const [m, o] = format(a); o ? c.error(o, m) : c.error(m); },
+      debug: (...a: unknown[]) => {
+        const [m, o] = format(a);
+        o ? c.debug(o, m) : c.debug(m);
+      },
+      info: (...a: unknown[]) => {
+        const [m, o] = format(a);
+        o ? c.info(o, m) : c.info(m);
+      },
+      warn: (...a: unknown[]) => {
+        const [m, o] = format(a);
+        o ? c.warn(o, m) : c.warn(m);
+      },
+      error: (...a: unknown[]) => {
+        const [m, o] = format(a);
+        o ? c.error(o, m) : c.error(m);
+      },
     };
   },
   /** Direct access to the underlying pino instance when you need structured logging. */
