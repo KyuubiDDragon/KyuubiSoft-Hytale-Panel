@@ -17,7 +17,7 @@ import type { ServerPaths } from './servers.js';
 // ============================================================
 
 /** The folders of the server the file manager works on (its ServerContext.paths). */
-export type FileManagerFolders = Pick<ServerPaths, 'mods' | 'plugins' | 'server' | 'data'>;
+export type FileManagerFolders = Pick<ServerPaths, 'mods' | 'earlyplugins' | 'plugins' | 'server' | 'data'>;
 
 export interface FileManagerRoot {
   id: string;
@@ -182,6 +182,13 @@ export function getRoots(folders: FileManagerFolders): FileManagerRoot[] {
       rw: true,
       permission: 'files.write',
       label: 'Mods',
+    },
+    {
+      id: 'earlyplugins',
+      path: folders.earlyPluginsPath,
+      rw: true,
+      permission: 'files.write',
+      label: 'Early Plugins',
     },
     {
       id: 'plugins',
