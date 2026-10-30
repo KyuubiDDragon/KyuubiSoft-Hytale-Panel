@@ -103,7 +103,7 @@ mkdir -p /opt/hytale/updater /opt/hytale/backups/native
 rmdir /opt/hytale/server/updater 2>/dev/null || true
 # Directories the server writes into. Created here, before the ownership pass
 # below, so they never stay root-owned.
-mkdir -p /opt/hytale/data/worlds /opt/hytale/plugins /opt/hytale/mods /opt/hytale/auth
+mkdir -p /opt/hytale/data/worlds /opt/hytale/earlyplugins /opt/hytale/plugins /opt/hytale/mods /opt/hytale/auth
 # The links in the server folder point to their sibling folder by a relative
 # path (../data, not /opt/hytale/data): that names the same folder here, on
 # the host and in the panel's container, which sees an additional server's
@@ -139,7 +139,7 @@ fix_ownership() {
     fi
     local dirs=() dir fixed
     for dir in /opt/hytale/server /opt/hytale/data /opt/hytale/backups \
-               /opt/hytale/plugins /opt/hytale/mods /opt/hytale/prefabs \
+               /opt/hytale/earlyplugins /opt/hytale/plugins /opt/hytale/mods /opt/hytale/prefabs \
                /opt/hytale/downloader /opt/hytale/auth /opt/hytale/updater; do
         [ -d "$dir" ] && dirs+=("$dir")
     done
@@ -277,7 +277,10 @@ done
 # ============================================================
 echo "[INFO] Checking server files..."
 
-SERVER_JAR="/opt/hytale/server/HytaleServer.jar"
+OFFICIAL_SERVER_JAR="/opt/hytale/server/HytaleServer.jar"
+SERVER_JAR_NAME="${SERVER_JAR:-HytaleServer.jar}"
+SERVER_JAR="/opt/hytale/server/${SERVER_JAR_NAME}"
+echo "[DEBUG] Using SERVER_JAR=${SERVER_JAR}"
 ASSETS_FILE="/opt/hytale/server/Assets.zip"
 DOWNLOADER_DIR="/opt/hytale/downloader"
 CREDENTIALS_FILE="${DOWNLOADER_DIR}/.hytale-downloader-credentials.json"
@@ -547,7 +550,7 @@ run_downloader() {
                 
                 # Wait forever instead of crashing
                 while true; do
-                    if [ -f "$SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
+                    if [ -f "$OFFICIAL_SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
                         echo "[INFO] Files detected! Continuing..."
                         return 0
                     fi
@@ -566,7 +569,7 @@ run_downloader() {
         cd /opt/hytale/server || return 1
 
         # Backup current JAR version info (if updating)
-        if [ "$UPDATE_MODE" = "update" ] && [ -f "$SERVER_JAR" ]; then
+        if [ "$UPDATE_MODE" = "update" ] && [ -f "$OFFICIAL_SERVER_JAR" ]; then
             echo "[INFO] Updating server files..."
         fi
 
@@ -595,7 +598,7 @@ run_downloader() {
 
         # Only treat the update as applied if extraction succeeded AND the
         # server jar is actually present afterwards.
-        if [ "$UNZIP_OK" = "1" ] && [ -f "$SERVER_JAR" ]; then
+        if [ "$UNZIP_OK" = "1" ] && [ -f "$OFFICIAL_SERVER_JAR" ]; then
             rm -f game.zip
             echo "[INFO] Extraction complete!"
             discard_staged_update
@@ -604,7 +607,7 @@ run_downloader() {
             # before a pending stop is handled: without it the next start would
             # download the build again. A fresh install takes the version from
             # the JAR (as start-server.sh does on every start).
-            SAVED_VERSION="${LATEST_VERSION:-$(jar_manifest_version "$SERVER_JAR")}"
+            SAVED_VERSION="${LATEST_VERSION:-$(jar_manifest_version "$OFFICIAL_SERVER_JAR")}"
             if [ -n "$SAVED_VERSION" ]; then
                 write_version_file "$SAVED_VERSION" "$PATCHLINE" \
                     && echo "[INFO] Saved version $SAVED_VERSION to $VERSION_FILE"
@@ -645,7 +648,7 @@ run_downloader() {
 }
 
 # Check if files exist
-if [ -f "$SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
+if [ -f "$OFFICIAL_SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
     echo "[INFO] Server files found!"
     
     # Auto-update check. The panel's "Auto-updates" switch (panel-config.json
@@ -668,10 +671,10 @@ elif [ -n "$SERVER_JAR_URL" ] && [ -n "$ASSETS_URL" ]; then
     
     # wget writes straight to the final name: a download cut short by a stop
     # is removed, or the next start would take it for the real file.
-    if [ ! -f "$SERVER_JAR" ]; then
+    if [ ! -f "$OFFICIAL_SERVER_JAR" ]; then
         echo "[INFO] Downloading HytaleServer.jar..."
-        PARTIAL_DOWNLOAD="$SERVER_JAR"
-        run_interruptible gosu hytale wget -q --show-progress -O "$SERVER_JAR" "$SERVER_JAR_URL"
+        PARTIAL_DOWNLOAD="$OFFICIAL_SERVER_JAR"
+        run_interruptible gosu hytale wget -q --show-progress -O "$OFFICIAL_SERVER_JAR" "$SERVER_JAR_URL"
         PARTIAL_DOWNLOAD=""
     fi
 
@@ -712,7 +715,7 @@ else
     echo "[WAIT] Waiting for server files..."
     
     while true; do
-        if [ -f "$SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
+        if [ -f "$OFFICIAL_SERVER_JAR" ] && [ -f "$ASSETS_FILE" ]; then
             echo "[INFO] Files detected! Continuing..."
             break
         fi
@@ -723,9 +726,9 @@ fi
 # ============================================================
 # Final check
 # ============================================================
-if [ ! -f "$SERVER_JAR" ] || [ ! -f "$ASSETS_FILE" ]; then
+if [ ! -f "$OFFICIAL_SERVER_JAR" ] || [ ! -f "$ASSETS_FILE" ]; then
     echo "[ERROR] Server files still missing!"
-    echo "[ERROR] Expected: $SERVER_JAR"
+    echo "[ERROR] Expected: $OFFICIAL_SERVER_JAR"
     echo "[ERROR] Expected: $ASSETS_FILE"
     echo ""
     echo "Contents of /opt/hytale/server/:"
@@ -755,6 +758,7 @@ echo "[INFO] Setting up data directories..."
 # Relative links, see relink_absolute above.
 relink_absolute /opt/hytale/server/universe /opt/hytale/data ../data
 relink_absolute /opt/hytale/server/.auth /opt/hytale/auth ../auth
+relink_absolute /opt/hytale/server/earlyplugins /opt/hytale/earlyplugins ../earlyplugins
 relink_absolute /opt/hytale/server/plugins /opt/hytale/plugins ../plugins
 relink_absolute /opt/hytale/server/mods /opt/hytale/mods ../mods
 
@@ -763,6 +767,9 @@ if [ ! -L "/opt/hytale/server/universe" ]; then
     rm -rf /opt/hytale/server/universe 2>/dev/null || true
     ln -sfn ../data /opt/hytale/server/universe
 fi
+
+mkdir -p /opt/hytale/earlyplugins
+ln -sfn ../earlyplugins /opt/hytale/server/earlyplugins
 
 mkdir -p /opt/hytale/plugins
 ln -sfn ../plugins /opt/hytale/server/plugins 2>/dev/null || true
