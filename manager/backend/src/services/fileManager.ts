@@ -185,7 +185,7 @@ export function getRoots(folders: FileManagerFolders): FileManagerRoot[] {
     },
     {
       id: 'earlyplugins',
-      path: folders.earlyPlugins,
+      path: folders.earlyplugins,
       rw: true,
       permission: 'files.write',
       label: 'Early Plugins',
