@@ -18,6 +18,7 @@ export function serverContextIn(root: string, id = 'srv-b'): ServerContext {
       data: dir('data'),
       backups: dir('backups'),
       mods: dir('mods'),
+      earlyplugins: dir('earlyplugins'),
       plugins: dir('plugins'),
       assets: dir('assets'),
       auth: dir('auth'),

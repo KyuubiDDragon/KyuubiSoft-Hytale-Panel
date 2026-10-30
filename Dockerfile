@@ -64,6 +64,7 @@ RUN groupadd -g 9999 hytale \
                 /opt/hytale/updater \
                 /opt/hytale/data \
                 /opt/hytale/backups \
+                /opt/hytale/earlyplugins \
                 /opt/hytale/plugins \
                 /opt/hytale/mods \
                 /opt/hytale/downloader \
@@ -87,7 +88,7 @@ COPY --chmod=755 scripts/healthcheck.sh /opt/hytale/healthcheck.sh
 # ============================================================
 # Volumes for persistent data
 # ============================================================
-VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server", "/opt/hytale/downloader", "/opt/hytale/auth", "/opt/hytale/updater"]
+VOLUME ["/opt/hytale/data", "/opt/hytale/backups", "/opt/hytale/earlyplugins", "/opt/hytale/plugins", "/opt/hytale/mods", "/opt/hytale/server", "/opt/hytale/downloader", "/opt/hytale/auth", "/opt/hytale/updater"]
 
 # ============================================================
 # Expose UDP port (QUIC protocol)

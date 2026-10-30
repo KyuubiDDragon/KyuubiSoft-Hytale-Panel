@@ -216,6 +216,7 @@ export const config = {
   backupsPath: process.env.BACKUPS_PATH || '/opt/hytale/backups',
   dataPath: process.env.DATA_PATH || '/opt/hytale/data',
   modsPath: process.env.MODS_PATH || '/opt/hytale/mods',
+  earlyPluginsPath: process.env.EARLY_PLUGINS_PATH || '/opt/hytale/earlyplugins',
   pluginsPath: process.env.PLUGINS_PATH || '/opt/hytale/plugins',
   assetsPath: process.env.ASSETS_PATH || '/opt/hytale/assets',
   // Native updater (staging/ + backup/), mounted read-only in the manager.
